@@ -294,25 +294,11 @@ main {
   align-items: center;
   gap: 0.7rem;
 }
-.gate-nav .crest svg {
-  width: 34px;
-  height: 34px;
-  color: var(--gold-burnished);
-}
-.gate-nav .crest .brand {
-  font-family: var(--display);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  font-size: 1.05rem;
-  color: var(--gold-burnished);
-  line-height: 1;
-}
-.gate-nav .crest .brand small {
+/* the game mark itself is the site logo (transparent lockup on stone) */
+.gate-nav .crest .brand-logo {
   display: block;
-  font-size: 0.5rem;
-  letter-spacing: 0.3em;
-  color: var(--gold-aged);
-  margin-top: 4px;
+  height: clamp(50px, 7vw, 64px);
+  width: auto;
 }
 .gate-nav .links {
   display: flex;
