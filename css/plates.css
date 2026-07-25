@@ -354,3 +354,59 @@ body.treasury[data-chamber="nagas"]::before {
     opacity: 0.85;
   }
 }
+
+/* ============================================================================
+   S1h — CARVED IMAGE BUTTONS site-wide (dual-CTA, three cards, explore-factions).
+   Reuse the S1e .plate-btn wake (brightness + flame-halo, 150ms) + focus ring;
+   these rules only SIZE the plate per context and add the sub-line + states.
+   Appended last so the context widths win over the hero .plate-face on source order.
+   ========================================================================= */
+.doorway-cta .plate-face {
+  width: min(280px, 74vw);
+}
+.scene-cta .plate-face {
+  width: min(262px, 72vw);
+}
+.explore-cta .plate-face {
+  width: min(300px, 80vw);
+}
+/* live sub-line beneath an image button (the prior carved buttons carried these) */
+.btn-sub {
+  display: block;
+  font-family: var(--text);
+  color: var(--gold-burnished);
+  opacity: 0.86;
+  font-size: 0.76rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 9px rgba(0, 0, 0, 0.92);
+  margin-top: 0.5rem;
+}
+/* explore-factions: centered at the band's foot */
+.explore-foot {
+  text-align: center;
+  margin-top: 3.4vh;
+}
+/* the three-card buttons sit tight under the copy; uniform plate height keeps the grid aligned */
+.scene-card .scene-cta {
+  margin-top: 0.2rem;
+}
+/* connected "Declared" state — image gone, aged-gold sleeping text chip */
+.doorway-cta.declared-state {
+  line-height: normal;
+  border: 1px solid var(--gold-aged);
+  border-radius: 2px;
+  padding: 0.55rem 1.7rem;
+  cursor: default;
+}
+.doorway-cta.declared-state:hover .plate-face,
+.doorway-cta.declared-state:focus-visible .plate-face {
+  filter: none;
+}
+.doorway-cta.declared-state .declared {
+  font-family: var(--display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-aged);
+  font-size: 0.82rem;
+}

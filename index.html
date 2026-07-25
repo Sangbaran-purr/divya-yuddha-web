@@ -17,7 +17,7 @@
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
     <link rel="stylesheet" href="css/pages.css?v=s1g" />
-    <link rel="stylesheet" href="css/plates.css?v=s1e" />
+    <link rel="stylesheet" href="css/plates.css?v=s1h" />
     <link rel="preload" as="image" href="assets/plates/facade.webp" type="image/webp" media="(min-width:720px)" fetchpriority="high" />
     <link rel="preload" as="image" href="assets/plates/facade_mobile.webp" type="image/webp" media="(max-width:719px)" fetchpriority="high" />
     <script src="config.js?v=s1e"></script>
@@ -92,12 +92,20 @@
           <div class="doorway-col">
             <h2 class="doorway-title">Declare Yourself</h2>
             <p class="doorway-copy">The gate opens only for bearers. Declare yourself — your wallet is your name here.</p>
-            <button id="doorway-declare" class="rite-btn" type="button" style="padding:0.6rem 1.6rem">Connect Wallet<span class="sub">your name at the gate</span></button>
+            <button id="doorway-declare" class="plate-btn doorway-cta" type="button" aria-label="Connect wallet — declare yourself">
+              <img class="plate-face" src="assets/brand/ui/btn_connect_wallet.webp" width="560" height="232" alt="" aria-hidden="true" />
+              <span class="sr-only">Connect Wallet</span>
+            </button>
+            <span class="btn-sub" id="doorway-sub">your name at the gate</span>
           </div>
           <div class="doorway-col">
             <h2 class="doorway-title">Claim Your Access</h2>
             <p class="doorway-copy">One free Access token, one per hand, bound to you alone. Take the rite.</p>
-            <a class="rite-btn" href="rite.html" style="padding:0.6rem 1.6rem">Claim Access<span class="sub">take the rite</span></a>
+            <a class="plate-btn doorway-cta" href="rite.html" aria-label="Claim access — take the rite">
+              <img class="plate-face" src="assets/brand/ui/btn_claim_access.webp" width="560" height="236" alt="" aria-hidden="true" />
+              <span class="sr-only">Claim Access</span>
+            </a>
+            <span class="btn-sub">take the rite</span>
           </div>
         </div>
       </section>
@@ -145,6 +153,12 @@
             <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
           </div>
         </div>
+        <div class="explore-foot">
+          <a class="plate-btn explore-cta" href="#panels" aria-label="Explore factions — see the game, the collection, the rite">
+            <img class="plate-face" src="assets/brand/ui/btn_explore_factions.webp" width="560" height="215" alt="" aria-hidden="true" />
+            <span class="sr-only">Explore Factions</span>
+          </a>
+        </div>
       </section>
 
       <!-- ===================== THREE CARD SECTIONS (mobile master §4, S1g) ===================== -->
@@ -156,7 +170,11 @@
             </div>
             <h3 class="scene-title">The Game</h3>
             <p class="scene-copy">Strategic best-of-three duels where four factions clash. Free to play, always.</p>
-            <a id="card-game-link" class="rite-btn" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener" style="padding:0.6rem 1.4rem">Enter the Arena<span class="sub">play free</span></a>
+            <a id="card-game-link" class="plate-btn scene-cta" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener" aria-label="Enter the arena — play free">
+              <img class="plate-face" src="assets/brand/ui/btn_enter_arena.webp" width="560" height="236" alt="" aria-hidden="true" />
+              <span class="sr-only">Enter the Arena</span>
+            </a>
+            <span class="btn-sub">play free</span>
           </article>
           <article class="scene-card">
             <div class="scene-frame">
@@ -164,7 +182,11 @@
             </div>
             <h3 class="scene-title">The Collection</h3>
             <p class="scene-copy">Heroes, astras, mantras and artifacts — held in your name, traded by your hand.</p>
-            <a class="rite-btn" href="treasury.html" style="padding:0.6rem 1.4rem">View Collection<span class="sub">your cards</span></a>
+            <a class="plate-btn scene-cta" href="treasury.html" aria-label="View collection — your cards">
+              <img class="plate-face" src="assets/brand/ui/btn_view_collection.webp" width="560" height="227" alt="" aria-hidden="true" />
+              <span class="sr-only">View Collection</span>
+            </a>
+            <span class="btn-sub">your cards</span>
           </article>
           <article class="scene-card">
             <div class="scene-frame">
@@ -172,7 +194,11 @@
             </div>
             <h3 class="scene-title">The Rite</h3>
             <p class="scene-copy">The Access token is your key. Free, one per hand, bound to you alone.</p>
-            <a class="rite-btn" href="rite.html" style="padding:0.6rem 1.4rem">Learn the Rite<span class="sub">claim access</span></a>
+            <a class="plate-btn scene-cta" href="rite.html" aria-label="Learn the rite — claim access">
+              <img class="plate-face" src="assets/brand/ui/btn_learn_rite.webp" width="560" height="232" alt="" aria-hidden="true" />
+              <span class="sr-only">Learn the Rite</span>
+            </a>
+            <span class="btn-sub">claim access</span>
           </article>
         </div>
       </section>
@@ -258,6 +284,7 @@
         var heroDecl = document.getElementById("hero-declare");
         var heroWrap = document.getElementById("hero-declare-wrap");
         var doorwayDecl = document.getElementById("doorway-declare");
+        var doorwaySub = document.getElementById("doorway-sub");
         var npTop = document.getElementById("nameplate-top");
         var addrTop = document.getElementById("addr-top");
 
@@ -272,16 +299,21 @@
         if (heroDecl) heroDecl.addEventListener("click", doConnect);
         if (doorwayDecl) doorwayDecl.addEventListener("click", doConnect);
 
+        // S1h: the dual-CTA left is a carved image plate when disconnected; on connect
+        // the image hides and an aged-gold "Declared" text state shows (button disabled).
         function setDoorway(connected) {
           if (!doorwayDecl) return;
           if (connected) {
-            doorwayDecl.innerHTML = 'Declared<span class="sub">your name is at the gate</span>';
-            doorwayDecl.classList.add("sleeping");
+            doorwayDecl.innerHTML = '<span class="declared">Declared</span>';
+            doorwayDecl.className = "plate-btn doorway-cta declared-state";
             doorwayDecl.disabled = true;
+            if (doorwaySub) doorwaySub.textContent = "your name is at the gate";
           } else {
-            doorwayDecl.innerHTML = 'Connect Wallet<span class="sub">your name at the gate</span>';
-            doorwayDecl.classList.remove("sleeping");
+            doorwayDecl.innerHTML =
+              '<img class="plate-face" src="assets/brand/ui/btn_connect_wallet.webp" width="560" height="232" alt="" aria-hidden="true" /><span class="sr-only">Connect Wallet</span>';
+            doorwayDecl.className = "plate-btn doorway-cta";
             doorwayDecl.disabled = false;
+            if (doorwaySub) doorwaySub.textContent = "your name at the gate";
           }
         }
 
