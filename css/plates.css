@@ -101,7 +101,7 @@ main {
   color: var(--gold-burnished);
   opacity: 0.92;
   max-width: 34ch;
-  margin: 1.6rem auto 0;
+  margin: 1.2rem auto 0;
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9);
   font-size: clamp(0.9rem, 1.6vw, 1.05rem);
 }
@@ -109,8 +109,58 @@ main {
   font-family: var(--text);
   color: var(--flame-core);
   font-size: clamp(0.9rem, 1.9vw, 1.1rem);
-  margin: 1.2rem 0 0;
+  margin: 1.1rem 0 0;
   text-shadow: 0 1px 14px rgba(0, 0, 0, 0.95);
+}
+/* THE CEREMONIAL PLATE — the connect CTA in the hero rhythm (§ owner ruling B, S1e).
+   lockup → war line → PLATE → promise. The plate is the disconnected face only;
+   on connect the whole cta hides and the header nameplate carries identity. */
+.facade .hero-cta {
+  margin: 1.4rem auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+}
+.facade .hero-cta.hidden {
+  display: none;
+}
+.plate-btn {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+}
+.plate-btn .plate-face {
+  display: block;
+  width: min(460px, 62vw);
+  height: auto;
+  filter: drop-shadow(0 6px 22px rgba(0, 0, 0, 0.6));
+  transition: filter 150ms ease;
+}
+/* image-safe golden wake on hover/focus (brightness + flame-halo, 150ms) */
+.plate-btn:hover .plate-face,
+.plate-btn:focus-visible .plate-face {
+  filter: brightness(1.08) drop-shadow(0 0 20px rgba(232, 147, 58, 0.6));
+}
+.plate-btn:focus {
+  outline: none;
+}
+.plate-btn:focus-visible {
+  outline: 2px solid rgba(232, 147, 58, 0.8);
+  outline-offset: 6px;
+  border-radius: 8px;
+}
+.facade .plate-sub {
+  font-family: var(--text);
+  color: var(--gold-burnished);
+  opacity: 0.9;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.95);
 }
 .facade .scroll-cue {
   position: absolute;
@@ -129,24 +179,30 @@ main {
   z-index: 4;
 }
 
-/* desktop plate content placement (landscape doorway) */
+/* desktop plate content placement (landscape doorway) — top lifted to seat the plate */
 @media (min-width: 720px) {
   .facade-content {
-    top: 15%;
+    top: 11%;
+  }
+  .facade .hero-logo {
+    width: min(520px, 68vw);
   }
 }
-/* mobile plate content placement (portrait: lockup in the upper starfield, copy below) */
+/* mobile plate content placement (portrait: lockup in the upper starfield, cta below) */
 @media (max-width: 719px) {
   .facade-content {
-    top: 7%;
+    top: 6%;
     width: 92%;
   }
   .facade .hero-logo {
-    width: min(320px, 82vw);
+    width: min(300px, 78vw);
   }
   .facade .hero-copy {
-    margin-top: 30vw;
-  } /* drop the war line + promise down onto the doorway of the tall plate, below the lockup */
+    margin-top: 15vw;
+  } /* drop the war line + plate + promise onto the doorway of the tall plate, below the lockup */
+  .plate-btn .plate-face {
+    width: min(320px, 86vw);
+  }
   .facade-lamps {
     background:
       radial-gradient(120px 120px at 18% 25%, rgba(255, 201, 107, 0.42), transparent 62%),

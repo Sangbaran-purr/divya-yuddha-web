@@ -97,7 +97,9 @@
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
 }
 
-/* FOUR FACTIONS band — grounds-not-chrome sigil panels (§13.C) */
+/* FOUR FACTIONS band — carved badges on bare stone (§ owner ruling, S1e).
+   The ground-color panels retire: each badge carries its own gold-framed field;
+   they sit on the stone with generous dark between. */
 .faction-head {
   text-align: center;
   font-family: var(--display);
@@ -105,62 +107,41 @@
   text-transform: uppercase;
   color: var(--gold-burnished);
   font-size: clamp(1rem, 2.4vw, 1.4rem);
-  margin: 0 0 2.4rem;
+  margin: 0 0 2.8rem;
 }
 .factions {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1.4rem;
+  gap: 2.4rem 2rem;
 }
 @media (min-width: 720px) {
   .factions {
     grid-template-columns: repeat(4, 1fr);
+    gap: 2.6rem;
   }
 }
 .faction {
   text-align: center;
-  padding: 1.4rem 0.8rem 1.2rem;
-  border: 1px solid var(--gold-aged);
-  border-radius: 2px;
-  /* the ground IS the accent (literally grounds-not-chrome) */
-  background: linear-gradient(180deg, var(--fg, #2a2216) 0%, rgba(11, 10, 8, 0.9) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
-.faction.devas {
-  --fg: #3a2a10;
-}
-.faction.asuras {
-  --fg: #3a130c;
-}
-.faction.vanaras {
-  --fg: #0f2a20;
-}
-.faction.nagas {
-  --fg: #0c1826;
-}
-/* real faction crests on the ground-color panels (§ owner ruling 7) */
-.faction .sigil {
+/* the carved badge — its own ground; sits ON the stone, no panel behind it */
+.faction .badge {
   display: block;
-  width: 76px;
-  height: 84px;
-  object-fit: contain;
-  margin: 0 auto 0.9rem;
-  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.5));
-}
-.faction .fname {
-  font-family: var(--display);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--gold-burnished);
-  font-size: 1rem;
+  width: auto;
+  height: clamp(180px, 24vw, 230px);
+  margin: 0 auto 1rem;
+  filter: drop-shadow(0 5px 16px rgba(0, 0, 0, 0.55));
 }
 .faction .fep {
   font-family: var(--text);
   color: var(--gold-burnished);
-  opacity: 0.9; /* raised for legibility on the ground panels (§ owner ruling 6b) */
+  opacity: 0.9;
   font-size: 0.78rem;
-  margin: 0.4rem 0 1rem;
+  margin: 0 0 1rem;
   min-height: 2.4em;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
 }
 .faction .explore {
   font-family: var(--display);

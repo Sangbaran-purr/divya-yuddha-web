@@ -15,12 +15,12 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="css/threshold.css?v=s1d" />
-    <link rel="stylesheet" href="css/pages.css?v=s1d" />
-    <link rel="stylesheet" href="css/plates.css?v=s1d" />
+    <link rel="stylesheet" href="css/threshold.css?v=s1e" />
+    <link rel="stylesheet" href="css/pages.css?v=s1e" />
+    <link rel="stylesheet" href="css/plates.css?v=s1e" />
     <link rel="preload" as="image" href="assets/plates/facade.webp" type="image/webp" media="(min-width:720px)" fetchpriority="high" />
     <link rel="preload" as="image" href="assets/plates/facade_mobile.webp" type="image/webp" media="(max-width:719px)" fetchpriority="high" />
-    <script src="config.js?v=s1d"></script>
+    <script src="config.js?v=s1e"></script>
   </head>
   <body class="gate">
     <script src="js/ornament.js"></script>
@@ -67,6 +67,14 @@
           <h1 class="sr-only">Divya Yuddha — Battle of the Celestials</h1>
           <img class="hero-logo" src="assets/brand/hero-logo.webp" width="1000" height="648" fetchpriority="high" decoding="async" alt="Divya Yuddha — Battle of the Celestials" />
           <p class="hero-copy">The war is visible to all. The door opens only for bearers.</p>
+          <div class="hero-cta" id="hero-declare-wrap">
+            <button id="hero-declare" class="plate-btn" type="button" aria-label="Declare yourself — connect wallet">
+              <img class="plate-face" src="assets/brand/ui/btn_declare.webp" width="960" height="272" alt="" aria-hidden="true" />
+              <span class="sr-only">Declare Yourself</span>
+            </button>
+            <span class="plate-sub">connect wallet</span>
+            <div id="hero-declare-line" class="state-line" aria-live="polite"></div>
+          </div>
           <p class="promise">Own the cards. The game stays free.</p>
         </div>
         <div class="scroll-cue" aria-hidden="true"><svg><use href="#dy-chev" /></svg></div>
@@ -115,26 +123,22 @@
         <h2 class="faction-head">Four Factions. Four Destinies.</h2>
         <div class="factions">
           <div class="faction devas">
-            <img class="sigil" src="assets/brand/factions/devas.webp" width="200" height="210" loading="lazy" decoding="async" alt="Devas crest" />
-            <div class="fname">Devas</div>
+            <img class="badge" src="assets/brand/ui/badge_devas.webp" width="258" height="420" loading="lazy" decoding="async" alt="Devas faction badge" />
             <div class="fep">Guardians of Dharma. Bearers of light.</div>
             <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
           </div>
           <div class="faction asuras">
-            <img class="sigil" src="assets/brand/factions/asuras.webp" width="200" height="279" loading="lazy" decoding="async" alt="Asuras crest" />
-            <div class="fname">Asuras</div>
+            <img class="badge" src="assets/brand/ui/badge_asuras.webp" width="242" height="420" loading="lazy" decoding="async" alt="Asuras faction badge" />
             <div class="fep">Masters of Ambition. Driven by desire.</div>
             <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
           </div>
           <div class="faction vanaras">
-            <img class="sigil" src="assets/brand/factions/vanaras.webp" width="200" height="226" loading="lazy" decoding="async" alt="Vanaras crest" />
-            <div class="fname">Vanaras</div>
+            <img class="badge" src="assets/brand/ui/badge_vanaras.webp" width="246" height="420" loading="lazy" decoding="async" alt="Vanaras faction badge" />
             <div class="fep">Bound by Loyalty. Children of the wild.</div>
             <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
           </div>
           <div class="faction nagas">
-            <img class="sigil" src="assets/brand/factions/nagas.webp" width="200" height="331" loading="lazy" decoding="async" alt="Nagas crest" />
-            <div class="fname">Nagas</div>
+            <img class="badge" src="assets/brand/ui/badge_nagas.webp" width="237" height="420" loading="lazy" decoding="async" alt="Nagas faction badge" />
             <div class="fep">Keepers of Mystery. From depths unknown.</div>
             <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
           </div>
@@ -185,8 +189,8 @@
       <p class="epithet" style="margin-top:1rem">Own the cards. The game stays free.</p>
     </footer>
 
-    <script src="js/light.js?v=s1d"></script>
-    <script src="js/wallet.js?v=s1d"></script>
+    <script src="js/light.js?v=s1e"></script>
+    <script src="js/wallet.js?v=s1e"></script>
     <script>
       (function () {
         var CFG = window.DY_CONFIG;
@@ -196,8 +200,12 @@
         var lf = document.getElementById("law-free");
         if (lf) lf.href = CFG.freeGameUrl;
 
-        // the top-right header button is the SOLE connect CTA (§ owner ruling 3)
+        // Two CTAs, one flow (S1e / owner ruling B): the ceremonial hero PLATE and
+        // the persistent header text button both connect; both are the disconnected
+        // face only — on connect the header nameplate carries identity and both hide.
         var declTop = document.getElementById("declare-top");
+        var heroDecl = document.getElementById("hero-declare");
+        var heroWrap = document.getElementById("hero-declare-wrap");
         var npTop = document.getElementById("nameplate-top");
         var addrTop = document.getElementById("addr-top");
 
@@ -209,19 +217,23 @@
           window.DYWallet.connect().catch(function () {});
         }
         declTop.addEventListener("click", doConnect);
+        if (heroDecl) heroDecl.addEventListener("click", doConnect);
 
         window.DYWallet.onChange(function (s) {
           if (!s.hasProvider) {
             declTop.classList.remove("hidden");
+            if (heroWrap) heroWrap.classList.remove("hidden");
             return;
           }
           if (s.connected) {
             npTop.classList.remove("hidden");
             declTop.classList.add("hidden");
+            if (heroWrap) heroWrap.classList.add("hidden");
             addrTop.textContent = window.DYWallet.shortAddr(s.address);
           } else {
             npTop.classList.add("hidden");
             declTop.classList.remove("hidden");
+            if (heroWrap) heroWrap.classList.remove("hidden");
           }
         });
         window.DYWallet.init();
