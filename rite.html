@@ -9,6 +9,8 @@
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css" />
     <link rel="stylesheet" href="css/pages.css" />
+    <link rel="stylesheet" href="css/plates.css" />
+    <link rel="preload" as="image" href="assets/plates/rite.webp" type="image/webp" fetchpriority="high" />
     <script src="config.js"></script>
   </head>
   <body>
@@ -34,24 +36,33 @@
     </header>
 
     <main>
-      <section class="section tight wrap" aria-label="The Rite">
-        <div class="lintel"><span></span><span class="display">The Rite</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+      <section class="rite-scene" aria-label="The Rite">
+        <picture class="rite-plate">
+          <source srcset="assets/plates/rite.webp" type="image/webp" />
+          <img
+            src="assets/plates/rite.jpg"
+            fetchpriority="high"
+            decoding="async"
+            alt="The rite doorway — the war burning through the carved arch; above the lintel hangs the rite mark."
+          />
+        </picture>
+        <div class="rite-lamps" aria-hidden="true"></div>
 
-        <div class="rite-stage">
-          <!-- the RITE MARK: the sun-roundel crest on stone (the Access token's face) -->
-          <svg id="rite-mark" class="rite-mark" aria-label="The rite mark, unlit"><use href="#dy-crest" /></svg>
+        <!-- the RITE MARK hangs above the door's lintel (the Access token's face) -->
+        <div id="rite-mark" class="rite-mark-hang unlit" aria-label="The rite mark, unlit">
+          <img src="assets/plates/rite_mark.webp" alt="The rite mark — a gold sun-medallion with a sapphire heart, on carved stone." />
+        </div>
 
-          <!-- the ONE vermilion thread (dormant until a real claim confirms) -->
-          <div id="rite-thread" class="rite-thread" aria-hidden="true"><i></i></div>
+        <!-- the ONE vermilion thread (dormant until a real claim confirms) -->
+        <div id="rite-thread" class="rite-thread" aria-hidden="true"><i></i></div>
 
+        <!-- the threshold stone: state message + the one action -->
+        <div class="rite-threshold">
           <p id="rite-msg" class="rite-state-msg">The rite admits you to nothing you did not already own — it is only your name at the gate.</p>
-
-          <div>
-            <button id="rite-action" class="rite-btn" type="button">
-              Declare Yourself<span class="sub">connect wallet</span>
-            </button>
-            <div id="rite-line" class="state-line" aria-live="polite"></div>
-          </div>
+          <button id="rite-action" class="rite-btn" type="button">
+            Declare Yourself<span class="sub">connect wallet</span>
+          </button>
+          <div id="rite-line" class="state-line" aria-live="polite"></div>
         </div>
       </section>
     </main>
@@ -89,6 +100,7 @@
         // here (there is no client-side mint path — AccessNFT.mint is onlyMinter).
         function celebrateClaim() {
           thread.classList.add("drawn");
+          mark.classList.remove("unlit");
           mark.classList.add("burning");
           mark.setAttribute("aria-label", "The rite mark, burning");
           setTimeout(function () {

@@ -43,66 +43,9 @@
   margin: 0.9rem 0 0;
 }
 
-/* THE DOORWAY: carved arch (hairline gold pillars + lintel) over the visible war */
-.doorway {
-  position: relative;
-  width: min(560px, 82vw);
-  margin: 4vh auto 0;
-  padding: 2.2rem 2.4rem 2.6rem;
-  border-left: 1px solid var(--gold-hairline);
-  border-right: 1px solid var(--gold-hairline);
-  border-top: 1px solid var(--gold-hairline);
-  border-radius: 2px 2px 0 0;
-  /* the war beyond: temple-city crop at the horizon, dark storm sky above */
-  background:
-    linear-gradient(180deg, rgba(11, 10, 8, 0.92) 0%, rgba(11, 10, 8, 0.55) 42%, rgba(11, 10, 8, 0.2) 66%, transparent 100%),
-    radial-gradient(120% 70% at 50% 8%, #14273d33, transparent 60%),
-    url("../assets/img/doorway_war.jpg") center bottom / cover no-repeat,
-    var(--stone-void);
-  overflow: hidden;
-}
-.doorway::before {
-  /* the lintel gold seam across the arch top */
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -1px;
-  right: -1px;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, var(--gold-burnished), transparent);
-  opacity: 0.7;
-}
-.doorway .doorway-inner {
-  position: relative;
-  z-index: 1;
-  min-height: 220px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 1.4rem;
-}
-.promise {
-  font-family: var(--text);
-  color: var(--gold-burnished);
-  font-size: clamp(0.95rem, 2vw, 1.15rem);
-  letter-spacing: 0.02em;
-  margin: 0.4rem 0 0;
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
-}
-/* two flanking lamps at the doorway shoulders */
-.doorway .lamp {
-  position: absolute;
-  top: 18px;
-  animation: lampBreath 4.8s ease-in-out infinite;
-}
-.doorway .lamp.left {
-  left: -14px;
-}
-.doorway .lamp.right {
-  right: -14px;
-  animation-delay: -2.6s;
-}
+/* THE DOORWAY (S1 CSS-built arch + war-crop) is RETIRED in S1b — the painted
+   plate carries it (see css/plates.css .facade). The .title-mark / .title-epithet
+   base rules below are reused by the plate's live overlay. */
 .scroll-cue {
   margin-top: 3vh;
   color: var(--gold-aged);

@@ -9,9 +9,12 @@
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css" />
     <link rel="stylesheet" href="css/pages.css" />
+    <link rel="stylesheet" href="css/plates.css" />
+    <link rel="preload" as="image" href="assets/plates/facade.webp" type="image/webp" media="(min-width:720px)" fetchpriority="high" />
+    <link rel="preload" as="image" href="assets/plates/facade_mobile.webp" type="image/webp" media="(max-width:719px)" fetchpriority="high" />
     <script src="config.js"></script>
   </head>
-  <body>
+  <body class="gate">
     <script src="js/ornament.js"></script>
     <div id="carried-lamp" aria-hidden="true"></div>
 
@@ -37,27 +40,33 @@
     </header>
 
     <main>
-      <!-- ===================== THE FACADE (§8.1) ===================== -->
-      <section class="facade wrap" aria-label="The Gate">
-        <div class="crest-crown"><svg aria-hidden="true"><use href="#dy-crest" /></svg></div>
-        <h1 class="title-mark">Divya Yuddha</h1>
-        <p class="title-epithet">Battle of the Celestials</p>
-
-        <div class="doorway" role="img" aria-label="A carved doorway; through it, the war's world burns on the horizon — a distant lit temple-city under a storm sky.">
-          <span class="flame lamp left" aria-hidden="true"><svg style="width:22px;height:30px;color:var(--flame-core)"><use href="#dy-flame" /></svg></span>
-          <span class="flame lamp right" aria-hidden="true"><svg style="width:22px;height:30px;color:var(--flame-core)"><use href="#dy-flame" /></svg></span>
-          <div class="doorway-inner">
-            <p class="prose" style="max-width:34ch">Four factions rise, from the heavens to the netherworlds. The war is visible to all — the door opens only for bearers.</p>
-            <button id="declare-main" class="rite-btn" type="button">
-              Declare Yourself<span class="sub">connect wallet</span>
-            </button>
-            <div id="declare-line" class="state-line" aria-live="polite"></div>
-            <p class="promise">Own the cards. The game stays free.</p>
-          </div>
+      <!-- ===================== THE FACADE — the painted plate (§8.1, S1b) ===================== -->
+      <section class="facade" aria-label="The Gate">
+        <picture class="facade-plate">
+          <source media="(max-width:719px)" srcset="assets/plates/facade_mobile.webp" type="image/webp" />
+          <source media="(max-width:719px)" srcset="assets/plates/facade_mobile.jpg" />
+          <source srcset="assets/plates/facade.webp" type="image/webp" />
+          <img
+            src="assets/plates/facade.jpg"
+            fetchpriority="high"
+            decoding="async"
+            alt="The night gate — a carved temple doorway flanked by guardian statues and hanging lamps; through the arch the war's world burns on the horizon, a distant lit temple-city under a storm sky."
+          />
+        </picture>
+        <div class="facade-lamps" aria-hidden="true"></div>
+        <div class="facade-content">
+          <h1 class="title-mark">Divya Yuddha</h1>
+          <p class="title-epithet">Battle of the Celestials</p>
+          <p class="hero-copy">The war is visible to all. The door opens only for bearers.</p>
+          <button id="declare-main" class="rite-btn" type="button">
+            Declare Yourself<span class="sub">connect wallet</span>
+          </button>
+          <div id="declare-line" class="state-line" aria-live="polite"></div>
+          <p class="promise">Own the cards. The game stays free.</p>
         </div>
-
         <div class="scroll-cue" aria-hidden="true"><svg><use href="#dy-chev" /></svg></div>
       </section>
+      <div class="facade-seam" aria-hidden="true"></div>
 
       <!-- ===================== THE RITE / THE TREASURY / THE LAW ===================== -->
       <section class="section dawn wrap" aria-label="What lies within">
