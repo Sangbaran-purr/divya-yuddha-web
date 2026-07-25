@@ -15,11 +15,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="css/threshold.css" />
-    <link rel="stylesheet" href="css/pages.css" />
-    <link rel="stylesheet" href="css/plates.css" />
+    <link rel="stylesheet" href="css/threshold.css?v=s1d" />
+    <link rel="stylesheet" href="css/pages.css?v=s1d" />
+    <link rel="stylesheet" href="css/plates.css?v=s1d" />
     <link rel="preload" as="image" href="assets/plates/treasury_hall.webp" type="image/webp" />
-    <script src="config.js"></script>
+    <script src="config.js?v=s1d"></script>
   </head>
   <body class="treasury">
     <script src="js/ornament.js"></script>
@@ -30,14 +30,16 @@
         <a class="crest" href="index.html">
           <img class="brand-logo" src="assets/brand/logo.webp" width="460" height="298" alt="Divya Yuddha — Battle of the Celestials" />
         </a>
-        <div class="links">
-          <a href="index.html">The Gate</a>
-          <a href="rite.html">The Rite</a>
-          <a href="treasury.html" aria-current="page">The Treasury</a>
-          <a id="free-game" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">The Free Game</a>
-        </div>
-        <div>
-          <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
+        <div class="nav-right">
+          <div class="links">
+            <a href="index.html">The Gate</a>
+            <a href="rite.html">The Rite</a>
+            <a href="treasury.html" aria-current="page">The Treasury</a>
+            <a id="free-game" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">The Free Game</a>
+          </div>
+          <div id="nav-decl">
+            <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
+          </div>
         </div>
       </nav>
     </header>
@@ -64,10 +66,10 @@
       <p class="epithet">Money buys ownership, never win-rate.</p>
     </footer>
 
-    <script src="js/light.js"></script>
-    <script src="js/wallet.js"></script>
-    <script src="js/cards.js"></script>
-    <script src="js/treasury.js"></script>
+    <script src="js/light.js?v=s1d"></script>
+    <script src="js/wallet.js?v=s1d"></script>
+    <script src="js/cards.js?v=s1d"></script>
+    <script src="js/treasury.js?v=s1d"></script>
     <script>
       (function () {
         document.getElementById("free-game").href = window.DY_CONFIG.freeGameUrl;

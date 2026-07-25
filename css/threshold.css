@@ -186,7 +186,8 @@ main {
 .prose {
   font-family: var(--text);
   color: var(--gold-burnished);
-  opacity: 0.86;
+  opacity: 0.94; /* raised for legibility over stone (§ owner ruling 6b) */
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
 }
 
 /* ---- CARVED LINTEL (section threshold, §6) ---- */
@@ -285,9 +286,18 @@ main {
   z-index: 3;
   display: flex;
   align-items: center;
+  justify-content: space-between; /* logo hard-left · links+button hard-right — center band stays clear of the painted chakra */
   gap: 1.4rem;
   padding: 1.2rem 0;
   flex-wrap: wrap;
+}
+/* the right cluster: nav links grouped WITH the connect button, off the center */
+.gate-nav .nav-right {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .gate-nav .crest {
   display: flex;
@@ -302,28 +312,78 @@ main {
 }
 .gate-nav .links {
   display: flex;
-  gap: 1.5rem;
-  margin-left: auto;
+  gap: 1.15rem;
   align-items: center;
   flex-wrap: wrap;
 }
 .gate-nav .links a {
+  position: relative;
   font-family: var(--display);
   font-weight: 500;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-size: 0.72rem;
-  color: var(--gold-aged);
-  transition: color var(--wake) ease;
-  padding: 4px 2px;
+  font-size: 0.68rem;
+  /* base state reads at rest — burnished, not aged (§ owner ruling 5) */
+  color: var(--gold-burnished);
+  transition: color var(--wake) ease, text-shadow var(--wake) ease;
+  padding: 4px 2px 6px;
+}
+/* the golden wake: a hairline gold underline draws in on hover/focus (150ms) */
+.gate-nav .links a::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 0;
+  height: 1px;
+  background: var(--gold-hairline);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--wake) ease;
 }
 .gate-nav .links a:hover,
-.gate-nav .links a:focus-visible,
-.gate-nav .links a[aria-current="page"] {
-  color: var(--gold-burnished);
+.gate-nav .links a:focus-visible {
+  color: var(--flame-core);
+  text-shadow: 0 0 12px rgba(232, 147, 58, 0.55); /* flame-halo glow, consistent with the light system */
 }
-.gate-nav .links a[aria-current="page"] {
-  border-bottom: 1px solid var(--gold-hairline);
+.gate-nav .links a:hover::after,
+.gate-nav .links a:focus-visible::after,
+.gate-nav .links a[aria-current="page"]::after {
+  transform: scaleX(1);
+}
+
+/* desktop: the nav goes FULL-BLEED so logo hugs the left edge and the link+button
+   cluster hugs the right edge — maximal clearance from the plate's center chakra
+   (§ owner ruling 4). Placed AFTER the base .links a rule so its tighter sizing wins
+   on source order. On mobile the nav is in-flow (no chakra behind it) — wrap stays. */
+@media (min-width: 720px) {
+  .gate-nav.wrap {
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding-left: clamp(12px, 1.4vw, 32px);
+    padding-right: clamp(12px, 1.4vw, 32px);
+  }
+  .gate-nav .nav-right {
+    gap: 0.85rem;
+  }
+  .gate-nav .links {
+    gap: 0.95rem;
+  }
+  .gate-nav .links a {
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+  }
+  /* the sole header CTA stays compact on desktop (the hero is the star now) */
+  .gate-nav #declare-top {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    line-height: 1.1;
+    padding: 0.42rem 0.8rem !important;
+  }
+  .gate-nav #declare-top .sub {
+    display: none;
+  }
 }
 
 /* ---- NAMEPLATE (connected; carved stone + flame dot, never a green circle) - */
@@ -399,7 +459,9 @@ main {
 
 /* ---- scroll dawn (mobile): sections dim until revealed ---- */
 .dawn {
-  opacity: 0.38;
+  /* raised legibility floor (§ owner ruling 6a): unlit sections stay readable;
+     directed light still lifts them to full on reveal */
+  opacity: 0.6;
   transition: opacity 900ms ease;
 }
 .dawn.lit {

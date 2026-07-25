@@ -91,9 +91,10 @@
 .pillar-item .v {
   font-family: var(--text);
   color: var(--gold-burnished);
-  opacity: 0.78;
+  opacity: 0.9; /* raised for legibility (§ owner ruling 6b) */
   font-size: 0.92rem;
   margin-top: 0.2rem;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
 }
 
 /* FOUR FACTIONS band — grounds-not-chrome sigil panels (§13.C) */
@@ -136,11 +137,14 @@
 .faction.nagas {
   --fg: #0c1826;
 }
+/* real faction crests on the ground-color panels (§ owner ruling 7) */
 .faction .sigil {
-  width: 62px;
-  height: 62px;
+  display: block;
+  width: 76px;
+  height: 84px;
+  object-fit: contain;
   margin: 0 auto 0.9rem;
-  color: var(--gold-burnished);
+  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.5));
 }
 .faction .fname {
   font-family: var(--display);
@@ -152,10 +156,11 @@
 .faction .fep {
   font-family: var(--text);
   color: var(--gold-burnished);
-  opacity: 0.72;
+  opacity: 0.9; /* raised for legibility on the ground panels (§ owner ruling 6b) */
   font-size: 0.78rem;
   margin: 0.4rem 0 1rem;
   min-height: 2.4em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
 }
 .faction .explore {
   font-family: var(--display);
