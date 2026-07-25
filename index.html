@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Divya Yuddha — The Gate</title>
+    <meta name="description" content="Own the cards. The game stays free. The companion threshold to Divya Yuddha — Battle of the Celestials." />
+    <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/threshold.css" />
+    <link rel="stylesheet" href="css/pages.css" />
+    <script src="config.js"></script>
+  </head>
+  <body>
+    <script src="js/ornament.js"></script>
+    <div id="carried-lamp" aria-hidden="true"></div>
+
+    <header>
+      <nav class="gate-nav wrap" aria-label="Primary">
+        <a class="crest" href="index.html" aria-label="Divya Yuddha — the Gate">
+          <svg aria-hidden="true"><use href="#dy-crest" /></svg>
+          <span class="brand">Divya Yuddha<small>Battle of the Celestials</small></span>
+        </a>
+        <div class="links">
+          <a href="index.html" aria-current="page">The Gate</a>
+          <a href="rite.html">The Rite</a>
+          <a href="treasury.html">The Treasury</a>
+          <a id="free-game" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">The Free Game</a>
+        </div>
+        <div id="nav-decl">
+          <button id="declare-top" class="rite-btn" type="button" style="padding:0.5rem 1.2rem">
+            Declare Yourself<span class="sub">connect wallet</span>
+          </button>
+          <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <!-- ===================== THE FACADE (§8.1) ===================== -->
+      <section class="facade wrap" aria-label="The Gate">
+        <div class="crest-crown"><svg aria-hidden="true"><use href="#dy-crest" /></svg></div>
+        <h1 class="title-mark">Divya Yuddha</h1>
+        <p class="title-epithet">Battle of the Celestials</p>
+
+        <div class="doorway" role="img" aria-label="A carved doorway; through it, the war's world burns on the horizon — a distant lit temple-city under a storm sky.">
+          <span class="flame lamp left" aria-hidden="true"><svg style="width:22px;height:30px;color:var(--flame-core)"><use href="#dy-flame" /></svg></span>
+          <span class="flame lamp right" aria-hidden="true"><svg style="width:22px;height:30px;color:var(--flame-core)"><use href="#dy-flame" /></svg></span>
+          <div class="doorway-inner">
+            <p class="prose" style="max-width:34ch">Four factions rise, from the heavens to the netherworlds. The war is visible to all — the door opens only for bearers.</p>
+            <button id="declare-main" class="rite-btn" type="button">
+              Declare Yourself<span class="sub">connect wallet</span>
+            </button>
+            <div id="declare-line" class="state-line" aria-live="polite"></div>
+            <p class="promise">Own the cards. The game stays free.</p>
+          </div>
+        </div>
+
+        <div class="scroll-cue" aria-hidden="true"><svg><use href="#dy-chev" /></svg></div>
+      </section>
+
+      <!-- ===================== THE RITE / THE TREASURY / THE LAW ===================== -->
+      <section class="section dawn wrap" aria-label="What lies within">
+        <div class="lintel"><span></span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+        <div class="band-grid" style="grid-template-columns:1fr">
+          <div class="factions" style="grid-template-columns:1fr">
+            <div style="display:grid;gap:3vh;grid-template-columns:1fr" class="rite-tri">
+              <div class="pillar">
+                <h3>The Rite</h3>
+                <p class="prose" style="text-align:center;max-width:36ch;margin:0 auto">One free Access token, one per hand, bound to you alone. It is your name at the gate — it never touches your win-rate.</p>
+                <div style="text-align:center;margin-top:1.4rem"><a class="rite-btn" href="rite.html" style="padding:0.6rem 1.6rem">Take the Rite<span class="sub">claim your access</span></a></div>
+              </div>
+              <div class="pillar">
+                <h3>The Treasury</h3>
+                <p class="prose" style="text-align:center;max-width:36ch;margin:0 auto">Cards you own are yours — held in your name, traded by your hand. Money buys ownership, never win-rate.</p>
+                <div style="text-align:center;margin-top:1.4rem"><a class="rite-btn" href="treasury.html" style="padding:0.6rem 1.6rem">Enter the Hall<span class="sub">your collection</span></a></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- THE LAW — the one parchment above the treasury (§8.1) -->
+      <section class="section tight dawn wrap" aria-label="The Law">
+        <div class="lintel"><span></span><span class="display">The Law</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+        <div style="max-width:640px;margin:0 auto">
+          <div class="parchment">
+            <h3>Plainly stated</h3>
+            <ul>
+              <li><strong>The game stays free.</strong> The full game lives on, free, at its own home — <a id="law-free" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">the free game</a>. This site changes nothing there.</li>
+              <li><strong>The chain is Polygon (Amoy testnet in this phase).</strong> Your wallet is your identity — no accounts, no email, no passwords.</li>
+              <li><strong>One Access token per hand.</strong> Free to claim, enforced on-chain, one per wallet.</li>
+              <li><strong>Soulbound and yours.</strong> The Access token cannot be sold or transferred; you may burn it. Ownership, never advantage.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== FOUR FACTIONS band (§13.C) ===================== -->
+      <section class="section dawn wrap" aria-label="Four factions">
+        <h2 class="faction-head">Four Factions. Four Destinies.</h2>
+        <div class="factions">
+          <div class="faction devas">
+            <svg class="sigil" aria-hidden="true"><use href="#dy-devas" /></svg>
+            <div class="fname">Devas</div>
+            <div class="fep">Guardians of Dharma. Bearers of light.</div>
+            <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
+          </div>
+          <div class="faction asuras">
+            <svg class="sigil" aria-hidden="true"><use href="#dy-asuras" /></svg>
+            <div class="fname">Asuras</div>
+            <div class="fep">Masters of Ambition. Driven by desire.</div>
+            <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
+          </div>
+          <div class="faction vanaras">
+            <svg class="sigil" aria-hidden="true"><use href="#dy-vanaras" /></svg>
+            <div class="fname">Vanaras</div>
+            <div class="fep">Bound by Loyalty. Children of the wild.</div>
+            <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
+          </div>
+          <div class="faction nagas">
+            <svg class="sigil" aria-hidden="true"><use href="#dy-nagas" /></svg>
+            <div class="fname">Nagas</div>
+            <div class="fep">Keepers of Mystery. From depths unknown.</div>
+            <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== THE GAME / THE COLLECTION ===================== -->
+      <section class="section tight dawn wrap" aria-label="The game and the collection">
+        <div class="band-grid">
+          <div class="pillar">
+            <h3>The Game</h3>
+            <div class="pillar-item"><svg style="width:26px;height:26px;color:var(--gold-burnished);float:left;margin:2px 10px 0 0"><use href="#dy-blades" /></svg><div class="k">Strategic Battles</div><div class="v">Best-of-three duels where every decision shapes the outcome.</div></div>
+            <div class="pillar-item"><svg style="width:26px;height:26px;color:var(--gold-burnished);float:left;margin:2px 10px 0 0"><use href="#dy-deck" /></svg><div class="k">Build. Command. Conquer.</div><div class="v">Decks drawn from four factions and iconic heroes.</div></div>
+            <div class="pillar-item"><svg style="width:26px;height:26px;color:var(--gold-burnished);float:left;margin:2px 10px 0 0"><use href="#dy-realm" /></svg><div class="k">Cosmic Realms</div><div class="v">Ever-changing realms that bend strategy and fate.</div></div>
+          </div>
+          <div class="pillar" style="align-self:center;text-align:center">
+            <p class="prose" style="max-width:44ch;margin:0 auto">Every legend was once a choice. What you choose today becomes history.</p>
+          </div>
+          <div class="pillar" style="text-align:center">
+            <h3>The Collection</h3>
+            <p class="prose" style="max-width:26ch;margin:0 auto 1.4rem">Mythic cards. Eternal value. Your collection is your legacy.</p>
+            <a class="rite-btn" href="treasury.html" style="padding:0.6rem 1.4rem">Enter Hall<span class="sub">your cards</span></a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== JOIN THE SAGA (dormant, §14.1) ===================== -->
+      <section class="section tight dawn wrap" aria-label="Join the saga">
+        <div class="lintel"><span></span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+        <div class="saga">
+          <div>
+            <h3 class="display" style="font-size:1rem;margin:0 0 .6rem">Join the Saga</h3>
+            <p class="prose" style="max-width:40ch">Be the first to witness new heroes, reveals, and drops.</p>
+          </div>
+          <div>
+            <form class="field" onsubmit="return false" aria-label="Email signup (not yet active)">
+              <input type="email" placeholder="enter your email" disabled aria-disabled="true" />
+              <button class="rite-btn sleeping" type="button" disabled aria-disabled="true" style="padding:0.55rem 1rem">Soon</button>
+            </form>
+            <p class="dormant-note">The saga's roll is not yet open. Nothing is collected here.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="gate-foot">
+      <p class="line">Every legend was once a choice. What you choose today becomes history.</p>
+      <p class="epithet" style="margin-top:1rem">Own the cards. The game stays free.</p>
+    </footer>
+
+    <script src="js/light.js"></script>
+    <script src="js/wallet.js"></script>
+    <script>
+      (function () {
+        var CFG = window.DY_CONFIG;
+        // free-game external links (nav + law)
+        var fg = document.getElementById("free-game");
+        if (fg) fg.href = CFG.freeGameUrl;
+        var lf = document.getElementById("law-free");
+        if (lf) lf.href = CFG.freeGameUrl;
+
+        var declMain = document.getElementById("declare-main");
+        var declTop = document.getElementById("declare-top");
+        var line = document.getElementById("declare-line");
+        var npTop = document.getElementById("nameplate-top");
+        var addrTop = document.getElementById("addr-top");
+
+        function noWallet() {
+          line.innerHTML =
+            'You carry no key. <a href="https://metamask.io/download/" target="_blank" rel="noopener">Forge one</a> — install a wallet (MetaMask) to declare yourself.';
+        }
+        function doConnect() {
+          if (!window.DYWallet.state.hasProvider) {
+            noWallet();
+            return;
+          }
+          line.textContent = "Awaiting your seal…";
+          window.DYWallet.connect().catch(function () {
+            line.textContent = "The seal was not given. Try again when ready.";
+          });
+        }
+        declMain.addEventListener("click", doConnect);
+        declTop.addEventListener("click", doConnect);
+
+        window.DYWallet.onChange(function (s) {
+          if (!s.hasProvider) {
+            declTop.classList.remove("hidden");
+            return;
+          }
+          if (s.connected) {
+            npTop.classList.remove("hidden");
+            declTop.classList.add("hidden");
+            addrTop.textContent = window.DYWallet.shortAddr(s.address);
+            // gate CTA now points onward to the rite
+            declMain.innerHTML = 'Enter the Rite<span class="sub">take your access token</span>';
+            declMain.onclick = function () {
+              window.location.href = "rite.html";
+            };
+            line.innerHTML = 'Declared. <a href="rite.html">The rite awaits.</a>';
+          } else {
+            npTop.classList.add("hidden");
+            declTop.classList.remove("hidden");
+          }
+        });
+        window.DYWallet.init();
+      })();
+    </script>
+  </body>
+</html>

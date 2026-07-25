@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Divya Yuddha — The Rite</title>
+    <meta name="description" content="Take the rite: claim your free Access token — one per hand, bound to you alone." />
+    <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/threshold.css" />
+    <link rel="stylesheet" href="css/pages.css" />
+    <script src="config.js"></script>
+  </head>
+  <body>
+    <script src="js/ornament.js"></script>
+    <div id="carried-lamp" aria-hidden="true"></div>
+
+    <header>
+      <nav class="gate-nav wrap" aria-label="Primary">
+        <a class="crest" href="index.html" aria-label="Divya Yuddha — the Gate">
+          <svg aria-hidden="true"><use href="#dy-crest" /></svg>
+          <span class="brand">Divya Yuddha<small>Battle of the Celestials</small></span>
+        </a>
+        <div class="links">
+          <a href="index.html">The Gate</a>
+          <a href="rite.html" aria-current="page">The Rite</a>
+          <a href="treasury.html">The Treasury</a>
+          <a id="free-game" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">The Free Game</a>
+        </div>
+        <div id="nav-decl">
+          <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="section tight wrap" aria-label="The Rite">
+        <div class="lintel"><span></span><span class="display">The Rite</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+
+        <div class="rite-stage">
+          <!-- the RITE MARK: the sun-roundel crest on stone (the Access token's face) -->
+          <svg id="rite-mark" class="rite-mark" aria-label="The rite mark, unlit"><use href="#dy-crest" /></svg>
+
+          <!-- the ONE vermilion thread (dormant until a real claim confirms) -->
+          <div id="rite-thread" class="rite-thread" aria-hidden="true"><i></i></div>
+
+          <p id="rite-msg" class="rite-state-msg">The rite admits you to nothing you did not already own — it is only your name at the gate.</p>
+
+          <div>
+            <button id="rite-action" class="rite-btn" type="button">
+              Declare Yourself<span class="sub">connect wallet</span>
+            </button>
+            <div id="rite-line" class="state-line" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="gate-foot">
+      <p class="epithet">Free · one per hand · bound to you alone.</p>
+    </footer>
+
+    <script src="js/light.js"></script>
+    <script src="js/wallet.js"></script>
+    <script>
+      (function () {
+        var CFG = window.DY_CONFIG;
+        document.getElementById("free-game").href = CFG.freeGameUrl;
+
+        var mark = document.getElementById("rite-mark");
+        var thread = document.getElementById("rite-thread");
+        var msg = document.getElementById("rite-msg");
+        var btn = document.getElementById("rite-action");
+        var line = document.getElementById("rite-line");
+        var npTop = document.getElementById("nameplate-top");
+        var addrTop = document.getElementById("addr-top");
+
+        function setBtn(label, sub, opts) {
+          opts = opts || {};
+          btn.innerHTML = label + (sub ? '<span class="sub">' + sub + "</span>" : "");
+          btn.classList.toggle("sleeping", !!opts.sleeping);
+          btn.disabled = !!opts.sleeping && !opts.clickable;
+          btn.onclick = opts.onClick || null;
+          btn.setAttribute("aria-disabled", opts.sleeping ? "true" : "false");
+        }
+
+        // THE VERMILION CEREMONY — present in full; only ever called on a REAL
+        // claim confirmation. Claims are not open in Phase A, so it never fires
+        // here (there is no client-side mint path — AccessNFT.mint is onlyMinter).
+        function celebrateClaim() {
+          thread.classList.add("drawn");
+          mark.classList.add("burning");
+          mark.setAttribute("aria-label", "The rite mark, burning");
+          setTimeout(function () {
+            setBtn("Enter", "the door is yours", {
+              onClick: function () {
+                window.location.href = "treasury.html";
+              },
+            });
+            msg.textContent = "The thread is drawn. The door will open for you now.";
+          }, 1500);
+        }
+        window.__celebrateClaim = celebrateClaim; // reachable only by a future claim module
+
+        function noWallet() {
+          line.innerHTML =
+            'You carry no key. <a href="https://metamask.io/download/" target="_blank" rel="noopener">Forge one</a> — install a wallet, then return to the rite.';
+        }
+
+        window.DYWallet.onChange(function (s) {
+          npTop.classList.toggle("hidden", !s.connected);
+          if (s.connected) addrTop.textContent = window.DYWallet.shortAddr(s.address);
+          line.textContent = "";
+
+          if (!s.hasProvider) {
+            msg.textContent = "The rite is spoken with a wallet. You carry none yet.";
+            setBtn("Declare Yourself", "connect wallet", { onClick: noWallet });
+            return;
+          }
+          if (!s.connected) {
+            msg.textContent = "Declare yourself first — your wallet is your name at this gate.";
+            setBtn("Declare Yourself", "connect wallet", {
+              onClick: function () {
+                line.textContent = "Awaiting your seal…";
+                window.DYWallet.connect().catch(function () {
+                  line.textContent = "The seal was not given.";
+                });
+              },
+            });
+            return;
+          }
+          if (!s.chainOk) {
+            msg.textContent = "You stand at the wrong gate.";
+            setBtn("Cross to Amoy", "switch network", {
+              onClick: function () {
+                line.textContent = "Crossing…";
+                window.DYWallet.ensureChain().catch(function () {
+                  line.textContent = "The crossing was refused.";
+                });
+              },
+            });
+            return;
+          }
+          // connected + on Amoy -> is this hand already a bearer?
+          if (s.isHolder === null) {
+            msg.textContent = "Reading your seal…";
+            setBtn("…", "", { sleeping: true });
+            window.DYWallet.checkHolder();
+            return;
+          }
+          if (s.isHolder) {
+            mark.classList.add("burning");
+            mark.setAttribute("aria-label", "The rite mark, burning");
+            msg.textContent = "You bear the mark. The door is yours.";
+            setBtn("Enter", "to your treasury", {
+              onClick: function () {
+                window.location.href = "treasury.html";
+              },
+            });
+            return;
+          }
+          // not a bearer yet — the claim is honest-dormant in Phase A
+          if (CFG.claimOpen) {
+            // (future) a real authorized-minter/sale module wires here; on its
+            // success it calls window.__celebrateClaim(). Not present in S1.
+            setBtn("Take the Rite", "free · one per hand · bound to you alone", {
+              onClick: function () {
+                line.textContent = "The rite module is not yet wired.";
+              },
+            });
+            msg.textContent = "The rite is open. Claim your Access token — free, one per hand.";
+          } else {
+            setBtn("The Rite Opens Soon", "the free claim is not yet open", { sleeping: true });
+            msg.textContent =
+              "The free claim is not yet open. When it opens, the token is free — one per hand, bound to you alone.";
+          }
+        });
+
+        window.DYWallet.init();
+      })();
+    </script>
+  </body>
+</html>

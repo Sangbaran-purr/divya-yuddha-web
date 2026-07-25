@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Divya Yuddha — The Treasury</title>
+    <meta name="description" content="The treasury hall — your cards, held in your name." />
+    <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/threshold.css" />
+    <link rel="stylesheet" href="css/pages.css" />
+    <script src="config.js"></script>
+  </head>
+  <body>
+    <script src="js/ornament.js"></script>
+    <div id="carried-lamp" aria-hidden="true"></div>
+
+    <header>
+      <nav class="gate-nav wrap" aria-label="Primary">
+        <a class="crest" href="index.html" aria-label="Divya Yuddha — the Gate">
+          <svg aria-hidden="true"><use href="#dy-crest" /></svg>
+          <span class="brand">Divya Yuddha<small>Battle of the Celestials</small></span>
+        </a>
+        <div class="links">
+          <a href="index.html">The Gate</a>
+          <a href="rite.html">The Rite</a>
+          <a href="treasury.html" aria-current="page">The Treasury</a>
+          <a id="free-game" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">The Free Game</a>
+        </div>
+        <div>
+          <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="section tight wrap" aria-label="The Treasury">
+        <div class="lintel"><span></span><span class="display">The Treasury</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+        <p class="prose" style="text-align:center;max-width:40ch;margin:0 auto 3vh">Your cards, held in your name — traded by your hand, never by ours.</p>
+
+        <!-- faction chambers: ground-color gem-marks that warm the hall ambient -->
+        <div id="tre-chambers" class="chambers" role="group" aria-label="Faction chambers">
+          <button class="chamber-gem" data-f="devas" aria-pressed="false" title="Devas chamber"><svg aria-hidden="true"><use href="#dy-devas" /></svg></button>
+          <button class="chamber-gem" data-f="asuras" aria-pressed="false" title="Asuras chamber"><svg aria-hidden="true"><use href="#dy-asuras" /></svg></button>
+          <button class="chamber-gem" data-f="vanaras" aria-pressed="false" title="Vanaras chamber"><svg aria-hidden="true"><use href="#dy-vanaras" /></svg></button>
+          <button class="chamber-gem" data-f="nagas" aria-pressed="false" title="Nagas chamber"><svg aria-hidden="true"><use href="#dy-nagas" /></svg></button>
+        </div>
+
+        <p id="tre-status" class="state-line" style="text-align:center" aria-live="polite"></p>
+        <div id="tre-hall" class="hall-empty" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer class="gate-foot">
+      <p class="epithet">Money buys ownership, never win-rate.</p>
+    </footer>
+
+    <script src="js/light.js"></script>
+    <script src="js/wallet.js"></script>
+    <script src="js/cards.js"></script>
+    <script src="js/treasury.js"></script>
+    <script>
+      (function () {
+        document.getElementById("free-game").href = window.DY_CONFIG.freeGameUrl;
+        var npTop = document.getElementById("nameplate-top");
+        var addrTop = document.getElementById("addr-top");
+        window.DYWallet.onChange(function (s) {
+          npTop.classList.toggle("hidden", !s.connected);
+          if (s.connected) addrTop.textContent = window.DYWallet.shortAddr(s.address);
+        });
+        window.DYTreasury.mount();
+        window.DYWallet.init();
+      })();
+    </script>
+  </body>
+</html>

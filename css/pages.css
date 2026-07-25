@@ -1,0 +1,495 @@
+/* ============================================================================
+   THE THRESHOLD — page surfaces: the Gate facade, the Rite, the Treasury.
+   Density gradient (§13.D): loudest at the facade, quietest at the rite.
+   ========================================================================= */
+
+/* ==================== THE GATE (facade) ==================== */
+.facade {
+  position: relative;
+  min-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2vh 0 6vh;
+}
+.facade .crest-crown {
+  margin: 1.5vh 0 0.5vh;
+  color: var(--gold-burnished);
+}
+.facade .crest-crown svg {
+  width: 56px;
+  height: 56px;
+  filter: drop-shadow(0 0 16px rgba(232, 147, 58, 0.35));
+}
+.title-mark {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-burnished);
+  font-size: clamp(2.4rem, 6.5vw, 4.6rem);
+  line-height: 1;
+  margin: 0.4rem 0 0;
+  text-shadow: 0 0 30px rgba(232, 147, 58, 0.25);
+}
+.title-epithet {
+  font-family: var(--display);
+  font-weight: 500;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--gold-aged);
+  font-size: clamp(0.6rem, 1.4vw, 0.86rem);
+  margin: 0.9rem 0 0;
+}
+
+/* THE DOORWAY: carved arch (hairline gold pillars + lintel) over the visible war */
+.doorway {
+  position: relative;
+  width: min(560px, 82vw);
+  margin: 4vh auto 0;
+  padding: 2.2rem 2.4rem 2.6rem;
+  border-left: 1px solid var(--gold-hairline);
+  border-right: 1px solid var(--gold-hairline);
+  border-top: 1px solid var(--gold-hairline);
+  border-radius: 2px 2px 0 0;
+  /* the war beyond: temple-city crop at the horizon, dark storm sky above */
+  background:
+    linear-gradient(180deg, rgba(11, 10, 8, 0.92) 0%, rgba(11, 10, 8, 0.55) 42%, rgba(11, 10, 8, 0.2) 66%, transparent 100%),
+    radial-gradient(120% 70% at 50% 8%, #14273d33, transparent 60%),
+    url("../assets/img/doorway_war.jpg") center bottom / cover no-repeat,
+    var(--stone-void);
+  overflow: hidden;
+}
+.doorway::before {
+  /* the lintel gold seam across the arch top */
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -1px;
+  right: -1px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--gold-burnished), transparent);
+  opacity: 0.7;
+}
+.doorway .doorway-inner {
+  position: relative;
+  z-index: 1;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1.4rem;
+}
+.promise {
+  font-family: var(--text);
+  color: var(--gold-burnished);
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
+  letter-spacing: 0.02em;
+  margin: 0.4rem 0 0;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
+}
+/* two flanking lamps at the doorway shoulders */
+.doorway .lamp {
+  position: absolute;
+  top: 18px;
+  animation: lampBreath 4.8s ease-in-out infinite;
+}
+.doorway .lamp.left {
+  left: -14px;
+}
+.doorway .lamp.right {
+  right: -14px;
+  animation-delay: -2.6s;
+}
+.scroll-cue {
+  margin-top: 3vh;
+  color: var(--gold-aged);
+  animation: lampBreath 5s ease-in-out infinite;
+}
+.scroll-cue svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ==================== THE GAME / COLLECTION flanking + faction band ==================== */
+.band-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5vh;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .band-grid {
+    grid-template-columns: 0.9fr 2.2fr 0.9fr;
+    gap: 3vw;
+  }
+}
+.pillar h3 {
+  font-family: var(--display);
+  letter-spacing: var(--track-display);
+  text-transform: uppercase;
+  color: var(--gold-burnished);
+  font-size: 1.05rem;
+  margin: 0 0 1.2rem;
+  text-align: center;
+}
+.pillar-item {
+  margin: 0 0 1.3rem;
+}
+.pillar-item .k {
+  font-family: var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-burnished);
+  font-size: 0.82rem;
+}
+.pillar-item .v {
+  font-family: var(--text);
+  color: var(--gold-burnished);
+  opacity: 0.78;
+  font-size: 0.92rem;
+  margin-top: 0.2rem;
+}
+
+/* FOUR FACTIONS band — grounds-not-chrome sigil panels (§13.C) */
+.faction-head {
+  text-align: center;
+  font-family: var(--display);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold-burnished);
+  font-size: clamp(1rem, 2.4vw, 1.4rem);
+  margin: 0 0 2.4rem;
+}
+.factions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.4rem;
+}
+@media (min-width: 720px) {
+  .factions {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+.faction {
+  text-align: center;
+  padding: 1.4rem 0.8rem 1.2rem;
+  border: 1px solid var(--gold-aged);
+  border-radius: 2px;
+  /* the ground IS the accent (literally grounds-not-chrome) */
+  background: linear-gradient(180deg, var(--fg, #2a2216) 0%, rgba(11, 10, 8, 0.9) 100%);
+}
+.faction.devas {
+  --fg: #3a2a10;
+}
+.faction.asuras {
+  --fg: #3a130c;
+}
+.faction.vanaras {
+  --fg: #0f2a20;
+}
+.faction.nagas {
+  --fg: #0c1826;
+}
+.faction .sigil {
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 0.9rem;
+  color: var(--gold-burnished);
+}
+.faction .fname {
+  font-family: var(--display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold-burnished);
+  font-size: 1rem;
+}
+.faction .fep {
+  font-family: var(--text);
+  color: var(--gold-burnished);
+  opacity: 0.72;
+  font-size: 0.78rem;
+  margin: 0.4rem 0 1rem;
+  min-height: 2.4em;
+}
+.faction .explore {
+  font-family: var(--display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  color: var(--gold-aged);
+  border: 1px solid var(--gold-aged);
+  border-radius: 1px;
+  padding: 0.4rem 1rem;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+/* ==================== JOIN THE SAGA (dormant, §14.1) ==================== */
+.saga {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: center;
+  text-align: center;
+}
+@media (min-width: 760px) {
+  .saga {
+    grid-template-columns: 1fr 1fr;
+    text-align: left;
+  }
+}
+.saga .field {
+  display: flex;
+  gap: 0.6rem;
+  max-width: 420px;
+}
+.saga input {
+  flex: 1;
+  background: rgba(11, 10, 8, 0.7);
+  border: 1px solid var(--gold-aged);
+  border-radius: 1px;
+  color: var(--gold-aged);
+  font-family: var(--text);
+  padding: 0.6rem 0.8rem;
+}
+.saga input::placeholder {
+  color: var(--gold-aged);
+  opacity: 0.7;
+}
+.saga .dormant-note {
+  font-family: var(--text);
+  font-size: 0.7rem;
+  color: var(--gold-aged);
+  margin-top: 0.5rem;
+  letter-spacing: 0.04em;
+}
+
+/* ==================== THE RITE (§8.3 — quieter register, §13.D) ==================== */
+.rite-stage {
+  min-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 2rem;
+  padding: 8vh 0;
+}
+.rite-mark {
+  width: 132px;
+  height: 132px;
+  color: var(--gold-aged);
+  transition: color 600ms ease, filter 600ms ease;
+}
+.rite-mark.burning {
+  color: var(--gold-burnished);
+  filter: drop-shadow(0 0 22px rgba(232, 147, 58, 0.5));
+}
+/* the ONE vermilion thread — drawn across the lintel on claim confirm */
+.rite-thread {
+  width: min(420px, 70vw);
+  height: 2px;
+  position: relative;
+  overflow: hidden;
+}
+.rite-thread i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, transparent, var(--vermilion), var(--flame-halo), transparent);
+}
+.rite-thread.drawn i {
+  animation: threadDraw 1400ms ease forwards;
+}
+@keyframes threadDraw {
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rite-thread.drawn i {
+    animation: none;
+    transform: scaleX(1);
+  }
+}
+.rite-state-msg {
+  font-family: var(--text);
+  color: var(--gold-burnished);
+  opacity: 0.85;
+  max-width: 40ch;
+}
+
+/* ==================== THE TREASURY (§8.5 — the one dense hall) ==================== */
+.chambers {
+  display: flex;
+  gap: 0.9rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0 0 4vh;
+}
+.chamber-gem {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--gold-aged);
+  background: var(--cg, #241e15);
+  cursor: pointer;
+  transition: box-shadow var(--wake) ease, border-color var(--wake) ease;
+  color: var(--gold-burnished);
+  display: grid;
+  place-items: center;
+}
+.chamber-gem[data-f="devas"] {
+  --cg: #3a2a10;
+}
+.chamber-gem[data-f="asuras"] {
+  --cg: #3a130c;
+}
+.chamber-gem[data-f="vanaras"] {
+  --cg: #0f2a20;
+}
+.chamber-gem[data-f="nagas"] {
+  --cg: #0c1826;
+}
+.chamber-gem[aria-pressed="true"],
+.chamber-gem:hover,
+.chamber-gem:focus-visible {
+  border-color: var(--gold-burnished);
+  box-shadow: 0 0 16px rgba(232, 147, 58, 0.35);
+}
+.chamber-gem svg {
+  width: 22px;
+  height: 22px;
+}
+
+.hall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 2.4rem 1.6rem;
+}
+.plinth {
+  text-align: center;
+}
+.plinth .frame {
+  aspect-ratio: 5 / 7;
+  border: 1px solid var(--gold-hairline);
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--stone-relief), var(--stone-void));
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.plinth .frame .placeholder {
+  padding: 0.8rem;
+  color: var(--gold-aged);
+}
+.plinth .frame .placeholder svg {
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 0.5rem;
+}
+.plinth .frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.plinth .stand {
+  height: 8px;
+  margin-top: 6px;
+  background: linear-gradient(180deg, var(--gold-aged), transparent);
+  opacity: 0.5;
+}
+.plinth .pname {
+  font-family: var(--display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: var(--gold-burnished);
+  margin-top: 0.7rem;
+}
+.plinth .pep {
+  font-family: var(--text);
+  font-size: 0.66rem;
+  color: var(--gold-aged);
+  margin-top: 0.15rem;
+}
+.plinth .chain-link {
+  font-family: var(--text);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: var(--gold-aged);
+  border-bottom: 1px solid transparent;
+  margin-top: 0.4rem;
+  display: inline-block;
+}
+.plinth .chain-link:hover,
+.plinth .chain-link:focus-visible {
+  color: var(--gold-burnished);
+  border-bottom-color: var(--gold-hairline);
+}
+
+/* selecting a chamber warms the hall ambient toward that ground (§8.5) */
+#tre-hall {
+  transition: box-shadow 600ms ease;
+  border-radius: 2px;
+  padding: 2vh 0;
+}
+body[data-chamber="devas"] #tre-hall {
+  box-shadow: inset 0 0 220px 40px rgba(180, 118, 43, 0.1);
+}
+body[data-chamber="asuras"] #tre-hall {
+  box-shadow: inset 0 0 220px 40px rgba(142, 47, 27, 0.12);
+}
+body[data-chamber="vanaras"] #tre-hall {
+  box-shadow: inset 0 0 220px 40px rgba(31, 92, 70, 0.12);
+}
+body[data-chamber="nagas"] #tre-hall {
+  box-shadow: inset 0 0 220px 40px rgba(20, 39, 61, 0.14);
+}
+
+.hall-empty {
+  text-align: center;
+  padding: 6vh 0;
+}
+.hall-empty .empty-plinth {
+  width: 130px;
+  aspect-ratio: 5 / 7;
+  margin: 0 auto 1.6rem;
+  border: 1px solid var(--gold-hairline);
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--stone-lit), var(--stone-void));
+  box-shadow: 0 0 40px rgba(232, 147, 58, 0.14);
+}
+
+/* ---- footer ---- */
+.gate-foot {
+  border-top: 1px solid var(--gold-hairline);
+  padding: 6vh 0 8vh;
+  color: var(--gold-aged);
+  font-family: var(--text);
+  text-align: center;
+}
+.gate-foot .line {
+  color: var(--gold-burnished);
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+
+/* ---- status/toast-free messaging: a quiet stone line under a button ---- */
+.state-line {
+  font-family: var(--text);
+  font-size: 0.8rem;
+  color: var(--gold-aged);
+  margin-top: 0.9rem;
+  min-height: 1.2em;
+  letter-spacing: 0.03em;
+}
+.state-line a {
+  color: var(--gold-burnished);
+  border-bottom: 1px solid var(--gold-hairline);
+}
