@@ -361,6 +361,15 @@ body.treasury[data-chamber="nagas"]::before {
    these rules only SIZE the plate per context and add the sub-line + states.
    Appended last so the context widths win over the hero .plate-face on source order.
    ========================================================================= */
+/* the plate button is display:block; shrink it to the image and center it
+   (doorway columns + explore foot are not flex-centered like the cards are) */
+.doorway-cta,
+.scene-cta,
+.explore-cta {
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
 .doorway-cta .plate-face {
   width: min(280px, 74vw);
 }
