@@ -14,15 +14,16 @@ window.DY_CONFIG = {
     blockExplorerUrls: ["https://amoy.polygonscan.com"],
   },
 
-  // ⚠ REHEARSAL PLACEHOLDERS — REPLACED AT PHASE-A FREEZE.
-  // These are the deterministic addresses from the G11 LOCAL DRY-RUN (never
-  // broadcast to Amoy), used only so the read paths have a shape to call. They
-  // are NOT live deployments; on-chain reads against them fail gracefully
-  // (read-only hall, non-holder). The live Amoy addresses land at the freeze,
-  // after the G11 broadcast (see divya-yuddha-web3/docs/G11_RUNBOOK.md).
+  // ✓ FROZEN PHASE A (AMOY) — recorded 2026-07-25. The live Polygon Amoy (80002)
+  // deployment from the G11 broadcast (see divya-yuddha-web3/docs/G11_RUNBOOK.md).
+  // The site reads accessNFT (holder gate) and waveCardNFT (the treasury
+  // Transfer-scan); dycoin and marketplace are the frozen proxies, recorded here
+  // for the Phase-B marketplace UI (not yet read by the site).
   contracts: {
-    accessNFT: "0x1a4f38B8A89ffbe21Ef07D0c85E71A1dA5afD2B6", // REHEARSAL
-    waveCardNFT: "0x4e2958b9682A516020581D381a776ee0232Ffe8a", // REHEARSAL
+    accessNFT: "0xd2FcFee0c1D0AD2959b04BB6Cdb9E0e92dF62C13", // FROZEN PHASE A (AMOY)
+    waveCardNFT: "0xF3320378523413EdE0D874CfF80B780CD38cDe64", // FROZEN PHASE A (AMOY)
+    dycoin: "0x85738Bb5176E0800c0e21FB0F424de7Cbbf306ca", // FROZEN PHASE A (AMOY) — DYCoin proxy
+    marketplace: "0x2b74C4C651Dd09D30275EF0dD1c14a699B8502cd", // FROZEN PHASE A (AMOY) — Marketplace proxy
   },
 
   // ethers.js — pinned. UMD build, verified to expose BrowserProvider /
