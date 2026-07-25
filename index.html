@@ -16,17 +16,17 @@
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
-    <link rel="stylesheet" href="css/pages.css?v=s1e" />
+    <link rel="stylesheet" href="css/pages.css?v=s1g" />
     <link rel="stylesheet" href="css/plates.css?v=s1e" />
     <link rel="preload" as="image" href="assets/plates/facade.webp" type="image/webp" media="(min-width:720px)" fetchpriority="high" />
     <link rel="preload" as="image" href="assets/plates/facade_mobile.webp" type="image/webp" media="(max-width:719px)" fetchpriority="high" />
     <script src="config.js?v=s1e"></script>
   </head>
   <body class="gate">
-    <script src="js/ornament.js"></script>
+    <script src="js/ornament.js?v=s1g"></script>
     <div id="carried-lamp" aria-hidden="true"></div>
 
-    <header>
+    <header id="top">
       <nav class="gate-nav wrap" aria-label="Primary">
         <a class="crest" href="index.html">
           <img class="brand-logo" src="assets/brand/logo.webp" width="460" height="298" alt="Divya Yuddha — Battle of the Celestials" />
@@ -81,23 +81,23 @@
       </section>
       <div class="facade-seam" aria-hidden="true"></div>
 
-      <!-- ===================== THE RITE / THE TREASURY / THE LAW ===================== -->
-      <section class="section dawn wrap" aria-label="What lies within">
-        <div class="lintel"><span></span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
-        <div class="band-grid" style="grid-template-columns:1fr">
-          <div class="factions" style="grid-template-columns:1fr">
-            <div style="display:grid;gap:3vh;grid-template-columns:1fr" class="rite-tri">
-              <div class="pillar">
-                <h3>The Rite</h3>
-                <p class="prose" style="text-align:center;max-width:36ch;margin:0 auto">One free Access token, one per hand, bound to you alone. It is your name at the gate — it never touches your win-rate.</p>
-                <div style="text-align:center;margin-top:1.4rem"><a class="rite-btn" href="rite.html" style="padding:0.6rem 1.6rem">Take the Rite<span class="sub">claim your access</span></a></div>
-              </div>
-              <div class="pillar">
-                <h3>The Treasury</h3>
-                <p class="prose" style="text-align:center;max-width:36ch;margin:0 auto">Cards you own are yours — held in your name, traded by your hand. Money buys ownership, never win-rate.</p>
-                <div style="text-align:center;margin-top:1.4rem"><a class="rite-btn" href="treasury.html" style="padding:0.6rem 1.6rem">Enter the Hall<span class="sub">your collection</span></a></div>
-              </div>
-            </div>
+      <!-- ===================== THE DUAL-CTA DOORWAY (mobile master §2, S1g) ===================== -->
+      <section class="doorway" aria-label="Declare yourself or claim your access">
+        <picture class="doorway-plate">
+          <source srcset="assets/plates/rite.webp" type="image/webp" />
+          <img src="assets/plates/rite.jpg" loading="lazy" decoding="async" alt="A carved temple gate opening onto the burning world beyond, braziers alight at its foot." />
+        </picture>
+        <div class="doorway-lamps" aria-hidden="true"></div>
+        <div class="doorway-cols wrap">
+          <div class="doorway-col">
+            <h2 class="doorway-title">Declare Yourself</h2>
+            <p class="doorway-copy">The gate opens only for bearers. Declare yourself — your wallet is your name here.</p>
+            <button id="doorway-declare" class="rite-btn" type="button" style="padding:0.6rem 1.6rem">Connect Wallet<span class="sub">your name at the gate</span></button>
+          </div>
+          <div class="doorway-col">
+            <h2 class="doorway-title">Claim Your Access</h2>
+            <p class="doorway-copy">One free Access token, one per hand, bound to you alone. Take the rite.</p>
+            <a class="rite-btn" href="rite.html" style="padding:0.6rem 1.6rem">Claim Access<span class="sub">take the rite</span></a>
           </div>
         </div>
       </section>
@@ -119,7 +119,7 @@
       </section>
 
       <!-- ===================== FOUR FACTIONS band (§13.C) ===================== -->
-      <section class="section dawn wrap" aria-label="Four factions">
+      <section id="factions" class="section dawn wrap" aria-label="Four factions">
         <h2 class="faction-head">Four Factions. Four Destinies.</h2>
         <div class="factions">
           <div class="faction devas">
@@ -145,23 +145,33 @@
         </div>
       </section>
 
-      <!-- ===================== THE GAME / THE COLLECTION ===================== -->
-      <section class="section tight dawn wrap" aria-label="The game and the collection">
-        <div class="band-grid">
-          <div class="pillar">
-            <h3>The Game</h3>
-            <div class="pillar-item"><svg style="width:26px;height:26px;color:var(--gold-burnished);float:left;margin:2px 10px 0 0"><use href="#dy-blades" /></svg><div class="k">Strategic Battles</div><div class="v">Best-of-three duels where every decision shapes the outcome.</div></div>
-            <div class="pillar-item"><svg style="width:26px;height:26px;color:var(--gold-burnished);float:left;margin:2px 10px 0 0"><use href="#dy-deck" /></svg><div class="k">Build. Command. Conquer.</div><div class="v">Decks drawn from four factions and iconic heroes.</div></div>
-            <div class="pillar-item"><svg style="width:26px;height:26px;color:var(--gold-burnished);float:left;margin:2px 10px 0 0"><use href="#dy-realm" /></svg><div class="k">Cosmic Realms</div><div class="v">Ever-changing realms that bend strategy and fate.</div></div>
-          </div>
-          <div class="pillar" style="align-self:center;text-align:center">
-            <p class="prose" style="max-width:44ch;margin:0 auto">Every legend was once a choice. What you choose today becomes history.</p>
-          </div>
-          <div class="pillar" style="text-align:center">
-            <h3>The Collection</h3>
-            <p class="prose" style="max-width:26ch;margin:0 auto 1.4rem">Mythic cards. Eternal value. Your collection is your legacy.</p>
-            <a class="rite-btn" href="treasury.html" style="padding:0.6rem 1.4rem">Enter Hall<span class="sub">your cards</span></a>
-          </div>
+      <!-- ===================== THREE CARD SECTIONS (mobile master §4, S1g) ===================== -->
+      <section id="panels" class="section tight dawn wrap" aria-label="The game, the collection, the rite">
+        <div class="scene-cards">
+          <article class="scene-card">
+            <div class="scene-frame">
+              <img src="assets/plates/card_game.webp" width="900" height="675" loading="lazy" decoding="async" alt="A lone warrior on a ridge overlooking a burning battlefield and a fortress-city under a fiery sky." />
+            </div>
+            <h3 class="scene-title">The Game</h3>
+            <p class="scene-copy">Strategic best-of-three duels where four factions clash. Free to play, always.</p>
+            <a id="card-game-link" class="rite-btn" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener" style="padding:0.6rem 1.4rem">Enter the Arena<span class="sub">play free</span></a>
+          </article>
+          <article class="scene-card">
+            <div class="scene-frame">
+              <img src="assets/plates/card_collection.webp" width="900" height="675" loading="lazy" decoding="async" alt="A winged Garuda statue rising in a lamplit temple hall of black stone and gold." />
+            </div>
+            <h3 class="scene-title">The Collection</h3>
+            <p class="scene-copy">Heroes, astras, mantras and artifacts — held in your name, traded by your hand.</p>
+            <a class="rite-btn" href="treasury.html" style="padding:0.6rem 1.4rem">View Collection<span class="sub">your cards</span></a>
+          </article>
+          <article class="scene-card">
+            <div class="scene-frame">
+              <img src="assets/plates/card_rite.webp" width="900" height="675" loading="lazy" decoding="async" alt="A robed figure raising a glowing light before a fiery gate, flanked by stone guardians." />
+            </div>
+            <h3 class="scene-title">The Rite</h3>
+            <p class="scene-copy">The Access token is your key. Free, one per hand, bound to you alone.</p>
+            <a class="rite-btn" href="rite.html" style="padding:0.6rem 1.4rem">Learn the Rite<span class="sub">claim access</span></a>
+          </article>
         </div>
       </section>
 
@@ -184,9 +194,46 @@
       </section>
     </main>
 
-    <footer class="gate-foot">
-      <p class="line">Every legend was once a choice. What you choose today becomes history.</p>
-      <p class="epithet" style="margin-top:1rem">Own the cards. The game stays free.</p>
+    <!-- ===================== THE FOOTER (mobile master §5, S1g) ===================== -->
+    <footer class="site-foot">
+      <div class="foot-top wrap">
+        <div class="foot-brand">
+          <img class="foot-logo" src="assets/brand/logo.webp" width="200" height="130" alt="" aria-hidden="true" />
+          <p class="foot-tag">Divya Yuddha<small>Battle of the Celestials</small></p>
+          <div class="foot-icons" role="group" aria-label="Community — coming soon">
+            <span class="soc sleeping" aria-disabled="true" title="Discord — coming soon"><svg aria-hidden="true"><use href="#dy-discord" /></svg></span>
+            <span class="soc sleeping" aria-disabled="true" title="X — coming soon"><svg aria-hidden="true"><use href="#dy-x" /></svg></span>
+            <span class="soc sleeping" aria-disabled="true" title="Telegram — coming soon"><svg aria-hidden="true"><use href="#dy-telegram" /></svg></span>
+            <span class="soc sleeping" aria-disabled="true" title="YouTube — coming soon"><svg aria-hidden="true"><use href="#dy-youtube" /></svg></span>
+          </div>
+        </div>
+        <nav class="foot-col" aria-label="Explore">
+          <h4>Explore</h4>
+          <a href="index.html#top">The Gate</a>
+          <a href="index.html#factions">Factions</a>
+          <a href="index.html#panels">The Game</a>
+          <a href="rite.html">The Rite</a>
+          <a href="treasury.html">The Treasury</a>
+        </nav>
+        <div class="foot-col" aria-label="Support">
+          <h4>Support</h4>
+          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Help Center</span>
+          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Guides</span>
+          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Terms of Service</span>
+          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Privacy Policy</span>
+        </div>
+        <div class="foot-col" aria-label="Community">
+          <h4>Community</h4>
+          <span class="foot-soc sleeping" aria-disabled="true" title="coming soon"><svg aria-hidden="true"><use href="#dy-discord" /></svg>Discord</span>
+          <span class="foot-soc sleeping" aria-disabled="true" title="coming soon"><svg aria-hidden="true"><use href="#dy-x" /></svg>X</span>
+          <span class="foot-soc sleeping" aria-disabled="true" title="coming soon"><svg aria-hidden="true"><use href="#dy-telegram" /></svg>Telegram</span>
+          <span class="foot-soc sleeping" aria-disabled="true" title="coming soon"><svg aria-hidden="true"><use href="#dy-youtube" /></svg>YouTube</span>
+        </div>
+        <div class="foot-plaque">
+          <svg class="foot-flame" aria-hidden="true"><use href="#dy-flame" /></svg>
+          <p>The gate remains open for those who dare.</p>
+        </div>
+      </div>
     </footer>
 
     <script src="js/light.js?v=s1e"></script>
@@ -199,6 +246,8 @@
         if (fg) fg.href = CFG.freeGameUrl;
         var lf = document.getElementById("law-free");
         if (lf) lf.href = CFG.freeGameUrl;
+        var cardGame = document.getElementById("card-game-link");
+        if (cardGame) cardGame.href = CFG.freeGameUrl;
 
         // Two CTAs, one flow (S1e / owner ruling B): the ceremonial hero PLATE and
         // the persistent header text button both connect; both are the disconnected
@@ -206,6 +255,7 @@
         var declTop = document.getElementById("declare-top");
         var heroDecl = document.getElementById("hero-declare");
         var heroWrap = document.getElementById("hero-declare-wrap");
+        var doorwayDecl = document.getElementById("doorway-declare");
         var npTop = document.getElementById("nameplate-top");
         var addrTop = document.getElementById("addr-top");
 
@@ -218,11 +268,26 @@
         }
         declTop.addEventListener("click", doConnect);
         if (heroDecl) heroDecl.addEventListener("click", doConnect);
+        if (doorwayDecl) doorwayDecl.addEventListener("click", doConnect);
+
+        function setDoorway(connected) {
+          if (!doorwayDecl) return;
+          if (connected) {
+            doorwayDecl.innerHTML = 'Declared<span class="sub">your name is at the gate</span>';
+            doorwayDecl.classList.add("sleeping");
+            doorwayDecl.disabled = true;
+          } else {
+            doorwayDecl.innerHTML = 'Connect Wallet<span class="sub">your name at the gate</span>';
+            doorwayDecl.classList.remove("sleeping");
+            doorwayDecl.disabled = false;
+          }
+        }
 
         window.DYWallet.onChange(function (s) {
           if (!s.hasProvider) {
             declTop.classList.remove("hidden");
             if (heroWrap) heroWrap.classList.remove("hidden");
+            setDoorway(false);
             return;
           }
           if (s.connected) {
@@ -230,10 +295,12 @@
             declTop.classList.add("hidden");
             if (heroWrap) heroWrap.classList.add("hidden");
             addrTop.textContent = window.DYWallet.shortAddr(s.address);
+            setDoorway(true);
           } else {
             npTop.classList.add("hidden");
             declTop.classList.remove("hidden");
             if (heroWrap) heroWrap.classList.remove("hidden");
+            setDoorway(false);
           }
         });
         window.DYWallet.init();

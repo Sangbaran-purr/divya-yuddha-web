@@ -40,6 +40,10 @@
     '<symbol id="dy-blades" viewBox="0 0 32 32"><g fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 6l14 14M26 6L12 20"/><path d="M20 22l4 4M12 22l-4 4"/></g></symbol>' +
     '<symbol id="dy-deck" viewBox="0 0 32 32"><g fill="none" stroke="currentColor" stroke-width="1.4"><rect x="8" y="6" width="14" height="20" rx="1"/><path d="M12 3h14v20"/></g></symbol>' +
     '<symbol id="dy-realm" viewBox="0 0 32 32"><g fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="16" cy="16" r="11"/><path d="M5 16h22M16 5v22M8 8c5 5 11 5 16 0M8 24c5-5 11-5 16 0"/></g></symbol>' +
+    '<symbol id="dy-discord" viewBox="0 0 24 24"><path d="M8 6c-2 .2-3.6 1-4.2 2C2.7 10.5 2.7 14 3.7 16.6c1 1.1 2.4 1.8 3.8 1.9l.9-1.5M16 6c2 .2 3.6 1 4.2 2 1.1 2.5 1.1 6 .1 8.6-1 1.1-2.4 1.8-3.8 1.9l-.9-1.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="9.2" cy="12" r="1.25" fill="currentColor"/><circle cx="14.8" cy="12" r="1.25" fill="currentColor"/></symbol>' +
+    '<symbol id="dy-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>' +
+    '<symbol id="dy-telegram" viewBox="0 0 24 24"><path d="M21 5L2.8 12.1l5.7 1.9 2 5.4 2.9-3.7 4.2 3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8.5 14l8.2-6.2" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></symbol>' +
+    '<symbol id="dy-youtube" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.6 9.8l4 2.2-4 2.2z" fill="currentColor"/></symbol>' +
     "</defs></svg>";
   if (document.body) {
     document.body.insertAdjacentHTML("afterbegin", SPRITE);
