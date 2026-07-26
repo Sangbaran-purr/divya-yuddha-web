@@ -9,7 +9,7 @@
 window.DYAdmin = (function () {
   var PLAYER = window.DY_CONFIG; // chain + ethers CDN (shared infra)
   var FILE = window.DY_ADMIN_CONFIG || {};
-  var LS_KEY = "dy_admin_config";
+  var LS_KEY = "dyadmin::config"; // distinct namespace; never collides with the game copy's dyw:: door-wipe (S5a follow-up)
 
   var ACCESS_ABI = [
     "function owner() view returns (address)",
