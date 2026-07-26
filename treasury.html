@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="css/pages.css?v=s1g" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="preload" as="image" href="assets/plates/treasury_hall.webp" type="image/webp" />
-    <script src="config.js?v=sfreeze"></script>
+    <script src="config.js?v=s4"></script>
   </head>
   <body class="treasury">
     <script src="js/ornament.js?v=s1g"></script>
@@ -35,7 +35,7 @@
             <a href="index.html">The Gate</a>
             <a href="rite.html">The Rite</a>
             <a href="treasury.html" aria-current="page">The Treasury</a>
-            <a id="free-game" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">The Free Game</a>
+            <a href="game/index.html">The Game</a>
           </div>
           <div id="nav-decl">
             <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
@@ -110,7 +110,6 @@
     <script src="js/treasury.js?v=s1e"></script>
     <script>
       (function () {
-        document.getElementById("free-game").href = window.DY_CONFIG.freeGameUrl;
         var npTop = document.getElementById("nameplate-top");
         var addrTop = document.getElementById("addr-top");
         window.DYWallet.onChange(function (s) {

@@ -34,9 +34,6 @@ window.DY_CONFIG = {
     cdn: "https://cdn.jsdelivr.net/npm/ethers@6.17.0/dist/ethers.umd.min.js",
   },
 
-  // The free game (external link — the live Pages game; stays free, untouched).
-  freeGameUrl: "https://sangbaran-purr.github.io/divya-yuddha/",
-
   // Access-NFT claim state. The site CANNOT mint (AccessNFT.mint is
   // onlyMinter). The claim ships FULLY BUILT but DORMANT ("THE RITE OPENS
   // SOON") until a Phase-A authorized-minter/sale module goes live. Flipping

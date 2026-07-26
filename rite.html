@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="css/pages.css?v=s1g" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="preload" as="image" href="assets/plates/rite.webp" type="image/webp" fetchpriority="high" />
-    <script src="config.js?v=sfreeze"></script>
+    <script src="config.js?v=s4"></script>
     <style>
       /* THE THRESHOLD NOTICE — one parchment interstitial before the door (S2) */
       #thresh {
@@ -141,7 +141,7 @@
             <a href="index.html">The Gate</a>
             <a href="rite.html" aria-current="page">The Rite</a>
             <a href="treasury.html">The Treasury</a>
-            <a id="free-game" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">The Free Game</a>
+            <a href="game/index.html">The Game</a>
           </div>
           <div id="nav-decl">
             <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
@@ -229,7 +229,6 @@
     <script>
       (function () {
         var CFG = window.DY_CONFIG;
-        document.getElementById("free-game").href = CFG.freeGameUrl;
 
         var mark = document.getElementById("rite-mark");
         var thread = document.getElementById("rite-thread");
@@ -271,7 +270,7 @@
           var ov = document.createElement("div");
           ov.id = "thresh";
           ov.innerHTML =
-            '<div class="card parchment"><p class="note">This hall keeps its own memory. Your progress at the free game does not follow you here, nor here to there.</p><button type="button" class="rite-btn" id="thresh-enter">Enter<span class="sub">into the hall</span></button></div>';
+            '<div class="card parchment"><p class="note">This hall keeps its own memory. Your progress at another gate does not follow you here, nor here to there.</p><button type="button" class="rite-btn" id="thresh-enter">Enter<span class="sub">into the hall</span></button></div>';
           document.body.appendChild(ov);
           requestAnimationFrame(function () { ov.classList.add("show"); });
           document.getElementById("thresh-enter").onclick = function () {

@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Divya Yuddha — The Gate</title>
-    <meta name="description" content="Own the cards. The game stays free. The companion threshold to Divya Yuddha — Battle of the Celestials." />
+    <meta name="description" content="Own the cards. The companion threshold to Divya Yuddha — Battle of the Celestials." />
     <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" sizes="512x512" href="assets/brand/icon-512.png" />
     <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Divya Yuddha — Battle of the Celestials" />
-    <meta property="og:description" content="Own the cards. The game stays free. The companion threshold to the war." />
+    <meta property="og:description" content="Own the cards. The companion threshold to the war." />
     <meta property="og:image" content="https://sangbaran-purr.github.io/divya-yuddha-web/assets/plates/facade.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
@@ -20,7 +20,7 @@
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="preload" as="image" href="assets/plates/facade.webp" type="image/webp" media="(min-width:720px)" fetchpriority="high" />
     <link rel="preload" as="image" href="assets/plates/facade_mobile.webp" type="image/webp" media="(max-width:719px)" fetchpriority="high" />
-    <script src="config.js?v=sfreeze"></script>
+    <script src="config.js?v=s4"></script>
   </head>
   <body class="gate">
     <script src="js/ornament.js?v=s1g"></script>
@@ -36,7 +36,7 @@
             <a href="index.html" aria-current="page">The Gate</a>
             <a href="rite.html">The Rite</a>
             <a href="treasury.html">The Treasury</a>
-            <a id="free-game" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">The Free Game</a>
+            <a href="game/index.html">The Game</a>
           </div>
           <div id="nav-decl">
             <button id="declare-top" class="rite-btn" type="button" style="padding:0.5rem 1.2rem">
@@ -75,7 +75,7 @@
             <span class="plate-sub">connect wallet</span>
             <div id="hero-declare-line" class="state-line" aria-live="polite"></div>
           </div>
-          <p class="promise">Own the cards. The game stays free.</p>
+          <p class="promise">Own the cards. The gate is yours.</p>
         </div>
         <div class="scroll-cue" aria-hidden="true"><svg><use href="#dy-chev" /></svg></div>
       </section>
@@ -116,13 +116,12 @@
         <div style="max-width:640px;margin:0 auto">
           <div class="parchment">
             <h3>The Law of the Gate</h3>
-            <p>Two gates stand, with two rulebooks. This is the owner's gate — the game is built in, entered by the Access token.</p>
+            <p>The game is built into this gate, entered by the Access token.</p>
             <ul>
               <li><strong>The door is free.</strong> The Access token is claimed once at launch, one per hand, bound to you alone — never sold, yours to burn. It admits you; it buys no advantage.</li>
               <li><strong>The cards are owned.</strong> Every wave card is an NFT. Trade them on the marketplace in DYCoin, or earn them at the table — three cards a season, and three alone.</li>
               <li><strong>Two coins, one wall.</strong> DYCoin is money: the marketplace, and staking when it opens. The play-token is reward alone, redeemed toward the earnable three through verified play. Neither ever becomes the other.</li>
               <li><strong>Rank is not for sale.</strong> XP measures the player, and sets the bots you face. Player-versus-player matchmaking and staking arrive in Phase B — named here because they are coming, not yet here.</li>
-              <li><strong>The free game endures.</strong> The full game lives free at its own home, every wave included, forever — a different gate for a different crowd: <a id="law-free" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener">the free game</a>.</li>
             </ul>
           </div>
         </div>
@@ -169,12 +168,12 @@
               <img src="assets/plates/card_game.webp" width="900" height="675" loading="lazy" decoding="async" alt="A lone warrior on a ridge overlooking a burning battlefield and a fortress-city under a fiery sky." />
             </div>
             <h3 class="scene-title">The Game</h3>
-            <p class="scene-copy">Strategic best-of-three duels where four factions clash. Free to play, always.</p>
-            <a id="card-game-link" class="plate-btn scene-cta" href="https://sangbaran-purr.github.io/divya-yuddha/" target="_blank" rel="noopener" aria-label="Enter the arena — play free">
+            <p class="scene-copy">Strategic best-of-three duels where four factions clash.</p>
+            <a class="plate-btn scene-cta" href="game/index.html" aria-label="Enter the arena">
               <img class="plate-face" src="assets/brand/ui/btn_enter_arena.webp" width="560" height="236" alt="" aria-hidden="true" />
               <span class="sr-only">Enter the Arena</span>
             </a>
-            <span class="btn-sub">play free</span>
+            <span class="btn-sub">for bearers</span>
           </article>
           <article class="scene-card">
             <div class="scene-frame">
@@ -268,15 +267,6 @@
     <script src="js/wallet.js?v=s1e"></script>
     <script>
       (function () {
-        var CFG = window.DY_CONFIG;
-        // free-game external links (nav + law)
-        var fg = document.getElementById("free-game");
-        if (fg) fg.href = CFG.freeGameUrl;
-        var lf = document.getElementById("law-free");
-        if (lf) lf.href = CFG.freeGameUrl;
-        var cardGame = document.getElementById("card-game-link");
-        if (cardGame) cardGame.href = CFG.freeGameUrl;
-
         // Two CTAs, one flow (S1e / owner ruling B): the ceremonial hero PLATE and
         // the persistent header text button both connect; both are the disconnected
         // face only — on connect the header nameplate carries identity and both hide.
