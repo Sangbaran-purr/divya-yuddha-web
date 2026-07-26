@@ -1,0 +1,285 @@
+/* ============================================================================
+   admin.css — the Admin Drops dashboard (S5a). THRESHOLD register, but an
+   INSTRUMENT, not a ceremony: dense, legible, utilitarian. Reuses the tokens
+   from threshold.css (:root vars + fonts). Unlinked from all navs.
+   ========================================================================= */
+body.admin {
+  background: var(--stone-void);
+  color: var(--parchment);
+  font-family: var(--text);
+  margin: 0;
+  padding: 0 0 6rem;
+  line-height: 1.5;
+}
+
+.admin-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 1.4rem 1.1rem;
+}
+
+.admin-head {
+  border-bottom: 1px solid var(--gold-aged);
+  padding-bottom: 0.9rem;
+  margin-bottom: 1.2rem;
+}
+.admin-head h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: var(--track-display);
+  color: var(--gold-burnished);
+  font-size: 1.15rem;
+  margin: 0 0 0.2rem;
+  text-transform: uppercase;
+}
+.admin-head .sub {
+  color: var(--gold-aged);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+/* --- generic card/panel --- */
+.panel {
+  background: var(--stone-lit);
+  border: 1px solid var(--gold-aged);
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.1rem;
+}
+.panel[hidden] {
+  display: none;
+}
+.panel h2 {
+  font-family: var(--display);
+  font-size: 0.92rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-burnished);
+  margin: 0 0 0.75rem;
+}
+.panel .hint {
+  font-size: 0.8rem;
+  color: var(--gold-aged);
+  margin: 0 0 0.7rem;
+}
+
+/* --- gate/status banners --- */
+.banner {
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.1rem;
+  font-size: 0.9rem;
+}
+.banner.warn {
+  background: rgba(142, 47, 27, 0.16);
+  border: 1px solid var(--ember);
+  color: #e8b8a4;
+}
+.banner.info {
+  background: rgba(20, 39, 61, 0.28);
+  border: 1px solid var(--abyss);
+  color: #a9c4dd;
+}
+.banner.ok {
+  background: rgba(31, 92, 70, 0.18);
+  border: 1px solid var(--jade);
+  color: #9fd3bd;
+}
+.banner strong {
+  color: var(--flame-core);
+}
+
+/* --- inputs --- */
+label.fld {
+  display: block;
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold-aged);
+  margin: 0.6rem 0 0.25rem;
+}
+input.txt,
+textarea.txt,
+select.txt {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--stone-void);
+  border: 1px solid var(--gold-hairline);
+  border-radius: 4px;
+  color: var(--parchment);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  padding: 0.55rem 0.6rem;
+}
+textarea.txt {
+  min-height: 6.5rem;
+  resize: vertical;
+  line-height: 1.7;
+}
+select.txt {
+  font-family: var(--text);
+}
+input.txt:focus,
+textarea.txt:focus,
+select.txt:focus {
+  outline: none;
+  border-color: var(--gold-burnished);
+}
+
+/* --- buttons --- */
+button.btn {
+  font-family: var(--display);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--gold-burnished);
+  border: 1px solid var(--gold-hairline);
+  border-radius: 4px;
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+  transition: border-color var(--wake), color var(--wake), background var(--wake);
+  margin-top: 0.8rem;
+}
+button.btn:hover:not(:disabled) {
+  border-color: var(--gold-burnished);
+  color: var(--flame-core);
+}
+button.btn.primary {
+  background: rgba(217, 168, 78, 0.12);
+}
+button.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+button.btn.tiny {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.7rem;
+  margin-top: 0;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+/* --- confirm box --- */
+.confirm {
+  border: 1px dashed var(--gold-hairline);
+  border-radius: 5px;
+  padding: 0.8rem 0.9rem;
+  margin-top: 0.9rem;
+  background: var(--stone-relief);
+}
+.confirm .q {
+  color: var(--flame-core);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+/* --- result / history tables --- */
+table.grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.9rem;
+  font-size: 0.8rem;
+}
+table.grid th {
+  text-align: left;
+  color: var(--gold-aged);
+  font-family: var(--display);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  border-bottom: 1px solid var(--gold-aged);
+  padding: 0.4rem 0.5rem;
+}
+table.grid td {
+  border-bottom: 1px solid rgba(138, 111, 58, 0.25);
+  padding: 0.45rem 0.5rem;
+  vertical-align: top;
+}
+table.grid td.addr {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+}
+
+/* status pills */
+.pill {
+  display: inline-block;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.pill.pending {
+  color: var(--flame-halo);
+  border-color: var(--flame-halo);
+}
+.pill.success {
+  color: #9fd3bd;
+  border-color: var(--jade);
+}
+.pill.revert,
+.pill.fail {
+  color: #e8a48c;
+  border-color: var(--ember);
+}
+.pill.invalid {
+  color: var(--gold-aged);
+  border-color: var(--gold-aged);
+}
+
+a.txlink {
+  color: var(--duskgold);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+a.txlink:hover {
+  color: var(--flame-core);
+  border-bottom-color: var(--flame-core);
+}
+
+.summary {
+  margin-top: 0.8rem;
+  font-size: 0.85rem;
+  color: var(--parchment);
+}
+.summary b.good {
+  color: #9fd3bd;
+}
+.summary b.bad {
+  color: #e8a48c;
+}
+
+details.cfg {
+  margin-top: 1.4rem;
+  border-top: 1px solid var(--gold-aged);
+  padding-top: 0.9rem;
+}
+details.cfg summary {
+  cursor: pointer;
+  color: var(--gold-aged);
+  font-family: var(--display);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.foot-note {
+  margin-top: 2rem;
+  font-size: 0.72rem;
+  color: var(--gold-aged);
+  line-height: 1.7;
+}

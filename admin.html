@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Divya Yuddha — Admin Drops</title>
+    <meta name="description" content="Owner-only minting instrument (Access + Wave drops). The chain enforces ownership." />
+    <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/threshold.css?v=s1e" />
+    <link rel="stylesheet" href="css/admin.css?v=s5a" />
+    <script src="config.js?v=s4"></script>
+    <script src="admin-config.js?v=s5a"></script>
+  </head>
+  <body class="admin">
+    <div class="admin-wrap">
+      <header class="admin-head">
+        <h1>Admin Drops</h1>
+        <div class="sub">An instrument, not a ceremony. Minting is owner-only — the chain enforces it.</div>
+      </header>
+
+      <!-- GATE — static default reads NOT CONFIGURED; JS refines to the live state -->
+      <div id="gate-banner" class="banner warn">
+        <strong>NOT CONFIGURED.</strong> No contract addresses are set. Connect a wallet and set the G12
+        AccessNFT + WaveCardNFT addresses in Configuration below. All controls stay disabled until then.
+      </div>
+
+      <!-- PANEL 1 — ACCESS DROP -->
+      <section class="panel" id="panel-access">
+        <h2>Access Drop — AccessNFT.mint(to)</h2>
+        <p class="hint">One soulbound Access NFT per wallet. Contract-enforced: a wallet that already holds one
+          reverts <span class="mono">AlreadyHolds</span> — surfaced per-row, never halting a batch.</p>
+        <label class="fld" for="acc-addr">Single address</label>
+        <input class="txt" id="acc-addr" type="text" placeholder="0x… (checksummed)" disabled />
+        <label class="fld" for="acc-batch">Batch — one address per line</label>
+        <textarea class="txt" id="acc-batch" placeholder="0x…&#10;0x…&#10;0x…" disabled></textarea>
+        <button class="btn" id="acc-review" disabled>Review drop</button>
+        <div id="acc-confirm"></div>
+        <div id="acc-results"></div>
+      </section>
+
+      <!-- PANEL 2 — WAVE DROP -->
+      <section class="panel" id="panel-wave">
+        <h2>Wave Drop — WaveCardNFT.mint(to, cardId)</h2>
+        <p class="hint">Wave cards only, grouped by faction (launch-88 cards are never individually minted and
+          never appear here). Pick one card; drop it to one or many addresses.</p>
+        <label class="fld" for="wave-pick">Wave card</label>
+        <select class="txt" id="wave-pick" disabled></select>
+        <label class="fld" for="wave-addr">Single address</label>
+        <input class="txt" id="wave-addr" type="text" placeholder="0x… (checksummed)" disabled />
+        <label class="fld" for="wave-batch">Batch — one address per line (this one card → many holders)</label>
+        <textarea class="txt" id="wave-batch" placeholder="0x…&#10;0x…&#10;0x…" disabled></textarea>
+        <button class="btn" id="wave-review" disabled>Review drop</button>
+        <div id="wave-confirm"></div>
+        <div id="wave-results"></div>
+      </section>
+
+      <!-- HISTORY -->
+      <section class="panel" id="panel-history">
+        <h2>Mint history</h2>
+        <p class="hint">Read from chain (Access <span class="mono">Transfer</span>-from-zero + Wave
+          <span class="mono">CardMinted</span>), chunked getLogs, newest first. No parallel storage.</p>
+        <div class="row-actions">
+          <button class="btn tiny" id="hist-refresh" data-always="1">Refresh</button>
+          <span id="hist-status" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+        </div>
+        <table class="grid">
+          <thead>
+            <tr><th>When (UTC)</th><th>Type</th><th>To</th><th>Card</th><th>Tx</th></tr>
+          </thead>
+          <tbody id="hist-body"></tbody>
+        </table>
+      </section>
+
+      <!-- CONFIGURATION — localStorage override (no rehearsal addresses committed) -->
+      <details class="cfg">
+        <summary>Configuration (this browser only)</summary>
+        <p class="hint">Overrides admin-config.js for this browser via localStorage. Nothing is committed.
+          Paste the G12 fresh contract addresses + the wave-card list, then Save. Clear to return to
+          NOT CONFIGURED.</p>
+        <label class="fld" for="cfg-access">AccessNFT address</label>
+        <input class="txt" id="cfg-access" type="text" placeholder="0x…" />
+        <label class="fld" for="cfg-wave">WaveCardNFT address</label>
+        <input class="txt" id="cfg-wave" type="text" placeholder="0x…" />
+        <label class="fld" for="cfg-deploy">Deploy block (history scan start; 0 = full chunked scan)</label>
+        <input class="txt" id="cfg-deploy" type="number" placeholder="0" />
+        <label class="fld" for="cfg-cards">Wave cards — JSON [{ "cardId": 101, "name": "…", "faction": "devas" }]</label>
+        <textarea class="txt" id="cfg-cards" placeholder='[&#10;  { "cardId": 101, "name": "Deva Sainika", "faction": "devas" }&#10;]'></textarea>
+        <div class="row-actions">
+          <button class="btn" id="cfg-save">Save</button>
+          <button class="btn" id="cfg-clear">Clear</button>
+        </div>
+        <div id="cfg-msg" class="mono" style="font-size:0.78rem;color:var(--flame-core);margin-top:0.5rem"></div>
+        <div id="cfg-source" class="mono" style="font-size:0.72rem;color:var(--gold-aged);margin-top:0.3rem"></div>
+      </details>
+
+      <div class="foot-note">
+        This page is unlinked from all navigation and non-indexed. It signs with the connected wallet only;
+        it holds no key. Owner-only minting is enforced by the contracts (`onlyMinter` / `owner()`), not by this UI.
+        Every send carries an explicit gas limit and a confirm step stating the count and destinations.
+      </div>
+    </div>
+
+    <script src="js/wallet.js?v=s1e"></script>
+    <script src="js/admin.js?v=s5a"></script>
+    <script>
+      window.DYAdmin.mount();
+    </script>
+  </body>
+</html>
