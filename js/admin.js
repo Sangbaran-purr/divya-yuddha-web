@@ -29,10 +29,11 @@ window.DYAdmin = (function () {
   // Explicit gas floors (runbook law). Amoy mints measure ~90k–130k; ~2x floor.
   var ACCESS_MINT_GAS = 300000;
   var WAVE_MINT_GAS = 300000;
-  var LOG_CHUNK = 45000; // getLogs block window (public-RPC range safety)
+  var LOG_CHUNK = 9000; // getLogs block window — MUST stay under archive-RPC caps (drpc/others reject >10000) (S5a-FIX-3)
   var WAIT_CONFIRMS = 1;
   var WAIT_TIMEOUT_MS = 75000; // bound tx.wait — a never-mined/dropped tx must NEVER sit PENDING (S5a-FIX-2)
   var FEE_HEADROOM = 2n; // 2x headroom over the live base+priority fee signal (S5a-FIX-2); wallet override stays possible
+  var RECENT_WINDOW = 500; // recent-only history fallback span (no readRpcUrl) — last N blocks, dodges archive gating (S5a-FIX-3)
 
   var owners = { access: null, wave: null }; // last-read on-chain owners
   var histLoaded = false;
@@ -52,6 +53,7 @@ window.DYAdmin = (function () {
       accessNFT: o.accessNFT || fc.accessNFT || null,
       waveCardNFT: o.waveCardNFT || fc.waveCardNFT || null,
       deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
+      readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null, // archive-capable RPC for HISTORY READS only (S5a-FIX-3)
       waveCards: o.waveCards && o.waveCards.length ? o.waveCards : FILE.waveCards || [],
       source: o.accessNFT || o.waveCardNFT ? "localStorage (this browser)" : "admin-config.js",
     };
@@ -448,6 +450,26 @@ window.DYAdmin = (function () {
   }
 
   // ---------- HISTORY (chunked getLogs, newest-first) ----------
+  // detect an archive/range rejection so we tell the owner to set a Read RPC URL (vs a generic "could not read")
+  function isArchiveError(e) {
+    var s = "";
+    try {
+      s = JSON.stringify(e && (e.info || e.error || {})) + " " + ((e && e.message) || "") + " " + ((e && e.shortMessage) || "");
+    } catch (x) {
+      s = (e && e.message) || "";
+    }
+    s = s.toLowerCase();
+    return (
+      s.indexOf("archive") >= 0 ||
+      s.indexOf("personal token") >= 0 ||
+      s.indexOf("block range") >= 0 ||
+      s.indexOf("range is too") >= 0 ||
+      s.indexOf("-32602") >= 0 ||
+      s.indexOf("too many") >= 0 ||
+      (s.indexOf("range") >= 0 && s.indexOf("limit") >= 0)
+    );
+  }
+
   function loadHistory() {
     var c = cfg();
     var status = $("hist-status");
@@ -456,15 +478,19 @@ window.DYAdmin = (function () {
       status.textContent = "Not configured.";
       return;
     }
-    status.textContent = "Scanning mint events…";
+    var useArchive = !!c.readRpcUrl;
+    status.textContent = useArchive ? "Scanning full history (archive RPC)…" : "Scanning recent mints…";
     body.innerHTML = "";
     withEthers()
       .then(function (ethers) {
-        var provider = readProvider();
+        // READ-ONLY provider. With a Read RPC URL → a dedicated JsonRpcProvider (NEVER a signer). Else the wallet
+        // provider, restricted to a recent window so a non-archive node is not asked for historical logs.
+        var provider = useArchive ? new ethers.JsonRpcProvider(c.readRpcUrl) : readProvider();
         var access = new ethers.Contract(c.accessNFT, ACCESS_ABI, provider);
         var wave = new ethers.Contract(c.waveCardNFT, WAVE_ABI, provider);
         return provider.getBlockNumber().then(function (latest) {
-          return scanChunked(ethers, access, wave, c.deployBlock || 0, latest).then(function (evs) {
+          var from = useArchive ? c.deployBlock || 0 : Math.max(0, latest - RECENT_WINDOW);
+          return scanChunked(ethers, access, wave, from, latest).then(function (evs) {
             return attachTimes(provider, evs);
           });
         });
@@ -475,10 +501,22 @@ window.DYAdmin = (function () {
           return b.block - a.block || b.logIndex - a.logIndex;
         });
         renderHistory(rows);
-        status.textContent = rows.length ? rows.length + " mint event(s)." : "No mints yet.";
+        if (useArchive) {
+          status.textContent = rows.length ? rows.length + " mint event(s) (full history)." : "No mints yet.";
+        } else {
+          status.innerHTML =
+            (rows.length ? rows.length + " recent mint(s). " : "No mints in the last " + RECENT_WINDOW + " blocks. ") +
+            "<span style='color:var(--ember)'>Recent only — set Read RPC URL in Configuration for full history.</span>";
+        }
       })
-      .catch(function () {
-        status.textContent = "Could not read events (RPC range/limit, or wrong addresses).";
+      .catch(function (e) {
+        histLoaded = false;
+        if (isArchiveError(e)) {
+          status.innerHTML =
+            "<span style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</span>";
+        } else {
+          status.textContent = "Could not read events (" + ((e && e.shortMessage) || "RPC error") + ").";
+        }
       });
   }
 
@@ -597,6 +635,7 @@ window.DYAdmin = (function () {
     $("cfg-access").value = c.accessNFT || "";
     $("cfg-wave").value = c.waveCardNFT || "";
     $("cfg-deploy").value = c.deployBlock || 0;
+    $("cfg-readrpc").value = c.readRpcUrl || "";
     $("cfg-cards").value = c.waveCards.length ? JSON.stringify(c.waveCards, null, 2) : "";
     // (4) persistent readout: what the picker actually got, always visible in the config panel
     var n = c.waveCards.length;
@@ -654,10 +693,15 @@ window.DYAdmin = (function () {
         cards = override().waveCards || [];
       }
 
+      var readRpc = $("cfg-readrpc").value.trim();
+      if (readRpc && !/^https?:\/\//i.test(readRpc)) {
+        return warn(msg, "Read RPC URL must be an http(s) URL. Nothing saved.");
+      }
       var o = {
         accessNFT: pa,
         waveCardNFT: pw,
         deployBlock: Number($("cfg-deploy").value) || 0,
+        readRpcUrl: readRpc || null,
         waveCards: cards,
       };
       localStorage.setItem(LS_KEY, JSON.stringify(o));

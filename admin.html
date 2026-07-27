@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
     <link rel="stylesheet" href="css/admin.css?v=s5d" />
     <script src="config.js?v=s4"></script>
-    <script src="admin-config.js?v=s5a"></script>
+    <script src="admin-config.js?v=s5e"></script>
   </head>
   <body class="admin">
     <div class="admin-wrap">
@@ -86,6 +86,8 @@
         <input class="txt" id="cfg-wave" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-deploy">Deploy block (history scan start; 0 = full chunked scan)</label>
         <input class="txt" id="cfg-deploy" type="number" placeholder="0" />
+        <label class="fld" for="cfg-readrpc">Read RPC URL (archive-capable — for FULL Mint History; blank = recent-only)</label>
+        <input class="txt" id="cfg-readrpc" type="text" placeholder="https://… (read-only; never signs)" />
         <label class="fld" for="cfg-cards">Wave cards — JSON [{ "cardId": 101, "name": "…", "faction": "devas" }]</label>
         <textarea class="txt" id="cfg-cards" placeholder='[&#10;  { "cardId": 101, "name": "Deva Sainika", "faction": "devas" }&#10;]'></textarea>
         <div class="row-actions">
@@ -104,7 +106,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s5d"></script>
+    <script src="js/admin.js?v=s5e"></script>
     <script>
       window.DYAdmin.mount();
     </script>

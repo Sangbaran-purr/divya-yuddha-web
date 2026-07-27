@@ -37,6 +37,12 @@ window.DY_ADMIN_CONFIG = {
   // the getLogs range tiny.
   deployBlock: 0,
 
+  // Archive-capable Amoy RPC used ONLY for the Mint-History getLogs read (never a
+  // signing path — all writes stay on the wallet). Public free RPCs reject
+  // historical getLogs as archive requests; set an archive endpoint here for FULL
+  // history. Null = recent-only scan (last N blocks) via the wallet's own RPC.
+  readRpcUrl: null,
+
   // WAVE CARDS ONLY (see header). Empty until the metadata freeze / rehearsal.
   // Example (do not ship guessed ids): { cardId: 101, name: "Deva Sainika", faction: "devas" }
   waveCards: [],
