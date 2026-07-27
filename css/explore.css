@@ -84,6 +84,79 @@ body.explore[data-fac="asuras"] .ex-tab.on { border-color: var(--vermilion); col
 body.explore[data-fac="nagas"] .ex-tab.on { border-color: var(--jade); color: #8fd3bd; }
 body.explore[data-fac="vanaras"] .ex-tab.on { border-color: var(--duskgold); color: #e0b878; }
 
+/* --- launch / wave sections (S6b) --- */
+.ex-section-head {
+  margin: 1.6rem 0 0.9rem;
+  text-align: center;
+}
+.ex-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  font-family: var(--display);
+  font-size: 0.95rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-burnished);
+}
+.ex-section-title::before,
+.ex-section-title::after {
+  content: "";
+  flex: 0 1 90px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-aged), transparent);
+}
+.ex-section-count {
+  font-family: var(--text);
+  font-size: 0.72rem;
+  color: var(--gold-aged);
+  border: 1px solid var(--gold-aged);
+  border-radius: 999px;
+  padding: 0.02rem 0.5rem;
+}
+.ex-section-copy {
+  max-width: 46ch;
+  margin: 0.5rem auto 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--parchment);
+  opacity: 0.9;
+}
+.ex-foot {
+  margin: 1.8rem auto 0;
+  text-align: center;
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  color: var(--gold-aged);
+}
+
+/* --- per-card availability badge --- */
+.ex-badge {
+  display: inline-block;
+  margin: 0 0.5rem 0.5rem;
+  font-family: var(--display);
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.06rem 0.44rem;
+  white-space: nowrap;
+}
+.ex-badge-launch {
+  color: var(--gold-burnished);
+}
+.ex-badge-wave1 {
+  color: #8fb9d6;
+  border-color: var(--abyss);
+}
+.ex-badge-token {
+  color: var(--duskgold);
+  border: 1px dashed var(--duskgold);
+  white-space: normal;
+}
+
 /* --- grid --- */
 .ex-grid {
   display: grid;
