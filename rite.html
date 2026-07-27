@@ -125,6 +125,99 @@
           display: none !important;
         }
       }
+      /* ── TORANA — the Access Card, a claims-closed presentation piece (S6c) ── */
+      .torana-scene {
+        display: block;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 2.6rem 1rem 3rem;
+        text-align: center;
+      }
+      .torana-frame {
+        position: relative;
+        display: block;
+        max-width: 720px;
+        margin: 0 auto;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid var(--gold-hairline);
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.55),
+          0 12px 44px rgba(0, 0, 0, 0.6),
+          0 0 46px rgba(232, 147, 58, 0.16);
+        background: var(--stone-void);
+      }
+      /* a subtle THRESHOLD vignette scrim over the card edges (static, no motion) */
+      .torana-frame::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: inherit;
+        background: radial-gradient(70% 66% at 50% 42%, transparent 58%, rgba(4, 3, 1, 0.34));
+      }
+      .torana-frame img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      /* fail-open placeholder on a 404 frame */
+      .torana-ph {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        aspect-ratio: 2 / 3;
+        background: linear-gradient(160deg, var(--stone-relief), var(--stone-void));
+      }
+      .torana-ph-t {
+        font-family: var(--display);
+        font-size: 1.5rem;
+        letter-spacing: 0.14em;
+        color: var(--gold-burnished);
+      }
+      .torana-ph-s {
+        font-family: var(--text);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--gold-aged);
+      }
+      .torana-copy {
+        max-width: 48ch;
+        margin: 1.3rem auto 0;
+      }
+      .torana-title {
+        font-family: var(--display);
+        font-weight: 600;
+        letter-spacing: var(--track-display);
+        text-transform: uppercase;
+        color: var(--gold-burnished);
+        font-size: 1.16rem;
+        margin: 0 0 0.55rem;
+      }
+      .torana-sub {
+        font-family: var(--text);
+        color: var(--parchment);
+        font-size: 1.02rem;
+        line-height: 1.6;
+        margin: 0 0 0.85rem;
+      }
+      .torana-status {
+        font-family: var(--text);
+        color: var(--gold-aged);
+        font-size: 0.86rem;
+        line-height: 1.65;
+        margin: 0;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .torana-frame {
+          box-shadow:
+            0 0 0 1px rgba(0, 0, 0, 0.55),
+            0 12px 44px rgba(0, 0, 0, 0.6);
+        }
+      }
     </style>
   </head>
   <body>
@@ -179,6 +272,32 @@
             Declare Yourself<span class="sub">connect wallet</span>
           </button>
           <div id="rite-line" class="state-line" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- TORANA — the Access Card, a claims-closed presentation piece (S6c).
+           Carries ONLY the three ruled strings; visually separated from the
+           wallet threshold above. No mint / wallet prompt / countdown / price / date. -->
+      <section class="torana-scene" aria-label="TORANA — The Access Card">
+        <figure class="torana-frame">
+          <img
+            src="assets/tokens/Access_Torana_720.jpg"
+            width="720"
+            height="1080"
+            loading="lazy"
+            decoding="async"
+            alt="TORANA — The Access Card: the founding threshold gate opening onto the four realms."
+            onerror="this.style.display='none';var p=this.parentNode.querySelector('.torana-ph');if(p)p.style.display='flex';"
+          />
+          <div class="torana-ph" aria-hidden="true">
+            <span class="torana-ph-t">TORANA</span>
+            <span class="torana-ph-s">The Access Card</span>
+          </div>
+        </figure>
+        <div class="torana-copy">
+          <h2 class="torana-title">TORANA — The Access Card</h2>
+          <p class="torana-sub">One card. The whole launch set, playable.</p>
+          <p class="torana-status">The Rite is not yet open. Claims begin on the owner's word, and this page will announce it.</p>
         </div>
       </section>
     </main>
