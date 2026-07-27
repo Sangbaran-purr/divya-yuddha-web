@@ -16,7 +16,7 @@
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
-    <link rel="stylesheet" href="css/pages.css?v=s1g" />
+    <link rel="stylesheet" href="css/pages.css?v=s1h" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="preload" as="image" href="assets/plates/facade.webp" type="image/webp" media="(min-width:720px)" fetchpriority="high" />
     <link rel="preload" as="image" href="assets/plates/facade_mobile.webp" type="image/webp" media="(max-width:719px)" fetchpriority="high" />
@@ -35,6 +35,7 @@
           <div class="links">
             <a href="index.html" aria-current="page">The Gate</a>
             <a href="rite.html">The Rite</a>
+            <a href="explore.html">The Cards</a>
             <a href="treasury.html">The Treasury</a>
             <a href="game/index.html">The Game</a>
           </div>
@@ -134,22 +135,22 @@
           <div class="faction devas">
             <img class="badge" src="assets/brand/ui/badge_devas.webp" width="258" height="420" loading="lazy" decoding="async" alt="Devas faction badge" />
             <div class="fep">Guardians of Dharma. Bearers of light.</div>
-            <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
+            <a class="explore" href="explore.html?f=devas" aria-label="Explore the Deva cards">Explore ›</a>
           </div>
           <div class="faction asuras">
             <img class="badge" src="assets/brand/ui/badge_asuras.webp" width="242" height="420" loading="lazy" decoding="async" alt="Asuras faction badge" />
             <div class="fep">Masters of Ambition. Driven by desire.</div>
-            <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
+            <a class="explore" href="explore.html?f=asuras" aria-label="Explore the Asura cards">Explore ›</a>
           </div>
           <div class="faction vanaras">
             <img class="badge" src="assets/brand/ui/badge_vanaras.webp" width="246" height="420" loading="lazy" decoding="async" alt="Vanaras faction badge" />
             <div class="fep">Bound by Loyalty. Children of the wild.</div>
-            <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
+            <a class="explore" href="explore.html?f=vanaras" aria-label="Explore the Vanara cards">Explore ›</a>
           </div>
           <div class="faction nagas">
             <img class="badge" src="assets/brand/ui/badge_nagas.webp" width="237" height="420" loading="lazy" decoding="async" alt="Nagas faction badge" />
             <div class="fep">Keepers of Mystery. From depths unknown.</div>
-            <button class="explore sleeping" type="button" disabled aria-disabled="true" title="Faction lore opens in a later phase">Explore</button>
+            <a class="explore" href="explore.html?f=nagas" aria-label="Explore the Naga cards">Explore ›</a>
           </div>
         </div>
         <div class="explore-foot">
@@ -238,6 +239,7 @@
           <h4>Explore</h4>
           <a href="index.html#top">The Gate</a>
           <a href="index.html#factions">Factions</a>
+          <a href="explore.html">The Cards</a>
           <a href="index.html#panels">The Game</a>
           <a href="rite.html">The Rite</a>
           <a href="treasury.html">The Treasury</a>

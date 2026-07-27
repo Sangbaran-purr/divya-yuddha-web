@@ -1,0 +1,273 @@
+/* ============================================================================
+   explore.css — the card showcase (S6). THRESHOLD register, reuses threshold.css
+   :root tokens. Scoped to body.explore. Mobile-first grid + lightbox.
+   ========================================================================= */
+body.explore {
+  background: var(--stone-void);
+  color: var(--parchment);
+  font-family: var(--text);
+  margin: 0;
+  padding: 0 0 5rem;
+}
+
+.explore-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1.4rem 1rem;
+}
+
+.explore-head {
+  text-align: center;
+  border-bottom: 1px solid var(--gold-aged);
+  padding-bottom: 1rem;
+  margin-bottom: 1.2rem;
+}
+.explore-head h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: var(--track-display);
+  color: var(--gold-burnished);
+  font-size: 1.3rem;
+  margin: 0 0 0.3rem;
+  text-transform: uppercase;
+}
+.explore-head .sub {
+  color: var(--gold-aged);
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+}
+
+/* --- faction tabs --- */
+.ex-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 1.4rem;
+}
+.ex-tab {
+  font-family: var(--display);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--stone-lit);
+  color: var(--gold-aged);
+  border: 1px solid var(--gold-hairline);
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: color var(--wake), border-color var(--wake), background var(--wake);
+}
+.ex-tab:hover {
+  color: var(--gold-burnished);
+  border-color: var(--gold-burnished);
+}
+.ex-tab.on {
+  color: var(--flame-core);
+  border-color: var(--flame-halo);
+  background: rgba(217, 168, 78, 0.1);
+}
+.ex-count {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--gold-aged);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.02rem 0.42rem;
+  opacity: 0.85;
+}
+
+/* --- faction ground tint on the gallery (subtle) --- */
+body.explore[data-fac="devas"] .ex-tab.on { border-color: var(--gold-burnished); }
+body.explore[data-fac="asuras"] .ex-tab.on { border-color: var(--vermilion); color: #f0b49c; }
+body.explore[data-fac="nagas"] .ex-tab.on { border-color: var(--jade); color: #8fd3bd; }
+body.explore[data-fac="vanaras"] .ex-tab.on { border-color: var(--duskgold); color: #e0b878; }
+
+/* --- grid --- */
+.ex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.9rem;
+}
+@media (max-width: 460px) {
+  .ex-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
+  }
+}
+
+.ex-card {
+  margin: 0;
+  cursor: pointer;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--stone-lit);
+  border: 1px solid rgba(138, 111, 58, 0.35);
+  transition: transform var(--wake), border-color var(--wake), box-shadow var(--wake);
+}
+.ex-card:hover,
+.ex-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--gold-hairline);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  outline: none;
+}
+.ex-frame {
+  aspect-ratio: 2 / 3;
+  background: var(--stone-void);
+  position: relative;
+}
+.ex-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ex-cap {
+  font-family: var(--display);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: var(--gold-burnished);
+  padding: 0.4rem 0.5rem 0.05rem;
+  line-height: 1.25;
+}
+.ex-cap-sub {
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gold-aged);
+  padding: 0 0.5rem 0.5rem;
+}
+
+/* --- neutral placeholder (fail-open on a 404 frame) --- */
+.ex-ph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  text-align: center;
+  padding: 0.6rem;
+  background: linear-gradient(160deg, var(--stone-relief), var(--stone-void));
+  border: 1px solid rgba(138, 111, 58, 0.3);
+}
+.ex-ph-name {
+  font-family: var(--display);
+  font-size: 0.82rem;
+  color: var(--gold-burnished);
+}
+.ex-ph-sub {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gold-aged);
+}
+
+/* --- lightbox --- */
+.ex-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 3, 1, 0.9);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.ex-lightbox.show {
+  display: flex;
+  opacity: 1;
+}
+.ex-lb-inner {
+  position: relative;
+  max-width: 92vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+.ex-lb-img {
+  max-width: 100%;
+  max-height: 78vh;
+  display: flex;
+  cursor: pointer;
+}
+.ex-lb-frame {
+  display: block;
+  max-width: 100%;
+  max-height: 78vh;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+}
+.ex-lb-cap {
+  font-family: var(--display);
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  color: var(--gold-burnished);
+  text-align: center;
+}
+.ex-lb-count {
+  font-size: 0.72rem;
+  color: var(--gold-aged);
+  letter-spacing: 0.06em;
+}
+.ex-lb-close {
+  position: absolute;
+  top: -2.6rem;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(4, 3, 1, 0.6);
+  border: 1px solid var(--gold-hairline);
+  color: var(--gold-burnished);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.ex-lb-nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(4, 3, 1, 0.55);
+  border: 1px solid var(--gold-hairline);
+  color: var(--gold-burnished);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.ex-lb-prev { left: 2vw; }
+.ex-lb-next { right: 2vw; }
+.ex-lb-close:hover,
+.ex-lb-nav:hover {
+  color: var(--flame-core);
+  border-color: var(--flame-core);
+}
+
+.explore-foot-note {
+  margin-top: 2.4rem;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--gold-aged);
+  line-height: 1.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-lightbox,
+  .ex-card {
+    transition: none !important;
+  }
+  .ex-card:hover,
+  .ex-card:focus-visible {
+    transform: none;
+  }
+}
