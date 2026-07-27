@@ -132,11 +132,14 @@
         margin: 0 auto;
         padding: 2.6rem 1rem 3rem;
         text-align: center;
+        /* presentation piece, not a takeover — tunable card width */
+        --torana-w: clamp(260px, 34vw, 420px);
       }
       .torana-frame {
         position: relative;
         display: block;
-        max-width: 720px;
+        width: var(--torana-w);
+        max-width: 100%;
         margin: 0 auto;
         border-radius: 10px;
         overflow: hidden;
