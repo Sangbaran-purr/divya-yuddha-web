@@ -241,6 +241,11 @@ table.grid td.addr {
   color: var(--gold-aged);
   border-color: var(--gold-aged);
 }
+/* dropped/stuck: submitted but not mined (gas too low / dropped / replaced) — actionable, distinct from a hard revert */
+.pill.dropped {
+  color: var(--duskgold);
+  border: 1px dashed var(--duskgold);
+}
 
 a.txlink {
   color: var(--duskgold);

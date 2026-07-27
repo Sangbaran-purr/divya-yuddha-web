@@ -30,6 +30,9 @@ window.DYAdmin = (function () {
   var ACCESS_MINT_GAS = 300000;
   var WAVE_MINT_GAS = 300000;
   var LOG_CHUNK = 45000; // getLogs block window (public-RPC range safety)
+  var WAIT_CONFIRMS = 1;
+  var WAIT_TIMEOUT_MS = 75000; // bound tx.wait — a never-mined/dropped tx must NEVER sit PENDING (S5a-FIX-2)
+  var FEE_HEADROOM = 2n; // 2x headroom over the live base+priority fee signal (S5a-FIX-2); wallet override stays possible
 
   var owners = { access: null, wave: null }; // last-read on-chain owners
   var histLoaded = false;
@@ -105,6 +108,26 @@ window.DYAdmin = (function () {
   }
   function readProvider() {
     return new ethersRef.BrowserProvider(window.ethereum);
+  }
+
+  // (scope 2) size EIP-1559 fees from live base+priority with FEE_HEADROOM so a send isn't dropped under Amoy's
+  // volatile gas floor. maxFeePerGas is a refundable ceiling; the wallet still shows + can override these.
+  function feeOverrides(provider) {
+    return provider
+      .getFeeData()
+      .then(function (fd) {
+        var gp = fd.gasPrice || 0n; // legacy signal (≈ base+priority; on Amoy base≈0 so this is the real floor)
+        var mf = fd.maxFeePerGas || 0n;
+        var basis = gp > mf ? gp : mf; // whichever price signal is higher
+        if (basis === 0n) return {}; // no signal → let the wallet decide
+        var ceil = basis * FEE_HEADROOM;
+        var prio = basis * FEE_HEADROOM;
+        if (prio > ceil) prio = ceil;
+        return { maxFeePerGas: ceil, maxPriorityFeePerGas: prio };
+      })
+      .catch(function () {
+        return {}; // fee read failed → let the wallet decide (never block the send)
+      });
   }
 
   // parse a checksummed address; returns normalized or null (invalid)
@@ -339,58 +362,88 @@ window.DYAdmin = (function () {
         return tr;
       });
 
-      var ok = 0;
-      var bad = 0;
-      // sequential — a failed row never halts the batch
-      var chain = Promise.resolve();
-      addrs.forEach(function (a, i) {
-        chain = chain.then(function () {
-          return dropOne(contract, kind, a, cardId).then(function (r) {
-            var stCell = rows[i].querySelector(".pill").parentNode;
-            var dCell = rows[i].querySelector(".detail");
-            if (r.status === "success") {
-              ok++;
-              stCell.innerHTML = "<span class='pill success'>success</span>";
-              dCell.innerHTML = "<a class='txlink' target='_blank' rel='noopener' href='" + txUrl(r.hash) + "'>" +
-                r.hash.slice(0, 10) + "… ↗</a>";
-            } else {
-              bad++;
-              stCell.innerHTML = "<span class='pill " + (r.status === "revert" ? "revert" : "fail") + "'>" +
-                r.status + "</span>";
-              dCell.innerHTML = r.detail +
-                (r.hash ? " · <a class='txlink' target='_blank' rel='noopener' href='" + txUrl(r.hash) +
-                  "'>tx ↗</a>" : "");
-            }
-            summary.innerHTML = "Progress: <b class='good'>" + ok + "</b> success · <b class='bad'>" + bad +
-              "</b> failed · " + (addrs.length - ok - bad) + " remaining.";
+      // size fees once from live gas (scope 2) — a stale-priced send is what got dropped before
+      return feeOverrides(provider).then(function (feeOv) {
+        var ok = 0;
+        var bad = 0;
+        // sequential — a failed row never halts the batch
+        var chain = Promise.resolve();
+        addrs.forEach(function (a, i) {
+          chain = chain.then(function () {
+            return dropOne(contract, kind, a, cardId, feeOv).then(function (r) {
+              var stCell = rows[i].querySelector(".pill").parentNode;
+              var dCell = rows[i].querySelector(".detail");
+              if (r.status === "success") {
+                ok++;
+                stCell.innerHTML = "<span class='pill success'>success</span>";
+                dCell.innerHTML = "<a class='txlink' target='_blank' rel='noopener' href='" + txUrl(r.hash) + "'>" +
+                  r.hash.slice(0, 10) + "… ↗</a>";
+              } else {
+                bad++;
+                // r.status ∈ revert | dropped | fail — each has its own pill (no more silent PENDING)
+                stCell.innerHTML = "<span class='pill " + r.status + "'>" + r.status + "</span>";
+                dCell.innerHTML = r.detail +
+                  (r.hash ? " · <a class='txlink' target='_blank' rel='noopener' href='" + txUrl(r.hash) +
+                    "'>tx ↗</a>" : "");
+              }
+              summary.innerHTML = "Progress: <b class='good'>" + ok + "</b> success · <b class='bad'>" + bad +
+                "</b> unresolved · " + (addrs.length - ok - bad) + " remaining.";
+            });
           });
         });
-      });
-      return chain.then(function () {
-        summary.innerHTML = "Done: <b class='good'>" + ok + "</b> success · <b class='bad'>" + bad +
-          "</b> failed, of " + addrs.length + ".";
+        return chain.then(function () {
+          summary.innerHTML = "Done: <b class='good'>" + ok + "</b> success · <b class='bad'>" + bad +
+            "</b> failed/unconfirmed, of " + addrs.length + ".";
+        });
       });
     });
   }
 
   // one mint: pre-simulate (surface revert reason without spending), then send with explicit gas.
-  function dropOne(contract, kind, to, cardId) {
+  function dropOne(contract, kind, to, cardId, feeOv) {
     var sim = kind === "access" ? contract.mint.staticCall(to) : contract.mint.staticCall(to, cardId);
     return sim
       .then(function () {
-        var send = kind === "access"
-          ? contract.mint(to, { gasLimit: ACCESS_MINT_GAS })
-          : contract.mint(to, cardId, { gasLimit: WAVE_MINT_GAS });
+        var ov = { gasLimit: kind === "access" ? ACCESS_MINT_GAS : WAVE_MINT_GAS };
+        if (feeOv && feeOv.maxFeePerGas != null) {
+          ov.maxFeePerGas = feeOv.maxFeePerGas;
+          ov.maxPriorityFeePerGas = feeOv.maxPriorityFeePerGas;
+        }
+        var send = kind === "access" ? contract.mint(to, ov) : contract.mint(to, cardId, ov);
+        // `send` resolves once the WALLET submits the tx; then wait for it to mine — BOUNDED (no PENDING-forever).
         return send.then(function (tx) {
-          return tx.wait().then(function (rc) {
-            if (rc && rc.status === 1) return { status: "success", hash: tx.hash };
-            return { status: "fail", detail: "reverted on-chain", hash: tx.hash };
-          });
+          return tx
+            .wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS)
+            .then(function (rc) {
+              if (rc && rc.status === 1) return { status: "success", hash: tx.hash };
+              return { status: "revert", detail: "reverted on-chain", hash: tx.hash }; // mined, status 0
+            })
+            .catch(function (we) {
+              // wait-phase: replaced/cancelled, or timed out (never mined). MUST resolve, never hang on PENDING.
+              if (we && we.code === "TRANSACTION_REPLACED") {
+                if (we.receipt && we.receipt.status === 1) {
+                  return { status: "success", hash: (we.replacement && we.replacement.hash) || tx.hash };
+                }
+                if (we.reason === "cancelled") return { status: "dropped", detail: "cancelled in wallet", hash: tx.hash };
+                return {
+                  status: "dropped",
+                  detail: "replaced (" + (we.reason || "repriced") + ") — check wallet",
+                  hash: (we.replacement && we.replacement.hash) || tx.hash,
+                };
+              }
+              return {
+                status: "dropped",
+                detail: "not mined in " + Math.round(WAIT_TIMEOUT_MS / 1000) +
+                  "s (gas too low or dropped) — speed up / resubmit in your wallet",
+                hash: tx.hash,
+              };
+            });
         });
       })
       .catch(function (e) {
-        // staticCall revert (AlreadyHolds etc.) or send/reject
-        return { status: e && e.code === "ACTION_REJECTED" ? "fail" : "revert", detail: decodeErr(e), hash: e && e.transactionHash };
+        // pre-sim staticCall revert (AlreadyHolds etc.) or the wallet rejected the signature
+        if (e && e.code === "ACTION_REJECTED") return { status: "fail", detail: "signature rejected in wallet" };
+        return { status: "revert", detail: decodeErr(e), hash: e && e.transactionHash };
       });
   }
 
