@@ -545,7 +545,25 @@ window.DYAdmin = (function () {
     $("cfg-wave").value = c.waveCardNFT || "";
     $("cfg-deploy").value = c.deployBlock || 0;
     $("cfg-cards").value = c.waveCards.length ? JSON.stringify(c.waveCards, null, 2) : "";
-    $("cfg-source").textContent = "Active source: " + c.source;
+    // (4) persistent readout: what the picker actually got, always visible in the config panel
+    var n = c.waveCards.length;
+    var src = $("cfg-source");
+    src.textContent = "Active source: " + c.source + " · wave cards loaded: " + (n || "NONE — picker disabled");
+    src.style.color = n ? "var(--gold-aged)" : "var(--ember)";
+  }
+
+  // (1) Tolerant JSON: copy-paste from a doc/chat brings smart quotes + trailing commas.
+  function sanitizeJson(s) {
+    return s
+      .replace(/[“”]/g, '"') // “ ” curly double quotes -> "
+      .replace(/[‘’]/g, "'") // ‘ ’ curly single quotes -> '
+      .replace(/,(\s*[}\]])/g, "$1") // trailing comma before } or ]
+      .trim();
+  }
+
+  function warn(msg, txt) {
+    msg.textContent = txt;
+    msg.style.color = "var(--ember)";
   }
 
   function saveCfg() {
@@ -555,33 +573,34 @@ window.DYAdmin = (function () {
       var w = $("cfg-wave").value.trim();
       var pa = a ? parseAddr(a) : null;
       var pw = w ? parseAddr(w) : null;
-      if (a && !pa) {
-        msg.textContent = "AccessNFT address is not a valid checksummed address.";
-        return;
-      }
-      if (w && !pw) {
-        msg.textContent = "WaveCardNFT address is not a valid checksummed address.";
-        return;
-      }
-      var cards = [];
+      if (a && !pa) return warn(msg, "AccessNFT address is not a valid checksummed address. Nothing saved.");
+      if (w && !pw) return warn(msg, "WaveCardNFT address is not a valid checksummed address. Nothing saved.");
+
       var rawCards = $("cfg-cards").value.trim();
+      var cards;
       if (rawCards) {
         try {
-          cards = JSON.parse(rawCards);
+          cards = JSON.parse(sanitizeJson(rawCards));
         } catch (e) {
-          msg.textContent = "Wave cards must be valid JSON.";
-          return;
+          return warn(msg, "Wave cards are not valid JSON (check quotes/commas). Nothing saved.");
         }
+        if (!Array.isArray(cards)) return warn(msg, "Wave cards must be a JSON array [ … ]. Nothing saved.");
         var factions = { devas: 1, asuras: 1, vanaras: 1, nagas: 1 };
         for (var i = 0; i < cards.length; i++) {
           var cd = cards[i];
-          if (cd.cardId == null || isNaN(Number(cd.cardId)) || !cd.name || !factions[cd.faction]) {
-            msg.textContent = "Card #" + (i + 1) + " needs {cardId:number, name, faction ∈ devas|asuras|vanaras|nagas}.";
-            return;
+          if (cd == null || cd.cardId == null || isNaN(Number(cd.cardId)) || !cd.name || !factions[cd.faction]) {
+            return warn(
+              msg,
+              "Card #" + (i + 1) + " needs {cardId:number, name, faction ∈ devas|asuras|vanaras|nagas}. Nothing saved."
+            );
           }
           cd.cardId = Number(cd.cardId);
         }
+      } else {
+        // (2 — RULED) empty textarea: PRESERVE the previously-stored wave cards; never blank a prior valid list.
+        cards = override().waveCards || [];
       }
+
       var o = {
         accessNFT: pa,
         waveCardNFT: pw,
@@ -589,7 +608,15 @@ window.DYAdmin = (function () {
         waveCards: cards,
       };
       localStorage.setItem(LS_KEY, JSON.stringify(o));
-      msg.textContent = "Saved to this browser. Nothing was committed.";
+
+      // (3) accurate per-save message; (2) persistent notice when the stored list is empty
+      var n = cards.length;
+      if (n > 0) {
+        msg.textContent = "Saved · " + n + " wave card" + (n === 1 ? "" : "s") + " loaded. Nothing was committed.";
+        msg.style.color = "var(--flame-core)";
+      } else {
+        warn(msg, "Saved addresses · WAVE CARDS NOT SET — the picker stays disabled. Paste the wave-card JSON and Save again.");
+      }
       histLoaded = false;
       buildPicker();
       fillCfgForm();
@@ -600,6 +627,7 @@ window.DYAdmin = (function () {
   function clearCfg() {
     localStorage.removeItem(LS_KEY);
     $("cfg-msg").textContent = "Cleared. Reverted to admin-config.js.";
+    $("cfg-msg").style.color = "var(--flame-core)";
     histLoaded = false;
     buildPicker();
     fillCfgForm();
