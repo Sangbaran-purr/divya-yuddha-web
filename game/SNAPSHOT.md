@@ -1,18 +1,25 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `44690ca615034bdfb8c4a00c4358f260d4d2a7b0` (44690ca)
-- Source committed: 2026-07-24 11:54:37 +0530
+- Source commit: `7abbc282393e74f214730efc190160c2bf3f3fad` (7abbc28)
+- Source committed: 2026-08-04 18:25:31 +0530
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
-- index.html (+ gate preamble injected between the DYW-GATE markers)
+- index.html (+ gate preamble AND the S3 economy-suppression block, injected between the DYW-GATE markers)
 - src/chapters.js (Story Mode data)
 - assets/cards, assets/img, assets/audio, assets/story, assets/thumbs
+- assets/board (BOARD_ART_V zoomed tiles), assets/vendor (pixi runtime)
 
 ## Excluded / transformed
 - assets/video/ (~47MB) — NOT copied. The VIDEO_BASE web branch is rewritten to the free game's live same-origin URL (https://sangbaran-purr.github.io/divya-yuddha/assets/video/); the intro streams from there and fails open to the landing if unavailable (the game's own law).
+- assets/vfx/ (~285MB, S8 WORD 1) — NOT copied. The three sheet-URL builders (mvURL/sheetURL/stillURL) are rewritten from 'assets/vfx/ to the free game's live Pages URL (https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/); VFX sheets stream same-origin. Guarded: the sync fails if the builder count is not exactly 3.
 - .DS_Store — not in the commit; never copied.
+
+## S3 economy suppression (marker: DYW-S3-SUPPRESS-START / -END; S8 WORD 2)
+- CSS display:none: the Ratna Vault (#vault + #mode-vault + .vault-buy), buy/acquire entry points (.cc-pin) + #col-wallet, landing wallet rows (.lp-wallet) + #lp-sadhana + #sadhanapick.
+- DOM scrubber: coins/Amsha/Sadhana amounts removed from earn stamps (.earn-chip) and quest rewards (.q-reward); XP and LEVEL lines are kept (ruled progression). Game logic is byte-faithful — no source edit.
+- KEPT VISIBLE: the Collection gallery (as a card viewer).
 
 ## Gate preamble (marker: DYW-GATE-START / DYW-GATE-END)
 - Honest-door session check: no site pass -> redirect to ../rite.html. A courtesy redirect, not security.
@@ -20,8 +27,11 @@
 - Return-to-gate gem-mark (top-left, safe-area aware).
 
 ## Notes at sync time
-- Source working tree dirty files: 4 (ignored by the archive method).
-- game/ in-repo size: 246112 KB.
+- Source working tree dirty files: 1 (ignored by the archive method).
+- game/ in-repo size: 189732 KB.
+
+## Entry-link stamps (S8 flag-1)
+- The five site->game links (rite.html x3, index.html x2) are stamped game/index.html?v=7abbc28 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 5.
 
 ## Refresh
     bash scripts/sync_game.sh

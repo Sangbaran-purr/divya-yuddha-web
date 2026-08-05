@@ -18,8 +18,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SITE_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEST="$SITE_REPO/game"
 VIDEO_URL="https://sangbaran-purr.github.io/divya-yuddha/assets/video/"
+VFX_URL="https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/"
 NS_PREFIX="dyw::"
-ARCHIVE_PATHS="index.html src/chapters.js assets/cards assets/img assets/audio assets/story assets/thumbs"
+# assets/vfx is NOT archived (285MB): the three VFX URL builders are cross-linked to the free game's live Pages
+# origin (S8 owner ruling, WORD 1 — mirrors the video cross-link). assets/board + assets/vendor (pixi) ARE copied.
+ARCHIVE_PATHS="index.html src/chapters.js assets/cards assets/img assets/audio assets/story assets/thumbs assets/board assets/vendor"
 
 if [ ! -f "$GAME_REPO/index.html" ] || [ ! -d "$GAME_REPO/assets/cards" ]; then
   echo "error: GAME_REPO does not look like the game ($GAME_REPO)" >&2
@@ -52,6 +55,26 @@ sed "s#: 'assets/video/';#: '$VIDEO_URL';#" "$DEST/index.html" > "$DEST/index.ht
 mv "$DEST/index.html.v" "$DEST/index.html"
 if [ "$(grep -c "$VIDEO_URL';" "$DEST/index.html")" -lt "1" ]; then
   echo "error: video cross-link rewrite failed" >&2
+  exit 1
+fi
+
+# VFX cross-link (S8 WORD 1): the sheet-URL builders anchor on 'assets/vfx/ — rewrite the base to the free game's
+# live Pages origin so the 285MB sheet set streams same-origin instead of being copied. Same guard style as the
+# video: assert the EXACT match count and fail loudly if the pattern drifts. There are THREE builders (mvURL /
+# sheetURL / stillURL), so the count is 3 (the game legitimately has three sheet-URL builders; not one like video).
+VFX_BEFORE="$(grep -o "'assets/vfx/" "$DEST/index.html" | wc -l | tr -d ' ')"
+if [ "$VFX_BEFORE" != "3" ]; then
+  echo "error: expected exactly three 'assets/vfx/ builders (mvURL/sheetURL/stillURL), found $VFX_BEFORE (game changed its VFX wiring)" >&2
+  exit 1
+fi
+sed "s#'assets/vfx/#'$VFX_URL#g" "$DEST/index.html" > "$DEST/index.html.v"
+mv "$DEST/index.html.v" "$DEST/index.html"
+if [ "$(grep -o "'$VFX_URL" "$DEST/index.html" | wc -l | tr -d ' ')" != "3" ]; then
+  echo "error: VFX cross-link rewrite did not produce 3 absolute builders" >&2
+  exit 1
+fi
+if [ "$(grep -c "'assets/vfx/" "$DEST/index.html")" != "0" ]; then
+  echo "error: VFX cross-link left a relative 'assets/vfx/ reference behind" >&2
   exit 1
 fi
 
@@ -102,6 +125,37 @@ cat > "$PRE" <<'PREAMBLE'
   else addGem();
 })();
 </script>
+<!-- DYW-S3-SUPPRESS-START (S8 WORD 2; re-applied every sync). Hide the free-platform economy surfaces.
+     Game logic stays byte-faithful: CSS display:none on ids/classes + a DOM currency scrubber, no source edit.
+     KEPT VISIBLE (ruled): the Collection gallery as a viewer, and the XP + LEVEL progression lines. -->
+<style id="dyw-s3-suppress">
+  /* (1) Ratna Vault — the whole screen (tabs/grid/gate/season/set/back live inside it) + landing entry + buy buttons */
+  #vault, #mode-vault, .vault-buy { display: none !important; }
+  /* (2) buy/acquire entry points (collection PIN + BUY both carry .cc-pin) + the collection wallet readout */
+  #col-wallet, .cc-pin { display: none !important; }
+  /* (3) landing wallet rows (coins/Amsha) + the Sadhana pin card + its picker overlay */
+  .lp-wallet, #lp-sadhana, #sadhanapick { display: none !important; }
+</style>
+<script>
+(function(){
+  // (4)+(5) amount-level scrub — earn-stamp currency chips and quest reward currency; XP is KEPT.
+  function scrub(){
+    try {
+      var chips = document.querySelectorAll(".earn-chip"); // "+N XP" kept; "◉N"/"✦N"/"Sadhana +N" removed
+      for (var i = 0; i < chips.length; i++){ var t = (chips[i].textContent || "").trim();
+        if (t.charAt(0) === "◉" || t.charAt(0) === "✦" || t.indexOf("Sadhana") === 0) chips[i].remove(); }
+      var qs = document.querySelectorAll(".q-reward"); // "+N coins · +N Amsha · +N XP" -> "+N XP"
+      for (var j = 0; j < qs.length; j++){ var s = qs[j].textContent || "";
+        var m = s.replace(/\+\d+\s*coins\s*·\s*\+\d+\s*Amsha\s*·\s*/, ""); if (m !== s) qs[j].textContent = m; }
+    } catch (e) {}
+  }
+  var pending = false;
+  function schedule(){ if (pending) return; pending = true; requestAnimationFrame(function(){ pending = false; scrub(); }); }
+  function boot(){ scrub(); try { new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true }); } catch (e) {} }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
+</script>
+<!-- DYW-S3-SUPPRESS-END -->
 <!-- HONEST-DOOR: this is a courtesy redirect + storage namespace, NOT security.
      The game is free elsewhere by design; there is no DRM here. -->
 <!-- DYW-GATE-END -->
@@ -113,6 +167,10 @@ rm -f "$PRE"
 
 if [ "$(grep -c "DYW-GATE-START" "$DEST/index.html")" != "1" ]; then
   echo "error: gate preamble injection failed" >&2
+  exit 1
+fi
+if [ "$(grep -c "DYW-S3-SUPPRESS-START" "$DEST/index.html")" != "1" ]; then
+  echo "error: S3 economy-suppression block injection failed" >&2
   exit 1
 fi
 
@@ -127,13 +185,20 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - Method: \`git archive\` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
-- index.html (+ gate preamble injected between the DYW-GATE markers)
+- index.html (+ gate preamble AND the S3 economy-suppression block, injected between the DYW-GATE markers)
 - src/chapters.js (Story Mode data)
 - assets/cards, assets/img, assets/audio, assets/story, assets/thumbs
+- assets/board (BOARD_ART_V zoomed tiles), assets/vendor (pixi runtime)
 
 ## Excluded / transformed
 - assets/video/ (~47MB) — NOT copied. The VIDEO_BASE web branch is rewritten to the free game's live same-origin URL ($VIDEO_URL); the intro streams from there and fails open to the landing if unavailable (the game's own law).
+- assets/vfx/ (~285MB, S8 WORD 1) — NOT copied. The three sheet-URL builders (mvURL/sheetURL/stillURL) are rewritten from 'assets/vfx/ to the free game's live Pages URL ($VFX_URL); VFX sheets stream same-origin. Guarded: the sync fails if the builder count is not exactly 3.
 - .DS_Store — not in the commit; never copied.
+
+## S3 economy suppression (marker: DYW-S3-SUPPRESS-START / -END; S8 WORD 2)
+- CSS display:none: the Ratna Vault (#vault + #mode-vault + .vault-buy), buy/acquire entry points (.cc-pin) + #col-wallet, landing wallet rows (.lp-wallet) + #lp-sadhana + #sadhanapick.
+- DOM scrubber: coins/Amsha/Sadhana amounts removed from earn stamps (.earn-chip) and quest rewards (.q-reward); XP and LEVEL lines are kept (ruled progression). Game logic is byte-faithful — no source edit.
+- KEPT VISIBLE: the Collection gallery (as a card viewer).
 
 ## Gate preamble (marker: DYW-GATE-START / DYW-GATE-END)
 - Honest-door session check: no site pass -> redirect to ../rite.html. A courtesy redirect, not security.
@@ -144,8 +209,28 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - Source working tree dirty files: $SRC_DIRTY (ignored by the archive method).
 - game/ in-repo size: ${GAME_BYTES} KB.
 
+## Entry-link stamps (S8 flag-1)
+- The five site->game links (rite.html x3, index.html x2) are stamped game/index.html?v=$SRC_SHORT — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 5.
+
 ## Refresh
     bash scripts/sync_game.sh
 SNAP
 
-echo "sync_game: done. game/ = ${GAME_BYTES} KB (video cross-linked, not copied)."
+# STAMP THE SITE-TO-GAME ENTRY LINKS (S8 flag-1): bind the five game/index.html links to the synced HEAD short sha,
+# so browsers refetch the gated entry exactly when the copy changes (stamps bind to bytes). Guarded: assert exactly
+# five links, fail loudly on drift. Handles re-runs — an existing ?v=<oldsha> is rewritten to the new sha.
+ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html"
+LINKS_BEFORE="$(grep -oF 'game/index.html' $ENTRY_FILES | wc -l | tr -d ' ')"
+if [ "$LINKS_BEFORE" != "5" ]; then
+  echo "error: expected exactly 5 site->game entry links (rite.html x3 + index.html x2), found $LINKS_BEFORE (site nav changed)" >&2
+  exit 1
+fi
+SHA="$SRC_SHORT" perl -i -pe 's{game/index\.html(\?v=[0-9a-f]+)?}{game/index.html?v=$ENV{SHA}}g' $ENTRY_FILES
+LINKS_STAMPED="$(grep -oF "game/index.html?v=$SRC_SHORT" $ENTRY_FILES | wc -l | tr -d ' ')"
+if [ "$LINKS_STAMPED" != "5" ]; then
+  echo "error: entry-link stamping did not produce 5 stamped links (got $LINKS_STAMPED)" >&2
+  exit 1
+fi
+echo "sync_game: stamped 5 entry links -> game/index.html?v=$SRC_SHORT"
+
+echo "sync_game: done. game/ = ${GAME_BYTES} KB (video + vfx cross-linked, not copied)."

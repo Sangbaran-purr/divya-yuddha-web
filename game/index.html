@@ -47,6 +47,37 @@
   else addGem();
 })();
 </script>
+<!-- DYW-S3-SUPPRESS-START (S8 WORD 2; re-applied every sync). Hide the free-platform economy surfaces.
+     Game logic stays byte-faithful: CSS display:none on ids/classes + a DOM currency scrubber, no source edit.
+     KEPT VISIBLE (ruled): the Collection gallery as a viewer, and the XP + LEVEL progression lines. -->
+<style id="dyw-s3-suppress">
+  /* (1) Ratna Vault — the whole screen (tabs/grid/gate/season/set/back live inside it) + landing entry + buy buttons */
+  #vault, #mode-vault, .vault-buy { display: none !important; }
+  /* (2) buy/acquire entry points (collection PIN + BUY both carry .cc-pin) + the collection wallet readout */
+  #col-wallet, .cc-pin { display: none !important; }
+  /* (3) landing wallet rows (coins/Amsha) + the Sadhana pin card + its picker overlay */
+  .lp-wallet, #lp-sadhana, #sadhanapick { display: none !important; }
+</style>
+<script>
+(function(){
+  // (4)+(5) amount-level scrub — earn-stamp currency chips and quest reward currency; XP is KEPT.
+  function scrub(){
+    try {
+      var chips = document.querySelectorAll(".earn-chip"); // "+N XP" kept; "◉N"/"✦N"/"Sadhana +N" removed
+      for (var i = 0; i < chips.length; i++){ var t = (chips[i].textContent || "").trim();
+        if (t.charAt(0) === "◉" || t.charAt(0) === "✦" || t.indexOf("Sadhana") === 0) chips[i].remove(); }
+      var qs = document.querySelectorAll(".q-reward"); // "+N coins · +N Amsha · +N XP" -> "+N XP"
+      for (var j = 0; j < qs.length; j++){ var s = qs[j].textContent || "";
+        var m = s.replace(/\+\d+\s*coins\s*·\s*\+\d+\s*Amsha\s*·\s*/, ""); if (m !== s) qs[j].textContent = m; }
+    } catch (e) {}
+  }
+  var pending = false;
+  function schedule(){ if (pending) return; pending = true; requestAnimationFrame(function(){ pending = false; scrub(); }); }
+  function boot(){ scrub(); try { new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true }); } catch (e) {} }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
+</script>
+<!-- DYW-S3-SUPPRESS-END -->
 <!-- HONEST-DOOR: this is a courtesy redirect + storage namespace, NOT security.
      The game is free elsewhere by design; there is no DRM here. -->
 <!-- DYW-GATE-END -->
@@ -117,8 +148,12 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 #field::after{ content:''; position:absolute; inset:0; z-index:1; background:rgba(6,4,2,var(--board-overlay,.30)); pointer-events:none; }   /* dark overlay for readability; per-realm strength via --board-overlay */
 #vfxcanvas{ position:absolute; inset:0; z-index:5; pointer-events:none; }
 #vfxflash{ position:absolute; inset:0; z-index:6; pointer-events:none; opacity:0; background:radial-gradient(circle at 50% 50%, rgba(255,251,235,.92), rgba(255,235,175,.5) 42%, transparent 74%); }
-#vfxflash.fire{ animation:mythicFlash .5s ease-out; }
+#vfxflash.fire{ animation:mythicFlash calc(.5s * var(--vfx-t,1)) ease-out; }
 @keyframes mythicFlash{ 0%{opacity:0;} 8%{opacity:.98;} 24%{opacity:.35;} 100%{opacity:0;} }   /* synced to bolt 2: sharp flash → ~200ms afterglow decay */
+/* T66 combat vignette: white screen-edge flash (transparent centre → white edge, opacity-only) */
+#vfxvignette{ position:fixed; inset:0; z-index:59; pointer-events:none; opacity:0; background:radial-gradient(ellipse at 50% 50%, transparent 56%, rgba(255,252,240,.85) 100%); }
+#vfxvignette.fire{ animation:vignetteFlash calc(.06s * var(--vfx-t,1)) ease-out; }
+@keyframes vignetteFlash{ 0%{opacity:0;} 50%{opacity:.25;} 100%{opacity:0;} }
 #embers{ position:absolute; inset:0; pointer-events:none; z-index:2; overflow:hidden; }
 .ember{ position:absolute; bottom:-8px; border-radius:50%; opacity:0;
   background:radial-gradient(circle, #ffe9a8, #C9A84C 60%, transparent 72%);
@@ -176,14 +211,31 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 
 /* board mini — art-first, no name strip */
 .bc{ flex:0 0 auto; height:var(--mini-h,90px); width:calc(var(--mini-h,90px)*0.75); background:var(--panel); border:1px solid var(--line); border-radius:7px; position:relative; overflow:hidden; cursor:pointer; }
-/* T42b DEFECT-2: board card = T41b crop. Art window = top 65% (object-position:top hides the frame's baked nameplate/
-   rules-text); the bottom ~35% is the dark card ground that houses the medallion. The MEDALLION remains the sole
-   LIVE-power carrier (effPower + buffed/hurt state colouring) — no redundant chip is added (see report rationale). */
-.bc .art{ position:absolute; top:0; left:0; width:100%; height:65%; object-fit:cover; object-position:top center; z-index:0; }
+/* T93/T93b: board card = FRAMELESS ART-FORWARD tile (assets/board/, art window template-cropped from the framed
+   finals). The art COVER-FILLS the whole slot (height:100%, was the T42b top-65% framed crop) — no frame, no nameplate,
+   no rules text. object-position stays TOP so a framed FALLBACK (a card with no tile, e.g. The Setu Stones) still hides
+   its baked nameplate at the bottom. A bottom scrim (.bc.has-art::after) seats the medallion + bottom badges over the
+   now-fuller art. The MEDALLION remains the sole LIVE-power carrier; the mini-name stays the no-art fallback. */
+.bc .art{ position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; object-position:top center; z-index:0; }
+.bc.has-art::after{ content:''; position:absolute; inset:0; z-index:2; pointer-events:none; background:linear-gradient(to bottom, transparent 58%, rgba(0,0,0,.5) 100%); }   /* T93: legibility scrim under the medallion/venom badges (art now fills to the bottom edge) */
 .bc .mini-name{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:3px; z-index:1;
   font-family:Cinzel,serif; font-size:9px; font-weight:600; line-height:1.15; color:var(--ink); }
 .bc.has-art .mini-name{ display:none; }
 .bc.hero{ border-color:var(--gold-dim); }
+/* T104 PART 1 — pulsating BORDER-GLOW hero aura (pure CSS, on the card plane; retires the canvas idle auras). Per-hero tint via --aura-1 (inner) / --aura-2 (outer), set in boardCard. box-shadow is purely visual — adds NO hit area (tap targets unfattened) and is not clipped by .bc's own overflow (renders outside the border-box). */
+.bc.hero.aura{ --aura-1:#ffe6b0; --aura-2:#e0b040; animation:heroAura 1.8s ease-in-out infinite alternate; }
+/* T104-A: BOTTOM-ANCHORED FOOTLIGHT — the glow concentrates at the card's bottom edge (downward offset + larger blur). Strong under-glow, ~25% wraparound on the sides (the blur), near-zero at top (the offset pushes the pool below). Adjacent heroes are horizontal neighbours → bottoms never collide, each tint owns its bottom edge. */
+@keyframes heroAura{
+  from{ box-shadow: 0 4px 8px 0 var(--aura-1), 0 7px 16px 2px var(--aura-2); }
+  to  { box-shadow: 0 6px 13px 1px var(--aura-1), 0 10px 26px 4px var(--aura-2); }
+}
+@media (prefers-reduced-motion: reduce){ .bc.hero.aura{ animation:none; box-shadow: 0 5px 11px 1px var(--aura-1), 0 9px 20px 3px var(--aura-2); } }   /* reduced-motion: static footlight, no pulse */
+.row.hero-row{ overflow:visible; }   /* T104: the hero row holds ≤3 heroes (never scrolls) — let the border-glow render past the row edge instead of being clipped by the default overflow:auto. The enclosing .half stays overflow:hidden, but heroes sit interior so the soft glow is not reached by it. */
+/* T104-B: DELAYED HERO ARRIVAL — the placed hero cell is held HIDDEN (opacity 0, not tappable) while the entry choreography plays the empty slot; it materializes in the settle with a ~150ms fade/scale-in, then the footlight ignites. Mirrors the T97 showcase (there: keep a removed card visible; here: hold a placed card hidden). Engine state untouched. */
+.bc.hero.materializing{ opacity:0 !important; transform:scale(.86); transform-origin:50% 100%; pointer-events:none !important; box-shadow:none !important; animation:none !important; }
+.bc.hero.materialize-in{ animation:heroMaterialize calc(.15s * var(--vfx-t,1)) ease-out; }
+@keyframes heroMaterialize{ from{ opacity:0; transform:scale(.86); } to{ opacity:1; transform:scale(1); } }
+@media (prefers-reduced-motion: reduce){ .bc.hero.materialize-in{ animation:none; } }
 .bc.ghostc{ opacity:.6; border-style:dashed; }
 .shieldbadge{ position:absolute; top:2px; right:3px; font-size:12px; z-index:3; filter:drop-shadow(0 1px 1px #000); }
 .medallion{ position:absolute; right:2px; bottom:2px; width:23px; height:23px; border-radius:50%; z-index:3;
@@ -196,15 +248,16 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 .medallion.buffed .mark{ color:#5fd06f; } .medallion.hurt .mark{ color:#e05a4a; }
 .bc.targetable{ outline:2px solid var(--gold); outline-offset:1px; z-index:6; animation:pulse 1s infinite alternate; }
 @keyframes pulse{ from{ outline-color:#e0b040; box-shadow:0 0 6px #c9a84c; } to{ outline-color:#fff0c0; box-shadow:0 0 15px #ffe9a8; } }
-.bc.landing{ animation:land .45s ease-out; }
-@keyframes land{ 0%{ transform:scale(.82); box-shadow:0 0 0 0 rgba(255,233,168,.9);} 45%{ box-shadow:0 0 0 4px rgba(255,233,168,.75);} 100%{ transform:scale(1); box-shadow:0 0 0 0 rgba(255,233,168,0);} }
+.bc.landing{ animation:land calc(.45s * var(--vfx-t,1)) ease-out; }
+/* T66 ambient: anticipation dip (.82 → .78) then overshoot (1.02) then settle — a 1-frame snap so plays never read limp */
+@keyframes land{ 0%{ transform:scale(.82); box-shadow:0 0 0 0 rgba(255,233,168,.9);} 12%{ transform:scale(.78);} 55%{ box-shadow:0 0 0 4px rgba(255,233,168,.75);} 72%{ transform:scale(1.02);} 100%{ transform:scale(1); box-shadow:0 0 0 0 rgba(255,233,168,0);} }
 .slot-empty{ flex:1; min-height:24px; display:flex; align-items:center; justify-content:center; color:#6a5730; opacity:.55; font-size:13px; }
 
 .art-slot{ display:flex; gap:6px; align-items:center; justify-content:center; min-height:0; }
 .art-chip{ font-size:10px; font-family:Cinzel,serif; color:var(--gold); border:1px solid var(--gold-dim); border-radius:4px; padding:2px 8px; background:#1a1408; }
 
 /* floating combat text */
-.floater{ position:fixed; z-index:66; font-family:Cinzel,serif; font-weight:700; font-size:16px; pointer-events:none; text-shadow:0 1px 2px #000; animation:floatUp .6s ease-out forwards; }
+.floater{ position:fixed; z-index:66; font-family:Cinzel,serif; font-weight:700; font-size:16px; pointer-events:none; text-shadow:0 1px 2px #000; animation:floatUp calc(.6s * var(--vfx-t,1)) ease-out forwards; }
 .floater.up{ color:#6fe07e; } .floater.down{ color:#ff6a58; }
 @keyframes floatUp{ 0%{ transform:translateY(0); opacity:0; } 22%{ opacity:1; } 100%{ transform:translateY(-26px); opacity:0; } }
 
@@ -288,6 +341,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .bs-layer{ position:absolute; inset:0; pointer-events:none; }
 .bs-dim{ background:linear-gradient(180deg, rgba(7,4,2,.7), rgba(7,4,2,.5) 42%, rgba(7,4,2,.8)); }
 .bs-vig{ background:radial-gradient(125% 100% at 50% 40%, transparent 46%, rgba(0,0,0,.72) 100%); }
+@media(min-width:1024px){ .bs-vig{ background:radial-gradient(86% 92% at 50% 42%, transparent 38%, rgba(0,0,0,.86) 100%); } }   /* T71 2a: tighter, deeper edge vignette frames the widened board — the hall reads as staging, not margin; centre stays readable */
 #battlestage > .ember-fx{ position:fixed; inset:0; width:100%; max-width:none; height:100%; margin:0; pointer-events:none; }
 
 /* board table — the two-zone play surface; feathered/transparent edges reveal the realm floor around it */
@@ -312,15 +366,19 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 #passbtn{ background:linear-gradient(180deg,#2a1e0a,#1a1206); border-color:var(--gold-2); color:var(--gold-bright); letter-spacing:.14em; }
 
 @media(min-width:1024px){
-  /* T42b DEFECT-3: the match column stays 520-capped on desktop. Desktop drops the mobile centering-carousel padding
-     (calc(50%-…) shows only ~3) for a LEFT-PACKED row so FIVE minis sit in the visible row (5×92 + 4×9 gap + 2×8 pad
-     = 512 ≤ 518); a 6th+ overflow-scrolls with the edge fade. scroll-snap-align:start so packed cards don't centre-snap. */
-  #hand{ padding:14px 8px 16px; }
-  .hc{ width:92px; scroll-snap-align:start; }
-  .hc-nm{ font-size:10px; } .hc-epi{ font-size:7.5px; } .hc-chip{ min-width:20px; height:20px; font-size:12px; }
-  .deckstack{ width:52px; } .deckstack img{ width:52px; } .deckcnt{ font-size:12px; }
-  .score-av{ width:46px; height:46px; }
-  .zbody, .zhead{ padding-left:64px; }   /* T42b DEFECT-1: desktop deck stack is 52 wide → clear 64 */
+  /* T71 DESKTOP STAGE PASS: the match column now COMMANDS the viewport (was T42b's 520-cap). The column widens to
+     min(1000px,90vw); board minis scale up via a raised MINI_MAX in sizeBoard() (height-fitting logic grows the cards
+     to fill the taller board); the hand row LEFT-PACKS proportionally larger cards (118 + 9 gap + pad → ~7 in the
+     visible row, the rest overflow-scroll with the edge fade). scroll-snap-align:start so packed cards don't centre-snap.
+     2b DEPTH GLOW: a faction-neutral gold ambient glow + drop shadow lifts the board off the temple backdrop. */
+  #app{ max-width:min(1000px, 90vw); box-shadow:0 0 90px 18px rgba(224,176,64,.09), 0 26px 90px rgba(0,0,0,.62); }
+  #hudcol{ max-width:min(1000px, 90vw); }
+  #hand{ padding:16px 12px 20px; }
+  .hc{ width:118px; scroll-snap-align:start; }
+  .hc-nm{ font-size:12px; } .hc-epi{ font-size:9px; } .hc-chip{ min-width:24px; height:24px; font-size:14px; }
+  .deckstack{ width:60px; } .deckstack img{ width:60px; } .deckcnt{ font-size:13px; }
+  .score-av{ width:52px; height:52px; }
+  .zbody, .zhead{ padding-left:74px; }   /* desktop deck stack is 60 wide → clear 74 */
 }
 @media(max-width:479px){
   .hc{ width:104px; }
@@ -1340,19 +1398,29 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 /* ===== event choreography ===== */
 #choreolayer{ position:fixed; inset:0; z-index:64; pointer-events:none; }
 #choreolayer.locked{ pointer-events:auto; cursor:pointer; }
-.bc.choreo-src{ animation:choreoLift .42s ease-out; z-index:5; }
+.bc.choreo-src{ animation:choreoLift calc(.42s * var(--vfx-t,1)) ease-out; z-index:5; }
 @keyframes choreoLift{ 0%{ transform:translateY(0) scale(1);} 40%{ transform:translateY(-8px) scale(1.09); filter:brightness(1.25);} 100%{ transform:translateY(0) scale(1);} }
-.bc.hit{ animation:choreoHit .3s ease-out; }
+.bc.hit{ animation:choreoHit calc(.3s * var(--vfx-t,1)) ease-out; }
 @keyframes choreoHit{ 0%,100%{ transform:translateX(0);} 20%{ transform:translateX(-4px);} 40%{ transform:translateX(4px) ;} 60%{ transform:translateX(-3px);} 80%{ transform:translateX(2px);} }
-.bc.pumped{ animation:choreoPump .32s ease-out; }
+.bc.pumped{ animation:choreoPump calc(.32s * var(--vfx-t,1)) ease-out; }
 @keyframes choreoPump{ 0%,100%{ transform:scale(1);} 45%{ transform:scale(1.13); filter:brightness(1.3);} }
-.dissolve-clone{ position:fixed; z-index:65; border-radius:12px; pointer-events:none; background:linear-gradient(#3a1414,#180808); border:2px solid #b0483c; display:flex; align-items:center; justify-content:center; font-family:Cinzel,serif; font-size:11px; color:#ffd9d0; text-align:center; padding:4px; animation:dissolveAway .5s ease-in forwards; }
+.dissolve-clone{ position:fixed; z-index:65; border-radius:12px; pointer-events:none; background:linear-gradient(#3a1414,#180808); border:2px solid #b0483c; display:flex; align-items:center; justify-content:center; font-family:Cinzel,serif; font-size:11px; color:#ffd9d0; text-align:center; padding:4px; animation:dissolveAway calc(.5s * var(--vfx-t,1)) ease-in forwards; }
 @keyframes dissolveAway{ 0%{ opacity:1; transform:scale(1);} 100%{ opacity:0; transform:scale(.7) rotate(4deg); filter:blur(3px);} }
+/* T97 VICTIM SHOWCASE — the struck card's real visual held over its (now-emptied) cell for the strike duration, then it exits.
+   T97b: hosted in #victimlayer (z-4, below the strike canvas) so the strike renders OVER it; the death particles (shardBurst) still draw
+   in #choreolayer (z-65) so they read on top of everything. animation:none neutralises any inherited .bc entrance anim on the clone.
+   'kill' reuses dissolveAway (crack+blur, Vajra). 'removal' = clean fade+lift, NO crack/blur (Sudarshana law: the hero returns, it does not die). */
+/* T97b: victim clones live in #victimlayer (a #field child, z-4) so a real board card's stacking is reproduced — ABOVE the board rows/slot (.half z-3) yet BELOW the strike canvas (#vfxcanvas z-5). The bolt/disc therefore render OVER the held card, not under it. */
+#victimlayer{ position:absolute; inset:0; z-index:4; pointer-events:none; }
+.victim-showcase{ pointer-events:none; animation:none; }
+.victim-showcase.victim-kill{ animation:dissolveAway calc(.5s * var(--vfx-t,1)) ease-in forwards; }
+.victim-showcase.victim-removal{ animation:victimVanish calc(.3s * var(--vfx-t,1)) ease-out forwards; }
+@keyframes victimVanish{ 0%{ opacity:1; transform:scale(1);} 100%{ opacity:0; transform:scale(1.05);} }
 .floater.venom{ color:var(--venom); } .floater.note{ color:#ffe08a; font-size:13px; }
-.callout{ position:fixed; z-index:67; font-family:Cinzel,serif; font-weight:700; font-size:12px; letter-spacing:1px; color:#fff2cf; pointer-events:none; text-shadow:0 1px 3px #000, 0 0 8px rgba(255,220,140,.5); animation:calloutPop .5s ease-out forwards; white-space:nowrap; }
+.callout{ position:fixed; z-index:67; font-family:Cinzel,serif; font-weight:700; font-size:12px; letter-spacing:1px; color:#fff2cf; pointer-events:none; text-shadow:0 1px 3px #000, 0 0 8px rgba(255,220,140,.5); animation:calloutPop calc(.5s * var(--vfx-t,1)) ease-out forwards; white-space:nowrap; }
 @keyframes calloutPop{ 0%{ transform:translateY(4px) scale(.85); opacity:0;} 25%{ opacity:1;} 78%{ opacity:1; transform:translateY(-6px) scale(1);} 100%{ opacity:0; transform:translateY(-12px);} }
 #ftoast{ position:fixed; top:31%; left:0; right:0; z-index:69; text-align:center; pointer-events:none; }
-#ftoast .ft{ display:inline-block; font-family:Cinzel,serif; font-size:17px; font-weight:700; letter-spacing:3px; padding:8px 22px; border-radius:12px; border:1.5px solid; background:rgba(8,6,3,.82); animation:ftPop .62s ease-out; text-transform:uppercase; }
+#ftoast .ft{ display:inline-block; font-family:Cinzel,serif; font-size:17px; font-weight:700; letter-spacing:3px; padding:8px 22px; border-radius:12px; border:1.5px solid; background:rgba(8,6,3,.82); animation:ftPop calc(.62s * var(--vfx-t,1)) ease-out; text-transform:uppercase; }
 @keyframes ftPop{ 0%{ transform:scale(.8); opacity:0;} 22%{ transform:scale(1.04); opacity:1;} 80%{ opacity:1;} 100%{ opacity:0; transform:scale(1);} }
 .ft.f-chaos{ color:var(--crimson); border-color:var(--crimson); box-shadow:0 0 18px rgba(224,72,60,.5); }
 .ft.f-dharma{ color:var(--gold); border-color:var(--gold); box-shadow:0 0 18px rgba(201,168,76,.5); }
@@ -1472,34 +1540,42 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 #gearbtn,#mutebtn{ background:none; border:1px solid #4a3a18; color:var(--ink-dim); border-radius:8px; width:30px; height:28px; font-size:14px; cursor:pointer; padding:0; }
 #gearbtn:active,#mutebtn:active{ transform:scale(.92); }
 .mutetoast{ position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:73; background:rgba(12,9,4,.94); border:1px solid #5a4718; color:#f0e2c0; font-family:Cinzel,serif; font-size:12px; letter-spacing:1px; padding:6px 16px; border-radius:20px; pointer-events:none; animation:mutetoastFade 1.2s ease-out forwards; }
+/* T90: jank ramp-down notice — the mutetoast look, but persistent + actionable (dismissible). */
+.jank-notice{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:74; max-width:92vw; display:flex; align-items:center; gap:10px; background:rgba(12,9,4,.96); border:1px solid #5a4718; color:#f0e2c0; font-family:'Crimson Pro',Georgia,serif; font-size:13px; padding:9px 12px 9px 16px; border-radius:12px; box-shadow:0 6px 22px rgba(0,0,0,.5); animation:mutetoastFade .3s ease-out; }
+.jank-notice .jank-act{ flex:0 0 auto; background:rgba(232,200,116,.14); border:1px solid var(--gold-dim,#8a6d2a); color:var(--gold,#e8c874); font-family:Cinzel,serif; font-size:11px; letter-spacing:.5px; padding:5px 11px; border-radius:8px; cursor:pointer; }
+.jank-notice .jank-x{ flex:0 0 auto; background:none; border:none; color:#9a8c6a; font-size:14px; cursor:pointer; padding:2px 4px; line-height:1; }
 @keyframes mutetoastFade{ 0%{opacity:0;transform:translateX(-50%) translateY(-6px);} 15%{opacity:1;transform:translateX(-50%) translateY(0);} 80%{opacity:1;} 100%{opacity:0;} }
 
 /* ===== board VFX ===== */
-.shard{ position:fixed; z-index:65; width:8px; height:8px; pointer-events:none; border-radius:2px; will-change:transform,opacity; animation:shardFly .6s ease-out forwards; }
+.shard{ position:fixed; z-index:65; width:8px; height:8px; pointer-events:none; border-radius:2px; will-change:transform,opacity; animation:shardFly calc(.6s * var(--vfx-t,1)) ease-out forwards; }
 @keyframes shardFly{ 0%{ opacity:1; transform:translate(0,0) rotate(0) scale(1);} 100%{ opacity:0; transform:translate(var(--dx),var(--dy)) rotate(var(--dr)) scale(.4);} }
-.bc.cracking{ animation:crackSplit .5s ease-in forwards; }
+.bc.cracking{ animation:crackSplit calc(.5s * var(--vfx-t,1)) ease-in forwards; }
 @keyframes crackSplit{ 0%{ clip-path:polygon(0 0,100% 0,100% 100%,0 100%);} 40%{ clip-path:polygon(0 0,48% 6%,100% 0,100% 45%,52% 55%,100% 100%,0 100%,45% 52%);} 100%{ opacity:0; clip-path:polygon(0 0,48% 20%,100% 0,100% 45%,52% 55%,100% 100%,0 100%,45% 52%); transform:scale(.9);} }
-.bc.impact{ animation:impactFlash .3s ease-out; }
-@keyframes impactFlash{ 0%,100%{ box-shadow:none; transform:translate(0,0);} 15%{ box-shadow:0 0 0 3px rgba(255,70,50,.85), 0 0 18px rgba(255,60,40,.6); transform:translate(-3px,1px);} 45%{ transform:translate(3px,-1px);} 70%{ transform:translate(-2px,0);} }
+.bc.impact{ animation:impactFlash calc(.3s * var(--vfx-t,1)) ease-out; }
+/* T66 combat: jolt ±3px → ±5px, red ring 3px → 4px */
+@keyframes impactFlash{ 0%,100%{ box-shadow:none; transform:translate(0,0);} 15%{ box-shadow:0 0 0 4px rgba(255,70,50,.9), 0 0 20px rgba(255,60,40,.65); transform:translate(-5px,2px);} 45%{ transform:translate(5px,-2px);} 70%{ transform:translate(-3px,1px);} }
 .fx-ring{ position:fixed; z-index:63; border-radius:50%; pointer-events:none; will-change:transform,opacity; }
-.fx-ring.buff{ border:2.5px solid var(--green,#6fe07e); animation:ringRise .55s ease-out forwards; }
-.fx-ring.shield{ border:3px solid var(--gold); box-shadow:0 0 14px rgba(201,168,76,.7); animation:ringSnap .45s cubic-bezier(.2,1.4,.4,1) forwards; }
+.fx-ring.buff{ border:2.5px solid var(--green,#6fe07e); animation:ringRise calc(.55s * var(--vfx-t,1)) ease-out forwards; }
+.fx-ring.shield{ border:3px solid var(--gold); box-shadow:0 0 14px rgba(201,168,76,.7); animation:ringSnap calc(.45s * var(--vfx-t,1)) cubic-bezier(.2,1.4,.4,1) forwards; }
 @keyframes ringRise{ 0%{ opacity:0; transform:translate(-50%,-30%) scale(.5);} 25%{ opacity:.9;} 100%{ opacity:0; transform:translate(-50%,-140%) scale(1.1);} }
 @keyframes ringSnap{ 0%{ opacity:0; transform:translate(-50%,-50%) scale(1.8) rotate(-40deg);} 55%{ opacity:1;} 100%{ opacity:0; transform:translate(-50%,-50%) scale(1) rotate(0);} }
-.fx-drip{ position:fixed; z-index:64; width:7px; height:12px; border-radius:0 0 60% 60%/0 0 100% 100%; background:linear-gradient(var(--venom,#78e08f),#2f7d4a); pointer-events:none; opacity:.9; box-shadow:0 0 6px rgba(120,224,143,.6); animation:dripSlide .7s ease-in forwards; }
+.fx-drip{ position:fixed; z-index:64; width:7px; height:12px; border-radius:0 0 60% 60%/0 0 100% 100%; background:linear-gradient(var(--venom,#78e08f),#2f7d4a); pointer-events:none; opacity:.9; box-shadow:0 0 6px rgba(120,224,143,.6); animation:dripSlide calc(.7s * var(--vfx-t,1)) ease-in forwards; }
 @keyframes dripSlide{ 0%{ opacity:0; transform:translate(-50%,0) scaleY(.6);} 20%{ opacity:.95;} 100%{ opacity:0; transform:translate(-50%,var(--dy,42px)) scaleY(1.3);} }
-.venombadge.wet{ animation:venomPulse .6s ease-out; }
+.venombadge.wet{ animation:venomPulse calc(.6s * var(--vfx-t,1)) ease-out; }
 @keyframes venomPulse{ 0%,100%{ transform:scale(1);} 40%{ transform:scale(1.5); filter:drop-shadow(0 0 6px var(--venom));} }
-.floater.down.heavy{ font-size:21px; font-weight:800; animation:floatArc .7s ease-out forwards; }
+.floater.down.heavy{ font-size:21px; font-weight:800; animation:floatArc calc(.7s * var(--vfx-t,1)) ease-out forwards; }
 @keyframes floatArc{ 0%{ opacity:0; transform:translate(0,0) scale(.7);} 20%{ opacity:1;} 100%{ opacity:0; transform:translate(10px,-30px) scale(1.1);} }
 #boardwash{ position:fixed; inset:0; z-index:60; pointer-events:none; opacity:0; }
-#boardwash.on{ animation:washPulse .7s ease-out; }
+#boardwash.on{ animation:washPulse calc(.7s * var(--vfx-t,1)) ease-out; }
 @keyframes washPulse{ 0%{opacity:0;} 25%{opacity:.5;} 100%{opacity:0;} }
-#field.shake{ animation:screenShake .22s ease-in-out; }
+#field.shake{ animation:screenShake calc(.22s * var(--vfx-t,1)) ease-in-out; }
 @keyframes screenShake{ 0%,100%{ transform:translate(0,0);} 20%{ transform:translate(-6px,3px);} 40%{ transform:translate(6px,-3px);} 60%{ transform:translate(-4px,2px);} 80%{ transform:translate(4px,-1px);} }
+/* T66 spectacle: zoom-punch (scale 1→1.035→1) COMPOSED with a ±9px shake in ONE keyframe → single transform per frame, no two-animation conflict, no wrapper */
+#field.shake-big{ animation:fieldSpectacle calc(.28s * var(--vfx-t,1)) cubic-bezier(.22,1,.36,1); }
+@keyframes fieldSpectacle{ 0%{ transform:scale(1) translate(0,0);} 18%{ transform:scale(1.035) translate(-9px,4px);} 38%{ transform:scale(1.028) translate(9px,-4px);} 58%{ transform:scale(1.014) translate(-6px,3px);} 78%{ transform:scale(1.004) translate(5px,-2px);} 100%{ transform:scale(1) translate(0,0);} }
 #showcaseCard.shimmer::after{ content:''; position:absolute; inset:0; z-index:3; pointer-events:none; background:linear-gradient(105deg, transparent 30%, rgba(255,246,214,.5) 48%, transparent 66%); background-size:250% 100%; animation:shimmerSweep 1.4s ease-in-out infinite; }
 @keyframes shimmerSweep{ 0%{ background-position:180% 0;} 100%{ background-position:-80% 0;} }
-.fx-arc{ position:fixed; z-index:64; height:2.5px; transform-origin:left center; background:linear-gradient(90deg, transparent, var(--green,#6fe07e), transparent); pointer-events:none; animation:arcFade .5s ease-out forwards; }
+.fx-arc{ position:fixed; z-index:64; height:2.5px; transform-origin:left center; background:linear-gradient(90deg, transparent, var(--green,#6fe07e), transparent); pointer-events:none; animation:arcFade calc(.5s * var(--vfx-t,1)) ease-out forwards; }
 @keyframes arcFade{ 0%{ opacity:0;} 25%{ opacity:.95;} 100%{ opacity:0;} }
 #gearbtn:active{ transform:scale(.94); }
 .set-row{ margin:14px 0; text-align:left; }
@@ -1929,6 +2005,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
     <div id="deck-o" class="deckstack"><img id="deckimg-o" alt=""><span class="deckcnt" id="deckcnt-o">12</span></div>
     <div id="deck-p" class="deckstack"><img id="deckimg-p" alt=""><span class="deckcnt" id="deckcnt-p">12</span></div>
     <div id="embers"></div>
+    <div id="victimlayer"></div><!-- T97b: hosts victim-showcase clones ABOVE the board rows (.half z-3) but BELOW #vfxcanvas z-5, so the strike renders OVER the held card. Static #field child → survives render() (which only fillRow()s the row containers). -->
     <canvas id="vfxcanvas"></canvas>
     <div id="vfxflash"></div>
     <div id="oppthinking" class="hidden"><span class="think-emblem">🌀</span><span class="think-txt">Opponent is thinking<span class="td">.</span><span class="td">.</span><span class="td">.</span></span></div>
@@ -1979,6 +2056,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 <div id="ftoast" class="hidden"><span class="ft"></span></div>
 <div id="resultsummary" class="hidden"></div>
 <div id="boardwash"></div>
+<div id="vfxvignette"></div>   <!-- T66 combat screen-edge vignette flash -->
 <div id="showcase" class="hidden"><div id="showcaseCard"></div></div>
 <div id="choreolayer"></div>
 <div class="overlay hidden" id="settings"><div class="modal">
@@ -1999,6 +2077,12 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
       <button id="testsfx" class="tgl">▶ Test all SFX</button>
       <button id="testvfx" class="tgl">✦ Test VFX</button>
     </div>
+  </div>
+  <div class="set-row"><div class="set-lbl">VFX QUALITY</div>
+    <div class="seg" id="vfxqseg">
+      <button data-vq="auto">Auto</button><button data-vq="hi">High</button><button data-vq="md">Medium</button><button data-vq="lo">Low</button>
+    </div>
+    <div class="set-hint">Higher = crisper effects, more memory. Auto matches your device. Applies from your next match.</div>
   </div>
   <button class="fsel-start" onclick="$('settings').classList.add('hidden')">DONE</button>
 </div></div>
@@ -3207,6 +3291,7 @@ function castMantra(g, pi, id, targetUid=null){
       const u=lk.unit; opp.discard.splice(opp.discard.indexOf(u),1);
       u.power=u.base; u.aegis=false; u.revivedShield=false; u.venom=0; u.asleep=false; u.doomed=false; u.revealPending=false;
       pl.units.push(u); g.lastKillThisRound=null;
+      emit(g,'passive',{targetUids:[u.uid],abilityName:'Sanjivani Corruption',text:'stolen'});   // T98: observational emit (rule #7 — no state/rng touch) — fifth of the sibling family (Vishwapasha/Vritra/Nagapasha/Ahamkara), carries the ENTERING unit's uid so the dark-revival arrival VFX anchors at its cell. Behavior-neutral (no engine/story/quest consumer branches on 'passive'); the type field disambiguates from the mantra's own 'play' event of the same abilityName.
       onUnitRevive(g, pi, u);   // WAVE 1 batch 9 — revival choke #4 (Sanjivani Corruption: the stolen enemy corpse returns to the CASTER's side → an enemy Simhika on the other side sees it)
       log(g, `Sanjivani Corruption drags ${u.n} back to fight for ${pl.name}.`);
     } else log(g, 'Sanjivani Corruption: no fallen enemy Unit to steal.');
@@ -3217,6 +3302,7 @@ function castMantra(g, pi, id, targetUid=null){
       let t = targetUid!=null ? real.find(u=>u.uid===targetUid) : null;
       if (!t) t = real.reduce((a,b)=>effPower(g,pi,a)>=effPower(g,pi,b)?a:b);
       t.power*=2; t.doomed=true;
+      emit(g,'passive',{targetUids:[t.uid],abilityName:'Ahamkara',text:'doomed'});   // T96: observational emit (rule #7 — no state/rng touch) — fourth of the sibling family (Vishwapasha/Vritra/Nagapasha), carries the chosen target's uid so the ego-arrival VFX can anchor. Behavior-neutral (no engine/story/quest consumer branches on 'passive').
       log(g, `Ahamkara doubles ${t.n} to ${t.power} — doomed to shatter at round end.`);
     }
   } else if (id==='ramanaam'){
@@ -3534,6 +3620,7 @@ function resolveAstra(g, pi, c, targetUid){
       let t = targetUid!=null ? opp.heroes.find(h=>h.uid===targetUid) : null;
       if (!t) t = opp.heroes.reduce((a,b)=>a.power>=b.power?a:b);
       opp.heroes.splice(opp.heroes.indexOf(t),1); opp.removedHeroes.push(t);
+      emit(g,'passive',{targetUids:[t.uid],abilityName:'Sudarshana',text:'removed'});   // T92: observational emit (rule #7 — no state/rng touch) so the temporary hero-removal is attributable + choreographable; behavior-neutral (no engine/story/quest consumer branches on 'passive')
       if (t.id==='vritra'){ for (const u of pl.units) if (u.vritraBound){ u.bound=false; u.vritraBound=false; log(g,`With Vritra gone, ${u.n} slips its bonds.`); emit(g,'passive',{targetUids:[u.uid],abilityName:'Vritra',text:'released'}); } }   // WAVE 1 batch 16 — "while Vritra remains": Vritra removed (the only hero-removal path, Sudarshana) → free its binds on the removing side's Units
       log(g,`Sudarshana Chakra removes ${t.n} for this round.`); break;
     }
@@ -3587,6 +3674,7 @@ function resolveAstra(g, pi, c, targetUid){
       let t = targetUid!=null ? spec.options.find(u=>u.uid===targetUid) : null;
       if (!t) t = spec.options.reduce((a,b)=>effPower(g,1-pi,a)>=effPower(g,1-pi,b)?a:b);
       t.bound=true;
+      emit(g,'passive',{targetUids:[t.uid],abilityName:'Nagapasha',text:'bound'});   // T94: observational emit (rule #7 — no state/rng touch) — sibling-symmetry repair with Vishwapasha/Vritra bind emits; carries the bound target's uid so the bind-arrival VFX can anchor. Behavior-neutral (no engine/story/quest consumer branches on 'passive').
       log(g, `Nagapasha nooses ${t.n} — it cannot fight until ${opp.name} spends a turn to free it.`); break; }
     case 'worldcoil': {   // WAVE 1 batch 13 — bind an enemy Unit; releases when it LOSES a Venom token (venomLoss hook), NOT by the opponent spending a turn.
       const spec=targetSpec(g,pi,c);
@@ -3636,7 +3724,7 @@ function playCard(g, pi, handIndex, targetUid=null, position=null, movePosition=
   let surasaNegateAstra=false;
   if (opp.surasaTrap){
     const sur = opp.units.find(u=>u.uid===opp.surasaTrap && !u.ghost);
-    if (c.t==='unit'){ c.power-=2; if (sur) sur.power+=2; opp.surasaTrap=false;
+    if (c.t==='unit'){ c.power-=2; emit(g,'damage',{targetUids:[c.uid],amount:-2,abilityName:'Surasa'}); if (sur) sur.power+=2; opp.surasaTrap=false;   // T88b: observational emit (rule #7 \u2014 no state/rng touch) AFTER the play event so the story reads exists\u2192hurt; the trap's -2 is now attributable + choreographable (kill-on-entry legibility)
       log(g, `Surasa\u2019s trap saps ${c.n} (\u22122)${sur?` and feeds Surasa (+2 \u2192 ${sur.power})`:''}.`); }
     else if (c.t==='astra'){ surasaNegateAstra=true; opp.surasaTrap=false;
       log(g, `Surasa\u2019s trap swallows ${c.n} \u2014 its effect is negated (Chaos Surge still churns, \u00a79).`); }
@@ -4678,8 +4766,9 @@ function pulsePlaque(el){ if(reducedMotion())return; el.classList.remove('pulse'
 /* Scale board minis so both rows of a half always fit fully — never clipped.
    Each half gets a --mini-h; only below the 56px floor do we fall back to
    within-zone scrolling (with a fade affordance via .scrollzone). */
-const MINI_MIN=56, MINI_MAX=96, ROW_PAD=6, EMPTY_ROW=28;
+const MINI_MIN=56, MINI_MAX=96, MINI_MAX_DESK=150, ROW_PAD=6, EMPTY_ROW=28;   // T71: desktop lifts the mini cap so the height-fitting logic scales cards up to command the wider board
 function sizeBoard(){
+  const miniMax = (window.innerWidth>=1024) ? MINI_MAX_DESK : MINI_MAX;   // desktop only; mobile stays byte-identical at 96
   for (const side of ['opp','me']){
     const half=document.querySelector('.half.'+side); if(!half) continue;
     const zbody=half.querySelector('.zbody');
@@ -4695,7 +4784,7 @@ function sizeBoard(){
     const childGaps=Math.max(0, rows.length+(artH>1?1:0)-1)*gap;
     const content=zbody.clientHeight - padV - artH - childGaps - emptyRows.length*EMPTY_ROW;
     const per=Math.floor((content - nRows*ROW_PAD)/nRows) - 1; // -1 safety
-    if (per>=MINI_MIN){ half.style.setProperty('--mini-h', Math.min(per, MINI_MAX)+'px'); half.classList.remove('scrollzone'); }
+    if (per>=MINI_MIN){ half.style.setProperty('--mini-h', Math.min(per, miniMax)+'px'); half.classList.remove('scrollzone'); }
     else { half.style.setProperty('--mini-h', MINI_MIN+'px'); half.classList.add('scrollzone'); }
   }
 }
@@ -4723,6 +4812,9 @@ function startGame(p0Faction, p1Faction){
   showRealmIntro();
   render();
   VFX.init(); VFX.resize();      // size the impact-VFX canvas to the now-visible board
+  VFX.preloadSprites();          // T67: load + tint the painted VFX kit at MATCH START (async, non-blocking; mulligan proceeds; procedural fallback covers the load gap)
+  applyVfxQuality();   // T90: resolve the player's VFX-quality rung before the fetch
+  VFX.loadMatchSheets(currentFactions.p0, currentFactions.p1);   // T81: lazy — only THIS match's factions' landing sheets (+ the Deva row plates if a Deva is in the match). Loads during the mulligan window.
   beginMulligan();          // play begins when the player confirms their opening hand
 }
 const FAC_LABEL = f => f==='asuras' ? 'ASURA' : f==='vanaras' ? 'VANARA' : f==='nagas' ? 'NAGA' : 'DEVA';
@@ -4835,7 +4927,7 @@ $('mullconfirm').onclick=()=>{
   if (reducedMotion() || !evs.length){ pump(); return; }
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=skipChoreo;
-  (async()=>{ try{ for(const ev of evs){ if(choreoSkip) break; try{ await playEvent(ev, snap); }catch(e){} } }
+  (async()=>{ try{ for(const ev of evs){ if(choreoSkip) break; try{ await playEvent(ev, snap, evs); }catch(e){} } }
     finally{ choreoActive=false; choreoStartedAt=0; choreoForce=[]; layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML=''; try{ render(); }catch(e){} pump(); } })();
 };
 
@@ -5547,11 +5639,10 @@ function battleFitPlate(){ const el=$('battleplate'), p=BATTLE_PLATE[battlePlate
   const s=Math.max(innerWidth/p.w, innerHeight/p.h); el.style.width=(p.w*s)+'px'; el.style.height=(p.h*s)+'px'; }
 /* the board table asset per orientation (R-F cooled surface; alpha table over the scrim at full saturation) */
 function battleSetTable(){ const el=$('boardtable'); if(!el) return;
-  /* #field is always <=520px (portrait) — #app is 520-capped on every width — so the TALL table is correct on all
-     widths; object-fit:cover on the wide asset would zoom-crop it to a sliver. The wide table awaits a future
-     desktop-widening task (out of this reskin's scope fence). REVERSAL when #app widens on desktop (adopts the
-     WIDE asset) — restore this one branch:  el.src = (innerWidth>=1024) ? '...board_table_wide.png?v=1' : '...tall...'; */
-  el.src = 'assets/img/board_table_tall.png?v=1'; }
+  /* T71: #app now WIDENS on desktop (min(1000px,90vw)), so the field is landscape ≥1024 — adopt the WIDE table asset
+     (the reversal the T42 comment reserved). object-fit:cover on the wide asset now fits a landscape field correctly;
+     the tall asset would zoom-crop to a sliver in a wide field. Mobile (<1024) keeps the tall table byte-identical. */
+  el.src = (innerWidth>=1024) ? 'assets/img/board_table_wide.png?v=1' : 'assets/img/board_table_tall.png?v=1'; }
 function battleStageStart(){
   battlePickPlate(); battleFitPlate(); battleSetTable();
   Ember.start('battlestage', EMBER_CARD_DENSITY, 'hudwrap');   // gate on the match being active (#hudwrap)
@@ -7004,7 +7095,7 @@ function startStoryChapter(id){
   $('logbody').innerHTML=''; $('loglast').textContent=''; $('logdrawer').classList.remove('open');
   applyFactionTheme(); applyRealmBoard(G.realm); makeEmbers(); battleStageStart();   // T42
   Audio2.musicDuck(false); Audio2.playTrack('battle'); conchPending=true;   // release the intro duck INTO the menu→battle crossfade (the crossfade + conch stay the hinge)
-  showRealmIntro(); render(); VFX.init(); VFX.resize();
+  showRealmIntro(); render(); VFX.init(); VFX.resize(); VFX.preloadSprites(); applyVfxQuality(); VFX.loadMatchSheets(currentFactions.p0, currentFactions.p1);   // T67 sprite kit + T81 lazy match sheets at story-match start too
   if (G.mulliganCount>0) storyBeginMulligan();   // ch4/ch5: run the mulligan phase (teaches it) with the pre-match Brihaspati line
   else pump();                                   // ch1–3 (mulligan:0): straight into round 1 (player-first via storyRng)
 }
@@ -7399,28 +7490,43 @@ const facClass = f => f==='asuras' ? 'fac-asura' : f==='vanaras' ? 'fac-vanara' 
 // board owner's — so a Maricha-copy (Deva unit now owned by an Asura) or a Mohini-steal loads the copied card's real art.
 const CARD_FACTION = (()=>{ const m={}; try{ for(const f in DECKS) for(const c of DECKS[f]){ m[c.id]=f; m['n:'+c.n]=f; } }catch(e){} return m; })();
 function cardHomeFaction(c){ return (c && (CARD_FACTION[c.id] || CARD_FACTION['n:'+c.n])) || null; }
+/* T64 — global card-art cache-buster. Appended to EVERY cardArtSrc path, so bumping it forces a one-time
+   full refresh across all 177 card-art URLs. T64 full-canon sync: 126 derivatives replaced/added (whole
+   launch + wave roster onto the new unified frame art), so every returning client must re-fetch — the
+   intended, necessary consequence of the same-filename swaps. Bump this string whenever card frames are
+   re-exported. */
+const CARD_ART_V = 't64';
 function cardArtSrc(c, faction){
   const fac = cardHomeFaction(c) || faction;   // resolve by the card's home deck (fixes copied/stolen cards; identical to `faction` for normal cards)
   const name = c.n.replace(/[^A-Za-z0-9]/g,'');   // name segment = card name with ALL non-alphanumerics removed (spaces, apostrophes, …)
+  const v = `?v=${CARD_ART_V}`;                 // cache-buster suffix (transparent to <img src>; thumb URLs derive via dir-swap and keep it)
   /* R84.4 — TOKEN STEM. The Rakta frame reads TOKEN in both the type and rarity fields where the engine files
      t:'unit' / r:'C' — a DELIBERATE frame-vs-engine difference, ruled and recorded. So the derived stem cannot come
      from t/r for a token: without this branch cardArtSrc builds Asuras_Unit_Rakta_P2_rCommon.png and can never
      resolve the accepted frame. Tokens are in no DECKS array, so cardHomeFaction() is null and `fac` falls back to
      the OWNER's faction — which is correct: a Rakta belongs to whoever spawned it. */
-  if (c.token) return `assets/cards/${factionToken(fac)}_Token_${name}_P${c.base}_rToken.png`;
+  if (c.token) return `assets/cards/${factionToken(fac)}_Token_${name}_P${c.base}_rToken.png` + v;
   const type = c.t.charAt(0).toUpperCase()+c.t.slice(1);
   const stem = `assets/cards/${factionToken(fac)}_${type}_${name}`;
   const rar = RARITY_NAME[c.r];
-  return c.base > 0
+  return (c.base > 0
     ? `${stem}_P${c.base}_r${rar}.png`   // Units / Heroes
-    : `${stem}_r${rar}.png`;             // Astras / Mantras / Artifacts
+    : `${stem}_r${rar}.png`)             // Astras / Mantras / Artifacts
+    + v;
 }
-function attachArt(el, c, faction){
+/* T93/T93b — BOARD TILE SOURCE. The frameless art-forward tiles live in assets/board/ under the SAME canonical stem as
+   the framed cards (the thumbs dir-swap precedent), so the mapping is a dir + cache-stamp swap on cardArtSrc. Own stamp
+   (BOARD_ART_V) bound to the tile bytes; the framed CARD_ART_V is untouched. */
+const BOARD_ART_V = 'b60';   // bumped from 't93' on the board-art swap — the 60/60 purpose-made zoomed tiles are byte changes across the set, so the cache stamp must move
+function boardTileSrc(c, faction){ return cardArtSrc(c, faction).replace('assets/cards/','assets/board/').replace('?v='+CARD_ART_V, '?v='+BOARD_ART_V); }
+function attachArt(el, c, faction, board){
   if (c.ghost || c.id==='ghost') return;            // Yama tokens have no art
   const img=new Image();
   img.className='art'; img.alt=c.n;
   img.onload=()=>{ el.insertBefore(img, el.firstChild); el.classList.add('has-art'); };
-  img.src=cardArtSrc(c, faction);
+  if (board){ img.onerror=()=>{ img.onerror=null; img.src=cardArtSrc(c, faction); };   // T93b: a missing board tile (e.g. The Setu Stones — no master) falls back to the framed card; if THAT 404s too, the (nulled) handler leaves it unloaded (no-art fallback, as before)
+    img.src=boardTileSrc(c, faction); }
+  else img.src=cardArtSrc(c, faction);              // hand + inspect keep the framed derivative, unchanged
 }
 
 /* ---------- board minis (art-first, medallion power) ---------- */
@@ -7429,6 +7535,8 @@ function boardCard(c, pi, targetSet){
   const d=document.createElement('div');
   d.className='bc '+facClass(fac)+(c.t==='hero'?' hero':'')+(c.ghost?' ghostc':'');
   d.dataset.uid=c.uid;
+  if(c.t==='hero' && !c.ghost){ const tint=HERO_AURA_TINT[c.id]||HERO_AURA_TINT._default; d.style.setProperty('--aura-1',tint[0]); d.style.setProperty('--aura-2',tint[1]);   // T104 PART 1: CSS footlight aura + per-hero tint (lifecycle collapses into render() → reflow/Sudarshana/round-transition all handled by construction)
+    if(materializingHeroes[c.uid]) d.classList.add('materializing'); else d.classList.add('aura'); }   // T104-B: a hero mid-entry-arrival renders HIDDEN (survives this render) — the footlight ignites only on reveal
   const ep=effPower(G,pi,c);
   const sh=!c.ghost && c.t==='unit' && isShielded(G,pi,c);
   if(c.bound) d.classList.add('bound');
@@ -7446,7 +7554,7 @@ function boardCard(c, pi, targetSet){
     (c.bound?'<div class="bindbadge">⛓</div>':'')+
     (c.stolenBy!==-1?'<div class="stealbadge">🌀</div>':'')+
     `<div class="medallion ${state}">${c.bound?'0':ep}${mark?`<span class="mark">${mark}</span>`:''}</div>`;
-  attachArt(d, c, fac);
+  attachArt(d, c, fac, true);   // BOARD-ART SWAP (60/60 purpose-made zoomed tiles landed, all four factions at plain stems): the `true` arg ACTIVATES board-tile mode → boardTileSrc (assets/board/, BOARD_ART_V) with the T93b onerror fallback (zoomed tile → framed card → no-art). Body cards (Units/Heroes) render the purpose-made zoomed art; a card without a tile falls back to the framed card gracefully. Hand + inspect (the other attachArt call sites) keep the framed cardArtSrc, unchanged.
   // Leap selection (my own units, pi===0): pick a leaper, then an adjacent target.
   const leapPick = pi===0 && leapMode && ((leapMode==='leaper') || (leapMode.leaper && leapMode.adj && leapMode.adj.has(c.uid)));
   // Dharma Shield designation (my own un-shielded Units, pi===0).
@@ -7455,7 +7563,7 @@ function boardCard(c, pi, targetSet){
   else if (shieldPick){ d.classList.add('targetable'); d.onclick=()=>shieldClick(c); }
   else if (leapPick){ d.classList.add('targetable'); d.onclick=()=>leapClick(c); }
   else d.onclick=()=>{ if(!pendingPlay && !leapMode && !placeMode && !shieldMode) openInspect(c, pi, null); };
-  if (!knownUids.has(c.uid) && !(pendingFly && pendingFly.uid===c.uid)) d.classList.add('landing');
+  if (!knownUids.has(c.uid) && !(pendingFly && pendingFly.uid===c.uid) && !materializingHeroes[c.uid]) d.classList.add('landing');   // T104-B: a materializing hero skips the landing pop (it has its own reveal fade/scale-in)
   return d;
 }
 
@@ -7495,6 +7603,44 @@ function fixLogGrammar(msg){
   // 3rd-person subjects (Opponent / card names) and mid-sentence "You" (e.g. the "… — You 21 vs …" score line) are untouched.
   return msg.replace(/(^|⚔ )You ([A-Za-z]+)/, (m, pre, verb)=> pre+'You '+_baseVerb(verb));
 }
+// ===== T100 Deva hero AURA lifecycle (UI-side, render-reconciled; no engine emit). Deva heroes only — other faction rows ship later. =====
+// The Sudarshana RETURN carries no engine event (engine 1899 pushes the hero back with only a log), so a render-time reconciliation is the
+// cheapest hook (Q2): each render, a Deva hero on board without an aura gets one; an aura whose hero is gone (Sudarshana removal / match
+// change) is stopped; a hero that reflowed is re-anchored. Heroes PERSIST across rounds (engine 1896 clears units, not heroes) and the T99
+// loop survives round transitions, so an idle hero breathes continuously. LO rung = aura disabled (entry still plays) — the rollback clause.
+// T104 PART 1 — the CANVAS idle aura is RETIRED (reconcileHeroAuras/stopAllHeroAuras/heroAuras/enteringHeroes/HERO_AURA_OVERRIDE all removed).
+// The aura is now a pure-CSS pulsating BORDER-GLOW (.bc.hero.aura) applied in boardCard — its lifecycle collapses into render() BY CONSTRUCTION
+// (reflow, Sudarshana return, round transitions all handled: the class+tint are re-applied on every board rebuild). The T99 loop extension STAYS (no consumer today).
+// PER-HERO ENTRY OVERRIDE tier (canvas, still live). Keyed by the hero's canonical ENGINE id (rename-proof — R83 moved display names, never ids). Absent id → the faction entry, byte-unchanged.
+const HERO_ENTRY_OVERRIDE = { indra:'sprIndraHeroEntry', agni:'sprAgniHeroEntry', varuna:'sprVarunaHeroEntry' };   // T101 indra + T102 agni + T104 varuna
+// ROLLBACK (owner ruling): Deva heroes now land like normal Deva cards (the c1a landing flare), NOT the sovereign entry / delayed-arrival / solo-stagger sequences. This flag GATES OFF the whole T100–T104 Deva-hero entry branch — the recipes, entry sheets, motion briefs, and this override map are all PRESERVED-BUT-DORMANT (painted-aura-shelf precedent; flip to true to restore). The per-hero AURA/footlight system is untouched (separate map + boardCard).
+const DEVA_HERO_ENTRY_ON = false;
+// T104 PART 1 — per-hero BORDER-GLOW tint [inner, outer]: indra storm blue-white/gold · agni fire orange-gold · varuna ocean cyan-white · default warm deva gold (wave-1 heroes + other factions until their rows).
+const HERO_AURA_TINT = {
+  // Devas (T104)
+  indra:['#fff0d0','#6ba8ff'],   // storm blue-white/gold
+  agni:['#ffe0a0','#ff7a2a'],    // fire orange-gold
+  varuna:['#e0ffff','#3fc8ff'],  // ocean cyan-white
+  // Asuras
+  mahabali:['#ffdca0','#c83240'],// crimson-gold
+  rahu:['#b890e8','#2a0e52'],    // eclipse violet-black
+  shukra:['#fbfdff','#b8c6dc'],  // Venus silver-white
+  // Vanaras
+  hanuman:['#ffcf6a','#e8481e'], // vermilion-saffron
+  sugriva:['#c4ffd4','#1ea85a'], // emerald-green
+  angad:['#ffd890','#b0722a'],   // bronze-amber
+  // Nagas
+  vasuki:['#c8fff0','#14a882'],  // teal-emerald
+  shesha:['#bcc4ff','#3838b8'],  // cosmic indigo
+  takshaka:['#eaffa0','#9fce1e'],// acid-chartreuse
+  _default:['#ffe6b0','#e0b040'] // warm deva gold (wave-tier heroes: Kartikeya/Garuda + other factions' wave pairs — out of scope)
+};
+// T104-B DELAYED HERO ARRIVAL — uids whose placed cell is held hidden while the entry choreography plays. boardCard reads this (survives any render() mid-entry). The engine already placed the hero; only the picture is choreographed.
+let materializingHeroes = {};
+function revealMaterializingHero(uid){ if(!materializingHeroes[uid]) return; delete materializingHeroes[uid];
+  const el=document.querySelector('#field .bc.hero[data-uid="'+uid+'"]');
+  if(el){ el.classList.remove('materializing'); el.classList.add('materialize-in'); setTimeout(()=>{ if(el.isConnected) el.classList.add('aura'); }, 150*vfxT()); } }   // fade/scale-in, THEN the footlight ignites (~150ms later)
+function revealAllMaterializingHeroes(){ for(const uid in materializingHeroes) revealMaterializingHero(uid); }   // skip/reset safety: never leave a hero stuck hidden
 function render(targetSet){
   const me=G.players[0], op=G.players[1];
   $('rnum').textContent=G.round;
@@ -7610,24 +7756,58 @@ function flyClone(rect, destEl){
   requestAnimationFrame(()=>{ clone.style.left=dr.left+'px'; clone.style.top=dr.top+'px'; clone.style.width=dr.width+'px'; clone.style.height=dr.height+'px'; clone.style.opacity='.5'; });
   setTimeout(()=>{ clone.remove(); destEl.style.visibility='visible'; flash(destEl); }, 280);
 }
+// ---- center-screen banner QUEUE (shared #banner element): serializes the round-finish banner + the pass banner so they NEVER stack — a second announcement that fires while one is showing is queued and plays after. Reduced-motion is handled by the existing CSS (#banner .txt{ animation:none !important }), so this inherits static appear/disappear automatically.
+let bannerQ=[], bannerActive=false;
+function enqueueBanner(text, o={}){ bannerQ.push({ text, hold:o.hold||1800, animDur:o.animDur||1.8, sfx:o.sfx||null, cls:o.cls||'' }); if(!bannerActive) drainBanner(); }
+function drainBanner(){
+  const b=$('banner'), t=b.querySelector('.txt');
+  if(!bannerQ.length){ bannerActive=false; return; }
+  bannerActive=true;
+  const item=bannerQ.shift();
+  t.textContent=item.text;
+  t.className='txt'+(item.cls?(' '+item.cls):'');
+  b.classList.remove('hidden');
+  t.style.animation='none'; void t.offsetWidth; t.style.animation='bannerSweep '+item.animDur+'s ease-out';   // under reduced-motion the CSS forces animation:none → static show/hide
+  if(item.sfx){ try{ Audio2.fileSfx(item.sfx); }catch(e){} }
+  clearTimeout(b._t); b._t=setTimeout(()=>{ b.classList.add('hidden'); setTimeout(drainBanner, 180); }, item.hold);
+}
 function showRoundBanner(){
   const h=G.roundHistory[G.roundHistory.length-1];
   const res = h.winner==null?'ROUND DRAWN': h.winner===0?'YOU WIN':'OPPONENT WINS';
   const w0=G.players[0].roundWins, w1=G.players[1].roundWins;
   const lead = w0>w1?' · YOU LEAD': w1>w0?' · YOU TRAIL':'';
-  const b=$('banner'), t=b.querySelector('.txt');
-  t.textContent=`ROUND ${h.round} — ${res}${lead}`;
-  b.classList.remove('hidden');
-  t.style.animation='none'; void t.offsetWidth; t.style.animation='bannerSweep 1.8s ease-out';
-  if(!G.over) Audio2.fileSfx('sfx_round_end');   // round-end gong for rounds 1&2 ONLY — at match end the victory/defeat stinger owns the moment (a gong under a stinger is mud)
-  clearTimeout(b._t); b._t=setTimeout(()=>b.classList.add('hidden'), 1800);
+  enqueueBanner(`ROUND ${h.round} — ${res}${lead}`, { hold:1800, animDur:1.8, sfx: G.over?null:'sfx_round_end' });   // round-end gong for rounds 1&2 ONLY — at match end the victory/defeat stinger owns the moment
 }
+// PASS ANNOUNCEMENT (owner task): a pass emits no engine event, so it's detected UI-side via the players[pi].passed state transition in runAction. Same #banner visual class as the round-finish banner (reuse, no new look); ~1.5s hold; queued so it never stacks; sequenced into the same post-choreography position.
+function showPassBanner(pi){ enqueueBanner(pi===0?'YOU PASSED':'OPPONENT PASSED', { hold:1500, animDur:1.5 }); }
+function announcePassIfAny(passedBefore){ for(const pi of [0,1]){ if(passedBefore && !passedBefore[pi] && G.players[pi] && G.players[pi].passed) showPassBanner(pi); } }
 
 /* ================= GAME FEEL: pacing speed, audio, helpers ================= */
 const SPEEDS={ relaxed:1.4, normal:1.0, fast:0.6 };
 let speedMult = SPEEDS[localStorage.getItem('dy_speed')] || 1.0;
 const CHOREO_SPEED = 1.3;   // global baseline pacing multiplier for ALL choreography steps (showcase / effects / summary). ↑ = slower. One number to tune.
-function setSpeed(key){ if(!SPEEDS[key])return; speedMult=SPEEDS[key]; localStorage.setItem('dy_speed',key); syncSettingsUI(); }
+// T66 — unified VFX pacing. vfxT() = the SAME multiplier the canvas layer uses (S()=CHOREO_SPEED) × the user speed.
+// Bound into CSS via --vfx-t so DOM-effect durations AND their JS removal timeouts breathe together with canvas + settings.
+function vfxT(){ return (typeof speedMult!=='undefined'?speedMult:1) * CHOREO_SPEED; }
+function applyVfxT(){ try{ document.documentElement.style.setProperty('--vfx-t', vfxT().toFixed(3)); }catch(e){} }
+applyVfxT();
+// T66 — three-tier escalation ladder. Routes ALL effect dispatch (T65 firing map): L/M plays → spectacle;
+// astra plays + damage/destroy → combat; everything else (units, mantras, buffs, venom, shield) → ambient.
+function vfxTier(c, ev){
+  if(ev.type==='play' && c && (c.r==='L'||c.r==='M')) return 'spectacle';   // Legendary/Mythic plays (incl. Brahmastra-tier astras, which are L/M)
+  if(ev.type==='play' && c && c.t==='astra') return 'combat';               // lower-rarity astra resolution
+  if(ev.type==='damage' || ev.type==='destroy') return 'combat';            // combat events
+  return 'ambient';                                                          // units, mantras, buffs, venom, shield, tokens
+}
+function setSpeed(key){ if(!SPEEDS[key])return; speedMult=SPEEDS[key]; localStorage.setItem('dy_speed',key); applyVfxT(); syncSettingsUI(); }
+// T90: player-owned VFX quality (auto/hi/md/lo, dy_vfxq). Takes effect from the NEXT match (applyVfxQuality runs at match start). RAISING quality re-arms the jank prompt.
+const VFXQ_RANK={ lo:0, md:1, hi:2, auto:2 };
+function setVfxQuality(q){ if(!(q in VFXQ_RANK)) return; const old=localStorage.getItem('dy_vfxq')||'auto';
+  localStorage.setItem('dy_vfxq', q);
+  if((VFXQ_RANK[q]||0) > (VFXQ_RANK[old]||0)){ localStorage.removeItem('dy_vfxjank'); jankPromptShown=false; jankOnsets=[]; }   // re-offer the jank prompt only after the player RAISES quality
+  syncVfxQualityUI(); }
+function syncVfxQualityUI(){ const q=localStorage.getItem('dy_vfxq')||'auto'; document.querySelectorAll('#vfxqseg button').forEach(b=>b.classList.toggle('sel', b.dataset.vq===q)); }
+function applyVfxQuality(){ try{ if(window.VFX && VFX.applyQuality) VFX.applyQuality(localStorage.getItem('dy_vfxq')||'auto'); }catch(e){} }   // match-start rung resolution (before loadMatchSheets)
 function findCardByUid(uid){
   for(const pi of [0,1]){ const p=G.players[pi];
     for(const z of [p.units,p.heroes,p.discard,p.hand]){ const c=z.find(x=>x&&x.uid===uid); if(c) return c; }
@@ -7814,6 +7994,7 @@ function unlockAudioOnce(){ if(audioUnlocked)return; audioUnlocked=true; Audio2.
 /* ---- settings panel ---- */
 function syncSettingsUI(){
   document.querySelectorAll('#speedseg button').forEach(b=>b.classList.toggle('sel', SPEEDS[b.dataset.sp]===speedMult));
+  syncVfxQualityUI();   // T90
   $('musictoggle').textContent = Audio2.hasMusic ? '♪ Music' : '♪ Add music';
   $('musictoggle').classList.toggle('on', Audio2.hasMusic && Audio2.musicOn);
   $('musichint').classList.toggle('hidden', Audio2.hasMusic);
@@ -7845,6 +8026,8 @@ updateMuteIcon();
 $('gearbtn').onclick=()=>{ syncSettingsUI(); $('settings').classList.remove('hidden'); };
 $('settings').onclick=e=>{ if(e.target.id==='settings') $('settings').classList.add('hidden'); };
 document.querySelectorAll('#speedseg button').forEach(b=> b.onclick=()=>setSpeed(b.dataset.sp));
+document.querySelectorAll('#vfxqseg button').forEach(b=> b.onclick=()=>setVfxQuality(b.dataset.vq));   // T90
+syncVfxQualityUI();   // T90: reflect the persisted quality on load
 $('musictoggle').onclick=()=>{ unlockAudioOnce(); if(!Audio2.hasMusic){ toastMute('Set window.MUSIC_URL to add music'); return; } Audio2.setMusic(!Audio2.musicOn); syncSettingsUI(); updateMuteIcon(); };
 $('sfxtoggle').onclick=()=>{ unlockAudioOnce(); Audio2.setSfx(!Audio2.sfxOn); if(Audio2.sfxOn) Audio2.sfx('buff'); syncSettingsUI(); updateMuteIcon(); };
 $('sfxvol').oninput=e=>{ Audio2.setSfxVol(e.target.value/100); };
@@ -7900,8 +8083,10 @@ async function showcaseCard(uid, playedAs){
   fillShowcase(c, { copy: isCopy || transformed });              // PHASE 2 — the resolved card (the copy), with the ⧉ COPY tag
   if(transformed && !reducedMotion()){ el.style.animation='none'; void el.offsetWidth; el.style.animation=''; }   // re-pop as the crossfade beat (reuse the existing showcasePop)
   sc.classList.remove('hidden','out'); void sc.offsetWidth;
+  const r=el.getBoundingClientRect(), scPos={ el:null, cx:r.left+r.width/2, top:r.top+6, rect:r };   // T88b: the showcase card's rect, captured WHILE visible → the fallback position for a kill-on-entry death (which has no board/snapshot rect)
   await cDelay(1400);
   sc.classList.add('out'); await cDelay(300); sc.classList.add('hidden'); sc.classList.remove('out'); el.classList.remove('shimmer');
+  return scPos;
 }
 function summarize(evs){
   const nm=uid=>{ const c=findCardByUid(uid); return c?c.n:'a Unit'; };
@@ -7974,7 +8159,8 @@ function choreoRace(promise, snap){
 // Fast-forward the ACTIVE choreography to completion immediately: resolve every pending cDelay and every rAF-based await.
 function fastForwardChoreo(){ if(!choreoActive) return; choreoSkip=true;
   choreoTimers.forEach(([t,r])=>{ try{ clearTimeout(t); }catch(e){} try{ r&&r(); }catch(e){} }); choreoTimers=[];
-  const fs=choreoForce; choreoForce=[]; fs.forEach(fn=>{ try{ fn(); }catch(e){} }); }
+  const fs=choreoForce; choreoForce=[]; fs.forEach(fn=>{ try{ fn(); }catch(e){} });
+  try{ revealAllMaterializingHeroes(); }catch(e){} }   // T104-B: a skipped/backgrounded/watchdog'd entry must never leave a hero stuck hidden
 function skipChoreo(){ fastForwardChoreo(); }
 // (b) iOS backgrounding pauses rAF mid-await → fast-forward the choreo the moment the tab is hidden, so it can't stick.
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && choreoActive) fastForwardChoreo(); });
@@ -7985,7 +8171,7 @@ setInterval(()=>{ if(choreoActive && choreoStartedAt && (performance.now()-chore
 } }, 1500);
 // Defensive reset of ALL choreography globals — a new match must never inherit a stuck choreoActive from a prior match
 // whose choreo async was left pending (a hung rAF await) or rejected (an uncaught step exception, e.g. the drawImage race).
-function resetChoreo(){ choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoForce=[]; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
+function resetChoreo(){ choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
   choreoTimers.forEach(([t])=>{ try{ clearTimeout(t); }catch(e){} }); choreoTimers=[]; pendingPlay=null; roundCountAtActionStart=0;
   const layer=$('choreolayer'); if(layer){ layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML=''; } }
 const FTOAST_CLASS = a => a==='Chaos Surge'?'f-chaos': a==='Dharma Shield'?'f-dharma': a==='Leap'?'f-leap': a==='Venom'?'f-venom':'f-other';
@@ -7993,26 +8179,32 @@ function factionToast(ability, text){
   if (reducedMotion()) return;
   const b=$('ftoast'), t=b.querySelector('.ft');
   t.className='ft '+FTOAST_CLASS(ability); t.textContent=text||ability;
-  b.classList.remove('hidden'); t.style.animation='none'; void t.offsetWidth; t.style.animation='ftPop .62s ease-out';
-  clearTimeout(b._t); b._t=setTimeout(()=>b.classList.add('hidden'), 640);
+  b.classList.remove('hidden'); t.style.animation='none'; void t.offsetWidth; t.style.animation='ftPop '+(0.62*vfxT()).toFixed(2)+'s ease-out';
+  clearTimeout(b._t); b._t=setTimeout(()=>b.classList.add('hidden'), 640*vfxT());
 }
+// T77 (owner ruling 2026-07-30): the new catalog-derived VFX (c1a_deva, and future seq effects) REPLACE all pre-catalog visuals.
+// LEGACY_VFX gates every legacy VISUAL trigger in gameplay OFF so old effects never fire alongside the new ones. It gates GAMEPLAY
+// TRIGGERS + the legacy preload ONLY — the recipes stay defined and console-callable (VFX.*) for A/B, and nothing is deleted (rollback = flip true).
+// FEEL is untouched (hit-stop, zoom-punch/screenShake, cpulse, beat timing) and so are INFO/STATE (floaters, callouts, wetBadge, the persistent
+// shield/venom badges, the death-beat dissolve). The c1a wire is NEW, not legacy — it renders regardless of this flag.
+const LEGACY_VFX = false;
 function calloutAt(pos, txt){
   if (!pos || !txt || reducedMotion()) return;
   const c=document.createElement('div'); c.className='callout'; c.textContent=txt;
   c.style.left=pos.cx+'px'; c.style.top=(pos.rect.top-14)+'px'; c.style.transform='translateX(-50%)';
-  $('choreolayer').appendChild(c); setTimeout(()=>c.remove(), 520);
+  $('choreolayer').appendChild(c); setTimeout(()=>c.remove(), 520*vfxT());
 }
 function floatAt(pos, txt, kind){
   if (!pos || reducedMotion()) return;
   const f=document.createElement('div'); f.className='floater '+kind; f.textContent=txt;
   f.style.left=(pos.cx-9)+'px'; f.style.top=pos.top+'px';
-  $('choreolayer').appendChild(f); setTimeout(()=>f.remove(), 620);
+  $('choreolayer').appendChild(f); setTimeout(()=>f.remove(), 620*vfxT());
 }
 function dissolveAt(pos, name, color){
   if (!pos || reducedMotion()) return;
   const d=document.createElement('div'); d.className='dissolve-clone cracking';
   d.style.left=pos.rect.left+'px'; d.style.top=pos.rect.top+'px'; d.style.width=pos.rect.width+'px'; d.style.height=pos.rect.height+'px';
-  d.textContent='✖ '+(name||''); $('choreolayer').appendChild(d); setTimeout(()=>d.remove(), 520);
+  d.textContent='✖ '+(name||''); $('choreolayer').appendChild(d); setTimeout(()=>d.remove(), 520*vfxT());
   shardBurst(pos.rect, color||'#e0483c');   // faction-colored particle shards scatter out
 }
 function shardBurst(rect, color){
@@ -8025,46 +8217,86 @@ function shardBurst(rect, color){
     s.style.setProperty('--dx',(Math.cos(ang)*dist).toFixed(0)+'px');
     s.style.setProperty('--dy',(Math.sin(ang)*dist+28).toFixed(0)+'px');
     s.style.setProperty('--dr',(Math.random()*540-270).toFixed(0)+'deg');
-    $('choreolayer').appendChild(s); setTimeout(()=>s.remove(),640);
+    $('choreolayer').appendChild(s); setTimeout(()=>s.remove(),640*vfxT());
   }
 }
+// ===== T97 VICTIM SHOWCASE: the strike lands on the VISIBLE card, THEN the card goes (owner device verdict — the T88b showcase pattern) =====
+// runAction render()s the final board BEFORE the strike choreography, so the victim's cell is empty by strike time — AND an astra-cast
+// spectacle beat plays first, so the gap between render() and the destroy beat is long. captureVictims() clones the live .bc node WHILE it
+// is still on the board (between mutate() and render()) and SHOWS it immediately — a pointer-events:none overlay in #choreolayer (which
+// survives render()) that PERSISTS over the now-emptied cell through the cast beat AND the strike (no premature vanish, no pop-back).
+// showcaseVictim(uid, exitKind) then exits it AT the strike's contact beat: 'kill' → crack+dissolve+shards; 'removal' → clean vanish (NO
+// dissolve — Sudarshana law, the hero returns next round). Pixel-exact (the rendered node), no re-derivation from spliced-out unit data.
+let victimClones = {};   // uid → { node, rect, color } — cloned + shown pre-render, exited at the strike beat (reset per action)
+function captureVictims(uids){
+  clearVictims();        // drop any clone a skipped/prior action left un-exited
+  uids.forEach(u=>{
+    const el=document.querySelector(`#field .bc[data-uid="${u}"]`);
+    if(!el) return;                                    // no live cell (e.g. a Vajra kill-on-entry) → helper no-ops, the existing koePos/dissolveAt path stands
+    const r=el.getBoundingClientRect();
+    const fr=$('field').getBoundingClientRect();       // T97b: position is now RELATIVE to #victimlayer (inset:0 in #field), not the fixed viewport
+    const node=el.cloneNode(true); node.removeAttribute('id');
+    node.className=el.className+' victim-showcase';
+    Object.assign(node.style, { position:'absolute', left:(r.left-fr.left)+'px', top:(r.top-fr.top)+'px', width:r.width+'px', height:r.height+'px', margin:'0', transform:'none', pointerEvents:'none' });
+    let color='#e0483c'; for(const k in FAC_COLOR) if(el.classList.contains(k)) color=FAC_COLOR[k];
+    $('victimlayer').appendChild(node);                // SHOW now under #vfxcanvas — persists over the cell render() is about to empty, through the whole strike sequence; the strike renders OVER it (T97b)
+    victimClones[u]={ node, rect:r, color };           // rect = VIEWPORT rect, kept for shardBurst (which draws in #choreolayer, fixed/viewport coords)
+  });
+}
+// exit the held victim card at the strike's contact beat.
+function showcaseVictim(uid, exitKind){
+  const v=victimClones[uid]; if(!v) return false; delete victimClones[uid];
+  const node=v.node;
+  if(reducedMotion()){ node.remove(); return true; }
+  if(exitKind==='kill'){ node.classList.add('victim-kill'); shardBurst(v.rect, v.color); setTimeout(()=>node.remove(), 520*vfxT()); }   // the REAL card cracks+dissolves + faction shards (replaces the placeholder dissolveAt box)
+  else { node.classList.add('victim-removal'); setTimeout(()=>node.remove(), 320*vfxT()); }                                            // 'removal': clean fade+lift, no crack — the hero is spirited off, not slain
+  return true;
+}
+function clearVictims(){ for(const u in victimClones){ try{ victimClones[u].node.remove(); }catch(e){} } victimClones={}; }   // defensive: remove any un-exited clone (e.g. a skipped strike)
 function fxRing(pos, kind){
   if(!pos||reducedMotion()) return;
   const sz=Math.max(pos.rect.width,pos.rect.height)*(kind==='shield'?1.05:0.9);
   const r=document.createElement('div'); r.className='fx-ring '+kind;
   r.style.width=r.style.height=sz+'px'; r.style.left=pos.cx+'px'; r.style.top=(pos.rect.top+pos.rect.height/2)+'px';
-  $('choreolayer').appendChild(r); setTimeout(()=>r.remove(),600);
+  $('choreolayer').appendChild(r); setTimeout(()=>r.remove(),600*vfxT());
 }
 function fxDrip(pos){
   if(!pos||reducedMotion()) return;
   const d=document.createElement('div'); d.className='fx-drip';
   d.style.left=(pos.cx-3+(Math.random()*pos.rect.width*0.4-pos.rect.width*0.2))+'px'; d.style.top=(pos.rect.top+8)+'px';
   d.style.setProperty('--dy',(pos.rect.height*0.7).toFixed(0)+'px');
-  $('choreolayer').appendChild(d); setTimeout(()=>d.remove(),720);
+  $('choreolayer').appendChild(d); setTimeout(()=>d.remove(),720*vfxT());
 }
 function fxLeapArc(fromPos, toPos){
   if(!fromPos||!toPos||reducedMotion()) return;
   const x1=fromPos.cx, y1=fromPos.rect.top+fromPos.rect.height/2, x2=toPos.cx, y2=toPos.rect.top+toPos.rect.height/2;
   const len=Math.hypot(x2-x1,y2-y1), ang=Math.atan2(y2-y1,x2-x1)*180/Math.PI;
   const a=document.createElement('div'); a.className='fx-arc'; a.style.left=x1+'px'; a.style.top=y1+'px'; a.style.width=len+'px'; a.style.transform=`rotate(${ang}deg)`;
-  $('choreolayer').appendChild(a); setTimeout(()=>a.remove(),500);
+  $('choreolayer').appendChild(a); setTimeout(()=>a.remove(),500*vfxT());
 }
 let lastShakeAt=0;
-function screenShake(){
-  if(reducedMotion()) return; const now=performance.now(); if(now-lastShakeAt<1000) return; lastShakeAt=now;   // max one shake / second
-  const f=$('field'); f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake'); setTimeout(()=>f.classList.remove('shake'),240);
+function screenShake(spectacle){
+  if(reducedMotion()) return; const now=performance.now(); if(now-lastShakeAt<1000) return; lastShakeAt=now;   // max one shake / second (global gate, shared across tiers)
+  const f=$('field'); const cls=spectacle?'shake-big':'shake';   // T66: spectacle = ±9px shake + zoom-punch (single composed keyframe); combat = ±6px translate-only
+  f.classList.remove('shake','shake-big'); void f.offsetWidth; f.classList.add(cls);
+  setTimeout(()=>f.classList.remove('shake','shake-big'), (spectacle?300:240)*vfxT());
 }
+// T66 combat: a single ~60ms white screen-edge vignette flash (fixed overlay, opacity-only) on combat astra resolution
+function vignetteFlash(){ if(reducedMotion()) return; const v=$('vfxvignette'); if(!v) return; v.classList.remove('fire'); void v.offsetWidth; v.classList.add('fire'); setTimeout(()=>v.classList.remove('fire'), 120*vfxT()); }
 function boardWash(color){
   if(reducedMotion()) return; const w=$('boardwash'); w.style.background=`radial-gradient(circle at 50% 45%, ${color}55, transparent 70%)`;
-  w.classList.remove('on'); void w.offsetWidth; w.classList.add('on'); setTimeout(()=>w.classList.remove('on'),720);
+  w.classList.remove('on'); void w.offsetWidth; w.classList.add('on'); setTimeout(()=>w.classList.remove('on'),720*vfxT());
 }
 const FAC_HEX={ devas:'#e0b040', asuras:'#e0483c', vanaras:'#6fc257', nagas:'#3fb9a8' };
 function ownerPiOfUid(uid){ for(const pi of [0,1]){ const p=G.players[pi]; if([...p.units,...p.heroes,...p.discard].some(c=>c&&c.uid===uid)) return pi; if(p.artifact&&p.artifact.uid===uid) return pi; } return 0; }
-function wetBadge(el){ if(!el)return; const b=el.querySelector('.venombadge'); if(b){ b.classList.remove('wet'); void b.offsetWidth; b.classList.add('wet'); setTimeout(()=>b.classList.remove('wet'),600); } }
+function wetBadge(el){ if(!el)return; const b=el.querySelector('.venombadge'); if(b){ b.classList.remove('wet'); void b.offsetWidth; b.classList.add('wet'); setTimeout(()=>b.classList.remove('wet'),600*vfxT()); } }
 function leapArcFromText(leaperPos, text){
+  if(!LEGACY_VFX) return;   // T77: the leap streak is a legacy visual — self-gate (its only caller is already gated; this is defense-in-depth)
   const m=/copies (.+)$/.exec(text||''); if(!m||!leaperPos) return; const name=m[1].trim();
   const el=[...document.querySelectorAll('#field .bc')].find(e=>((e.querySelector('.mini-name')||{}).textContent||'')===name);
-  if(el){ const r=el.getBoundingClientRect(); fxLeapArc(leaperPos, { cx:r.left+r.width/2, rect:r }); }
+  if(el){ const r=el.getBoundingClientRect(), tx=r.left+r.width/2, ty=r.top+r.height/2, ly=leaperPos.rect.top+leaperPos.rect.height/2;
+    if(!VFX.sprStreak(leaperPos.cx, ly, tx, ty, r.width)) fxLeapArc(leaperPos, { cx:tx, rect:r });   // E9 painted Vanara-green streak replaces the arc line
+  }
 }
 function halfCenterClient(pi){ const el=document.querySelector(pi===1?'.half.opp':'.half.me'); if(!el) return null; const r=el.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; }
 
@@ -8074,6 +8306,9 @@ const VFX = (()=>{
   const CAP=120, DPR=Math.min(2, window.devicePixelRatio||1);
   let canvas, cx, fieldEl, w=0, h=0, parts=[], bolts=[], tint=null, raf=0, last=0, ready=false;
   let sGlow=[], sEmber=null, sDust=[], sDark=[];
+  let bloomCv=null, bloomCx=null, bloomOn=true;   // T69A bloom post-pass (half-res offscreen); bloomOn = A/B toggle for the G3 proof
+  let dimOn=false;   // T70-DIM (owner ruling): the per-effect ground-dim reads as a stain, not contrast → OFF by default on BOTH paths. Mechanism kept, gated by VFX.dim, reserved for the hero-moment scene dim (R3).
+  const BLOOM_OK=(()=>{ try{ return 'filter' in document.createElement('canvas').getContext('2d'); }catch(e){ return false; } })();   // feature-detect ctx.filter; skip cleanly where absent
   const S=()=> (typeof CHOREO_SPEED!=='undefined'?CHOREO_SPEED:1);
   function offc(size){ const c=document.createElement('canvas'); c.width=c.height=size; return c; }
   function makeGlow(stops, size){ const c=offc(size), g=c.getContext('2d'), rg=g.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2); stops.forEach(([o,col])=>rg.addColorStop(o,col)); g.fillStyle=rg; g.fillRect(0,0,size,size); return c; }
@@ -8089,12 +8324,13 @@ const VFX = (()=>{
     sEmber=makeGlow([[0,'rgba(255,244,196,1)'],[.4,'rgba(255,176,74,.9)'],[1,'rgba(255,146,52,0)']],16);
     sDust=[]; sDark=[]; for(let i=0;i<3;i++){ sDust.push(makeBlob('152,134,106',72,.5)); sDark.push(makeBlob('54,52,58',96,.6)); }
   }
-  function init(){ fieldEl=$('field'); canvas=$('vfxcanvas'); if(!canvas) return; cx=canvas.getContext('2d'); if(!sGlow.length) initSprites(); resize(); ready=true; }
-  function resize(){ if(!canvas||!fieldEl) return; const r=fieldEl.getBoundingClientRect(); w=r.width; h=r.height; canvas.width=Math.max(1,Math.round(w*DPR)); canvas.height=Math.max(1,Math.round(h*DPR)); canvas.style.width=w+'px'; canvas.style.height=h+'px'; }
+  function init(){ fieldEl=$('field'); canvas=$('vfxcanvas'); if(!canvas) return; cx=canvas.getContext('2d'); try{ cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high'; }catch(e){}   // C2: high-quality upscale on the Canvas2D path
+    if(!sGlow.length) initSprites(); resize(); ready=true; gpuInit(); }   // T70-P0: boot the GPU overlay (async, non-blocking; failure → Canvas2D floor)
+  function resize(){ if(!canvas||!fieldEl) return; const r=fieldEl.getBoundingClientRect(); w=r.width; h=r.height; canvas.width=Math.max(1,Math.round(w*DPR)); canvas.height=Math.max(1,Math.round(h*DPR)); canvas.style.width=w+'px'; canvas.style.height=h+'px'; if(typeof gpuResize==='function') gpuResize(); }
   function local(cxp, cyp){ const r=fieldEl.getBoundingClientRect(); return { x:cxp-r.left, y:cyp-r.top }; }
   function room(){ return CAP-parts.length; }
   function wake(){ if(!raf){ last=performance.now(); raf=requestAnimationFrame(step); } }
-  function add(p){ if(parts.length>=CAP) parts.shift(); parts.push(p); wake(); }
+  function add(p){ if(parts.length>=CAP){ const e=parts[0]; if(e && e.life>0.08*vfxT()) e.life=0.08*vfxT(); if(parts.length>=CAP+8) parts.shift(); } parts.push(p); wake(); }   // T75: evicted particle fast-fades 80ms
   function sprite(img, x, y, size, rot, alpha){ if(alpha<=0) return; cx.globalAlpha=alpha<1?alpha:1; const c=Math.cos(rot||0), s=Math.sin(rot||0); cx.setTransform(DPR*c, DPR*s, -DPR*s, DPR*c, DPR*x, DPR*y); cx.drawImage(img, -size/2, -size/2, size, size); }
   // midpoint-displacement bolt: straight top→impact, recursively displace midpoints perpendicular; fork 2–3 branches
   function displace(x1,y1,x2,y2,disp,levels){ let pts=[{x:x1,y:y1},{x:x2,y:y2}];
@@ -8104,9 +8340,556 @@ const VFX = (()=>{
     const main=displace(sx,sy,ix,iy,full*0.25,6), branches=[], nb=2+Math.floor(Math.random()*2), base=Math.atan2(iy-sy,ix-sx);
     for(let k=0;k<nb;k++){ const a=main[1+Math.floor(Math.random()*(main.length-2))], dir=base+(Math.random()<.5?1:-1)*(0.52+Math.random()*0.18), len=full*(0.2+Math.random()*0.2); branches.push(displace(a.x,a.y,a.x+Math.cos(dir)*len,a.y+Math.sin(dir)*len,len*0.25,4)); }
     return { main, branches, life:0.14, max:0.14 }; }
+  // ===================== T67 SPRITE COMPOSITOR (painted VFX kit) =====================
+  // Painted textures drawn on the SAME canvas/rAF as the particles; separate instance layer + cap (12).
+  let sprImg={}, sprTint={}, spritesReady=false, sprLoadN=0, sprites=[], bakeMs=0;   // T72: bakeMs = total load-time luminance-alpha bake cost (G5)
+  // T74 QUALITY LADDER: display-resolution rungs. HIGH 512px/64f sheets + 1024 stills · MEDIUM 448/48f + 768 · LOW 384/32f + 512 (current, the regression floor). Selected at boot; preload ONLY the chosen rung (nobody downloads three). st=still dir, sd=sheet dir, mvd=MV dir, cell=sheet cell.
+  const RUNG={ hi:{cell:512, st:'hi/', sd:'sheets/hi/', mvd:'sheets/hi/mv/'}, md:{cell:448, st:'md/', sd:'sheets/md/', mvd:'sheets/md/mv/'}, lo:{cell:384, st:'', sd:'sheets/', mvd:'sheets/mv/'} };
+  function pickRung(){ try{ const dm=navigator.deviceMemory||4, dpr=Math.min(2,window.devicePixelRatio||1); if(dm>=8 && dpr>=2) return 'hi'; if(dm>=4) return 'md'; return 'lo'; }catch(e){ return 'lo'; } }   // deviceMemory / DPR heuristic (renderer refines post-init if needed)
+  let vfxRung=pickRung();
+  const SHEET_V='t104';   // T104 ?v= stamp — bumped because the four hero-entry sheets are IN-PLACE swaps of committed sheets (cache-bust so devices fetch the retuned frames)
+  const stillURL=(key)=>'https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/game/'+RUNG[vfxRung].st+'vfx_'+key+'.png?v='+SHEET_V;
+  const sheetURL=(key)=>'https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/game/'+RUNG[vfxRung].sd+'vfx_'+key+'.png?v='+SHEET_V;
+  const mvURL=(key)=>'https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/game/'+RUNG[vfxRung].mvd+'vfx_'+key+'.png?v='+SHEET_V;
+  const SCAP=12;
+  const SPR_NAMES=['aura_1','aura_2','aura_3','bloom_1','bloom_2','lightning_1','lightning_2','lightning_3','lightning_4','ring_1','ring_2','shield_1','shield_2','smoke_1','smoke_2','streak_1','streak_2','surge_1','surge_2','venom_1','venom_2'];
+  const SPR_FAC={ devas:'#e0b040', asuras:'#e0483c', vanaras:'#6fc257', nagas:'#3fb9a8' };
+  function offc2(wd,ht){ const c=document.createElement('canvas'); c.width=wd; c.height=ht; return c; }
+  // T72 (mirrors the GPU heroKitTex): opaque kit textures (JPEG-in-.png, no alpha) stamp alpha=255 under 'lighter' → black regions render as opaque black tiles. Bake alpha=luminance per pixel so the black ground is transparent; additive color math is unchanged (bright stays bright).
+  function bakeAlpha(src){ const w=src.naturalWidth||src.width, h=src.naturalHeight||src.height, c=offc2(w,h), g=c.getContext('2d');
+    g.drawImage(src,0,0,w,h);
+    try{ const id=g.getImageData(0,0,w,h), d=id.data, n=d.length; for(let i=0;i<n;i+=4){ const r=d[i],gg=d[i+1],b=d[i+2]; d[i+3]= r>gg ? (r>b?r:b) : (gg>b?gg:b); } g.putImageData(id,0,0); }catch(e){ return src; }   // inline max (no fn-call per pixel)
+    return c; }
+  function tintOf(img,color){ const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height, c=offc2(iw,ih), g=c.getContext('2d');
+    g.drawImage(img,0,0,iw,ih); g.globalCompositeOperation='multiply'; g.fillStyle=color; g.fillRect(0,0,iw,ih);   // RGB tinted; black stays black → no additive contribution
+    // C2 WHITE-HOT CORE (F4): add the top-luminance core back UNtinted so bright centers stay white-gold, separated from the gold board
+    try{ const core=offc2(iw,ih), cg=core.getContext('2d'); cg.drawImage(img,0,0,iw,ih);
+      const id=cg.getImageData(0,0,iw,ih), d=id.data;
+      for(let i=0;i<d.length;i+=4){ if(Math.max(d[i],d[i+1],d[i+2])<205){ d[i]=d[i+1]=d[i+2]=0; } }   // keep only the hot core (>205)
+      cg.putImageData(id,0,0); g.globalCompositeOperation='lighter'; g.globalAlpha=0.55; g.drawImage(core,0,0); g.globalAlpha=1;
+    }catch(e){}
+    return c; }
+  function buildTints(key,img){                                                       // tint ONCE at load, never per-frame
+    if(/^aura|^ring/.test(key)){ sprTint[key]={}; for(const f in SPR_FAC) sprTint[key][f]=tintOf(img,SPR_FAC[f]); }   // faction-tinted
+    else if(/^bloom/.test(key)){ sprTint[key]={ damage:tintOf(img,'#ff5a44') }; }                                    // red for damage; destroy uses raw white-gold
+    else if(/^streak/.test(key)){ sprTint[key]={ leap:tintOf(img,SPR_FAC.vanaras) }; }                               // Leap = Vanara green
+    // shield(gold) / venom(green) / surge(ember) / lightning(blue-white) / smoke: ship as-loaded (GL4 overrides)
+  }
+  function preloadSprites(){ if(sprLoadN>0) return;                                    // idempotent, once per session (0d slot; async → never blocks the mulligan)
+    if(!LEGACY_VFX){ spritesReady=true; return; }                                       // T77: legacy stills cannot fire → skip. T81: sheets are NO LONGER chained here — they load per-match via loadMatchSheets (page load fetches no sheets).
+    SPR_NAMES.forEach(key=>{ const im=new Image(); im.decoding='async';
+      im.onload=()=>{ sprImg[key]=im; try{buildTints(key,im);}catch(e){}
+        try{ const t0=performance.now();
+          if(!/^smoke/.test(key)) sprImg[key]=bakeAlpha(im);                         // T72: additive stills → luminance-alpha (smoke stills stay opaque; they draw source-over)
+          const tv=sprTint[key]; if(tv){ for(const k in tv) tv[k]=bakeAlpha(tv[k]); }  // and EVERY tinted variant (the tile returns through the tinted copies otherwise)
+          bakeMs+=performance.now()-t0;
+        }catch(e){}
+        sprLoadN++; if(sprLoadN>=SPR_NAMES.length){ spritesReady=true; } };            // T81: no sheet chain (LEGACY-on stills only; sheets load per-match)
+      im.onerror=()=>{ sprLoadN++; if(sprLoadN>=SPR_NAMES.length){ spritesReady=true; } };   // a missing sprite just leaves its procedural fallback in place
+      im.src=stillURL(key); });   // T74: rung-selected still resolution
+  }
+  function pick(pre,n){ return pre+'_'+(1+Math.floor(Math.random()*n)); }
+  function haveSpr(key){ return !!sprImg[key]; }
+  function imgTint(key,kind){ const t=sprTint[key]; if(kind && t && t[kind]) return t[kind]; return sprImg[key]; }
+  // ===================== FLIPBOOK SHEETS (T68F: 384px, per-sheet grid, real-time playback + frame blending) =====================
+  let sheetImg={}, sheetGrid={}, sheetsReady=false, sheetLoading={};   // T81: per-key load tracking (was a global sheetLoadN counter — lazy loading is incremental per match)
+  const SHEET_NAMES=['aura_1','aura_2','smoke_1','smoke_2','surge_1','surge_2','venom_1','venom_2','c1a_deva','landing_asura','landing_vanara','landing_naga','brahmastra','gayatri','vajra','damage','buff','shield','venom','chaos_wash','chaos_mark','pashupatastra','sudarshana','nagapasha','pavamana','ahamkara','sanjivani','deva_hero_entry','indra_hero_entry','agni_hero_entry','varuna_hero_entry'];   // full catalog (LEGACY rollback loads all of this; lazy path loads a match-specific subset)
+  const LANDING_SHEET={ devas:'c1a_deva', asuras:'landing_asura', vanaras:'landing_vanara', nagas:'landing_naga' };   // faction → landing sheet key (all four ship as of T81)
+  const SHEET_GRID_CFG={ brahmastra:{cols:8, rows:5}, gayatri:{cols:6, rows:6}, chaos_wash:{cols:6, rows:4}, pashupatastra:{cols:8, rows:5}, pavamana:{cols:6, rows:6} };   // T78/T79: RECTANGULAR row-plate sheets — grid can't derive from width/SHEET_CELL (non-square cells); cw/ch = sheetDims/(cols,rows). Square sheets omit this (cw=ch=SHEET_CELL).
+  let SHEET_CELL=RUNG[vfxRung].cell;   // T74: rung-dependent sheet cell (hi 512 / md 448 / lo 384). Frame count derives from the sheet dims / cell, so 64f/48f/32f are auto-detected.
+  const SHEET_FPS=16;   // F1b: 16fps base ×vfxT → the window plays at ~1:1 real tempo
+  const SHEET_MODE={ aura_1:'pingpong', aura_2:'pingpong', smoke_1:'pingpong', surge_1:'pingpong', surge_2:'pingpong', smoke_2:'forward', venom_1:'forward', venom_2:'forward', c1a_deva:'forward', landing_asura:'forward', landing_vanara:'forward', landing_naga:'forward', brahmastra:'forward', gayatri:'forward', vajra:'forward', damage:'forward', buff:'forward', shield:'forward', venom:'forward', chaos_wash:'forward', chaos_mark:'forward', pashupatastra:'forward', sudarshana:'forward', nagapasha:'forward', pavamana:'forward', ahamkara:'forward', sanjivani:'forward', deva_hero_entry:'forward', indra_hero_entry:'forward', agni_hero_entry:'forward', varuna_hero_entry:'forward' };   // venom NEVER reverses; the seq catalog effects = one-shot forward; the hero auras pingpong (T99 loop, also forced by the recipe's loop config)
+  const sheetFrameCanvas=offc2(512,512);   // B4: ONE reusable canvas (max cell 512) for draw-time aura tint; draws consume only the SHEET_CELL sub-region
+  function haveSheet(key){ return !!sheetImg[key]; }
+  // T81: LOAD ONE SHEET, idempotent per key (skips if already loaded or in-flight). bakeAlpha + grid derivation as before.
+  function loadSheet(key){ if(!key || sheetImg[key] || sheetLoading[key]) return; sheetLoading[key]=true;
+    const im=new Image(); im.decoding='async';
+    im.onload=()=>{ const W=im.naturalWidth||im.width, H=im.naturalHeight||im.height, gc=SHEET_GRID_CFG[key];
+      const cols=gc?gc.cols:Math.round(W/SHEET_CELL), rows=gc?gc.rows:Math.round(H/SHEET_CELL), cw=Math.round(W/cols), ch=Math.round(H/rows);
+      sheetGrid[key]={cols,rows,frames:cols*rows,cw,ch};   // cw/ch per-sheet cell dims (square: =SHEET_CELL; rectangular row-plate: from SHEET_GRID_CFG)
+      try{ const t0=performance.now(); sheetImg[key]=bakeAlpha(im); bakeMs+=performance.now()-t0; }catch(e){ sheetImg[key]=im; }   // T72 luminance-alpha bake
+      sheetsReady=true; };
+    im.onerror=()=>{ sheetLoading[key]=false; };   // missing sheet → leave unloaded; the recipe's addSheetSpr guard no-ops
+    im.src=sheetURL(key); }   // T74: rung-selected resolution
+  // T81 PER-MATCH LAZY LOAD (owner ruling): page load fetches NO sheets; at match start we load ONLY what this match can use —
+  // the ≤2 factions' landing sheets, plus the two row plates IFF a Deva deck is present (Brahmastra + Gayatri are Deva-only, engine-verified).
+  function loadMatchSheets(facA, facB){
+    loadSheet('damage');   // T83: faction-agnostic — every match loads the shared damage tick
+    loadSheet('buff');     // T84: faction-agnostic — every match loads the shared buff surge
+    loadSheet('shield');   // T85: faction-agnostic — every match loads the shared shield formation
+    loadSheet('venom');    // T86: faction-agnostic — every match loads the shared venom tick (completes the status quartet)
+    if(LEGACY_VFX){ SHEET_NAMES.forEach(loadSheet); return; }   // A/B rollback: blanket-load the whole catalog
+    loadSheet(LANDING_SHEET[facA]); loadSheet(LANDING_SHEET[facB]);
+    if(facA==='devas' || facB==='devas'){ loadSheet('brahmastra'); loadSheet('gayatri'); loadSheet('vajra'); loadSheet('sudarshana'); loadSheet('pavamana'); loadSheet('deva_hero_entry'); loadSheet('indra_hero_entry'); loadSheet('agni_hero_entry'); loadSheet('varuna_hero_entry'); }   // T78/T79/T82/T92/T95 Deva cards + T100 Deva hero entry/aura + T101 Indra + T102 Agni per-hero overrides
+    if(facA==='asuras' || facB==='asuras'){ loadSheet('chaos_wash'); loadSheet('chaos_mark'); loadSheet('pashupatastra'); loadSheet('ahamkara'); loadSheet('sanjivani'); }   // T87/T96/T98 Asura-conditional
+    if(facA==='nagas' || facB==='nagas'){ loadSheet('nagapasha'); }   // T94 Naga-conditional — Nagapasha bind arrival
+  }
+  function addSheetSpr(key, x, y, size, o){ if(reducedMotion()||!sheetImg[key]) return false;
+    const mode=(o&&o.loop)?'pingpong':(SHEET_MODE[key]||'forward'), nf=(sheetGrid[key]||{}).frames||24;   // T99 (runtime extension #3): a looping sprite forces pingpong frame direction; ABSENT o.loop → mode is exactly SHEET_MODE[key]||'forward' as before.
+    const sp=Object.assign({ sheet:key, mode, frame:(Math.random()*nf)|0, dir:(mode==='pingpong'&&Math.random()<.5?-1:1), fAcc:0, x, y, size, anchorX:0.5, anchorY:0.5, sc0:1,sc1:1, op0:0,opPeak:1,op1:0, peakAt:0.15 }, o||{});
+    if(o && o.loop){   // T99: PERSISTENT + STOPPABLE. Large finite life keeps age/max DEFINED (~0) for the untouched one-shot draw line; the !s.loop cull-skip is what actually keeps it alive. Returns a handle; every non-loop call falls through to `return true` exactly as before.
+      if(sp.life==null) sp.life=1e6;
+      addSpr(sp);
+      return { stop(fadeMs){ if(sp._stopped) return; sp._stopped=true; sp.loop=false; sp.sc0=sp.sc1; sp.op0=sp.opPeak; sp.op1=0; sp.peakAt=0.0001; sp.crash=false; sp.age=0; sp.max=Math.max(0.05,(fadeMs||0)/1000); },   // stop: clear loop → cullable + one-shot op path resumes; fade opPeak→0 over fadeMs (real seconds, dt-driven), hold scale, then the age>=max cull removes it.
+        retarget(cxp,cyp,cardW){ if(sp._stopped) return; const p=local(cxp,cyp); sp.x=p.x; sp.y=p.y; if(cardW!=null) sp.size=cw(cardW)*(sp.retargetK||1); } };   // T100-F: re-anchor a LIVE loop sprite to a client position + draw size (hero card reflows → aura follows, position AND size). Only the loop handle carries it; the one-shot path (addSpr(sp);return true) is byte-untouched.
+    }
+    addSpr(sp); return true; }
+  // ===================== T70-P0 GPU OVERLAY LAYER (Pixi v8, WebGPU-first; PL2 overlay / PL3 triple-fallback / PL5 stable recipe API / PL6 vendored) =====================
+  // A transparent Pixi canvas above #vfxcanvas. One loop owns time: the T69A-hardened step calls gpuTick(dt) inside its try/catch, so the unkillable-loop guarantee covers the GPU layer too. Any failure → gpu.disabled → Canvas2D floor.
+  const gpu={ renderer:'none', enabled:false, disabled:false, texReady:false, app:null, PIXI:null, stage:null, gcanvas:null, sprites:[], tex:{}, mvtex:{}, _poison:false, wasNonEmpty:false,
+    dimLayer:null, fxLayer:null, particleLayer:null, particles:[], dims:[], emberTex:null, dimTex:null, bloomFilter:null,
+    mv:true, haze:true, bloom:{ threshold:0.55, intensity:1.3 }, PCAP:3000,   // T70-DIM R2: intensity 1.15→1.3. T70-P2H: cap 2000→3000 for the beat-3 shockwave burst.
+    hero:null, heroReady:false, heroTex:{}, auraTex:null, heroLog:[] };        // T70-P2H: the hero-moment sequencer state + its extra textures (ring/lightning/smoke sheet)
+  // ---- T70-P1 SHADERS (dual-source per 0b; GLSL = defaultFilterVert + finalColor/uTexture; WGSL = GlobalFilterUniforms g0 + custom g1) ----
+  const _WGSL_HDR=`struct GlobalFilterUniforms { uInputSize:vec4<f32>, uInputPixel:vec4<f32>, uInputClamp:vec4<f32>, uOutputFrame:vec4<f32>, uGlobalFrame:vec4<f32>, uOutputTexture:vec4<f32> };
+@group(0) @binding(0) var<uniform> gfu: GlobalFilterUniforms;
+@group(0) @binding(1) var uTexture: texture_2d<f32>;
+@group(0) @binding(2) var uSampler: sampler;`;
+  const _WGSL_VTX=`struct VSOutput { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> };
+fn _fvp(aPosition:vec2<f32>)->vec4<f32>{ var position=aPosition*gfu.uOutputFrame.zw+gfu.uOutputFrame.xy; position.x=position.x*(2.0/gfu.uOutputTexture.x)-1.0; position.y=position.y*(2.0*gfu.uOutputTexture.z/gfu.uOutputTexture.y)-gfu.uOutputTexture.z; return vec4(position,0.0,1.0); }
+fn _ftc(aPosition:vec2<f32>)->vec2<f32>{ return aPosition*(gfu.uOutputFrame.zw*gfu.uInputSize.zw); }
+@vertex fn mainVertex(@location(0) aPosition:vec2<f32>)->VSOutput{ return VSOutput(_fvp(aPosition), _ftc(aPosition)); }`;
+  // S2 MV-INTERP + S3a HEAT-WOBBLE (per-surge sprite filter). Frame A = uTexture (the rendered sprite frame-rect, 0..1). B + flow = whole sheets sampled at cell origins (a frame-rect's .source is the WHOLE sheet, so per-frame binding is impossible — cell origins are the fix). Warp A fwd frac*flow, B back (1-frac)*flow, mix(frac). uP0=(frac,flow,time,noise) uP1=(mvOn,cellX,cellY,alpha) uP2=(f1x,f1y,f0mvX,f0mvY).
+  const MV_GL=`in vec2 vTextureCoord;
+out vec4 finalColor;
+uniform sampler2D uTexture; uniform sampler2D uSheet; uniform sampler2D uMvSheet;
+uniform vec4 uP0; uniform vec4 uP1; uniform vec4 uP2;
+float _h(vec2 p){ return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5); }
+void main(){ float frac=uP0.x, flow=uP0.y, t=uP0.z, noise=uP0.w; vec2 cell=uP1.yz; float alpha=uP1.w;
+  vec2 uv=vTextureCoord;
+  vec2 w=vec2(_h(uv*7.0+t), _h(uv*7.0-t*1.31))-0.5; uv+=w*noise;                 // S3a heat wobble
+  vec2 cuv=clamp(uv,0.0,1.0);
+  if(uP1.x<0.5){ vec4 o=texture(uTexture,cuv); finalColor=vec4(o.rgb, max(o.r,max(o.g,o.b)))*alpha; return; }   // A/B: mv off = nearest frame (+ wobble). T70-P2H-fix: alpha=luminance so opaque-JPEG black grounds stay transparent under ADD (brightening unchanged)
+  vec2 fl=(texture(uMvSheet, uP2.zw+cuv*cell).rg-0.5)*2.0*flow;
+  vec2 la=clamp(uv+fl*frac,0.0,1.0), lb=clamp(uv-fl*(1.0-frac),0.0,1.0);
+  vec4 a=texture(uTexture, la); vec4 b=texture(uSheet, uP2.xy+lb*cell);
+  vec4 o=mix(a,b,frac); finalColor=vec4(o.rgb, max(o.r,max(o.g,o.b)))*alpha; }`;   // T70-P2H-fix: alpha=luminance (black grounds transparent under ADD)
+  const MV_WGSL=_WGSL_HDR+`
+struct MvU { uP0:vec4<f32>, uP1:vec4<f32>, uP2:vec4<f32> };
+@group(1) @binding(0) var<uniform> m: MvU;
+@group(1) @binding(1) var uSheet: texture_2d<f32>;
+@group(1) @binding(2) var uSheetSampler: sampler;
+@group(1) @binding(3) var uMvSheet: texture_2d<f32>;
+@group(1) @binding(4) var uMvSheetSampler: sampler;
+`+_WGSL_VTX+`
+fn _h(p:vec2<f32>)->f32{ return fract(sin(dot(p, vec2<f32>(41.3,289.1)))*43758.5); }
+@fragment fn mainFragment(@location(0) vuv:vec2<f32>)->@location(0) vec4<f32>{
+  let frac=m.uP0.x; let flow=m.uP0.y; let t=m.uP0.z; let noise=m.uP0.w; let cell=m.uP1.yz; let alpha=m.uP1.w;
+  var uv=vuv;
+  var w=vec2<f32>(_h(uv*7.0+vec2<f32>(t)), _h(uv*7.0-vec2<f32>(t*1.31)))-vec2<f32>(0.5); uv=uv+w*noise;
+  let cuv=clamp(uv,vec2<f32>(0.0),vec2<f32>(1.0));
+  if(m.uP1.x<0.5){ let o=textureSample(uTexture,uSampler,cuv); return vec4<f32>(o.rgb, max(o.r,max(o.g,o.b)))*alpha; }
+  var fl=(textureSample(uMvSheet,uMvSheetSampler, m.uP2.zw+cuv*cell).rg-vec2<f32>(0.5))*2.0*flow;
+  let la=clamp(uv+fl*frac, vec2<f32>(0.0),vec2<f32>(1.0)); let lb=clamp(uv-fl*(1.0-frac), vec2<f32>(0.0),vec2<f32>(1.0));
+  var a=textureSample(uTexture,uSampler,la); var b=textureSample(uSheet,uSheetSampler, m.uP2.xy+lb*cell);
+  let o=mix(a,b,frac); return vec4<f32>(o.rgb, max(o.r,max(o.g,o.b)))*alpha; }`;   // T70-P2H-fix: alpha=luminance (black grounds transparent under ADD)
+  // S1 HDR BLOOM (fxLayer filter): bright-pass (smooth knee) + concentric-tap gaussian (half-res reach) + additive recombine + soft tonemap
+  const BLOOM_GL=`in vec2 vTextureCoord;
+out vec4 finalColor;
+uniform sampler2D uTexture; uniform highp vec4 uInputSize; uniform float uThreshold; uniform float uIntensity;
+vec3 _bp(vec3 c){ float l=max(c.r,max(c.g,c.b)); return c*smoothstep(uThreshold,uThreshold+0.2,l); }
+void main(){ vec2 px=uInputSize.zw; vec4 base=texture(uTexture,vTextureCoord);
+  vec3 bloom=_bp(base.rgb)*0.226;
+  for(int i=0;i<8;i++){ float a=6.2831853*float(i)/8.0; vec2 d=vec2(cos(a),sin(a));
+    bloom+=_bp(texture(uTexture, vTextureCoord+d*px*3.0).rgb)*0.06;
+    bloom+=_bp(texture(uTexture, vTextureCoord+d*px*6.0).rgb)*0.03; }
+  vec3 col=base.rgb+bloom*uIntensity; col=col/(1.0+col*0.5);
+  finalColor=vec4(col, base.a); }`;
+  const BLOOM_WGSL=_WGSL_HDR+`
+struct BloomU { uThreshold:f32, uIntensity:f32 };
+@group(1) @binding(0) var<uniform> b: BloomU;
+`+_WGSL_VTX+`
+fn _bp(c:vec3<f32>, thr:f32)->vec3<f32>{ let l=max(c.r,max(c.g,c.b)); return c*smoothstep(thr,thr+0.2,l); }
+@fragment fn mainFragment(@location(0) uv:vec2<f32>)->@location(0) vec4<f32>{ let px=gfu.uInputSize.zw;
+  let base=textureSample(uTexture,uSampler,uv); var bloom=_bp(base.rgb,b.uThreshold)*0.226;
+  for(var i=0;i<8;i++){ let a=6.2831853*f32(i)/8.0; let d=vec2<f32>(cos(a),sin(a));
+    bloom=bloom+_bp(textureSample(uTexture,uSampler, uv+d*px*3.0).rgb, b.uThreshold)*0.06;
+    bloom=bloom+_bp(textureSample(uTexture,uSampler, uv+d*px*6.0).rgb, b.uThreshold)*0.03; }
+  var col=base.rgb+bloom*b.uIntensity; col=col/(1.0+col*0.5);
+  return vec4<f32>(col, base.a); }`;
+  function _radialCanvas(size, stops){ const c=document.createElement('canvas'); c.width=c.height=size; const g=c.getContext('2d'); const rg=g.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2); stops.forEach(s=>rg.addColorStop(s[0],s[1])); g.fillStyle=rg; g.fillRect(0,0,size,size); return c; }
+  function gpuMakeTextures(){ const P=gpu.PIXI;
+    gpu.emberTex=P.Texture.from(_radialCanvas(32,[[0,'rgba(255,244,214,1)'],[0.35,'rgba(255,180,90,0.85)'],[1,'rgba(255,150,60,0)']]));
+    gpu.dimTex=P.Texture.from(_radialCanvas(256,[[0,'rgba(0,0,0,1)'],[0.55,'rgba(0,0,0,0.75)'],[1,'rgba(0,0,0,0)']]));
+    gpu.auraTex=P.Texture.from(_radialCanvas(256,[[0,'rgba(255,246,214,1)'],[0.4,'rgba(255,208,120,0.82)'],[1,'rgba(255,176,74,0)']])); }   // T70-P2H: gold gather-glow for beat 1
+  function gpuMakeBloom(){ const P=gpu.PIXI; return new P.Filter({
+    glProgram:P.GlProgram.from({vertex:P.defaultFilterVert, fragment:BLOOM_GL, name:'t70-bloom'}),
+    gpuProgram:P.GpuProgram.from({vertex:{source:BLOOM_WGSL,entryPoint:'mainVertex'}, fragment:{source:BLOOM_WGSL,entryPoint:'mainFragment'}}),
+    resources:{ b:{ uThreshold:{value:gpu.bloom.threshold,type:'f32'}, uIntensity:{value:gpu.bloom.intensity,type:'f32'} } }, resolution:'inherit' }); }
+  function gpuMakeMvFilter(key){ const P=gpu.PIXI, cs=gpu.sheetTex[key].source, ms=gpu.mvSheetTex[key].source; return new P.Filter({
+    glProgram:P.GlProgram.from({vertex:P.defaultFilterVert, fragment:MV_GL, name:'t70-mv'}),
+    gpuProgram:P.GpuProgram.from({vertex:{source:MV_WGSL,entryPoint:'mainVertex'}, fragment:{source:MV_WGSL,entryPoint:'mainFragment'}}),
+    resources:{ m:{ uP0:{value:new Float32Array([0,16/384,0,0.012]),type:'vec4<f32>'}, uP1:{value:new Float32Array([gpu.mv?1:0, 1/8, 1/4, 1]),type:'vec4<f32>'}, uP2:{value:new Float32Array([0,0,0,0]),type:'vec4<f32>'} },
+      uSheet:cs, uSheetSampler:cs.style, uMvSheet:ms, uMvSheetSampler:ms.style }, antialias:false, padding:2 }); }
+  async function gpuInit(){
+    if(gpu.disabled || gpu.app || !fieldEl) return;
+    try{
+      if(gpu._poison) throw new Error('sim-init-throw');                                   // G3 hook: exercise the real catch → floor
+      const PIXI = await import('./assets/vendor/pixi.min.mjs');                            // PL6: local ESM, no CDN; dynamic import works from a classic script
+      gpu.PIXI=PIXI;
+      let gc=document.getElementById('vfxgpu');
+      if(!gc){ gc=document.createElement('canvas'); gc.id='vfxgpu'; gc.style.cssText='position:absolute;inset:0;z-index:6;pointer-events:none;'; fieldEl.appendChild(gc); }
+      gpu.gcanvas=gc;
+      const app=new PIXI.Application();
+      await app.init({ canvas:gc, backgroundAlpha:0, antialias:true, autoStart:false, resolution:DPR, autoDensity:true, preference:(gpu._pref||'webgpu') });   // PL3: webgpu preferred, Pixi auto-falls to webgl (gpu._pref forces a backend for the G2 GLSL gate)
+      gpu.app=app; gpu.stage=app.stage; gpu.renderer=(app.renderer&&app.renderer.name)||'none'; gpu.enabled=true;
+      // T70-P1 layer hierarchy: dimLayer (S5, normal blend, NOT bloomed) BENEATH fxLayer (surge + particles, ADD, bloom filter on top)
+      gpu.dimLayer=new PIXI.Container(); gpu.fxLayer=new PIXI.Container(); gpu.particleLayer=new PIXI.Container();
+      app.stage.addChild(gpu.dimLayer); app.stage.addChild(gpu.fxLayer); app.stage.addChild(gpu.particleLayer);   // T70-P2H PERF: particleLayer moved OUT of the bloomed fxLayer (above it, still ADD) — bloom no longer reprocesses 1000s of hero-burst particles every frame; embers stay bright additive without it
+      gpuMakeTextures();
+      try{ gpu.bloomFilter=gpuMakeBloom(); gpu.fxLayer.filters=[gpu.bloomFilter]; }catch(e){ gpu.bloomFilter=null; }   // S1 bloom on the fx layer only (dim excluded by construction)
+      gpuResize(); gpuLoadSurge();
+    }catch(e){ gpu.disabled=true; gpu.enabled=false; gpu.renderer='none'; gpu.app=null;      // PL3 FLOOR: everything falls through to Canvas2D, zero console noise
+      try{ if(gpu.gcanvas){ gpu.gcanvas.remove(); gpu.gcanvas=null; } }catch(_){}}
+  }
+  function gpuResize(){ if(!gpu.app||!fieldEl) return; const r=fieldEl.getBoundingClientRect(); try{ gpu.app.renderer.resize(r.width, r.height); }catch(e){} }
+  // C1: explicit linear min/mag filtering on every effect texture (upscaled → linear = smooth). mipmaps only on stills (drawn small → avoids shimmer); sheets are always drawn large so mipmaps would just cost memory.
+  function gpuTexFilter(tex, mip){ try{ const s=tex&&(tex.source||tex); if(!s) return; s.scaleMode='linear'; if(s.style){ s.style.scaleMode='linear'; } if(mip){ try{ s.autoGenerateMipmaps=true; if(s.style) s.style.mipmapFilter='linear'; }catch(e){} } }catch(e){} }
+  // T74: derive the grid (cols/rows/frames) from the loaded sheet dims / SHEET_CELL, so 64f (8x8) / 48f (8x6) / 32f (8x4) all work with no hardcoded frame count
+  function gpuSliceSheet(key, base){ const P=gpu.PIXI, src=base.source, cols=Math.round((src.width||base.width)/SHEET_CELL), rows=Math.round((src.height||base.height)/SHEET_CELL), nf=cols*rows;
+    gpu.grid=gpu.grid||{}; gpu.grid[key]={cols,rows,nf};
+    const frames=[]; for(let i=0;i<nf;i++){ const fx=(i%cols)*SHEET_CELL, fy=((i/cols)|0)*SHEET_CELL; frames.push(new P.Texture({ source:src, frame:new P.Rectangle(fx,fy,SHEET_CELL,SHEET_CELL) })); }
+    gpu.tex[key]=frames; return gpu.grid[key]; }
+  async function gpuLoadSurge(){                                                             // PL4: rung COLOR + MV sheets as textures (no pixel copies — frame rects share one source)
+    try{ const PIXI=gpu.PIXI;
+      for(const key of ['surge_1','surge_2']){
+        const base=await PIXI.Assets.load(sheetURL(key)); gpu.sheetTex=gpu.sheetTex||{}; gpu.sheetTex[key]=base; gpuTexFilter(base);
+        gpuSliceSheet(key, base);
+        const mvBase=await PIXI.Assets.load(mvURL(key)); gpu.mvSheetTex=gpu.mvSheetTex||{}; gpu.mvSheetTex[key]=mvBase;   // S2: whole MV sheet bound once; cell origins select the frame
+      }
+      gpu.texReady=true;
+      gpuLoadHero();   // T70-P2H: load the hero-moment extra textures after surge (async; heroReady gates the trigger)
+    }catch(e){ gpu.texReady=false; }
+  }
+  // T70-P2H-fix (L9): the kit stills are OPAQUE JPEGs (no alpha). A plain additive sprite of an opaque black-ground texture accumulates alpha → an opaque black tile. Bake a luminance-derived alpha so the black ground is truly transparent; then blendMode='add' draws only the bright energy. (The generated aura/ember textures already have canvas alpha, so they were never affected.)
+  async function heroKitTex(url){ const P=gpu.PIXI;
+    try{ const img=await new Promise((res,rej)=>{ const im=new Image(); im.decoding='async'; im.onload=()=>res(im); im.onerror=rej; im.src=url; });
+      const w=img.naturalWidth||512, h=img.naturalHeight||512, c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
+      g.drawImage(img,0,0,w,h); const id=g.getImageData(0,0,w,h), d=id.data;
+      for(let i=0;i<d.length;i+=4){ d[i+3]=Math.max(d[i],d[i+1],d[i+2]); }   // alpha = luminance
+      g.putImageData(id,0,0); const t=P.Texture.from(c); gpuTexFilter(t, true); return t;   // C1: still → linear + mipmaps
+    }catch(e){ return await P.Assets.load(url); }
+  }
+  async function gpuLoadHero(){   // T70-P2H: ring (beat 3 shockwave) + lightning (beat 2 wrap) stills + smoke sheet+MV (beat 4 MV smoke)
+    try{ const PIXI=gpu.PIXI;
+      gpu.heroTex.ring  = await heroKitTex(stillURL('ring_1'));       // luminance-alpha → additive-clean (no black tile); T74 rung-selected resolution
+      gpu.heroTex.light = await heroKitTex(stillURL('lightning_1'));
+      const sm=await PIXI.Assets.load(sheetURL('smoke_1')); gpu.sheetTex['smoke_1']=sm; gpuTexFilter(sm);
+      gpuSliceSheet('smoke_1', sm);
+      gpu.mvSheetTex['smoke_1']=await PIXI.Assets.load(mvURL('smoke_1'));
+      gpu.heroReady=true;
+    }catch(e){ gpu.heroReady=false; }
+  }
+  // PL5 CONTRACT: same tier=combat surge, ported T68F numbers — pingpong 32f @16fps×vfxT, random start+dir, ADD blend, anchor .5, constant scale, soft-birth envelope (peakAt .15, birth^0.6 / decay^1.6, opPeak .95, life .5×vfxT)
+  // S4 GPU PARTICLES: procedural ember sprites in the fx particleLayer (so bloom catches them). Cap gpu.PCAP, oldest-evicted.
+  function gpuEmit(x,y,size,n,opts){ if(!gpu.particleLayer||!gpu.emberTex) return; const P=gpu.PIXI; opts=opts||{};
+    const spMul=opts.speed||1, buoyMul=(opts.buoy!=null?opts.buoy:1), drag=opts.drag||1.6, tint=opts.tint||0xffcaa0, lifeMul=opts.life||1, spread=(opts.spread!=null?opts.spread:0.4);
+    for(let i=0;i<n;i++){ if(gpu.particles.length>=gpu.PCAP){ const e0=gpu.particles[0]; if(e0 && !e0._evict){ e0._evict=true; e0.max=Math.min(e0.max, e0.age+0.08*vfxT()); } if(gpu.particles.length>=gpu.PCAP+40){ const old=gpu.particles.shift(); try{ gpu.particleLayer.removeChild(old.spr); old.spr.destroy(); }catch(e){} } }   // T75: evicted → fast-fade 80ms (hard backstop at cap+40)
+      const ang=Math.random()*6.283, sp=(0.4+Math.random()*1.2)*size*spMul, jit=(opts.jitter!=null?opts.jitter:0), life=(0.35+Math.random()*0.5)*vfxT()*lifeMul*1.6*(1+(Math.random()-0.5)*2*jit);   // T75: ×1.6 follow-through + per-particle ±jitter (bursts die raggedly)
+      const spr=new P.Sprite(gpu.emberTex); spr.anchor.set(0.5); spr.x=x+(Math.random()-.5)*size*spread; spr.y=y+(Math.random()-.5)*size*spread;
+      const sz=(2+Math.random()*4); spr.width=spr.height=sz; spr.blendMode='add'; spr.alpha=0; spr.tint=tint;
+      gpu.particleLayer.addChild(spr);
+      gpu.particles.push({ spr, x:spr.x, y:spr.y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp-size*0.5*buoyMul, age:0, max:life, buoy:-size*0.6*buoyMul, drag, sz }); }
+  }
+  // T70-P2H beat 1: reverse-emission — particles ring in from ~1.4–2.8× card and converge on (x,y)
+  function gpuEmitInward(x,y,size,n){ if(!gpu.particleLayer||!gpu.emberTex) return; const P=gpu.PIXI;
+    for(let i=0;i<n;i++){ if(gpu.particles.length>=gpu.PCAP){ const e0=gpu.particles[0]; if(e0 && !e0._evict){ e0._evict=true; e0.max=Math.min(e0.max, e0.age+0.08*vfxT()); } if(gpu.particles.length>=gpu.PCAP+40){ const old=gpu.particles.shift(); try{ gpu.particleLayer.removeChild(old.spr); old.spr.destroy(); }catch(e){} } }   // T75: evicted → fast-fade 80ms (hard backstop at cap+40)
+      const ang=Math.random()*6.283, R=size*(1.4+Math.random()*1.4), life=(0.28+Math.random()*0.14)*vfxT()*1.6, sp=R/life*0.9*1.6;   // T75: ×1.6 follow-through (keep the same convergence distance → speed ×1.6)
+      const sx=x+Math.cos(ang)*R, sy=y+Math.sin(ang)*R, sz=(2+Math.random()*3);
+      const spr=new P.Sprite(gpu.emberTex); spr.anchor.set(0.5); spr.x=sx; spr.y=sy; spr.width=spr.height=sz; spr.blendMode='add'; spr.alpha=0; spr.tint=0xffe0a0;
+      gpu.particleLayer.addChild(spr);
+      gpu.particles.push({ spr, x:sx, y:sy, vx:-Math.cos(ang)*sp, vy:-Math.sin(ang)*sp, age:0, max:life, buoy:0, drag:0.4, sz }); }
+  }
+  function gpuParticleTick(dt){ const P=gpu.particles;
+    for(let i=P.length-1;i>=0;i--){ const p=P[i]; p.age+=dt;
+      if(p.age>=p.max){ try{ gpu.particleLayer.removeChild(p.spr); p.spr.destroy(); }catch(e){} P.splice(i,1); continue; }
+      const k=Math.exp(-p.drag*dt); p.vx*=k; p.vy=p.vy*k + p.buoy*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
+      const t=p.age/p.max; p.spr.x=p.x; p.spr.y=p.y; const d=(t-0.15)/0.85; p.spr.alpha=(t<0.15 ? t/0.15 : 1-Math.pow(Math.max(0,d),3))*0.9; const g=1+t*1.4; p.spr.width=p.spr.height=p.sz*g; }   // T75: cubic-in death (breathing tail)
+  }
+  function gpuSpawnSurge(x,y,size,rot,life){
+    if(!gpu.enabled||!gpu.texReady||!gpu.PIXI) return false;
+    try{ const PIXI=gpu.PIXI, key=(Math.random()<0.5?'surge_1':'surge_2'), gr=gpu.grid[key]||{cols:8,rows:4,nf:32}, nf=gr.nf, frame=(Math.random()*nf)|0;
+      const cont=new PIXI.Container(); cont.x=x; cont.y=y; cont.rotation=rot;                 // rotation on the container → uTexture stays axis-aligned for cell sampling
+      const spr=new PIXI.Sprite(gpu.tex[key][frame]); spr.anchor.set(0.5); spr.blendMode='add'; spr.alpha=1; spr.width=size; spr.height=size;
+      let mvFilter=null; try{ mvFilter=gpuMakeMvFilter(key); spr.filters=[mvFilter]; }catch(e){ mvFilter=null; }   // S2+S3a; if it fails the sprite still renders nearest-frame
+      cont.addChild(spr); gpu.fxLayer.addChild(cont);
+      let dimSpr=null; if(dimOn){ dimSpr=new PIXI.Sprite(gpu.dimTex); dimSpr.anchor.set(0.5); dimSpr.x=x; dimSpr.y=y; dimSpr.width=dimSpr.height=size*2.0; dimSpr.alpha=0; gpu.dimLayer.addChild(dimSpr); }   // T70-DIM: GPU ground-dim OFF by default (VFX.dim gate); mechanism kept for the scene dim (R3)
+      gpuEmit(x,y,size, 150+((Math.random()*150)|0));                                        // S4 combat weight 150–300
+      const haze=gpuHaze(x,y,size);                                                          // S3b DOM haze (flagged)
+      gpu.sprites.push({ cont, spr, key, frame, dir:(Math.random()<0.5?-1:1), nf, cols:gr.cols, rows:gr.rows, age:0, max:life, opPeak:0.95, peakAt:0.15, mvFilter, dimSpr, haze,
+                         dimPeak:0.25, dimRise:0.08*vfxT(), dimLife:0.5*vfxT(), dimAge:0 });
+      wake(); return true;
+    }catch(e){ return false; }
+  }
+  function gpuTick(dt){
+    if(!gpu.app) return; const A=gpu.sprites;
+    for(let i=A.length-1;i>=0;i--){ const s=A[i]; s.age+=dt;
+      if(s.age>=s.max){ try{ if(s.mvFilter&&s.mvFilter.destroy) s.mvFilter.destroy(); gpu.fxLayer.removeChild(s.cont); s.cont.destroy({children:true}); if(s.dimSpr){ gpu.dimLayer.removeChild(s.dimSpr); s.dimSpr.destroy(); } if(s.haze) s.haze.remove(); }catch(e){} A.splice(i,1); continue; }
+      s.frame += dt*SHEET_FPS/(vfxT()||1)*s.dir;
+      if(s.frame>=s.nf-1){ s.frame=(s.nf-1)-(s.frame-(s.nf-1)); s.dir=-1; if(s.frame<0)s.frame=0; }
+      else if(s.frame<0){ s.frame=-s.frame; s.dir=1; if(s.frame>s.nf-1)s.frame=s.nf-1; }
+      const f0=Math.max(0,Math.min(s.nf-1, Math.floor(s.frame))), f1=Math.min(s.nf-1,f0+1), frac=Math.max(0,Math.min(1,s.frame-f0));
+      s.spr.texture=gpu.tex[s.key][f0];                                                       // frame A = uTexture
+      const t=Math.min(1,s.age/s.max), pk=s.peakAt;
+      const alpha=Math.max(0,Math.min(1, t<pk ? (s.opPeak)*Math.pow(t/pk,0.6) : s.opPeak+(0-s.opPeak)*Math.pow((t-pk)/(1-pk),3) ));   // T75: cubic-IN release (breathing tail)
+      if(s.mvFilter){ const u=s.mvFilter.resources.m.uniforms, cols=s.cols||8, rows=s.rows||4;   // per-sprite grid (T74: 64f=8x8 / 48f=8x6 / 32f=8x4)
+        u.uP0=new Float32Array([frac,16/384,s.age,0.012]); u.uP1=new Float32Array([gpu.mv?1:0, 1/cols, 1/rows, alpha]);
+        u.uP2=new Float32Array([(f1%cols)/cols, ((f1/cols)|0)/rows, (f0%cols)/cols, ((f0/cols)|0)/rows]); }
+      else { s.spr.alpha=alpha; }
+      if(s.dimSpr){ s.dimAge+=dt; const da = s.dimAge<s.dimRise ? s.dimPeak*(s.dimAge/s.dimRise) : s.dimPeak*(1-(s.dimAge-s.dimRise)/(s.dimLife-s.dimRise)); s.dimSpr.alpha=Math.max(0,da); }
+      if(s.haze){ s.haze.style.opacity=String(Math.max(0, (t<0.25?t/0.25:1-(t-0.25)/0.75))*0.5); }
+    }
+    gpuParticleTick(dt);
+    gpuHeroTick(dt);   // T70-P2H: the 4-beat hero-moment sequencer (single clock)
+    const busy=A.length||gpu.particles.length||gpu.hero;
+    if(busy || gpu.wasNonEmpty){ try{ gpu.app.renderer.render(gpu.stage); }catch(e){} }
+    gpu.wasNonEmpty=!!busy;
+  }
+  // ===================== T70-P2H THE HERO MOMENT (4-beat choreographed spectacle, ONE clock) =====================
+  function heroLog(beat,msg){ if(gpu.hero) gpu.heroLog.push({ beat, tms:Math.round(gpu.hero.age*1000), msg, particles:gpu.particles.length, sprites:gpu.sprites.length }); }
+  // an MV-interpolated smoke sprite (beat 4) — reuses the surge sprite+MV path with the smoke_1 sheet; pushed to gpu.sprites so gpuTick animates + cleans it
+  function gpuSpawnHeroSmoke(x,y,size,life){ if(!gpu.heroReady||!gpu.tex['smoke_1']) return;
+    try{ const PIXI=gpu.PIXI, key='smoke_1', gr=gpu.grid[key]||{cols:8,rows:4,nf:32}, nf=gr.nf, frame=(Math.random()*nf)|0;
+      const cont=new PIXI.Container(); cont.x=x; cont.y=y; cont.rotation=(Math.random()-.5)*0.5;
+      const spr=new PIXI.Sprite(gpu.tex[key][frame]); spr.anchor.set(0.5); spr.blendMode='add'; spr.alpha=1; spr.width=size; spr.height=size;
+      let mvFilter=null; try{ mvFilter=gpuMakeMvFilter(key); spr.filters=[mvFilter]; }catch(e){ mvFilter=null; }
+      cont.addChild(spr); gpu.fxLayer.addChild(cont);
+      gpu.sprites.push({ cont, spr, key, frame, dir:(Math.random()<0.5?-1:1), nf, cols:gr.cols, rows:gr.rows, age:0, max:life, opPeak:0.72, peakAt:0.2, mvFilter, dimSpr:null, haze:null });
+    }catch(e){}
+  }
+  function gpuHero(x,y,cardW){
+    if(!gpu.enabled||!gpu.heroReady||!gpu.PIXI||gpu.hero) return false;   // one at a time (the choreography queue serializes anyway — G6)
+    try{ const PIXI=gpu.PIXI, T=vfxT(), W=cardW||90, r=fieldEl.getBoundingClientRect(), cw=r.width, ch=r.height;
+      const dimQ=new PIXI.Sprite(PIXI.Texture.WHITE); dimQ.tint=0x000000; dimQ.width=cw; dimQ.height=ch; dimQ.alpha=0; gpu.dimLayer.addChild(dimQ);       // FULL-VIEWPORT scene dim (dimLayer → not bloomed)
+      const flashQ=new PIXI.Sprite(PIXI.Texture.WHITE); flashQ.tint=0xfff2d6; flashQ.width=cw; flashQ.height=ch; flashQ.alpha=0; flashQ.blendMode='add'; gpu.fxLayer.addChild(flashQ);   // FULL-VIEWPORT flash
+      const aura=new PIXI.Sprite(gpu.auraTex); aura.anchor.set(0.5); aura.x=x; aura.y=y; aura.blendMode='add'; aura.alpha=0; aura.width=aura.height=W*0.5; gpu.fxLayer.addChild(aura);   // beat-1 gather glow
+      gpu.hero={ age:0, T, dur:2.9*T, x, y, W, cw, ch, dimQ, flashQ, aura, ring:null, light:null, lightT0:null, flashT0:null, ringT0:null, fired:{}, beat:0 };   // T75: aftermath extends 1.8→2.9s (beats 1–3 unchanged; the extra ~700ms plays under gameplay, decoupled)
+      gpu.heroLog=[]; wake(); return true;
+    }catch(e){ return false; }
+  }
+  function gpuHeroTick(dt){
+    const h=gpu.hero; if(!h) return; h.age+=dt; const t=h.age, T=h.T, W=h.W;
+    const B1=0.35*T, B2=0.55*T, B3=0.90*T, B4=2.90*T;   // beat boundaries (seconds, ×vfxT); T75: beats 1–3 unchanged, beat 4 (aftermath) extends to 2.9s
+    // SCENE DIM keyframe: ramp 0→.40 over beat 1, hold, release across beat 4
+    h.dimQ.alpha = t<B1 ? 0.40*(t/B1) : (t<B3 ? 0.40 : 0.40*Math.max(0,1-(t-B3)/(B4-B3)));
+    // BEAT 1 — ANTICIPATION: aura grows 0.5→2× card + brightens, then dissipates into the strike
+    h.aura.alpha = t<B1 ? Math.min(0.95, (t/B1)*1.15) : Math.max(0, 0.95*(1-(t-B1)/(0.45*T)));
+    h.aura.width = h.aura.height = W*(0.5 + 1.5*Math.min(1,t/B1));
+    if(!h.fired.b1){ h.fired.b1=true; h.beat=1; gpuEmitInward(h.x,h.y,W,320); heroLog(1,'anticipation: dim→40%, 320 inward, aura grow to 2×'); }
+    // BEAT 2 — STRIKE: lightning 4× card, full-viewport flash 120ms, bloom ×1.8 (hit-stop/zoom-punch come from the choreography's screenShake — not duplicated here)
+    if(t>=B1 && !h.fired.b2){ h.fired.b2=true; h.beat=2;
+      const lg=new gpu.PIXI.Sprite(gpu.heroTex.light); lg.anchor.set(0.5); lg.x=h.x; lg.y=h.y; lg.blendMode='add'; lg.width=lg.height=W*4; lg.alpha=0; gpu.fxLayer.addChild(lg); h.light=lg; h.lightT0=t;
+      if(gpu.bloomFilter){ try{ gpu.bloomFilter.resources.b.uniforms.uIntensity=gpu.bloom.intensity*1.8; }catch(e){} }
+      h.flashT0=t; heroLog(2,'strike: lightning 4×card, flash 120ms, bloom×1.8'); }
+    if(h.flashT0!=null){ const fe=(t-h.flashT0)/(0.12*T); h.flashQ.alpha = fe<0.25 ? fe/0.25 : Math.max(0,1-(fe-0.25)/0.75); if(fe>=1){ h.flashQ.alpha=0; h.flashT0=null; } }
+    if(h.light){ const le=(t-h.lightT0)/(0.28*T); h.light.alpha=Math.max(0, le<0.12 ? le/0.12 : 1-(le-0.12)/0.88)*0.95; }
+    if(h.fired.b2 && !h.fired.bloomBack && t>B2+0.12*T){ h.fired.bloomBack=true; if(gpu.bloomFilter){ try{ gpu.bloomFilter.resources.b.uniforms.uIntensity=gpu.bloom.intensity; }catch(e){} } }
+    // BEAT 3 — SHOCKWAVE: ring card→FULL BOARD WIDTH over 350ms, opacity crashing; 1000-particle outward burst
+    if(t>=B2 && !h.fired.b3){ h.fired.b3=true; h.beat=3;
+      const rg=new gpu.PIXI.Sprite(gpu.heroTex.ring); rg.anchor.set(0.5); rg.x=h.x; rg.y=h.y; rg.blendMode='add'; rg.alpha=0.95; rg.width=rg.height=W; gpu.fxLayer.addChild(rg); h.ring=rg; h.ringT0=t;
+      gpuEmit(h.x,h.y,W,1000,{ speed:2.6, buoy:0.15, drag:1.1, life:1.1, spread:0.15 }); heroLog(3,'shockwave: ring card→board width, 1000 outward'); }
+    if(h.ring){ const re=Math.min(1,(t-h.ringT0)/(0.35*T)); h.ring.width=h.ring.height=W+(h.cw*1.05-W)*re; h.ring.alpha=Math.max(0,0.95*(1-re*re));
+      if(h.ring.alpha>0.1){ h.ringMaxVisW=Math.max(h.ringMaxVisW||0, h.ring.width); gpu._lastRingMaxVisW=h.ringMaxVisW; }   // G3: peak ring width WHILE visibly bright (anti-stamp)
+      if(re>=1 && h.ring.alpha<0.02){ try{ gpu.fxLayer.removeChild(h.ring); h.ring.destroy(); }catch(e){} h.ring=null; } }
+    // BEAT 4 — AFTERMATH: MV smoke 3× card rolling, embers drifting, dim releasing (handled by the dim keyframe above)
+    if(t>=B3 && !h.fired.b4){ h.fired.b4=true; h.beat=4;
+      for(let i=0;i<2;i++) gpuSpawnHeroSmoke(h.x+(Math.random()-.5)*W*1.2, h.y+(Math.random()-.5)*W*0.6, W*3, 1.7*T);   // T75: smoke rolls longer through the extended aftermath
+      gpuEmit(h.x,h.y,W,220,{ speed:0.8, buoy:1.3, drag:1.4, life:2.4, jitter:0.3 }); heroLog(4,'aftermath: 2× MV smoke 3×card, 220 drifting embers dying over the final ~1200ms, dim release'); }   // T75: embers drift + die over the final ~1200ms, ragged (jitter)
+    if(t>=h.dur) gpuHeroEnd();
+  }
+  function gpuHeroEnd(){ const h=gpu.hero; if(!h) return;
+    try{ if(gpu.bloomFilter) gpu.bloomFilter.resources.b.uniforms.uIntensity=gpu.bloom.intensity; }catch(e){}
+    for(const q of [h.dimQ,h.flashQ,h.aura,h.light,h.ring]){ if(q){ try{ q.parent&&q.parent.removeChild(q); q.destroy(); }catch(e){} } }
+    gpu.hero=null;   // the beat-4 smoke sprites (in gpu.sprites) + particles finish on their own timers
+  }
+  // S3b HAZE (DOM ellipse; ⚠ touches the DOM layer — PL2 says overlay-only. Flag ON by default; feature-detected; reduced-motion excluded; owner keeps/kills on device verdict.)
+  function gpuHaze(x,y,size){ if(!gpu.haze || reducedMotion()) return null;
+    if(!(CSS && CSS.supports && (CSS.supports('backdrop-filter','blur(2px)')||CSS.supports('-webkit-backdrop-filter','blur(2px)')))) return null;
+    const r=fieldEl.getBoundingClientRect(); const d=document.createElement('div');
+    d.style.cssText=`position:absolute;left:${x-size*0.8}px;top:${y-size*0.6}px;width:${size*1.6}px;height:${size*1.2}px;border-radius:50%;pointer-events:none;z-index:6;opacity:0;backdrop-filter:blur(1.5px) saturate(1.05);-webkit-backdrop-filter:blur(1.5px) saturate(1.05);will-change:opacity,transform;`;
+    fieldEl.appendChild(d); return d;
+  }
+  // C1 GROUND DIM (F3): soft radial darkening under COMBAT+ / SPECTACLE effects only (never ambient, never reduced-motion)
+  let gdim=null;
+  function groundDim(cxp,cyp,radius){ if(!dimOn||reducedMotion()) return; const {x,y}=local(cxp,cyp); gdim={ x, y, r:radius*1.8, peak:0.25, age:0, rise:0.08*vfxT(), life:0.5*vfxT() }; wake(); }   // T70-DIM: OFF by default (VFX.dim gate). All combat/spectacle recipes route through here, so this single gate kills every Canvas2D ground-dim.
+  function addSpr(o){ if(reducedMotion()) return; if(!o.img && !o.swap && !o.sheet) return;
+    if(sprites.length>=SCAP){ const e=sprites[0]; if(e && !e._evict){ e._evict=true; e.max=Math.min(e.max, e.age+0.08*vfxT()); } if(sprites.length>=SCAP+3) sprites.shift(); }   // T75: evicted → fast-fade 80ms (not vanish); hard backstop at cap+3
+    o.age=0; o.max=o.life; o.swapT=0; sprites.push(o); wake(); }
+  // C1 GROUND DIM — T69A: moved OUT of drawSprites and drawn AFTER the bloom pass with 'destination-over' (behind the glow).
+  // Same dimmed-board-under-glow contrast, but the bloom source never contains it → bloom can't deepen the dim's alpha into an opaque-dark box.
+  function drawGroundDim(dt){
+    if(!gdim) return; gdim.age+=dt; if(gdim.age>=gdim.life){ gdim=null; return; }
+    const a = gdim.age<gdim.rise ? gdim.peak*(gdim.age/gdim.rise) : gdim.peak*(1-(gdim.age-gdim.rise)/(gdim.life-gdim.rise));
+    if(a<=0.003) return;
+    cx.save(); cx.setTransform(1,0,0,1,0,0); cx.globalCompositeOperation='destination-over'; cx.globalAlpha=1;
+    const g=cx.createRadialGradient(gdim.x*DPR,gdim.y*DPR,0, gdim.x*DPR,gdim.y*DPR,gdim.r*DPR);
+    g.addColorStop(0,`rgba(0,0,0,${a.toFixed(3)})`); g.addColorStop(1,'rgba(0,0,0,0)'); cx.fillStyle=g; cx.fillRect(0,0,canvas.width,canvas.height);
+    cx.restore();
+  }
+  function drawSprites(dt){
+    if(!sprites.length) return;
+    for(let i=sprites.length-1;i>=0;i--){ const s=sprites[i]; s.age+=dt; if(s.age>=s.max && !s.loop) sprites.splice(i,1); }   // T99: a loop sprite is NOT age-culled (s.loop truthy); stop() clears s.loop so it culls again. One-shot: s.loop===undefined → `&& !undefined` === `&& true` → byte-identical.
+    cx.save();                                                              // T67b R2: isolate all sprite state
+    for(const s of sprites){ if(s.smoke) drawOneSpr(s,dt); }                // pass 1: smoke (occludes, source-over set per-sprite)
+    for(const s of sprites){ if(!s.smoke) drawOneSpr(s,dt); }               // pass 2: kit (additive, 'lighter' set per-sprite)
+    cx.restore();                                                          // guaranteed clean gco/alpha/transform back to the frame's
+    cx.setTransform(1,0,0,1,0,0); cx.globalCompositeOperation='source-over'; cx.globalAlpha=1;
+  }
+  function drawOneSpr(s,dt){
+    if(s.swap && (s.swapUntil==null || s.age<s.swapUntil)){ s.swapT+=dt; if(!s.img || s.swapT>=0.05){ s.swapT=0; s.img=sprImg[pick('lightning',4)]; s.flip=(Math.random()<.5?-1:1); } }   // lightning: hard-swap every 50ms + flip DURING the flicker window (T75: then holds the last frame into the afterglow fade)
+    // F1b: fractional frame advance at 16fps / vfxT → 32 frames @1.5-cadence play the 2s window at ~1:1 real tempo
+    if(s.sheet){ const nf=(sheetGrid[s.sheet]||{}).frames||24;
+      s.frame += dt*SHEET_FPS/(vfxT()||1) * s.dir;
+      if(s.mode==='pingpong'){ if(s.frame>=nf-1){ s.frame=(nf-1)-(s.frame-(nf-1)); s.dir=-1; if(s.frame<0)s.frame=0; } else if(s.frame<0){ s.frame=-s.frame; s.dir=1; if(s.frame>nf-1)s.frame=nf-1; } }
+      else if(s.frame>nf-1){ s.frame=nf-1; }   // forward-only clamps at last frame (venom never reverses; transient sprites end before looping)
+    }
+    const img=s.sheet ? sheetImg[s.sheet] : s.img; if(!img) return;
+    const t=Math.min(1,s.age/s.max);
+    const ez = s.crash ? t : (1-Math.pow(1-t,3));                            // C3 F5: cubic-OUT growth
+    let sc=s.sc0+(s.sc1-s.sc0)*ez; if(s.overshoot) sc+=Math.sin(t*Math.PI)*s.overshoot*(1-t);
+    let op; const pk=(s.peakAt!=null?s.peakAt:0.3);
+    if(s.crash) op=s.opPeak*(1-Math.pow(t,2.4));                             // T75: crash afterglow breathes out (was 1.4)
+    else if(t<pk) op=s.op0+(s.opPeak-s.op0)*Math.pow(t/pk,0.6);              // C3: soft ~60-80ms birth (attack UNCHANGED)
+    else op=s.opPeak+(s.op1-s.opPeak)*Math.pow((t-pk)/(1-pk),3);            // T75: cubic-IN release (breathing tail; was 1.6)
+    if(s.loop){ const bt=Math.min(1,s.age/(s.birthS||0.25)); op=s.op0+(s.opPeak-s.op0)*Math.pow(bt,0.6); sc=s.sc0+(s.sc1-s.sc0)*(1-Math.pow(1-bt,3)); }   // T99: a loop sprite HOLDS at opPeak/sc1 after a ~250ms birth ramp — the one-shot t=age/max envelope above is computed then OVERRIDDEN, ONLY for loops (one-shot sprites never enter this branch → their op/sc statements are byte-identical). Drift uses t~0 (age/1e6); loop auras don't drift.
+    if(op<=0.004) return;
+    const size=s.size, sx=DPR*sc*(s.flip||1)*(s.stretchX||1), sy=DPR*sc*(s.squashY||1);
+    let px=s.x, py=s.y;
+    if(s.travel){ const tp=Math.min(1, (s.age*1000)/((s.travel.ms||400)*(vfxT()||1))); px=s.travel.fromX+(s.x-s.travel.fromX)*tp; py=s.travel.fromY+(s.y-s.travel.fromY)*tp; }   // T92-amend (first sprite-path extension since T78): cross-board THROW — the draw position lerps origin→anchor over travelMs (vfxT-scaled to track the animation), then PINS at the anchor. Absent s.travel → px=s.x,py=s.y = byte-identical for every other effect.
+    const c=Math.cos(s.rot||0), sn=Math.sin(s.rot||0), dx=px+(s.driftX||0)*t, dy=py+(s.driftY||0)*t;
+    const blend = s.smoke ? 'source-over' : 'lighter';
+    cx.setTransform(sx*c, sx*sn, -sy*sn, sy*c, DPR*dx, DPR*dy);              // transform shared by all sub-draws below
+    const ax=(s.anchorX!=null?s.anchorX:0.5), ay=(s.anchorY!=null?s.anchorY:0.5);
+    if(s.sheet){
+      const gr=sheetGrid[s.sheet]||{cols:6,frames:24}, cols=gr.cols, nf=gr.frames;
+      const ff=Math.max(0,Math.min(nf-1, s.frame)), f0=Math.floor(ff), f1=Math.min(nf-1,f0+1), frac=ff-f0;
+      const cW=gr.cw||SHEET_CELL, cH=gr.ch||SHEET_CELL, dH=size*cH/cW;   // T78: per-sheet cell dims (square: =SHEET_CELL, dH=size → identical; rectangular row-plate: 3:1 draw). Tint path is square-only (all tinted sheets are square).
+      const drawFrame=(fr,alpha)=>{ if(alpha<=0.003) return; const sx0=(fr%cols)*cW, sy0=((fr/cols)|0)*cH;
+        cx.globalCompositeOperation=blend; cx.globalAlpha=alpha;            // F3b: UNCONDITIONAL gco+alpha assertion per draw
+        if(s.tintFac){ const og=sheetFrameCanvas.getContext('2d'); og.globalCompositeOperation='source-over'; og.clearRect(0,0,SHEET_CELL,SHEET_CELL);
+          og.drawImage(img, sx0,sy0,SHEET_CELL,SHEET_CELL, 0,0,SHEET_CELL,SHEET_CELL); og.globalCompositeOperation='multiply'; og.fillStyle=SPR_FAC[s.tintFac]||'#e0b040'; og.fillRect(0,0,SHEET_CELL,SHEET_CELL);
+          og.globalCompositeOperation='destination-in'; og.drawImage(img, sx0,sy0,SHEET_CELL,SHEET_CELL, 0,0,SHEET_CELL,SHEET_CELL); og.globalCompositeOperation='source-over';   // T72: the multiply re-opaqued alpha → restore the baked luminance-alpha (keeps the tinted colour, black ground transparent)
+          cx.drawImage(sheetFrameCanvas, 0,0,SHEET_CELL,SHEET_CELL, -size*ax,-size*ay, size,size); }   // only the SHEET_CELL sub-region
+        else cx.drawImage(img, sx0,sy0,cW,cH, -size*ax,-dH*ay, size,dH); };   // T78: rectangular-safe (square → size×size, unchanged)
+      drawFrame(f0, op*(1-frac)); drawFrame(f1, op*frac);                    // F1c FRAME BLENDING: cross-fade floor+ceil by the fractional part → erases residual stepping
+      return;
+    }
+    cx.globalCompositeOperation=blend; cx.globalAlpha=Math.min(1,op);        // F3b: unconditional per-draw
+    cx.drawImage(img, -size*ax, -size*ay, size, size);
+    if(s.halo){ cx.globalCompositeOperation=blend; cx.globalAlpha=Math.min(1,op)*0.25; const hs=size*1.35; cx.drawImage(img, -hs*ax, -hs*ay, hs, hs); }   // C3 F5 double-stamp halo + F3b gco re-assert
+  }
+  function cw(cardW){ return cardW||w*0.16; }
+  // T75 THE ENVELOPE LAW: fast-in, slow-out. Attack ms is UNCHANGED (from current peakAt×life); the release extends and carries the growth. VFX.linger scales the RELEASE ONLY (default 0.7 per the owner device verdict, range 0.5–2.0). Release decay is cubic-in (a breathing tail). {a:attackMs, t:newTotalMs}.
+  const ENV={ aura:{a:82,t:950}, bloom:{a:40,t:300}, ring:{a:180,t:1000}, smoke:{a:135,t:1500}, lightning:{a:54,t:750}, shield:{a:175,t:800}, venom:{a:105,t:1300}, surge:{a:75,t:1150} };
+  let lingerVal=0.7;
+  function envLife(name){ const e=ENV[name], rel=(e.t-e.a)*lingerVal, tot=e.a+rel; return { life:tot/1000*vfxT(), peakAt:e.a/tot }; }   // → {life(sec×vfxT), peakAt(fraction)}; attack ms constant across linger settings
+  // ---- STEP 3 motion recipes (all life ×S()=vfxT parity; each returns true if the painted sprite fired, false → caller keeps procedural) ----
+  // ---- recipes: FLIPBOOK-first for the 4 converted effects (still + envelope fallback); C3 halo on additive stills; C1 ground-dim on combat+/spectacle ----
+  function sprAura(cxp,cyp,faction,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW), v=pick('aura',2);   // aura_1/2 have sheets; aura_3 still-only
+    if(haveSheet(v)) return addSheetSpr(v, x, y, W*2.2, Object.assign({ opPeak:0.85, tintFac:faction }, envLife('aura')));   // B4 draw-time faction tint; T75 fast-in slow-out
+    if(!haveSpr('aura_1')) return false;
+    addSpr({ img:imgTint(pick('aura',3),faction), x,y, size:W*1.9, sc0:0.8,sc1:1.15, op0:0,opPeak:0.8,op1:0, rot:Math.random()*6.28, halo:true, ...envLife('aura') }); return true; }
+  // T76: the first animate_vfx seq composite — a ONE-SHOT Deva landing flare (beam → 4-point star → glow linger). The scale/opacity animation is BAKED per-frame, so the runtime envelope is FLAT (op 1 throughout) and it just plays the 27-frame forward sheet once; life = 27/SHEET_FPS ×vfxT (plays through, clamps at the empty last frame, dies). Missing sheet → addSheetSpr guard no-ops.
+  // T80/T81: the LANDING CLASS is faction-keyed via LANDING_SHEET (defined in the sheet config; all four factions ship). All landings share the c1a envelope (27f one-shot, flat runtime envelope, drawn at card scale W*2.4). A faction whose sheet isn't loaded yet no-ops (addSheetSpr guards on a missing sheet).
+  function sprLanding(faction, cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const key=LANDING_SHEET[faction]; if(!key) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    return addSheetSpr(key, x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 27/SHEET_FPS*vfxT() }); }
+  function sprC1aDeva(cxp,cyp,cardW){ return sprLanding('devas', cxp,cyp,cardW); }   // shipped recipe name kept (A/B + back-compat)
+  // T78: BOARD-EFFECT class — the Brahmastra row-plate (1920×640 3:1). `boardW` = the enemy-half width; the sheet draws boardW wide × boardW/3 tall (rectangular cw/ch), centred at (cxp,cyp). Flat envelope (baked animation), one-shot forward, life = 40/SHEET_FPS ×vfxT (~2.5s at 16fps — the ultimate-weapon spectacle lingers under the following gameplay, decoupled).
+  function sprBrahmastra(cxp,cyp,boardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp);
+    return addSheetSpr('brahmastra', x, y, boardW, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 40/SHEET_FPS*vfxT() }); }
+  // T79: MANTRA class — the Gayatri serene row wash (1920×640 3:1, same rectangular row-plate machinery as brahmastra). Over the CASTER's half (a friendly revive-blessing). Flat envelope, one-shot forward, 36f (~2.25s at 16fps). NO strike / NO hit-stop coupling — it settles.
+  function sprGayatri(cxp,cyp,boardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp);
+    return addSheetSpr('gayatri', x, y, boardW, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 36/SHEET_FPS*vfxT() }); }
+  function sprPavamana(cxp,cyp,boardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp);   // T95: Pavamana cleanse wash — Gayatri's SIBLING (board-settle row plate over the CASTER's friendly half). 36f one-shot forward, flat envelope. SERENE — no hit-stop.
+    return addSheetSpr('pavamana', x, y, boardW, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 36/SHEET_FPS*vfxT() }); }
+  // T82: single-unit STRIKE class — Vajra, anchored on the TARGET unit's card rect (not the caster). Square card-anchored sheet (reuses the landing path), 18f one-shot forward, flat envelope, drawn at card scale. The fastest effect (~1.125s at 16fps).
+  function sprVajra(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    return addSheetSpr('vajra', x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 18/SHEET_FPS*vfxT() }); }
+  function sprAhamkara(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);   // T96: Ahamkara ego arrival — unit-anchored square (Vajra cell class), 24f forward, flat envelope so the baked seal→pillar→crown phases carry. DARK-BUFF register — no hit-stop, no shake; the unit exalts itself.
+    return addSheetSpr('ahamkara', x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 24/SHEET_FPS*vfxT() }); }
+  function sprSanjivani(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);   // T98: Sanjivani Corruption dark-revival arrival — unit-anchored square (Vajra cell class), 28f forward, flat envelope so the baked shroud→surge→threads→ashes emergence carries. EMERGENCE register — no hit-stop, no shake, no dissolve; the grave exhales and the stolen unit is DRAGGED BACK.
+    return addSheetSpr('sanjivani', x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 28/SHEET_FPS*vfxT() }); }
+  function sprDevaHeroEntry(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);   // T100: Deva hero ENTRY — the catalog's LOUDEST register (34f forward: rays herald → blazing full-cell pillar HOLDS at full → sun-crown blooms past the edge → settles). REPLACES the landing flare for Deva hero plays. Flat runtime op (the envelope is baked). No hit-stop — the heavens arrive, nothing is struck.
+    return addSheetSpr('deva_hero_entry', x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 34/SHEET_FPS*vfxT() }); }
+  function sprIndraHeroEntry(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);   // T101: Indra per-hero ENTRY (overrides the Deva default for Indra only) — INDRA'S STORM (34f forward: ground-seal wakes → gold-blue lightning RISES → storm-column holds full → wreath crown). Vajra separation: the storm rises+encloses, nothing descends. Flat runtime op (envelope baked). No hit-stop.
+    return addSheetSpr('indra_hero_entry', x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 34/SHEET_FPS*vfxT() }); }
+  function sprAgniHeroEntry(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);   // T102: Agni per-hero ENTRY (overrides the Deva default for Agni only) — AGNI'S FIRE (34f forward: hearth ignites → fire-ring races out → twin flame pillars RISE, hold full → embers settle). Warm orange-gold, ascending — nothing descends. Flat runtime op. No hit-stop.
+    return addSheetSpr('agni_hero_entry', x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 34/SHEET_FPS*vfxT() }); }
+  function sprVarunaHeroEntry(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);   // T104: Varuna per-hero ENTRY (overrides the Deva default for Varuna only) — VARUNA'S OCEAN (34f forward, turn-taking: tide-ground ignites → wave races [two pulses] → tide rises → spray settles). Cyan-white, ascending/enclosing — nothing descends. Flat runtime op (envelope baked). No hit-stop.
+    return addSheetSpr('varuna_hero_entry', x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 34/SHEET_FPS*vfxT() }); }
+  function sprNagapasha(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);   // T94: Nagapasha bind ARRIVAL — target-anchored like Vajra (6×3, 18f forward, flat envelope so the baked cast→converge→cinch→settle phases carry). RESTRAINT register — no travel, no hit-stop; the effect is target-local.
+    return addSheetSpr('nagapasha', x, y, W*2.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 18/SHEET_FPS*vfxT() }); }
+  function sprSudarshana(cxp,cyp,cardW, fromXp, fromYp, travelMs){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);   // T92-amend: Sudarshana Chakra — the THROWN spinning discus. Anchor = the removed hero's rect; optional (fromXp,fromYp)+travelMs = the cross-board flight from the caster's half (compositor spins+squashes in place, the runtime carries it). Target-strike register (6×3, 18f forward, flat envelope so the baked flight/impact phases carry).
+    const o={ frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 18/SHEET_FPS*vfxT() };
+    if(fromXp!=null && fromYp!=null){ const f=local(fromXp,fromYp); o.travel={ fromX:f.x, fromY:f.y, ms:(travelMs||400) }; }
+    return addSheetSpr('sudarshana', x, y, W*2.4, o); }
+  // T83: shared DAMAGE TICK status sting — faction-agnostic, fires on SURVIVING damage at the hit unit. HALF-WEIGHT: drawn at W*1.4 (vs a landing's W*2.4 → ~⅓ the area) and the sheet opacities are capped (0.7/0.75/0.4) → ~¼ on-screen weight. 12f (~0.75s), the shortest.
+  function sprDamage(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    return addSheetSpr('damage', x, y, W*1.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 12/SHEET_FPS*vfxT() }); }
+  // T84: shared BUFF SURGE — damage's inverse (a small fast gain, golden upward blessing). Same half-weight draw (W*1.4), 12f. Fires on any power-GAIN tick at the gained unit.
+  function sprBuff(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    return addSheetSpr('buff', x, y, W*1.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 12/SHEET_FPS*vfxT() }); }
+  // T85: shared SHIELD FORMATION — the state-arrival class (ring inscribes → dome rises). Weight BETWEEN the ticks and a landing → drawn at W*1.7. 14f. The persistent shield state stays on the .shieldbadge; this is the arrival moment only. (Distinct from the legacy sprShield.)
+  function sprShieldForm(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    return addSheetSpr('shield', x, y, W*1.7, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 14/SHEET_FPS*vfxT() }); }
+  // T86: shared VENOM TICK — the LIGHTEST effect (fires on venom application AND each drain, acid-green, seeps downward). Drawn at W*1.3 (smallest). 10f (shortest). Pure flavor — the ☠ floater + wetBadge + persistent .venombadge carry the state. (Distinct from the legacy sprVenom.)
+  function sprVenomTick(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    return addSheetSpr('venom', x, y, W*1.3, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 10/SHEET_FPS*vfxT() }); }
+  // T87: Chaos Surge dual-layer. WASH = the Asura storm over the surging half (row plate, like brahmastra/gayatri). MARK = the erratic spark where it lands (card-anchored, tick-scale W*1.4). Fired together on a surge buff (wash once/action, mark per surged unit, delayed).
+  function sprChaosWash(cxp,cyp,boardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp);
+    return addSheetSpr('chaos_wash', x, y, boardW, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 24/SHEET_FPS*vfxT() }); }
+  function sprChaosMark(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    return addSheetSpr('chaos_mark', x, y, W*1.4, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 12/SHEET_FPS*vfxT() }); }
+  // T89: PASHUPATASTRA — Brahmastra's inverse board strike (violet devouring vortex) over the enemy rows. Same row-plate machinery, 40f one-shot.
+  function sprPashupatastra(cxp,cyp,boardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp);
+    return addSheetSpr('pashupatastra', x, y, boardW, { frame:0, dir:1, op0:1,opPeak:1,op1:1, sc0:1,sc1:1, life: 40/SHEET_FPS*vfxT() }); }
+  function sprBloom(cxp,cyp,kind,cardW){ if(reducedMotion()||!ready||!haveSpr('bloom_1')) return false; const {x,y}=local(cxp,cyp), W=cw(cardW), k=pick('bloom',2);
+    groundDim(cxp,cyp,W*1.6);   // C1: bloom = combat hit
+    addSpr({ img:(kind==='damage'?imgTint(k,'damage'):sprImg[k]), x,y, size:W*2.0, sc0:0.6,sc1:1.2, opPeak:1, crash:true, rot:Math.random()*6.28, anchorX:(/2$/.test(k)?0.4:0.5), anchorY:(/2$/.test(k)?0.6:0.5), ...envLife('bloom') }); return true; }   // T75: flash instant, afterglow breathes out (300ms)
+  function sprRing(cxp,cyp,faction,cardW){ if(reducedMotion()||!ready||!haveSpr('ring_1')) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    addSpr({ img:imgTint(pick('ring',2),faction), x, y, size:W*2.2, sc0:0.7,sc1:1.05, overshoot:0.12, op0:0,opPeak:1,op1:0, squashY:0.42, halo:true, ...envLife('ring') }); return true; }   // ambient landing → no ground-dim; T75 linger
+  function sprSmoke(cxp,cyp,count,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW), n=count||1;
+    groundDim(cxp,cyp,W*1.8);   // C1: smoke = destroy/spectacle
+    for(let i=0;i<n;i++){ setTimeout(()=>{ if(!ready) return; const v=pick('smoke',2);
+      if(haveSheet(v)){ addSheetSpr(v, x+(Math.random()-.5)*W*0.5, y+(Math.random()-.5)*W*0.3, W*1.9, Object.assign({ opPeak:0.85, driftY:-(20+Math.random()*20) }, envLife('smoke'))); }   // flipbook smoke is an additive rolling GLOW; T75 linger (1500ms)
+      else if(haveSpr('smoke_1')){ addSpr({ img:sprImg[v], smoke:true, x:x+(Math.random()-.5)*W*0.5, y:y+(Math.random()-.5)*W*0.3, size:W*1.8, sc0:1.0,sc1:1.35, op0:0.85,opPeak:0.85,op1:0, rot:(Math.random()-.5)*0.21, driftY:-(20+Math.random()*20), ...envLife('smoke') }); } }, i*80*vfxT()); }
+    return (haveSheet('smoke_1')||haveSpr('smoke_1')); }
+  function sprLightning(cxp,cyp,cardW){ if(reducedMotion()||!ready||!haveSpr('lightning_1')) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    groundDim(cxp,cyp,W*2.4);   // C1: lightning = spectacle
+    addSpr({ img:sprImg[pick('lightning',4)], swap:true, swapUntil:0.45*vfxT(), x,y, size:W*3.2, sc0:1.0,sc1:1.06, op0:0,opPeak:0.95,op1:0, flip:(Math.random()<.5?-1:1), ...envLife('lightning') }); return true; }   // T75: flicker for ~450ms, then a 300ms afterglow fade of the last frame (no more flicker)
+  function sprShield(cxp,cyp,cardW){ if(reducedMotion()||!ready||!haveSpr('shield_1')) return false; const {x,y}=local(cxp,cyp), W=cw(cardW);
+    addSpr({ img:sprImg[pick('shield',2)], x,y, size:W*2.4, sc0:1.3,sc1:1.0, overshoot:0.18, op0:0,opPeak:0.7,op1:0, halo:true, ...envLife('shield') }); return true; }   // serene: no shake, no hit-stop, no dim; T75 snap unchanged, hold extends
+  function sprVenom(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW), v=pick('venom',2);   // ambient dread → no dim; forward-only sheet (venom never reverses)
+    if(haveSheet(v)) return addSheetSpr(v, x, y-W*0.25, W*1.9, Object.assign({ opPeak:0.6, driftY:W*0.2 }, envLife('venom')));   // T75: dread benefits most from lingering (1300ms)
+    if(!haveSpr('venom_1')) return false;
+    addSpr({ img:sprImg[v], x, y:y-W*0.25, size:W*1.7, sc0:0.9,sc1:1.0, op0:0,opPeak:0.6,op1:0, driftY:W*0.2, halo:true, ...envLife('venom') }); return true; }
+  function sprSurge(cxp,cyp,cardW){ if(reducedMotion()||!ready) return false; const {x,y}=local(cxp,cyp), W=cw(cardW), v=pick('surge',2);
+    if(gpu.enabled && gpu.texReady && gpuSpawnSurge(x, y, W*2.2, (Math.random()-.5)*0.4, envLife('surge').life)) return true;   // T70-P1: GPU serves the effect AND its ground-dim (S5); T75 linger lifetime
+    groundDim(cxp,cyp,W*2.1);   // C1: Canvas2D dim only when Canvas2D serves surge (P2 moves the rest of the effects onto the GPU dim)
+    if(haveSheet(v)) return addSheetSpr(v, x, y, W*2.2, Object.assign({ opPeak:0.95, rot:(Math.random()-.5)*0.4 }, envLife('surge')));   // T75 linger (1150ms)
+    if(!haveSpr('surge_1')) return false;
+    addSpr({ img:sprImg[v], x,y, size:W*2.1, sc0:0.8,sc1:1.2, op0:0,opPeak:0.9,op1:0, rot:(Math.random()-.5)*0.5, halo:true, ...envLife('surge') }); return true; }
+  function sprStreak(fx,fy,tx,ty,cardW){ if(reducedMotion()||!ready||!haveSpr('streak_1')) return false; const a=local(fx,fy), b=local(tx,ty), W=cw(cardW);
+    const dxp=b.x-a.x, dyp=b.y-a.y, len=Math.hypot(dxp,dyp)||1, ang=Math.atan2(dyp,dxp);
+    addSpr({ img:imgTint(pick('streak',2),'leap'), x:(a.x+b.x)/2, y:(a.y+b.y)/2, size:W*1.4, sc0:1,sc1:1, stretchX:Math.max(1,len/(W*1.0)), squashY:0.7, rot:ang, op0:0,opPeak:0.9,op1:0, peakAt:0.25, life:0.3*vfxT() }); return true; }
+  // T69A BLOOM POST-PASS: draw the vfx canvas into a half-res offscreen WITH ctx.filter blur, then composite that back full-size additively.
+  // Bright additive content bleeds soft light (the flat→luminous jump inside Canvas2D); dark content (the ground-dim) stays dark because 'lighter' of near-black adds ~0 → the dim is never brightened.
+  function bloomPass(){
+    if(!BLOOM_OK||!bloomOn) return;
+    const bw=Math.max(1,canvas.width>>1), bh=Math.max(1,canvas.height>>1);   // half-res intermediate = quarter the pixels (perf)
+    if(!bloomCv){ bloomCv=document.createElement('canvas'); bloomCx=bloomCv.getContext('2d'); }
+    if(bloomCv.width!==bw||bloomCv.height!==bh){ bloomCv.width=bw; bloomCv.height=bh; }
+    bloomCx.setTransform(1,0,0,1,0,0); bloomCx.globalCompositeOperation='source-over'; bloomCx.globalAlpha=1; bloomCx.clearRect(0,0,bw,bh);
+    bloomCx.filter='blur('+(3*DPR).toFixed(1)+'px)';                          // 3·DPR half-res px ≈ a constant ~6 CSS-px halo at any DPR
+    bloomCx.drawImage(canvas, 0,0,canvas.width,canvas.height, 0,0,bw,bh);
+    bloomCx.filter='none';                                                    // T67b R2: reset filter immediately after the pass (state discipline)
+    cx.setTransform(1,0,0,1,0,0); cx.globalCompositeOperation='lighter'; cx.globalAlpha=0.6; cx.imageSmoothingEnabled=true;   // T70-DIM R2: recomposite 0.5→0.6 — bloom carries the contrast the removed dim used to
+    cx.drawImage(bloomCv, 0,0,bw,bh, 0,0,canvas.width,canvas.height);
+    cx.globalCompositeOperation='source-over'; cx.globalAlpha=1;              // leave state clean for the next frame's top-of-frame reset
+  }
   function frame(dt, now){
     const t=now/1000;
-    cx.setTransform(1,0,0,1,0,0); cx.globalAlpha=1; cx.globalCompositeOperation='source-over'; cx.clearRect(0,0,canvas.width,canvas.height);
+    cx.setTransform(1,0,0,1,0,0); cx.globalAlpha=1; cx.globalCompositeOperation='source-over'; cx.imageSmoothingEnabled=true; cx.clearRect(0,0,canvas.width,canvas.height);   // C2: re-assert smoothing after any context state churn
     if(tint){ tint.life-=dt; if(tint.life<=0) tint=null; else { cx.globalAlpha=tint.a*(tint.life/tint.max); cx.fillStyle=tint.color; cx.fillRect(0,0,canvas.width,canvas.height); cx.globalAlpha=1; } }
     for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.life-=dt; if(p.life<=0){ parts.splice(i,1); continue; }
       if(p.kind==='smoke'){ p.vy+=(p.g||0)*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.spin*dt; }
@@ -8117,35 +8900,44 @@ const VFX = (()=>{
     cx.globalCompositeOperation='lighter';
     for(const p of parts){ if(p.kind==='smoke') continue; const age=1-p.life/p.max, flick=Math.sin(t*p.flHz+p.flP)*p.flA;
       if(p.kind==='glow'){ const idx=Math.min(4,Math.floor(age*5)), sc=age<0.2?age/0.2:1-(age-0.2)/0.8*0.85; sprite(sGlow[idx], p.x+flick, p.y, p.sz*Math.max(0.1,sc), 0, Math.min(1,p.life/p.max*1.4)); }
-      else sprite(sEmber, p.x+flick, p.y, p.sz, 0, Math.max(0,p.life/p.max)); }
+      else sprite(sEmber, p.x+flick, p.y, p.sz, 0, Math.pow(Math.max(0,p.life/p.max),0.6)); }   // T75: cubic-in death tail (lingers then fades)
     cx.setTransform(DPR,0,0,DPR,0,0); cx.globalAlpha=1; cx.lineCap='round'; cx.lineJoin='round';
     for(let i=bolts.length-1;i>=0;i--){ const b=bolts[i]; b.life-=dt; if(b.life<=0){ bolts.splice(i,1); continue; } const a=b.life/b.max;
-      for(const st of [[9,`rgba(150,190,255,${.16*a})`],[3.5,`rgba(205,228,255,${.5*a})`],[1,`rgba(255,255,255,${.95*a})`]]){ cx.lineWidth=st[0]; cx.strokeStyle=st[1]; poly(b.main); for(const br of b.branches) poly(br); } }
+      for(const st of [[12,`rgba(150,190,255,${.16*a})`],[5,`rgba(205,228,255,${.5*a})`],[1.5,`rgba(255,255,255,${.95*a})`]]){ cx.lineWidth=st[0]; cx.strokeStyle=st[1]; poly(b.main); for(const br of b.branches) poly(br); } }   // T66 spectacle: bolt widths 9/3.5/1 -> 12/5/1.5 for slot-scale presence
     cx.setTransform(1,0,0,1,0,0); cx.globalCompositeOperation='source-over'; cx.globalAlpha=1;
+    drawSprites(dt);   // T67 painted sprite layer (smoke source-over, kit additive) — on top of particles/bolts
+    if(sprites.length||bolts.length||parts.length) bloomPass();   // T69A: bloom only when additive content exists → empty/reduced-motion frames skip it cleanly
+    drawGroundDim(dt);   // T69A: dim LAST (destination-over) → behind the glow, excluded from the bloom source
+    gpuTick(dt);   // T70-P0: drive the GPU overlay from the SAME loop, inside step's try/catch (one loop owns time; the T69A guarantee covers it)
   }
   function step(now){
-    const dt=Math.min(0.05,(now-last)/1000); last=now; frame(dt, now);
-    if(parts.length||bolts.length||tint) raf=requestAnimationFrame(step); else { raf=0; cx.clearRect(0,0,canvas.width,canvas.height); }
+    const rawMs=now-last;                                              // T90: raw frame time (PRE-clamp) for the jank watcher
+    const dt=Math.min(0.05,(now-last)/1000); last=now;                 // T69A: dt clamp (≤50ms) + fresh last → a wake after any idle gap can't mass-expire (verified NOT the round-death cause; kept structural)
+    try{ jankSample(rawMs); }catch(e){}                                // T90: match-time jank detection (gated on choreoActive inside; never throws into the loop)
+    try{ frame(dt, now); }
+    catch(e){}                                                         // T69A ROOT FIX: a thrown draw must NEVER kill the loop. one thrown frame used to leave raf truthy → wake() could never restart → all later-round effects dead. frame() re-clears every canvas state at its top, so a dropped frame leaks nothing.
+    finally{ if(parts.length||bolts.length||tint||sprites.length||gdim||gpu.sprites.length||gpu.particles.length||gpu.hero) raf=requestAnimationFrame(step);   // ALWAYS re-arm while content lives (incl. live GPU sprites/particles/hero-moment) → raf can never get stuck truthy after a throw
+             else { raf=0; try{ cx.clearRect(0,0,canvas.width,canvas.height); }catch(_){} } }
   }
   function poly(pts){ cx.beginPath(); cx.moveTo(pts[0].x,pts[0].y); for(let i=1;i<pts.length;i++) cx.lineTo(pts[i].x,pts[i].y); cx.stroke(); }
-  function addFire(x,y,ang,sp,sz,life,buoy,inward){ add({ kind:'glow', x, y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp, buoy, inward, cx0:x, cy0:y, flHz:63+Math.random()*30, flP:Math.random()*6.28, flA:2+Math.random()*2, sz, life, max:life }); }
-  function addSmoke(set, x, y, vx, vy, g, sz, life, a){ add({ kind:'smoke', sprite:set[Math.floor(Math.random()*set.length)], x, y, vx, vy, g, rot:Math.random()*6.28, spin:(Math.random()-.5)*.8, curlF:1.5+Math.random(), curlP:Math.random()*6.28, curlA:6+Math.random()*8, sz, life, max:life, a }); }
-  function addEmber(x,y,ang,sp,buoy,life,sz){ add({ kind:'ember', x, y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp, buoy, inward:0, cx0:x, cy0:y, flHz:63+Math.random()*30, flP:Math.random()*6.28, flA:.9+Math.random(), sz, life, max:life }); }
+  function addFire(x,y,ang,sp,sz,life,buoy,inward){ add({ kind:'glow', x, y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp, buoy, inward, cx0:x, cy0:y, flHz:63+Math.random()*30, flP:Math.random()*6.28, flA:2+Math.random()*2, sz, life:life*1.6, max:life*1.6 }); }
+  function addSmoke(set, x, y, vx, vy, g, sz, life, a){ add({ kind:'smoke', sprite:set[Math.floor(Math.random()*set.length)], x, y, vx, vy, g, rot:Math.random()*6.28, spin:(Math.random()-.5)*.8, curlF:1.5+Math.random(), curlP:Math.random()*6.28, curlA:6+Math.random()*8, sz, life:life*1.6, max:life*1.6, a }); }   // T75 ×1.6
+  function addEmber(x,y,ang,sp,buoy,life,sz){ add({ kind:'ember', x, y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp, buoy, inward:0, cx0:x, cy0:y, flHz:63+Math.random()*30, flP:Math.random()*6.28, flA:.9+Math.random(), sz, life:life*1.6, max:life*1.6 }); }
   // (a) CARD LANDS — warm stone dust + gold embers
   function cardLand(cxp, cyp){ if(reducedMotion()||!ready) return; const {x,y}=local(cxp,cyp), s=S();
     for(let i=0;i<Math.min(3,room());i++){ const ang=Math.random()*6.28; addSmoke(sDust, x+(Math.random()*24-12), y+6, Math.cos(ang)*16, -6-Math.random()*8, 1, 20+Math.random()*14, (1.5+Math.random()*.6)*s, .42); }
-    const n=Math.min(8, Math.max(5,5+Math.floor(Math.random()*4)), room()); for(let i=0;i<n;i++){ const ang=-Math.PI/2+(Math.random()-.5)*1.9, sp=40+Math.random()*70; addEmber(x, y+4, ang, sp, 100, .6*s, 4+Math.random()*3); } }
+    const n=Math.min(10, 6+Math.floor(Math.random()*5), room()); for(let i=0;i<n;i++){ const ang=-Math.PI/2+(Math.random()-.5)*1.9, sp=40+Math.random()*70; addEmber(x, y+4, ang, sp, 100, .6*s, 4+Math.random()*3); } }   // T66 ambient: embers 5-8 -> 6-10
   // (b) ASTRA BURST — 3 fire populations (additive) + delayed smoke puffs
-  function astraBurst(cxp, cyp){ if(reducedMotion()||!ready) return; const {x,y}=local(cxp,cyp), s=S();
-    for(let i=0;i<Math.min(6,room());i++){ const ang=Math.random()*6.28, sp=20+Math.random()*50; addFire(x,y,ang,sp, 30+Math.random()*16, (.5+Math.random()*.3)*s, -70, 1.2); }   // large soft glows (flame body)
-    for(let i=0;i<Math.min(12,room());i++){ const ang=Math.random()*6.28, sp=70+Math.random()*140; addFire(x,y,ang,sp, 12+Math.random()*10, (.4+Math.random()*.25)*s, -110, 2.0); }  // small hot cores
-    for(let i=0;i<Math.min(8,room());i++){ const ang=-Math.PI/2+(Math.random()-.5)*2.2, sp=60+Math.random()*90; addEmber(x,y,ang,sp,-60,(.6+Math.random()*.5)*s, 5+Math.random()*3.5); }   // rising embers
-    setTimeout(()=>{ if(!ready) return; for(let i=0;i<Math.min(4,room());i++){ const ang=Math.random()*6.28; addSmoke(sDust, x+(Math.random()-.5)*20, y-6, Math.cos(ang)*14, -10-Math.random()*10, -2, 24+Math.random()*18, (1.4+Math.random()*.6)*s, .4); } }, 220*s);   // smoke after the flame peak
+  function astraBurst(cxp, cyp){ if(reducedMotion()||!ready) return; const {x,y}=local(cxp,cyp), s=S(), SZ=1.4;   // T66 STEP 3: ×1.4 slot-scale so bursts read at card-slot render size (counts still cap-gated by room())
+    for(let i=0;i<Math.min(6,room());i++){ const ang=Math.random()*6.28, sp=20+Math.random()*50; addFire(x,y,ang,sp, (30+Math.random()*16)*SZ, (.5+Math.random()*.3)*s, -70, 1.2); }   // large soft glows (flame body)
+    for(let i=0;i<Math.min(16,room());i++){ const ang=Math.random()*6.28, sp=70+Math.random()*140; addFire(x,y,ang,sp, (12+Math.random()*10)*SZ, (.4+Math.random()*.25)*s, -110, 2.0); }  // T66 combat: hot cores 12 -> 16
+    for(let i=0;i<Math.min(8,room());i++){ const ang=-Math.PI/2+(Math.random()-.5)*2.2, sp=60+Math.random()*90; addEmber(x,y,ang,sp,-60,(.6+Math.random()*.5)*s, (5+Math.random()*3.5)*SZ); }   // rising embers
+    setTimeout(()=>{ if(!ready) return; for(let i=0;i<Math.min(4,room());i++){ const ang=Math.random()*6.28; addSmoke(sDust, x+(Math.random()-.5)*20, y-6, Math.cos(ang)*14, -10-Math.random()*10, -2, (24+Math.random()*18)*SZ, (1.4+Math.random()*.6)*s, .4); } }, 220*s);   // smoke after the flame peak
   }
   // (c) BRAHMASTRA / Mythic — dim → bolt → dark → bolt+flash → afterglow → smoke roll + embers
-  function brahmastraSmoke(ix,iy){ const s=S();
-    for(let i=0;i<Math.min(16,room());i++){ const ang=Math.random()*6.28, spread=30+Math.random()*90; addSmoke(sDark, ix+(Math.random()-.5)*40, iy+(Math.random()-.5)*20, Math.cos(ang)*spread, -6-Math.random()*14, -3, 34+Math.random()*30, (1.6+Math.random()*.8)*s, .55); }   // rolls outward across the board
-    for(let i=0;i<Math.min(8,room());i++){ const ang=-Math.PI/2+(Math.random()-.5)*2, sp=50+Math.random()*90; addEmber(ix,iy,ang,sp,-40,(.7+Math.random()*.5)*s, 6+Math.random()*4); }
+  function brahmastraSmoke(ix,iy){ const s=S(), SZ=1.4;
+    for(let i=0;i<Math.min(16,room());i++){ const ang=Math.random()*6.28, spread=30+Math.random()*90; addSmoke(sDark, ix+(Math.random()-.5)*40, iy+(Math.random()-.5)*20, Math.cos(ang)*spread, -6-Math.random()*14, -3, (34+Math.random()*30)*SZ, (1.6+Math.random()*.8)*s, .55); }   // rolls outward across the board
+    for(let i=0;i<Math.min(8,room());i++){ const ang=-Math.PI/2+(Math.random()-.5)*2, sp=50+Math.random()*90; addEmber(ix,iy,ang,sp,-40,(.7+Math.random()*.5)*s, (6+Math.random()*4)*SZ); }
   }
   function flashDiv(){ const f=$('vfxflash'); if(f){ f.classList.remove('fire'); void f.offsetWidth; f.classList.add('fire'); } }
   function mythic(cxp, cyp){ if(reducedMotion()||!ready) return; const s=S(); const p=(cxp!=null)?local(cxp,cyp):{x:w*0.5,y:h*0.5}, ix=p.x, iy=p.y;
@@ -8154,47 +8946,209 @@ const VFX = (()=>{
     setTimeout(()=>{ if(ready){ bolts.push(mkBolt(ix,iy)); flashDiv(); wake(); } }, (90+100+60)*s);     // 60ms dark → bolt 2 (new shape) + full-screen flash
     setTimeout(()=>{ if(ready) brahmastraSmoke(ix,iy); }, (90+100+60+140)*s);                            // afterglow tail (flash div) → smoke + embers
   }
-  return { init, resize, cardLand, astraBurst, mythic };
+  return { init, resize, cardLand, astraBurst, mythic,
+           preloadSprites, loadMatchSheets, spritesReady:()=>spritesReady, sheetsReady:()=>sheetsReady, sprCount:()=>sprites.length, bakeMs:()=>bakeMs,
+           applyQuality(setting){ const q=(setting==='auto'||!RUNG[setting])?pickRung():setting; if(q!==vfxRung){ vfxRung=q; SHEET_CELL=RUNG[q].cell; sheetImg={}; sheetGrid={}; sheetsReady=false; sheetLoading={}; } return q; },   // T90: resolve the player's VFX-quality setting (auto=heuristic) → set the rung. Clears the sheet caches ONLY if the rung changed, so the NEXT loadMatchSheets re-fetches at the new rung (take-effect-next-match). currentRung() reads the resolved rung for the jank prompt.
+           currentRung(){ return vfxRung; },
+           __advance2D:(dt)=>{ try{ frame(dt, performance.now()); }catch(e){} },   // G-test: drive the Canvas2D frame synchronously (bypasses the pane's rAF throttling)
+           frameOf:(i)=>{ const s=sprites[i]; return s?{sheet:s.sheet,frame:s.frame,dir:s.dir,mode:s.mode}:null; },   // G2 instrumentation: read live frame index
+           setBloom:(v)=>{ bloomOn=!!v; }, bloomState:()=>({ok:BLOOM_OK,on:bloomOn}),   // G3 A/B proof hook (bloom on/off)
+           get dim(){ return dimOn; }, set dim(v){ dimOn=!!v; },   // T70-DIM master flag: per-effect ground-dim OFF by default; true re-enables both paths (reserved for the hero-moment scene dim, R3)
+           get linger(){ return lingerVal; }, set linger(v){ lingerVal=Math.max(0.5,Math.min(2,(+v)||1)); },   // T75 owner knob: live multiplier on RELEASE durations only (attack ms constant), 0.5–2.0
+           envLifeOf:(name)=>{ const e=ENV[name]; if(!e) return null; const rel=(e.t-e.a)*lingerVal, tot=e.a+rel; return { attackMs:e.a, totalMs:Math.round(tot), lifeMs:Math.round(envLife(name).life/vfxT()*1000) }; },   // G2/G6 instrumentation
+           gpuHero,   // T70-P2H: fire the 4-beat hero moment (returns true if the GPU served it → caller suppresses the Canvas2D spectacle)
+           gpu:{ get renderer(){return gpu.renderer;}, get enabled(){return gpu.enabled;}, get disabled(){return gpu.disabled;}, get texReady(){return gpu.texReady;}, get live(){return gpu.sprites.length;}, get particles(){return gpu.particles.length;}, get dims(){return gpu.dimLayer?gpu.dimLayer.children.length:0;},   // T70-P0/P1 A/B + instrumentation
+                 toggle(){ if(!gpu.disabled) gpu.enabled=!gpu.enabled; return gpu.enabled; },
+                 get frame0(){ return gpu.sprites[0]?gpu.sprites[0].frame:null; },                      // G2 instrumentation: live fractional GPU frame index
+                 get heroReady(){ return gpu.heroReady; }, get heroActive(){ return !!gpu.hero; }, get heroBeat(){ return gpu.hero?gpu.hero.beat:0; }, get heroLog(){ return gpu.heroLog.slice(); }, get PCAP(){ return gpu.PCAP; },   // T70-P2H instrumentation
+                 get quality(){ return vfxRung; }, get cell(){ return SHEET_CELL; }, get gridInfo(){ return gpu.grid||{}; },   // T74 quality-ladder instrumentation
+                 set quality(q){ if(!RUNG[q]||q===vfxRung) return; vfxRung=q; SHEET_CELL=RUNG[q].cell;   // T74: force a rung (reloads only the selected rung's assets)
+                   sprImg={}; sprTint={}; spritesReady=false; sprLoadN=0; sheetImg={}; sheetGrid={}; sheetsReady=false; sheetLoading={}; bakeMs=0; preloadSprites();
+                   try{ if(gpu.app){ gpu.tex={}; gpu.sheetTex={}; gpu.mvSheetTex={}; gpu.heroTex={}; gpu.grid={}; gpu.texReady=false; gpu.heroReady=false; gpuLoadSurge(); } }catch(e){} },
+                 get heroRingMaxVisW(){ return gpu.hero?(gpu.hero.ringMaxVisW||0):(gpu._lastRingMaxVisW||0); }, get fieldW(){ return fieldEl?fieldEl.getBoundingClientRect().width:0; },
+                 __heroAdvance(dt){ try{ if(gpu.hero) gpuHeroTick(dt); gpuParticleTick(dt); if(gpu.app) gpu.app.renderer.render(gpu.stage); }catch(e){} return gpu.hero?gpu.hero.beat:0; },   // G-test: drive the sequencer synchronously (bypasses the pane's rAF throttling)
+                 get heroBlends(){ const h=gpu.hero; return h?{ ring:h.ring&&h.ring.blendMode, light:h.light&&h.light.blendMode, aura:h.aura&&h.aura.blendMode, flash:h.flashQ&&h.flashQ.blendMode, dim:h.dimQ&&h.dimQ.blendMode, ringXY:h.ring?[Math.round(h.ring.x),Math.round(h.ring.y),Math.round(h.ring.width)]:null }:null; },   // T70-P2H-fix diagnostic
+                 get mv(){return gpu.mv;}, set mv(v){ gpu.mv=!!v; },                                   // S2 A/B: mv interp on/off (live)
+                 get haze(){return gpu.haze;}, set haze(v){ gpu.haze=!!v; },                            // S3b DOM haze flag
+                 get bloomParams(){return {threshold:gpu.bloom.threshold,intensity:gpu.bloom.intensity};},
+                 setBloom(on){ try{ if(!gpu.fxLayer) return; if(on===false){ gpu.fxLayer.filters=[]; } else if(gpu.bloomFilter){ gpu.fxLayer.filters=[gpu.bloomFilter]; } }catch(e){} },   // S1 A/B: bloom on/off
+                 tuneBloom(threshold,intensity){ try{ if(threshold!=null){ gpu.bloom.threshold=threshold; gpu.bloomFilter.resources.b.uniforms.uThreshold=threshold; } if(intensity!=null){ gpu.bloom.intensity=intensity; gpu.bloomFilter.resources.b.uniforms.uIntensity=intensity; } }catch(e){} },
+                 __simInitFail(){ try{ if(gpu.app&&gpu.app.destroy) gpu.app.destroy(true); }catch(e){} gpu.app=null; gpu.enabled=false; gpu.texReady=false; gpu.disabled=false; gpu._poison=true; return gpuInit(); },   // G3: force the real init throw → floor
+                 __reinit(){ gpu._poison=false; gpu.disabled=false; gpu.app=null; return gpuInit(); },
+                 __forceBackend(pref){ gpu._pref=pref; try{ if(gpu.gcanvas){ gpu.gcanvas.remove(); gpu.gcanvas=null; } if(gpu.app&&gpu.app.destroy) gpu.app.destroy(true); }catch(e){} gpu.app=null; gpu.enabled=false; gpu.texReady=false; gpu.disabled=false; gpu.sprites.length=0; gpu.particles.length=0; return gpuInit(); } },   // G2: force webgl to prove the GLSL variants run
+           sprAura, sprBloom, sprRing, sprSmoke, sprLightning, sprShield, sprVenom, sprSurge, sprStreak, sprC1aDeva, sprLanding, sprBrahmastra, sprGayatri, sprVajra, sprDamage, sprBuff, sprShieldForm, sprVenomTick, sprChaosWash, sprChaosMark, sprPashupatastra, sprSudarshana, sprNagapasha, sprPavamana, sprAhamkara, sprSanjivani, sprDevaHeroEntry, sprIndraHeroEntry, sprAgniHeroEntry, sprVarunaHeroEntry };
 })();
-function cpulse(el, cls){ if(!el||reducedMotion())return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); setTimeout(()=>el.classList.remove(cls),320); }
-async function playEvent(ev, snap){
+function cpulse(el, cls){ if(!el||reducedMotion())return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); setTimeout(()=>el.classList.remove(cls),320*vfxT()); }
+// T90 JANK WATCHER — during MATCH CHOREOGRAPHY ONLY, detect sustained frame stutter and (at most once/session) suggest a lower VFX quality. Suggest, never force, never nag.
+let jankOnsets=[], jankLastDropped=false, jankPromptShown=false;
+function jankSample(rawMs){
+  if(typeof choreoActive==='undefined' || !choreoActive) return;   // match-time choreography only (menus/cutscenes use other rAF loops). The hit-stop is a choreo PAUSE, not a step stall — the renderer runs smoothly through it, so it yields NO dropped-frame samples.
+  const dropped = rawMs>=34 && rawMs<=250;                         // ≥34ms = missed a 60fps frame (real render jank); >250ms = a background/idle stall (iOS throttle) → excluded
+  if(dropped && !jankLastDropped){                                 // count HITCH ONSETS (a drop after a smooth frame = one cluster) — a single hero-moment render is 1 onset, never enough
+    const now=performance.now(); jankOnsets.push(now);
+    while(jankOnsets.length && now-jankOnsets[0]>5000) jankOnsets.shift();   // 5s rolling window
+    if(jankOnsets.length>=4) maybeJankPrompt();                    // SUSTAINED: ≥4 separate hitches in 5s → the device is genuinely struggling (conservative; tune on device)
+  }
+  jankLastDropped = dropped;
+}
+function maybeJankPrompt(){
+  if(jankPromptShown) return;                                      // at most once per session
+  if(localStorage.getItem('dy_vfxjank')==='1') return;            // persistently dismissed — re-armed only when the player RAISES quality (Settings handler)
+  const rung = (typeof VFX!=='undefined' && VFX.currentRung) ? VFX.currentRung() : 'lo';   // VFX is a lexical const, NOT window.VFX
+  if(rung==='lo') return;                                          // already at the floor — nothing to suggest
+  jankPromptShown=true; showJankPrompt(rung);
+}
+function showJankPrompt(rung){
+  const next = rung==='hi' ? 'md' : 'lo', label = { md:'Medium', lo:'Low' }[next];
+  const box=document.createElement('div'); box.className='jank-notice';
+  const msg=document.createElement('span'); msg.textContent='Visuals stuttering? You can lower VFX quality in Settings.'; box.appendChild(msg);
+  const act=document.createElement('button'); act.className='jank-act'; act.textContent='Switch to '+label;
+  act.onclick=()=>{ localStorage.setItem('dy_vfxq', next); if(typeof syncVfxQualityUI==='function') syncVfxQualityUI(); box.remove(); toastMute('VFX quality → '+label+' · applies next match'); };
+  const x=document.createElement('button'); x.className='jank-x'; x.setAttribute('aria-label','Dismiss'); x.textContent='✕';
+  x.onclick=()=>{ localStorage.setItem('dy_vfxjank','1'); box.remove(); };   // dismiss ⇒ persist so it never re-nags across sessions (until quality is raised)
+  box.append(act, x); document.body.appendChild(box);
+}
+// T88 CAUSALITY: every destroy/damage the player sees must answer WHO did it (source) before TO WHOM (the target beats).
+// destroy/damage events carry only the cause STRING (abilityName), not a sourceUid — so we match the cause to a board card.
+const GENERIC_CAUSES = new Set(['reduced to 0','Venom']);   // deaths from a sweep / venom drains are already legible via the PRECEDING damage/venom beat + the ☠/wetBadge/venom-tick vocabulary — attributing them again would double up.
+let koePos = {};   // T88b: kill-on-entry fallback positions {uid → showcase-rect pos}, reset per action — a unit played AND destroyed the same action has no board/snapshot rect, so its -2 floater + dissolve resolve at the position the showcase occupied.
+function sourcePosForCause(cause, snap){   // the acting SOURCE = a board Unit/Hero whose name equals the cause; return its (DOM-anchored) rect, else null
+  if(!cause || typeof G==='undefined' || !G || !G.players) return null;
+  for(const pi of [0,1]){ const p=G.players[pi]; if(!p) continue;
+    for(const u of [...(p.units||[]), ...(p.heroes||[])]){ if(u && !u.ghost && u.n===cause){ const q=posOf(u.uid, snap); if(q && q.el) return q; } } }
+  return null;
+}
+async function attributeSource(ev, evs, snap){   // ~520ms source beat (cpulse + callout AT the source), ONCE per cause, then the caller plays the target beats
+  const cause = ev.abilityName; if(!cause || GENERIC_CAUSES.has(cause)) return;
+  const pe = evs.find(e=>e.type==='play'); const act = pe && findCardByUid(pe.sourceUid);
+  if(act && act.n===cause) return;   // IMMEDIATE: the cause IS the card the player just played this action — the showcase/callout already named it (Vajra, Brahmastra, Vasuki, on-play destroyers). No extra beat.
+  if(ev!==evs.find(e=>(e.type==='damage'||e.type==='destroy') && e.abilityName===cause)) return;   // DELAYED/TRIGGERED, but attribute only ONCE per cause (the first of its damage/destroy events this action) — one Kumbhakarna beat, then all the victims.
+  const sp = sourcePosForCause(cause, snap);
+  if(sp){ cpulse(sp.el, 'choreo-src'); calloutAt(sp, cause); await cDelay(520); }   // WHO — the player watches the SOURCE flare and shout, THEN the victims resolve.
+  else { const t0=ev.targetUids && ev.targetUids[0]; const tp = (t0 && koePos[t0]) || { cx: window.innerWidth/2, top: window.innerHeight*0.42, rect:{top: window.innerHeight*0.42} }; calloutAt(tp, cause); await cDelay(480); }   // T88b: SOURCELESS delayed cause (only Surasa-died-but-trap-fired reaches here today) → name the cause at the victim's (kill-on-entry showcase) position, else screen-centre. Kumbhakarna/Kalanemi/decay always have a board source above.
+}
+async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event slice, for the surviving-damage look-ahead (a same-uid destroy ⇒ killing blow ⇒ no tick)
   playEventSound(ev);
   const src = ev.sourceUid!=null ? posOf(ev.sourceUid, snap) : null;
+  if (ev.type==='destroy' || ev.type==='damage') await attributeSource(ev, evs, snap);   // T88: WHO did it, before the target beats below
   if (ev.type==='toast'){ factionToast(ev.abilityName, ev.text); await cDelay(620); return; }
   if (ev.type==='play'){
     const c=findCardByUid(ev.sourceUid); const isAstra = c && c.t==='astra';
     const isBody = c && (c.t==='unit'||c.t==='hero');
+    const tier = vfxTier(c, ev);                  // T66 ladder: ambient | combat | spectacle
     cardPlaySound(c);                             // Astra→impact file · Unit/Hero→clash file · Mantra→om/heal file · Artifact→artifact file (synth cardplay fully retired)
-    if(src){ cpulse(src.el,'choreo-src'); calloutAt(src, ev.abilityName); }
-    if(isBody && src) VFX.cardLand(src.cx, src.rect.top+src.rect.height/2);   // (a) card-lands dust + embers — same beat as the clash SFX
-    if(isAstra){ const tp=halfCenterClient(1-ownerPiOfUid(ev.sourceUid)); if(tp){ VFX.astraBurst(tp.x, tp.y); if(c.r==='M') VFX.mythic(tp.x, tp.y); } }   // (b) fire burst on the sfx_astra beat; (c) Mythic → lightning + flash + smoke
-    let hold=700;
-    if(c && (c.r==='L'||c.r==='M')){ hold+=300; screenShake(); boardWash(FAC_HEX[G.players[ownerPiOfUid(ev.sourceUid)].faction]||'#e0b040'); if(!isAstra) Audio2.sfx('boom'); }   // non-astra Mythic/Legendary keep the synth boom
+    if(src){ cpulse(src.el,'choreo-src'); calloutAt(src, ev.abilityName); }   // cpulse fires CONCURRENT with the impact visual (beat 1a)
+    if(LEGACY_VFX && isBody && src) VFX.cardLand(src.cx, src.rect.top+src.rect.height/2);   // (a) card-lands dust + embers — same beat as the clash SFX [T77-gated]
+    if(LEGACY_VFX && isAstra){ const tp=halfCenterClient(1-ownerPiOfUid(ev.sourceUid)); if(tp){ VFX.astraBurst(tp.x, tp.y); if(tier==='combat') vignetteFlash(); if(c.r==='M') VFX.mythic(tp.x, tp.y); } }   // (b) burst; combat → screen-edge vignette; Mythic → lightning + flash + smoke [T77-gated; astra hit-stop/shake stay below]
+    if(isAstra && c && c.id==='brahmastra'){ const oh=document.querySelector('.half.opp'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprBrahmastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T78: BOARD EFFECT (NEW pipeline, ungated) — the golden pillar row-plate over the enemy rows (Brahmastra destroys ALL enemy Units, engine-verified). Its strike beat rides the unconditional spectacle hit-stop below.
+    if(isAstra && c && c.id==='pashupata'){ const oh=document.querySelector('.half.opp'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprPashupatastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T89: BOARD EFFECT (NEW pipeline, ungated) — the violet devouring vortex over the enemy rows (Pashupatastra = AoE board damage, engine-verified; pierces shields). The vortex tear-open (beat 2) rides the spectacle hit-stop below.
+    if(c && c.t==='mantra' && c.id==='gayatri'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(cst===1?'.half.opp':'.half.me'); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprGayatri(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T79: MANTRA row wash (NEW pipeline, ungated) — the serene sigil/lotus over the CASTER's (friendly) half; Gayatri revives the lowest friendly Unit shielded (engine-verified). No hit-stop coupling.
+    if(c && c.t==='mantra' && c.id==='pavamana'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(cst===1?'.half.opp':'.half.me'); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprPavamana(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T95: MANTRA cleanse wash (Gayatri sibling, row plate over the CASTER's friendly half) — the purifying chant. SERENE, no hit-stop. The cleanse itself emits no per-unit ticks (Q3) so there is nothing to suppress.
+    // T67 painted sprite layer (falls back to procedural when a sprite isn't loaded)
+    if(isBody && src){ const fac=cardHomeFaction(c) || (G.players[ownerPiOfUid(ev.sourceUid)]||{}).faction || 'devas', isHero=(c.t==='hero');
+      if(LEGACY_VFX) VFX.sprRing(src.cx, src.rect.top+src.rect.height*0.78, fac, src.rect.width*(isHero?1.15:1));                          // E2 landing ground ring (faction-tinted; heroes land bigger) [T77-gated]
+      // T67b R1: EVERY Hero entrance (both seats, all factions, ALL rarities) gets a faction-tinted aura at combat weight — Epic heroes no longer land bare; L/M heroes also keep the spectacle stack below. Ambient-Deva UNITS keep their small blessing aura.
+      if(LEGACY_VFX && (isHero || (tier==='ambient' && fac==='devas'))) VFX.sprAura(src.cx, src.rect.top+src.rect.height*0.5, fac, src.rect.width*(isHero?1.3:1));   // [T77-gated]
+      if(DEVA_HERO_ENTRY_ON && isHero && fac==='devas'){   // ROLLBACK-gated (owner ruling): flag is OFF → this whole branch is inert, so Deva heroes fall to the `else` sprLanding (normal c1a Deva card-landing). The T100–T104 entry recipes/sheets/delayed-arrival are dormant, not deleted.
+        const entryRecipe=HERO_ENTRY_OVERRIDE[c.id]||'sprDevaHeroEntry';   // T101: per-hero override BEFORE the faction default (Indra → storm; absent id → the T100 faction entry, byte-unchanged). Same branch/suppression, different sheet.
+        const fired=VFX[entryRecipe](src.cx, src.rect.top+src.rect.height*0.5, src.rect.width);
+        if(fired){   // T104-B DELAYED ARRIVAL: hold the placed hero HIDDEN, materialize in the settle (~f25 of 34 = final quarter, inside the standing light). reduced-motion → fired===false → no hold (hero shows at once). Mirrors T97 (there: keep a removed card visible; here: hold a placed card hidden).
+          const huid=String(ev.sourceUid); materializingHeroes[huid]=true;
+          if(pendingFly && String(pendingFly.uid)===huid) pendingFly=null;   // the entry IS the arrival — cancel the plain fly-to-slot so the card doesn't flash in before the choreography
+          const cell=document.querySelector('#field .bc.hero[data-uid="'+huid+'"]');
+          if(cell){ cell.classList.add('materializing'); cell.classList.remove('aura','landing'); }
+          setTimeout(()=>revealMaterializingHero(huid), Math.round(1562*vfxT()));   // 25/16 s × vfxT
+        }
+      } else VFX.sprLanding(fac, src.cx, src.rect.top+src.rect.height*0.5, src.rect.width*(isHero?1.3:1)); }   // T80: faction-keyed landing flare (Deva→c1a_deva, Asura→landing_asura; Vanara/Naga no-op until their sheets land) — NEW pipeline, NOT gated by T77
+
+    let heroServed=false;
+    if(tier==='spectacle'){ const lp = src ? {x:src.cx, y:src.rect.top+src.rect.height*0.5} : (isAstra ? halfCenterClient(1-ownerPiOfUid(ev.sourceUid)) : null);
+      heroServed = !!(LEGACY_VFX && lp && VFX.gpuHero && VFX.gpuHero(lp.x, lp.y, src?src.rect.width:null));                                   // T70-P2H: the GPU hero moment SERVES the spectacle → suppress the Canvas2D wrap/smoke below (no double-fire). [T77-gated → heroServed=false, so the +1500ms hero-visual dwell reverts to +300; hit-stop/shake stay]
+      if(LEGACY_VFX && lp && !heroServed){ VFX.sprLightning(lp.x, lp.y, src?src.rect.width:null); if(isAstra) VFX.sprSmoke(lp.x, lp.y, 3, null); } }   // fallback (gpu disabled/not ready): the existing Canvas2D spectacle stack, intact [T77-gated]
+    let hold=700, hitStop=0;
+    if(tier==='spectacle'){ hold += heroServed ? 1500 : 300; hitStop=110; screenShake(true); if(LEGACY_VFX) boardWash(FAC_HEX[G.players[ownerPiOfUid(ev.sourceUid)].faction]||'#e0b040'); if(!isAstra) Audio2.sfx('boom'); }   // SPECTACLE: zoom-punch + ±9 shake + 110ms hit-stop (FEEL, stays) + boom (audio, stays); T77: only the board color-wash is gated off
+    else if(tier==='combat'){ hitStop=70; }                                    // COMBAT astra: 70ms hit-stop (burst + vignette above)
     else if(c && c.t==='hero') hold+=300;
+    if(hitStop) await cDelay(hitStop);                                         // HIT-STOP injected at the impact instant, before the hold (scaled by --vfx-t via cDelay; skipped in reduced-motion since playEvent never runs there)
     await cDelay(hold); return;
   }
-  if (ev.type==='destroy'){ const u=ev.targetUids[0]; dissolveAt(posOf(u, snap), snap[u]&&snap[u].name, snap[u]&&snap[u].color); await cDelay(600); return; }   // crack + shards + dwell
+  if (ev.type==='destroy'){ const u=ev.targetUids[0]; const dp=posOf(u, snap) || koePos[u];   // T88b: kill-on-entry death dissolves at the showcase position
+    if(ev.abilityName==='Vajra' && dp) VFX.sprVajra(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width);   // T82: target-anchored strike (NEW pipeline, ungated) — keyed off the RESOLUTION event's struck unit; the 2-frame snap lands inside the 40ms death hit-stop below. T97: the struck card is STILL VISIBLE here (captured + persisted at render) → the bolt lands ON the card.
+    await cDelay(40);
+    if(LEGACY_VFX && dp){ VFX.sprBloom(dp.cx, dp.rect.top+dp.rect.height/2, 'destroy', dp.rect.width); VFX.sprSmoke(dp.cx, dp.rect.top+dp.rect.height/2, 1, dp.rect.width); }   // E4 white-gold bloom + E5 smoke at death [T77-gated; the dissolve-beat below stays — it carries card identity + the death beat]
+    const shown = ev.abilityName==='Vajra' ? showcaseVictim(u, 'kill') : false;   // T97: AT contact (post the 40ms impact hit-stop) the held REAL card cracks+dissolves (kill exit + faction shards). Only Vajra is wired (the sole target-anchored destroy strike).
+    if(!shown){ const dcard=(!snap[u])?findCardByUid(u):null; dissolveAt(dp, (snap[u]&&snap[u].name)||(dcard&&dcard.n), (snap[u]&&snap[u].color)||(dcard?(FAC_HEX[cardHomeFaction(dcard)]||'#e0483c'):null)); }   // T97: the victim showcase owns the death dissolve when shown (real card, not the placeholder box); non-Vajra / no-live-cell → the placeholder dissolve at the snapshot/showcase position (unchanged). 40ms hit-stop → death reads as a beat, then crack + shards + dwell.
+    await cDelay(600); return; }
+  if (ev.type==='passive' && ev.abilityName==='Sudarshana'){ const u=ev.targetUids[0]; const dp=posOf(u, snap);   // T92: Sudarshana Chakra — the THROWN spinning discus. Anchor = the REMOVED hero's rect (posOf via snapshot — the hero was on board before the splice). It is a REMOVAL, not a kill → NO death dissolve (the hero returns next round); the strike + the hero's disappearance from the row carry the story. The callout names the cause AT the hero so the temporary removal isn't a silent vanishing (T88 principle).
+    if(dp){
+      // T97: the hero card is captured + persisted (captureVictims) → it stays VISIBLE through the whole cast beat AND the disc flight, so the disc bites a VISIBLE hero (no empty-slot flight). The 'removal' exit fires at the BITE below → hit-then-gone (the parked ruling's words). NO dissolve — T92 law: the hero returns next round, it is spirited off, not slain.
+      const caster=1-ownerPiOfUid(u), ch=document.querySelector(caster===1?'.half.opp':'.half.me');   // origin = the CASTER's half center (T79/T87 half idiom) — caster = the side opposite the removed hero's owner, cleanly derivable at the handler from the target uid.
+      let fx=null, fy=null; if(ch){ const r=ch.getBoundingClientRect(); fx=r.left+r.width/2; fy=r.top+r.height*0.5; }
+      VFX.sprSudarshana(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width, fx, fy, 380);   // THROW — thrown flat from the caster's half; travelMs 380 → the flight completes at the frame-9 CONTACT PIN (cDelay scales by exactly vfxT, so the await below tracks the sprite frame timing).
+      await cDelay(380);   // FLIGHT (frames 1-8) → the disc reaches the STILL-VISIBLE hero.
+      // 3f BITE (frames 9-10): the disc PINS at full presence + the baked spark burst (L3 f9-11) and glow (L4 f9-12) fire AT the contact point. The cast's spectacle hit-stop (110ms) fired back at the astra PLAY beat (~1s earlier); this contact is a separate, later beat, so we punctuate it with its OWN hit-stop — a combat-weight shake (a sharp precise BITE, distinct from the cast's board cataclysm) + a ~100ms freeze — so the hit is FELT at the target.
+      screenShake(false); await cDelay(100);
+      showcaseVictim(u, 'removal');   // T97: the disc has bitten — NOW the visible hero vanishes cleanly (removal exit). Hit-then-gone. (T97 resolves the old 3f cpulse STOP-AND-REPORT: there is now a visible hero card at the vacated slot for the whole strike; the vanish carries the removal, so no cpulse substitute is needed.)
+      await cDelay(300);   // the disc passes ON (fade 11-13) + linger; the hero has just vanished.
+      calloutAt(dp, 'Sudarshana Chakra');   // NAME the deed LAST, at the vacated slot (T88 legibility — a removal, not a kill; no death dissolve). calloutAt reads dp's coordinates, not dp.el (which is null here).
+      await cDelay(140); }
+    return; }
+  if (ev.type==='passive' && ev.abilityName==='Nagapasha'){ const u=ev.targetUids[0]; const dp=posOf(u, snap);   // T94: Nagapasha bind ARRIVAL — the serpent-noose coils converge + cinch AT the bound unit's cell (Vajra-anchored). The unit STAYS on board (bind ≠ kill), so posOf finds it live. RESTRAINT register: NO hit-stop, no shake, no dissolve, no damage tick, no red — target untouched. The L4 residue fade hands off to the ⛓ bindbadge that render() already placed on the bound unit. No callout (the cast named it; the bind is quiet).
+    if(dp){ VFX.sprNagapasha(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width); await cDelay(1125); }   // hold the coil arrival (18f @ SHEET_FPS 16 = 1125ms; cDelay scales by vfxT so the await tracks the sprite life)
+    return; }
+  if (ev.type==='passive' && ev.abilityName==='Ahamkara'){ const u=ev.targetUids[0]; const dp=posOf(u, snap);   // T96: Ahamkara ego ARRIVAL — the seal ignites + the pillar rises AT the chosen unit's cell (Vajra-anchored; the doomed unit STAYS on board with doubled power, so posOf finds it live). DARK-BUFF register: NO hit-stop, no shake, no dissolve, no damage tick — the unit is glorified, not struck. R38: the doomed unit clears silently with the board at round end (no death moment). No doomed marker exists (Q4) → the seal/crown fade clean.
+    if(dp){ VFX.sprAhamkara(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width); await cDelay(1500); }   // hold the ego arrival (24f @ SHEET_FPS 16 = 1500ms; cDelay scales by vfxT so the await tracks the sprite life)
+    return; }
+  if (ev.type==='passive' && ev.abilityName==='Sanjivani Corruption'){ const u=ev.targetUids[0]; const dp=posOf(u, snap);   // T98: Sanjivani Corruption dark-revival ARRIVAL — the grave exhales + crimson wells up AT the STOLEN unit's cell (Vajra-anchored). The unit was just placed on the Asura board (pl.units.push), so render() drew it before this beat → posOf finds it live. EMERGENCE register: NO hit-stop, no shake, no dissolve, no damage tick — nothing is struck, the corpse is DRAGGED BACK. Q3: no landing flare fires (the stolen unit has no play event); the neutral .bc.landing CSS pop is faction-agnostic. Q4: the Asura Chaos Surge (its own wash/mark) coexists per the Ahamkara precedent — both crimson, no contradiction.
+    if(dp){ VFX.sprSanjivani(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width); await cDelay(1750); }   // hold the emergence (28f @ SHEET_FPS 16 = 1750ms; cDelay scales by vfxT so the await tracks the sprite life)
+    return; }
   if (src && (ev.type==='buff'||ev.type==='token')){ cpulse(src.el,'choreo-src'); calloutAt(src, ev.abilityName); }
   const tgts=ev.targetUids||[];
   if (!tgts.length){ await cDelay(180); return; }
   const bigHit = tgts.length>=3 ? 300 : 0;   // 3+ target effects get an extra hold
   for (let i=0;i<tgts.length;i++){
     if (choreoSkip) break;
-    const pos=posOf(tgts[i], snap);
+    const pos=posOf(tgts[i], snap) || koePos[tgts[i]];   // T88b: kill-on-entry -2 floater at the showcase position
     if (pos){
-      if (ev.type==='damage'){ cpulse(pos.el,'impact'); floatAt(pos, ev.text||String(ev.amount), 'down heavy'); }
-      else if (ev.type==='venom'){ cpulse(pos.el,'impact'); fxDrip(pos); wetBadge(pos.el); floatAt(pos, '☠ '+(ev.amount||''), 'venom'); }
-      else if (ev.type==='buff'){ cpulse(pos.el,'pumped'); fxRing(pos,'buff'); floatAt(pos, ev.text||('+'+ev.amount), 'up'); if(ev.abilityName==='Leap') leapArcFromText(pos, ev.text); }
-      else if (ev.type==='token'){ fxDrip(pos); wetBadge(pos.el); floatAt(pos, '☠', 'venom'); }
-      else if (ev.type==='shield'){ fxRing(pos,'shield'); floatAt(pos, '🛡', 'note'); }
-      else { floatAt(pos, ev.text||ev.abilityName||'', 'note'); }
-    }
-    await cDelay(280);
+      // BEAT SEQUENCING (T66 1b): impact VISUAL + cpulse fire first; the floater/number is deferred ~120ms (scaled).
+      // COMBAT damage adds a 70ms hit-stop on top so the hit lands, the queue pauses, THEN the number reads.
+      let ft, fk, hitStop=0; const tcy=pos.rect.top+pos.rect.height/2, tfac=(G.players[ownerPiOfUid(tgts[i])]||{}).faction||'devas';
+      if (ev.type==='damage'){ cpulse(pos.el,'impact');
+        if(LEGACY_VFX) VFX.sprBloom(pos.cx, tcy, 'damage', pos.rect.width);   // E4 red bloom [T77-gated legacy]
+        else if(!evs.some(e=>e.type==='destroy' && (e.targetUids||[]).includes(tgts[i]))) VFX.sprDamage(pos.cx, tcy, pos.rect.width);   // T83: SURVIVING-damage tick only — a same-uid destroy in this action = killing blow → gets the death beat, not the tick (venom emits 'venom', never 'damage', so it's untouched)
+        ft=ev.text||String(ev.amount); fk='down heavy'; hitStop=70; }   // cpulse+hit-stop+number STAY
+      else if (ev.type==='venom'){ cpulse(pos.el,'impact');
+        if(LEGACY_VFX){ if(!VFX.sprVenom(pos.cx, tcy, pos.rect.width)) fxDrip(pos); }   // E6 venom body [T77-gated legacy]
+        else if(!evs.some(e=>e.type==='play' && e.sourceUid===tgts[i])) VFX.sprVenomTick(pos.cx, tcy, pos.rect.width);   // T86: venom DRAIN tick (suppressed for a unit played this action — Uraga enters self-poisoned; the landing covers it)
+        wetBadge(pos.el); ft='☠ '+(ev.amount||''); fk='venom'; }   // wetBadge + ☠ number STAY (venom state)
+      else if (ev.type==='buff'){ cpulse(pos.el,'pumped');
+        if(LEGACY_VFX){ if(ev.abilityName==='Chaos Surge'){ VFX.sprSurge(pos.cx, tcy, pos.rect.width); }                   // E8 Chaos Surge flare [T77-gated legacy]
+          else if(ev.abilityName==='Leap'){ fxRing(pos,'buff'); leapArcFromText(pos, ev.text); }                          // E9 leap streak [T77-gated legacy]
+          else if(!VFX.sprAura(pos.cx, tcy, tfac, pos.rect.width)){ fxRing(pos,'buff'); } }                               // E1 buff aura [T77-gated legacy]
+        else if(ev.abilityName==='Chaos Surge'){   // T87: Chaos Surge REPLACES the gold tick with the dual-layer storm — wash over the surging half (ONCE per action), + an erratic mark on THIS surged unit ~350ms into the wash (setTimeout idiom).
+          if(ev===evs.find(e=>e.type==='buff' && e.abilityName==='Chaos Surge')){ const owner=ownerPiOfUid(tgts[i]), wh=document.querySelector(owner===1?'.half.opp':'.half.me'); if(wh){ const r=wh.getBoundingClientRect(); VFX.sprChaosWash(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }
+          const mx=pos.cx, my=tcy, mw=pos.rect.width; setTimeout(()=>{ if(!choreoSkip) VFX.sprChaosMark(mx, my, mw); }, 350*vfxT()); }
+        else if(!evs.some(e=>e.type==='play' && e.sourceUid===tgts[i])) VFX.sprBuff(pos.cx, tcy, pos.rect.width);   // T84: gain tick, generic (Leap/on-play/mid-board). Suppressed for a unit PLAYED this action — its landing flare covers it. (Gayatri revive emits no buff.)
+        ft=ev.text||('+'+ev.amount); fk='up'; }                                                                          // cpulse + the +power number STAY
+      else if (ev.type==='token'){
+        if(LEGACY_VFX){ if(!VFX.sprVenom(pos.cx, tcy, pos.rect.width)) fxDrip(pos); }   // [T77-gated legacy]
+        else if(!evs.some(e=>e.type==='play' && e.sourceUid===tgts[i])) VFX.sprVenomTick(pos.cx, tcy, pos.rect.width);   // T86: venom APPLICATION tick (same tick as the drain; Raktabija's token emit has no targetUids so this loop never runs for it)
+        wetBadge(pos.el); ft='☠'; fk='venom'; }   // wetBadge + ☠ STAY
+      else if (ev.type==='shield'){
+        if(LEGACY_VFX){ if(!VFX.sprShield(pos.cx, tcy, pos.rect.width)) fxRing(pos,'shield'); }   // E7 shield wrap [T77-gated legacy]
+        else if(!evs.some(e=>e.type==='play' && e.sourceUid===tgts[i])) VFX.sprShieldForm(pos.cx, tcy, pos.rect.width);   // T85: formation arrival, generic (auto/manual Dharma Shield both funnel here). Suppressed for a unit PLAYED this action — the landing announces the arrival, the badge carries the state. Gayatri revive grants silently (no shield event), so no wash coincidence.
+        ft='🛡'; fk='note'; }   // 🛡 number + persistent shieldbadge STAY (shield state)
+      else { ft=ev.text||ev.abilityName||''; fk='note'; }
+      await cDelay(120 + hitStop);     // hit → (beat + combat hit-stop) → number
+      floatAt(pos, ft, fk);
+      await cDelay(160);               // settle before the next target (120+160 = the pre-T66 280ms spacing for ambient events)
+    } else { await cDelay(280); }
   }
   await cDelay(160 + bigHit);
 }
 function runAction(mutate, opts={}){
   const snap = snapshotBoard();
+  const passedBefore=[G.players[0].passed, G.players[1].passed];   // PASS ANNOUNCEMENT: detect a passed:false→true transition after this action resolves (pass emits no event)
   roundCountAtActionStart = G.roundHistory.length;
   const evStart = G.events.length;
   mutate();
@@ -8207,23 +9161,28 @@ function runAction(mutate, opts={}){
     const pe=evs.find(e=>e.type==='play'); if(pe) cardPlaySound(findCardByUid(pe.sourceUid));
     for(const e of evs){ if(e.type==='buff') powerChangeSound('sfx_buff', e.abilityName); else if(e.type==='damage') powerChangeSound('sfx_debuff', e.abilityName); }
     if (evs.some(e=>e.type==='destroy')) Audio2.fileSfx('sfx_unit_destroy');
-    render(); showResultSummary(evs); afterChoreo(); return;
+    render(); showResultSummary(evs); announcePassIfAny(passedBefore); afterChoreo(); return;   // pass banner (if a pass just landed) enqueued BEFORE afterChoreo's round banner → pass shows first, round after
   }
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=skipChoreo;
   (async()=>{
     try{
       const playEv = evs.find(e=>e.type==='play');
-      if (opts.actor===1 && playEv){ try{ await showcaseCard(playEv.sourceUid, playEv.abilityName); }catch(e){} }   // SHOWCASE; playEv.abilityName = pre-copy name → two-phase Maricha reveal. A broken showcase never aborts the match
+      koePos = {};   // T88b: reset the kill-on-entry position map for this action
+      const koeUid = (playEv && evs.some(e=>e.type==='destroy' && (e.targetUids||[]).includes(playEv.sourceUid))) ? playEv.sourceUid : null;   // a played unit that dies THIS action (kill-on-entry, e.g. into Surasa's trap) — no board/snapshot rect
+      if ((opts.actor===1 || koeUid) && playEv){ try{ const sp=await showcaseCard(playEv.sourceUid, playEv.abilityName); if(koeUid && sp) koePos[koeUid]=sp; }catch(e){} }   // SHOWCASE for opponent plays AND for ANY kill-on-entry (own OR opp) so the card VISIBLY EXISTS before it dies; capture its rect so the death beats have a position. (playEv.abilityName = pre-copy name → two-phase Maricha reveal.)
+      const victimUids=[]; for(const ev of evs){ if(ev.type==='destroy' && ev.abilityName==='Vajra') (ev.targetUids||[]).forEach(u=>victimUids.push(u)); else if(ev.type==='passive' && ev.abilityName==='Sudarshana') (ev.targetUids||[]).forEach(u=>victimUids.push(u)); }
+      captureVictims(victimUids);            // T97: clone the struck cards WHILE still on board — the next render() empties their cells; the strike then lands on the held clone
       render();                              // final board; spawnFloaters + HUD totals held while choreoActive
-      for (const ev of evs){ if(choreoSkip) break; try{ await playEvent(ev, snap); }catch(e){} }   // skip a broken step (e.g. a VFX drawImage race) — keep the match playable
+      for (const ev of evs){ if(choreoSkip) break; try{ await playEvent(ev, snap, evs); }catch(e){} }   // skip a broken step (e.g. a VFX drawImage race) — keep the match playable
       const roundEnded = G.roundHistory.length>roundCountAtActionStart && !G.over;
       if (roundEnded && !choreoSkip){ try{ await cDelay(500); }catch(e){} }   // theatre: pause after the poison settles
       try{ await choreoRace(animateTotals(), snapTotals); }catch(e){}          // totals count up — but rAF starvation (iOS bg) can't hang it: 3s cap snaps to final
     } finally {
       // GUARANTEE: no thrown/skipped/hung step can leave the choreo locked — always release the lock and resume the match
+      clearVictims();   // T97: drop any victim-showcase clone whose strike beat was skipped/broke, so it never persists past the action
       choreoActive=false; choreoStartedAt=0; choreoForce=[]; layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML='';
-      try{ render(); showResultSummary(evs); if (G.roundHistory.length>roundCountAtActionStart && !G.over) showRoundBanner(); }catch(e){}
+      try{ render(); showResultSummary(evs); announcePassIfAny(passedBefore); if (G.roundHistory.length>roundCountAtActionStart && !G.over) showRoundBanner(); }catch(e){}
       pump();
     }
   })();
@@ -8386,7 +9345,7 @@ $('passbtn').onclick=()=>{ if(G.turn===0&&!G.players[0].passed&&!G.over && !chor
 $('loghead').onclick=()=>$('logdrawer').classList.toggle('open');
 $('inspect').onclick=e=>{ if(e.target.id==='inspect' || e.target.closest('.inspect-hint')) closeInspect(); };
 $('hand').addEventListener('scroll', ()=>{ if(focusRaf) return; focusRaf=requestAnimationFrame(()=>{ focusRaf=0; updateFocus(); }); });
-window.addEventListener('resize', ()=>{ if(G){ sizeBoard(); updateFocus(); } VFX.resize(); if(CutState) cutResize(); });
+window.addEventListener('resize', ()=>{ if(G){ sizeBoard(); updateFocus(); } VFX.resize(); if(CutState) cutResize(); });   // T104: CSS border-glow reflows with the card natively — no reconcile on resize
 
 function pump(){
   if (G.over) return;
@@ -8478,6 +9437,7 @@ function playIntro(done){
   };
 }
 VFX.init();
+VFX.preloadSprites();   // T67b: preload the painted kit at PAGE LOAD (not match start) — sprites get the whole intro→landing→faction-select→mulligan window to load, so they're ready before the first play even on slow device connections (fixes the match-start race that made effects fire "occasionally/never" cold). Async, non-blocking; idempotent so the startGame call no-ops.
 playIntro(showLanding);   // R-A: the intro gates every launch; showLanding is the single home entry (skip + every fail path land here)
 </script>
 </body>

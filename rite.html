@@ -238,7 +238,7 @@
             <a href="rite.html" aria-current="page">The Rite</a>
             <a href="explore.html">The Cards</a>
             <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html">The Game</a>
+            <a href="game/index.html?v=7abbc28">The Game</a>
           </div>
           <div id="nav-decl">
             <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
@@ -409,8 +409,8 @@
           var entered = false;
           try { entered = !!localStorage.getItem("dy_site_entered"); } catch (e) {}
           function go() {
-            if (reduce) { window.location.href = "game/index.html"; return; }
-            doorWipe(function () { window.location.href = "game/index.html"; });
+            if (reduce) { window.location.href = "game/index.html?v=7abbc28"; return; }
+            doorWipe(function () { window.location.href = "game/index.html?v=7abbc28"; });
           }
           if (!entered) { thresholdNotice(go); } else { go(); }
         }
