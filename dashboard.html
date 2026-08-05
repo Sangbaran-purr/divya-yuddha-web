@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Divya Yuddha — Wallet Dashboard</title>
+    <meta name="description" content="Your DYC balances, vesting, staking and rewards — read live from the chain." />
+    <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/threshold.css?v=s1e" />
+    <link rel="stylesheet" href="css/dashboard.css?v=mf1" />
+    <script src="config.js?v=s4"></script>
+    <script src="mf-config.js?v=mf1"></script>
+  </head>
+  <body class="dash">
+    <!-- mobile header -->
+    <div class="mob-head">
+      <img src="assets/brand/logo.webp?v=mf1" alt="Divya Yuddha" />
+    </div>
+
+    <div class="dash-shell">
+      <!-- ============ SIDEBAR ============ -->
+      <aside class="dash-side">
+        <img class="side-logo" src="assets/brand/logo.webp?v=mf1" alt="Divya Yuddha" />
+        <nav class="side-nav">
+          <a href="dashboard.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Dashboard</a>
+          <a href="#" class="soon" data-soon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M8 10h6a2 2 0 0 1 0 4H8"/></svg>Buy DYC</a>
+          <a href="#cards" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Balances</a>
+          <a href="#cards" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l3 4-3 3-3-3zM12 10v11M6 21h12"/></svg>Stake</a>
+          <a href="#cards" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="8" width="16" height="12" rx="1"/><path d="M4 12h16M12 8v12M9 5a2 2 0 0 1 3 2 2 2 0 0 1 3-2"/></svg>Rewards</a>
+          <a href="#feed" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Transactions</a>
+          <a href="#" class="soon" data-referrals><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="9" r="3"/><circle cx="17" cy="12" r="2.5"/><path d="M3 20a5 5 0 0 1 10 0M14 20a4 4 0 0 1 7-3"/></svg>Referrals</a>
+          <a href="#" class="soon" data-soon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Settings</a>
+          <a href="#" data-help><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4 2c0 1.5-2 1.8-2 3.5M12 17h.01"/></svg>Help &amp; Support</a>
+        </nav>
+        <div class="side-promo">
+          <h4>DIVYA YUDDHA</h4>
+          <p>Four Factions.<br />Endless Legends.<br />Your Destiny.</p>
+          <div class="side-crests">
+            <img src="assets/brand/mf/icon_liquid.png?v=mf1" alt="" width="34" height="34" style="opacity:.9" />
+            <img src="assets/brand/mf/icon_vesting.png?v=mf1" alt="" width="34" height="34" style="opacity:.9" />
+            <img src="assets/brand/mf/icon_staked.png?v=mf1" alt="" width="34" height="34" style="opacity:.9" />
+            <img src="assets/brand/mf/icon_rewards.png?v=mf1" alt="" width="34" height="34" style="opacity:.9" />
+          </div>
+        </div>
+      </aside>
+
+      <!-- ============ MAIN ============ -->
+      <main class="dash-main">
+        <!-- POL fee banner (booked deviation) -->
+        <div class="pol-banner" id="pol-banner">
+          <span>⛽</span>
+          <span>You need a small amount of <b>POL</b> for network fees before you can send a transaction.
+            <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener">How to get POL →</a></span>
+        </div>
+
+        <!-- 1 — WALLET -->
+        <div class="wallet-bar" id="wallet-bar">
+          <div class="wb-title"><span class="sec-num">1</span> WALLET</div>
+          <div id="wb-state" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"></div>
+          <div class="wb-spacer"></div>
+          <div id="wb-net"></div>
+          <button class="btn-g" id="wb-action">Connect Wallet</button>
+        </div>
+
+        <!-- 2 — FOUR BALANCES -->
+        <div class="sec-label" id="cards"><span class="sec-num">2</span> FOUR BALANCES</div>
+        <section class="cards">
+          <!-- LIQUID -->
+          <article class="bcard b-liquid" id="card-liquid">
+            <div class="bcard-head">
+              <img class="bcard-icon" src="assets/brand/mf/icon_liquid.png?v=mf1" alt="Liquid" />
+              <div><div class="bcard-title">LIQUID</div><div class="bcard-sub">DYC spendable now</div></div>
+            </div>
+            <div class="big-num"><span id="liq-amt">—</span><span class="u">DYC</span></div>
+            <div class="note" id="liq-note"></div>
+          </article>
+
+          <!-- VESTING -->
+          <article class="bcard b-vesting" id="card-vesting">
+            <div class="bcard-head">
+              <img class="bcard-icon" src="assets/brand/mf/icon_vesting.png?v=mf1" alt="Vesting" />
+              <div><div class="bcard-title">VESTING</div><div class="bcard-sub">DYC still locked</div></div>
+            </div>
+            <div id="vest-body"></div>
+          </article>
+
+          <!-- STAKED -->
+          <article class="bcard b-staked" id="card-staked">
+            <div class="bcard-head">
+              <img class="bcard-icon" src="assets/brand/mf/icon_staked.png?v=mf1" alt="Staked" />
+              <div><div class="bcard-title">STAKED</div><div class="bcard-sub">DYC earning daily</div></div>
+            </div>
+            <div id="stake-body"></div>
+          </article>
+
+          <!-- REWARDS -->
+          <article class="bcard b-rewards" id="card-rewards">
+            <div class="bcard-head">
+              <img class="bcard-icon" src="assets/brand/mf/icon_rewards.png?v=mf1" alt="Rewards" />
+              <div><div class="bcard-title">REWARDS</div><div class="bcard-sub">DYC earned &amp; claimable</div></div>
+            </div>
+            <div id="reward-body"></div>
+          </article>
+        </section>
+
+        <!-- 3 + 4 -->
+        <div class="mid-row">
+          <div class="panel-box">
+            <div class="sec-label"><span class="sec-num">3</span> REWARD POOL RUNWAY</div>
+            <div class="runway-body">
+              <img class="runway-dial" src="assets/brand/mf/icon_runway.png?v=mf1" alt="" />
+              <div class="runway-text">
+                <div>At the current pace, the reward pool lasts ~</div>
+                <div class="runway-days" id="runway-days">—</div>
+              </div>
+              <div class="runway-aside">Runway increases when redemptions refill the pool.</div>
+            </div>
+            <div class="runway-foot" id="runway-foot">Estimated from pool aggregates · updates periodically.</div>
+          </div>
+
+          <!-- Buy DYC — M-F2 (styled placeholder) -->
+          <div class="panel-box">
+            <div class="sec-label"><span class="sec-num">4</span> BUY DYC</div>
+            <div class="soon-panel">
+              <h3>Buy &amp; Register</h3>
+              <p>Purchasing DYC, the 15/85 split preview, and staking activation arrive in the next release.</p>
+              <p style="margin-top:8px;opacity:.7">Presale @ $0.008 · Public @ $0.010</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5 — TRANSACTION FEED -->
+        <div class="panel-box" id="feed">
+          <div class="sec-label"><span class="sec-num">5</span> TRANSACTION FEED</div>
+          <div class="tx-wrap">
+            <table class="txtable">
+              <thead>
+                <tr><th>Type</th><th>Details</th><th>Amount</th><th>Status</th><th>Date</th><th>Tx</th></tr>
+              </thead>
+              <tbody id="tx-body">
+                <tr><td colspan="6" style="text-align:center;color:var(--gold-aged);padding:22px">Connect your wallet to see your activity.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <a class="viewall" id="tx-status" href="#feed"></a>
+        </div>
+
+        <!-- 6 — STATUS STATES (examples) -->
+        <div class="sec-label"><span class="sec-num">6</span> STATUS STATES (EXAMPLES)</div>
+        <section class="states">
+          <div class="state-box">
+            <div class="state-title">Before wallet connect</div>
+            <div class="mini-icons">
+              <figure><img src="assets/brand/mf/icon_liquid.png?v=mf1" alt="" />-- DYC</figure>
+              <figure><img src="assets/brand/mf/icon_vesting.png?v=mf1" alt="" />-- DYC</figure>
+              <figure><img src="assets/brand/mf/icon_staked.png?v=mf1" alt="" />-- DYC</figure>
+              <figure><img src="assets/brand/mf/icon_rewards.png?v=mf1" alt="" />-- DYC</figure>
+            </div>
+            <div class="connect-row">
+              <span style="opacity:.8">Connect your wallet to view your balances and start earning.</span>
+            </div>
+          </div>
+          <div class="state-box state-center">
+            <div class="state-title">Pending transaction</div>
+            <div class="spinner"></div>
+            <div style="color:var(--gold-burnished);font-family:var(--display);letter-spacing:.06em">Confirming…</div>
+            <div style="font-size:.82rem;opacity:.7;margin-top:6px">Please approve the transaction in your wallet.</div>
+          </div>
+          <div class="state-box fail">
+            <div class="state-title">⚠ Transaction failed</div>
+            <div class="fail-msg">You need a small amount of <b>POL</b> for network fees. Add a little POL to your wallet and try again.</div>
+            <button class="btn-g" style="color:var(--bad);border-color:rgba(224,102,79,.5)">Try Again</button>
+          </div>
+        </section>
+
+        <!-- footer -->
+        <div class="dash-foot">
+          <span class="lotus">✦</span>
+          <span>We are fully transparent. Numbers update live from the chain. No hidden terms.</span>
+          <a class="foot-help" href="#" data-help>Need help? Open Support</a>
+        </div>
+      </main>
+    </div>
+
+    <!-- overlays -->
+    <div class="dash-overlay" id="ov-pending">
+      <div class="overlay-card state-center">
+        <div class="spinner"></div>
+        <h3 id="ov-pending-title">Confirming…</h3>
+        <div style="font-size:.86rem;opacity:.8" id="ov-pending-msg">Please approve the transaction in your wallet.</div>
+      </div>
+    </div>
+    <div class="dash-overlay" id="ov-confirm">
+      <div class="overlay-card">
+        <h3 id="ov-confirm-title">Confirm</h3>
+        <div id="ov-confirm-body" style="font-size:.95rem;line-height:1.5"></div>
+        <div class="raw-line" id="ov-confirm-raw"></div>
+        <div class="overlay-actions">
+          <button class="btn-g" id="ov-confirm-cancel">Cancel</button>
+          <button class="btn-g btn-p" id="ov-confirm-go">Confirm &amp; Sign</button>
+        </div>
+      </div>
+    </div>
+    <div class="dash-overlay" id="ov-fail">
+      <div class="overlay-card fail">
+        <h3>⚠ Transaction failed</h3>
+        <div class="fail-msg" id="ov-fail-msg"></div>
+        <div class="overlay-actions">
+          <button class="btn-g" id="ov-fail-close">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/wallet.js?v=s1e"></script>
+    <script src="js/dashboard.js?v=mf1"></script>
+    <script>
+      window.DYDash.mount();
+    </script>
+  </body>
+</html>
