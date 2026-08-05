@@ -537,7 +537,7 @@ window.DYDash = (function () {
   }
   function feedIcon(k) {
     var src = { vesting: "icon_vesting", staked: "icon_staked", rewards: "icon_rewards" }[k] || "icon_liquid";
-    return "<img class='ic' src='assets/brand/mf/" + src + ".png?v=mf1b' alt=''>";
+    return "<img class='ic' src='assets/brand/mf/" + src + ".png?v=mf1c' alt=''>";
   }
   function renderFeed(evs) {
     var body = $("tx-body");

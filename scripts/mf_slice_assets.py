@@ -36,8 +36,10 @@ def gold_bbox(rgb, step=2):
     return (minx, miny, maxx, maxy) if found else None
 
 
-def rim_circle(crop, out_size, shrink=0.99):
-    """isolate the medallion as a rim-tight transparent circle hugging the gold rim exactly."""
+def rim_circle(crop, out_size, shrink=0.975):
+    """isolate the medallion as a transparent circle cut a step INSIDE the gold rim's outer edge
+    (M-F1c: the outermost ~2-3% of radius is shaved so the cut lands on solid gold — background
+    residue is then geometrically impossible; the rim still reads as a complete gold ring)."""
     rgb = crop.convert("RGB")
     w, h = rgb.size
     bb = gold_bbox(rgb)
@@ -87,7 +89,7 @@ for i, name in enumerate(names):
 # ---- DEFECT 1: runway hourglass dial (same saturated-gold-rim cut; crop tight to exclude the drop-shadow) ----
 hg = Image.open(os.path.join(SRC, "mf_icon_runway_hourglass.png")).convert("RGB")
 W, H = hg.size
-RUNWAY_SHRINK = 0.80  # the round frame sits at ~0.8 of the gem-tip extent
+RUNWAY_SHRINK = 0.78  # inside the round frame's gold (M-F1c inset), on solid gold at the perimeter
 dial = hg.crop((int(W * 0.12), int(H * 0.17), int(W * 0.88), int(H * 0.63)))
 dg = dial.convert("L").load()
 dw, dh = dial.size
