@@ -25,10 +25,18 @@ window.DYAdmin = (function () {
     "event CardMinted(uint256 indexed tokenId, uint256 indexed cardId, address indexed to)",
     "error NotAuthorizedMinter(address caller)",
   ];
+  // S9 — plain ERC-20 surface for the COIN DROPS panel (DYC sends from the connected admin wallet).
+  var COIN_ABI = [
+    "function transfer(address to, uint256 amount) returns (bool)",
+    "function balanceOf(address) view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+  ];
 
   // Explicit gas floors (runbook law). Amoy mints measure ~90k–130k; ~2x floor.
   var ACCESS_MINT_GAS = 300000;
   var WAVE_MINT_GAS = 300000;
+  var COIN_XFER_GAS = 120000; // ERC-20 transfer ~51k–66k (fresh recipient); ~2x floor
   var LOG_CHUNK = 9000; // getLogs block window — MUST stay under archive-RPC caps (drpc/others reject >10000) (S5a-FIX-3)
   var WAIT_CONFIRMS = 1;
   var WAIT_TIMEOUT_MS = 75000; // bound tx.wait — a never-mined/dropped tx must NEVER sit PENDING (S5a-FIX-2)
@@ -37,6 +45,7 @@ window.DYAdmin = (function () {
 
   var owners = { access: null, wave: null }; // last-read on-chain owners
   var histLoaded = false;
+  var coinMeta = null; // { decimals, symbol, balance } for the configured DYC token; null until read
 
   // ---------- config resolution: localStorage override > file ----------
   function override() {
@@ -52,10 +61,11 @@ window.DYAdmin = (function () {
     return {
       accessNFT: o.accessNFT || fc.accessNFT || null,
       waveCardNFT: o.waveCardNFT || fc.waveCardNFT || null,
+      dycoin: o.dycoin || fc.dycoin || null, // S9 — the DYC token for COIN DROPS (admin config, never config.js's frozen proxy)
       deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null, // archive-capable RPC for HISTORY READS only (S5a-FIX-3)
       waveCards: o.waveCards && o.waveCards.length ? o.waveCards : FILE.waveCards || [],
-      source: o.accessNFT || o.waveCardNFT ? "localStorage (this browser)" : "admin-config.js",
+      source: o.accessNFT || o.waveCardNFT || o.dycoin ? "localStorage (this browser)" : "admin-config.js",
     };
   }
   function isConfigured(c) {
@@ -203,6 +213,21 @@ window.DYAdmin = (function () {
         renderGateTruth(me, accMine, wavMine);
         setPanelEnabled("access", accMine);
         setPanelEnabled("wave", wavMine);
+        // S9 COIN DROPS — same owner gate (the recognized admin owns a collection) + a DYC address configured.
+        var coinAdmin = accMine || wavMine;
+        var bal = $("coin-balance");
+        if (coinAdmin && cfg().dycoin) {
+          setPanelEnabled("coin", true);
+          loadCoinMeta();
+        } else {
+          setPanelEnabled("coin", false);
+          coinMeta = null;
+          if (bal) {
+            bal.innerHTML = coinAdmin
+              ? "<span class='bad'>DYC address NOT CONFIGURED</span> — set it in Configuration to enable coin drops."
+              : "";
+          }
+        }
         if ((accMine || wavMine) && !histLoaded) loadHistory();
       })
       .catch(function () {
@@ -236,6 +261,7 @@ window.DYAdmin = (function () {
   function setPanelsEnabled(on) {
     setPanelEnabled("access", on);
     setPanelEnabled("wave", on);
+    setPanelEnabled("coin", on);
   }
   function setPanelEnabled(kind, on) {
     var p = $("panel-" + kind);
@@ -449,6 +475,269 @@ window.DYAdmin = (function () {
       });
   }
 
+  // ---------- COIN DROPS (S9) — plain ERC-20 DYC sends from the connected admin wallet ----------
+  function trimNum(s) {
+    // trim trailing zeros from a formatUnits string for display (150.0 -> 150, 1.500 -> 1.5)
+    if (s.indexOf(".") < 0) return s;
+    return s.replace(/\.?0+$/, "");
+  }
+
+  // read the DYC token's decimals/symbol/balance once the panel is enabled (never hardcode decimals blindly)
+  function loadCoinMeta() {
+    var c = cfg();
+    var me = window.DYWallet.state.address;
+    var bal = $("coin-balance");
+    var token = new ethersRef.Contract(c.dycoin, COIN_ABI, readProvider());
+    return Promise.all([
+      token.decimals().catch(function () { return null; }),
+      token.symbol().catch(function () { return "DYC"; }),
+      token.balanceOf(me).catch(function () { return null; }),
+    ]).then(function (r) {
+      if (r[0] == null || r[2] == null) {
+        // token unreadable at this address → keep the panel disabled rather than risk a wrong-decimals send
+        coinMeta = null;
+        setPanelEnabled("coin", false);
+        if (bal) bal.innerHTML = "<span class='bad'>Could not read a DYC token at " + shortAddr(c.dycoin) +
+          " — check the DYC address in Configuration.</span>";
+        return;
+      }
+      coinMeta = { decimals: Number(r[0]), symbol: r[1] || "DYC", balance: r[2] };
+      if (bal) bal.innerHTML = "Your balance: <b>" + trimNum(ethersRef.formatUnits(r[2], coinMeta.decimals)) +
+        " " + coinMeta.symbol + "</b>";
+    });
+  }
+
+  function refreshCoinBalance() {
+    if (!coinMeta) return loadCoinMeta();
+    var c = cfg();
+    var me = window.DYWallet.state.address;
+    var token = new ethersRef.Contract(c.dycoin, COIN_ABI, readProvider());
+    return token.balanceOf(me).then(function (b) {
+      coinMeta.balance = b;
+      var bal = $("coin-balance");
+      if (bal) bal.innerHTML = "Your balance: <b>" + trimNum(ethersRef.formatUnits(b, coinMeta.decimals)) +
+        " " + coinMeta.symbol + "</b>";
+    }).catch(function () {});
+  }
+
+  // parse a human amount ("150", "1.5") to wei via coinMeta.decimals; null if malformed or <= 0
+  function parseAmt(raw) {
+    var s = (raw == null ? "" : String(raw)).trim();
+    if (!/^\d+(\.\d+)?$/.test(s)) return null;
+    try {
+      var wei = ethersRef.parseUnits(s, coinMeta.decimals);
+      if (wei <= 0n) return null;
+      return { wei: wei, human: trimNum(s) };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // collect sends from the single fields + the CSV batch; validate every one, tag bad lines with numbers
+  function collectSends(singleAddr, singleAmt, batchVal) {
+    var rows = [];
+    if ((singleAddr && singleAddr.trim()) || (singleAmt && singleAmt.trim())) {
+      rows.push({ n: "single", rawAddr: singleAddr, rawAmt: singleAmt, raw: (singleAddr || "") + ", " + (singleAmt || "") });
+    }
+    if (batchVal) {
+      batchVal.split(/\r?\n/).forEach(function (l, i) {
+        if (!l.trim()) return;
+        var parts = l.split(/[,\t]/);
+        rows.push({ n: i + 1, rawAddr: parts[0], rawAmt: parts[1], raw: l.trim() });
+      });
+    }
+    var valid = [];
+    var invalid = [];
+    rows.forEach(function (r) {
+      var a = r.rawAddr != null ? parseAddr(r.rawAddr) : null;
+      var amt = parseAmt(r.rawAmt);
+      if (!a || !amt) {
+        var why = !a && !amt ? "bad address & amount" : !a ? "bad address" : "bad amount";
+        invalid.push({ n: r.n, text: r.raw, why: why });
+      } else {
+        valid.push({ to: a, wei: amt.wei, human: amt.human });
+      }
+    });
+    return { valid: valid, invalid: invalid };
+  }
+
+  // build the coin confirm box: block on ANY bad line (money — stricter than the NFT skip); show total + balance
+  function prepareCoinDrop() {
+    return withEthers().then(function () {
+      var confirm = $("coin-confirm");
+      confirm.innerHTML = "";
+      if (!coinMeta) {
+        confirm.appendChild(el("div", "q", "DYC token not read yet — refresh balance or check the address in Configuration."));
+        return;
+      }
+      var set = collectSends($("coin-addr").value, $("coin-amt").value, $("coin-batch").value);
+
+      // BLOCK: every line must be clean before any send is offered
+      if (set.invalid.length) {
+        confirm.appendChild(el("div", "q", "<b>" + set.invalid.length + "</b> line(s) need fixing — the batch is blocked " +
+          "until every line is clean (fix or remove them):"));
+        var ul = el("div", "mono");
+        ul.style.margin = "0.4rem 0";
+        ul.innerHTML = set.invalid.map(function (x) {
+          var t = x.text.length > 42 ? x.text.slice(0, 42) + "…" : x.text;
+          return "line " + x.n + " — <span class='pill invalid'>" + x.why + "</span> " + t;
+        }).join("<br>");
+        confirm.appendChild(ul);
+        return;
+      }
+      if (!set.valid.length) {
+        confirm.appendChild(el("div", "q", "Nothing to send — enter a recipient + amount, or batch lines."));
+        return;
+      }
+
+      var total = set.valid.reduce(function (s, r) { return s + r.wei; }, 0n);
+      var totalHuman = trimNum(ethersRef.formatUnits(total, coinMeta.decimals));
+      var balWei = coinMeta.balance != null ? coinMeta.balance : 0n;
+      var balHuman = trimNum(ethersRef.formatUnits(balWei, coinMeta.decimals));
+
+      confirm.appendChild(el("div", "q", "Send DYC to <b>" + set.valid.length + "</b> address" +
+        (set.valid.length === 1 ? "" : "es") + " — total <b>" + totalHuman + " " + coinMeta.symbol + "</b>:"));
+      var list = el("div", "mono");
+      list.style.margin = "0.4rem 0";
+      list.innerHTML = set.valid.map(function (r) {
+        return "Send <b>" + r.human + " " + coinMeta.symbol + "</b> to " + r.to +
+          "<br><span style='color:var(--gold-aged)'>&nbsp;&nbsp;raw: " + r.wei.toString() + " wei</span>";
+      }).join("<br>");
+      confirm.appendChild(list);
+
+      var balLine = el("div", null, "Your balance: <b>" + balHuman + " " + coinMeta.symbol + "</b>");
+      balLine.style.margin = "0.35rem 0";
+      balLine.style.fontSize = "0.82rem";
+      confirm.appendChild(balLine);
+
+      // insufficient balance blocks BEFORE any pre-sim/send
+      if (total > balWei) {
+        confirm.appendChild(el("div", "q", "<span class='bad'>Insufficient balance</span> — need " + totalHuman +
+          ", have " + balHuman + " " + coinMeta.symbol + ". Reduce the amount or top up the wallet."));
+        return;
+      }
+
+      var actions = el("div", "row-actions");
+      var go = el("button", "btn primary", "Sign &amp; send " + set.valid.length);
+      var cancel = el("button", "btn", "Cancel");
+      actions.appendChild(go);
+      actions.appendChild(cancel);
+      confirm.appendChild(actions);
+      cancel.onclick = function () {
+        confirm.innerHTML = "";
+      };
+      go.onclick = function () {
+        go.disabled = true;
+        cancel.disabled = true;
+        runCoinDrop(set.valid, $("coin-results")).then(function () {
+          confirm.innerHTML = "";
+          refreshCoinBalance();
+        });
+      };
+    });
+  }
+
+  function runCoinDrop(sends, resultsEl) {
+    var c = cfg();
+    var provider = readProvider();
+    return provider.getSigner().then(function (signer) {
+      var token = new ethersRef.Contract(c.dycoin, COIN_ABI, signer);
+
+      resultsEl.innerHTML = "";
+      var table = el("table", "grid");
+      table.innerHTML = "<thead><tr><th>#</th><th>To</th><th>Amount</th><th>Status</th><th>Detail / Tx</th></tr></thead>";
+      var tb = el("tbody");
+      table.appendChild(tb);
+      resultsEl.appendChild(table);
+      var summary = el("div", "summary");
+      resultsEl.appendChild(summary);
+
+      var rows = sends.map(function (r, i) {
+        var tr = el("tr");
+        tr.innerHTML = "<td>" + (i + 1) + "</td><td class='addr'>" + shortAddr(r.to) + "</td>" +
+          "<td>" + r.human + " " + coinMeta.symbol + "</td>" +
+          "<td><span class='pill pending'>pending</span></td><td class='detail'>—</td>";
+        tb.appendChild(tr);
+        return tr;
+      });
+
+      return feeOverrides(provider).then(function (feeOv) {
+        var ok = 0;
+        var bad = 0;
+        var chain = Promise.resolve();
+        sends.forEach(function (r, i) {
+          chain = chain.then(function () {
+            return sendCoinOne(token, r.to, r.wei, feeOv).then(function (res) {
+              var stCell = rows[i].querySelector(".pill").parentNode;
+              var dCell = rows[i].querySelector(".detail");
+              if (res.status === "success") {
+                ok++;
+                stCell.innerHTML = "<span class='pill success'>success</span>";
+                dCell.innerHTML = "<a class='txlink' target='_blank' rel='noopener' href='" + txUrl(res.hash) + "'>" +
+                  res.hash.slice(0, 10) + "… ↗</a>";
+              } else {
+                bad++;
+                stCell.innerHTML = "<span class='pill " + res.status + "'>" + res.status + "</span>";
+                dCell.innerHTML = res.detail +
+                  (res.hash ? " · <a class='txlink' target='_blank' rel='noopener' href='" + txUrl(res.hash) +
+                    "'>tx ↗</a>" : "");
+              }
+              summary.innerHTML = "Progress: <b class='good'>" + ok + "</b> success · <b class='bad'>" + bad +
+                "</b> unresolved · " + (sends.length - ok - bad) + " remaining.";
+            });
+          });
+        });
+        return chain.then(function () {
+          summary.innerHTML = "Done: <b class='good'>" + ok + "</b> success · <b class='bad'>" + bad +
+            "</b> failed/unconfirmed, of " + sends.length + ".";
+        });
+      });
+    });
+  }
+
+  // one send: pre-simulate the transfer (surfaces revert without spending), then send with explicit gas.
+  function sendCoinOne(token, to, wei, feeOv) {
+    return token.transfer.staticCall(to, wei)
+      .then(function () {
+        var ov = { gasLimit: COIN_XFER_GAS };
+        if (feeOv && feeOv.maxFeePerGas != null) {
+          ov.maxFeePerGas = feeOv.maxFeePerGas;
+          ov.maxPriorityFeePerGas = feeOv.maxPriorityFeePerGas;
+        }
+        return token.transfer(to, wei, ov).then(function (tx) {
+          return tx
+            .wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS)
+            .then(function (rc) {
+              if (rc && rc.status === 1) return { status: "success", hash: tx.hash };
+              return { status: "revert", detail: "reverted on-chain", hash: tx.hash };
+            })
+            .catch(function (we) {
+              if (we && we.code === "TRANSACTION_REPLACED") {
+                if (we.receipt && we.receipt.status === 1) {
+                  return { status: "success", hash: (we.replacement && we.replacement.hash) || tx.hash };
+                }
+                if (we.reason === "cancelled") return { status: "dropped", detail: "cancelled in wallet", hash: tx.hash };
+                return {
+                  status: "dropped",
+                  detail: "replaced (" + (we.reason || "repriced") + ") — check wallet",
+                  hash: (we.replacement && we.replacement.hash) || tx.hash,
+                };
+              }
+              return {
+                status: "dropped",
+                detail: "not mined in " + Math.round(WAIT_TIMEOUT_MS / 1000) +
+                  "s (gas too low or dropped) — speed up / resubmit in your wallet",
+                hash: tx.hash,
+              };
+            });
+        });
+      })
+      .catch(function (e) {
+        if (e && e.code === "ACTION_REJECTED") return { status: "fail", detail: "signature rejected in wallet" };
+        return { status: "revert", detail: decodeErr(e), hash: e && e.transactionHash };
+      });
+  }
+
   // ---------- HISTORY (chunked getLogs, newest-first) ----------
   // detect an archive/range rejection so we tell the owner to set a Read RPC URL (vs a generic "could not read")
   function isArchiveError(e) {
@@ -634,6 +923,7 @@ window.DYAdmin = (function () {
     var c = cfg();
     $("cfg-access").value = c.accessNFT || "";
     $("cfg-wave").value = c.waveCardNFT || "";
+    if ($("cfg-dyc")) $("cfg-dyc").value = c.dycoin || ""; // S9
     $("cfg-deploy").value = c.deployBlock || 0;
     $("cfg-readrpc").value = c.readRpcUrl || "";
     $("cfg-cards").value = c.waveCards.length ? JSON.stringify(c.waveCards, null, 2) : "";
@@ -663,10 +953,13 @@ window.DYAdmin = (function () {
     withEthers().then(function () {
       var a = $("cfg-access").value.trim();
       var w = $("cfg-wave").value.trim();
+      var d = $("cfg-dyc") ? $("cfg-dyc").value.trim() : ""; // S9 DYC token
       var pa = a ? parseAddr(a) : null;
       var pw = w ? parseAddr(w) : null;
+      var pd = d ? parseAddr(d) : null;
       if (a && !pa) return warn(msg, "AccessNFT address is not a valid checksummed address. Nothing saved.");
       if (w && !pw) return warn(msg, "WaveCardNFT address is not a valid checksummed address. Nothing saved.");
+      if (d && !pd) return warn(msg, "DYC token address is not a valid checksummed address. Nothing saved.");
 
       var rawCards = $("cfg-cards").value.trim();
       var cards;
@@ -700,6 +993,7 @@ window.DYAdmin = (function () {
       var o = {
         accessNFT: pa,
         waveCardNFT: pw,
+        dycoin: pd, // S9
         deployBlock: Number($("cfg-deploy").value) || 0,
         readRpcUrl: readRpc || null,
         waveCards: cards,
@@ -760,6 +1054,9 @@ window.DYAdmin = (function () {
         cardLabel: sel.options[sel.selectedIndex].text.trim(),
       });
     };
+    // Coin panel (S9)
+    if ($("coin-review")) $("coin-review").onclick = prepareCoinDrop;
+    if ($("coin-refresh-bal")) $("coin-refresh-bal").onclick = refreshCoinBalance;
     // History
     $("hist-refresh").onclick = function () {
       histLoaded = false;

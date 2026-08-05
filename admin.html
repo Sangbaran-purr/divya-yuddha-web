@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
     <link rel="stylesheet" href="css/admin.css?v=s5d" />
     <script src="config.js?v=s4"></script>
-    <script src="admin-config.js?v=s5e"></script>
+    <script src="admin-config.js?v=s9"></script>
   </head>
   <body class="admin">
     <div class="admin-wrap">
@@ -57,6 +57,27 @@
         <div id="wave-results"></div>
       </section>
 
+      <!-- PANEL 3 — COIN DROPS (S9) -->
+      <section class="panel" id="panel-coin">
+        <h2>Coin Drops — DYC.transfer(to, amount)</h2>
+        <p class="hint">Plain ERC-20 transfers of DYC from <b>your connected wallet</b> — no approvals, no custody,
+          no new contract. Amounts are in DYC (human units) and shown in raw wei at the confirm step. Every send is
+          pre-simulated; a reverting row is surfaced and never halts the batch.</p>
+        <div class="row-actions">
+          <span id="coin-balance" class="mono" style="font-size:0.82rem;color:var(--gold-aged)">Balance: —</span>
+          <button class="btn tiny" id="coin-refresh-bal" disabled>Refresh balance</button>
+        </div>
+        <label class="fld" for="coin-addr">Single — recipient address</label>
+        <input class="txt" id="coin-addr" type="text" placeholder="0x… (checksummed)" disabled />
+        <label class="fld" for="coin-amt">Single — amount (DYC)</label>
+        <input class="txt" id="coin-amt" type="text" placeholder="150" disabled />
+        <label class="fld" for="coin-batch">Batch — one "address, amount" per line (CSV)</label>
+        <textarea class="txt" id="coin-batch" placeholder="0x…, 150&#10;0x…, 50&#10;0x…, 12.5" disabled></textarea>
+        <button class="btn" id="coin-review" disabled>Review sends</button>
+        <div id="coin-confirm"></div>
+        <div id="coin-results"></div>
+      </section>
+
       <!-- HISTORY -->
       <section class="panel" id="panel-history">
         <h2>Mint history</h2>
@@ -84,6 +105,8 @@
         <input class="txt" id="cfg-access" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-wave">WaveCardNFT address</label>
         <input class="txt" id="cfg-wave" type="text" placeholder="0x…" />
+        <label class="fld" for="cfg-dyc">DYC token address (for Coin Drops)</label>
+        <input class="txt" id="cfg-dyc" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-deploy">Deploy block (history scan start; 0 = full chunked scan)</label>
         <input class="txt" id="cfg-deploy" type="number" placeholder="0" />
         <label class="fld" for="cfg-readrpc">Read RPC URL (archive-capable — for FULL Mint History; blank = recent-only)</label>
@@ -106,7 +129,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s5e"></script>
+    <script src="js/admin.js?v=s9"></script>
     <script>
       window.DYAdmin.mount();
     </script>
