@@ -62,6 +62,7 @@ window.DYAdmin = (function () {
       accessNFT: o.accessNFT || fc.accessNFT || null,
       waveCardNFT: o.waveCardNFT || fc.waveCardNFT || null,
       dycoin: o.dycoin || fc.dycoin || null, // S9 — the DYC token for COIN DROPS (admin config, never config.js's frozen proxy)
+      dycoinSale: o.dycoinSale || fc.dycoinSale || null, // M-F2 — the DYCoinSale (Approve Buyers EIP-712 domain + signer gate)
       deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null, // archive-capable RPC for HISTORY READS only (S5a-FIX-3)
       waveCards: o.waveCards && o.waveCards.length ? o.waveCards : FILE.waveCards || [],
@@ -179,6 +180,9 @@ window.DYAdmin = (function () {
       };
       return;
     }
+    // M-F2 Approve Buyers — INDEPENDENT gate (connected == sale.allowlistSigner), evaluated even if the NFT
+    // collections are NOT CONFIGURED (the owner may approve buyers without touching the drop panels).
+    refreshApprovePanel();
     if (!isConfigured(c)) {
       banner.className = "banner warn";
       banner.innerHTML = "<strong>NOT CONFIGURED.</strong> No contract addresses set. " +
@@ -262,6 +266,7 @@ window.DYAdmin = (function () {
     setPanelEnabled("access", on);
     setPanelEnabled("wave", on);
     setPanelEnabled("coin", on);
+    setPanelEnabled("approve", on);
   }
   function setPanelEnabled(kind, on) {
     var p = $("panel-" + kind);
@@ -924,6 +929,7 @@ window.DYAdmin = (function () {
     $("cfg-access").value = c.accessNFT || "";
     $("cfg-wave").value = c.waveCardNFT || "";
     if ($("cfg-dyc")) $("cfg-dyc").value = c.dycoin || ""; // S9
+    if ($("cfg-sale")) $("cfg-sale").value = c.dycoinSale || ""; // M-F2
     $("cfg-deploy").value = c.deployBlock || 0;
     $("cfg-readrpc").value = c.readRpcUrl || "";
     $("cfg-cards").value = c.waveCards.length ? JSON.stringify(c.waveCards, null, 2) : "";
@@ -954,12 +960,15 @@ window.DYAdmin = (function () {
       var a = $("cfg-access").value.trim();
       var w = $("cfg-wave").value.trim();
       var d = $("cfg-dyc") ? $("cfg-dyc").value.trim() : ""; // S9 DYC token
+      var sl = $("cfg-sale") ? $("cfg-sale").value.trim() : ""; // M-F2 DYCoinSale
       var pa = a ? parseAddr(a) : null;
       var pw = w ? parseAddr(w) : null;
       var pd = d ? parseAddr(d) : null;
+      var ps = sl ? parseAddr(sl) : null;
       if (a && !pa) return warn(msg, "AccessNFT address is not a valid checksummed address. Nothing saved.");
       if (w && !pw) return warn(msg, "WaveCardNFT address is not a valid checksummed address. Nothing saved.");
       if (d && !pd) return warn(msg, "DYC token address is not a valid checksummed address. Nothing saved.");
+      if (sl && !ps) return warn(msg, "DYCoinSale address is not a valid checksummed address. Nothing saved.");
 
       var rawCards = $("cfg-cards").value.trim();
       var cards;
@@ -994,6 +1003,7 @@ window.DYAdmin = (function () {
         accessNFT: pa,
         waveCardNFT: pw,
         dycoin: pd, // S9
+        dycoinSale: ps, // M-F2
         deployBlock: Number($("cfg-deploy").value) || 0,
         readRpcUrl: readRpc || null,
         waveCards: cards,
@@ -1025,8 +1035,131 @@ window.DYAdmin = (function () {
     refreshGate();
   }
 
+  // ---------- APPROVE BUYERS (M-F2) — EIP-712 allowlist vouchers, no-server ----------
+  var SALE_ABI = ["function allowlistSigner() view returns (address)"];
+  var approvedList = []; // merged {wallet, sig} (existing allowlist.json + this session's signs)
+  var saleSigner = null; // last-read sale.allowlistSigner()
+
+  function refreshApprovePanel() {
+    var st = $("approve-status");
+    var c = cfg();
+    setPanelEnabled("approve", false);
+    if (!c.dycoinSale) {
+      if (st) st.innerHTML = "<span class='mono'>DYCoinSale NOT CONFIGURED</span> — set the sale address in Configuration to approve buyers.";
+      return;
+    }
+    withEthers().then(function () {
+      var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, readProvider());
+      return sale.allowlistSigner();
+    }).then(function (signer) {
+      saleSigner = signer;
+      var me = window.DYWallet.state.address;
+      var isSigner = eq(signer, me);
+      if (isSigner) {
+        setPanelEnabled("approve", true);
+        st.innerHTML = "You are the sale's allowlist signer — your signatures count. " +
+          "<span class='mono'>" + shortAddr(me) + "</span>";
+        st.style.color = "var(--flame-core)";
+        loadExistingAllowlist();
+      } else {
+        setPanelEnabled("approve", false);
+        st.innerHTML = "<span class='bad'>This wallet is not the sale's allowlist signer</span>, so its signatures would be rejected on-chain. " +
+          "Connect the approving wallet. Expected: <span class='mono'>" + shortAddr(signer) + "</span>.";
+        st.style.color = "var(--gold-aged)";
+      }
+    }).catch(function () {
+      st.innerHTML = "<span class='bad'>Could not read the sale</span> — check the DYCoinSale address in Configuration.";
+    });
+  }
+
+  // load the currently-published allowlist so signs MERGE (never blow away prior approvals)
+  function loadExistingAllowlist() {
+    fetch("allowlist.json?nb=" + Date.now()).then(function (r) { return r.json(); }).then(function (a) {
+      if (Array.isArray(a) && !approvedList.length) approvedList = a.slice();
+      renderAllowlistCount();
+    }).catch(function () {});
+  }
+  function renderAllowlistCount() {
+    var n = $("approve-count");
+    if (n) n.textContent = approvedList.length ? approvedList.length + " wallet(s) in the list" : "list empty";
+  }
+
+  // EIP-712 sign the Allowlisted(wallet) voucher with the connected (signer) wallet
+  function signVoucher(wallet) {
+    var c = cfg();
+    var provider = new ethersRef.BrowserProvider(window.ethereum);
+    return provider.getSigner().then(function (signer) {
+      var domain = { name: "DYCoinSale", version: "1", chainId: PLAYER.chain.id, verifyingContract: c.dycoinSale };
+      var types = { Allowlisted: [{ name: "wallet", type: "address" }] };
+      return signer.signTypedData(domain, types, { wallet: wallet });
+    });
+  }
+
+  function upsert(wallet, sig) {
+    var lo = wallet.toLowerCase();
+    for (var i = 0; i < approvedList.length; i++) {
+      if ((approvedList[i].wallet || "").toLowerCase() === lo) { approvedList[i] = { wallet: wallet, sig: sig }; return; }
+    }
+    approvedList.push({ wallet: wallet, sig: sig });
+  }
+
+  // parse + validate the batch, then sign each (fail-never-halts, per-row status)
+  function runApprove() {
+    withEthers().then(function () {
+      var raw = $("approve-input").value || "";
+      var results = $("approve-results");
+      results.innerHTML = "";
+      var lines = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      if (!lines.length) { results.innerHTML = "<div class='q'>Paste one wallet address per line.</div>"; return; }
+      var table = el("table", "grid");
+      table.innerHTML = "<thead><tr><th>#</th><th>Wallet</th><th>Status</th></tr></thead>";
+      var tb = el("tbody"); table.appendChild(tb); results.appendChild(table);
+      var rows = lines.map(function (l, i) {
+        var a = parseAddr(l);
+        var tr = el("tr");
+        tr.innerHTML = "<td>" + (i + 1) + "</td><td class='addr'>" + (a ? shortAddr(a) : (l.slice(0, 16) + "…")) +
+          "</td><td>" + (a ? "<span class='pill pending'>pending</span>" : "<span class='pill invalid'>bad address</span>") + "</td>";
+        tb.appendChild(tr);
+        return { addr: a, tr: tr };
+      });
+      var chain = Promise.resolve(), ok = 0, bad = 0;
+      rows.forEach(function (r) {
+        chain = chain.then(function () {
+          if (!r.addr) { bad++; return; }
+          var cell = r.tr.querySelector("td:last-child");
+          return signVoucher(r.addr).then(function (sig) {
+            upsert(r.addr, sig);
+            ok++;
+            cell.innerHTML = "<span class='pill success'>signed &amp; added</span>";
+          }).catch(function (e) {
+            bad++;
+            cell.innerHTML = "<span class='pill fail'>" + (e && e.code === "ACTION_REJECTED" ? "rejected in wallet" : "sign failed") + "</span>";
+          });
+        });
+      });
+      chain.then(function () {
+        renderAllowlistCount();
+        var sum = el("div", "summary", "Done: <b class='good'>" + ok + "</b> signed · <b class='bad'>" + bad + "</b> skipped. " +
+          "The list now has <b>" + approvedList.length + "</b> wallet(s). Download it and commit allowlist.json to publish.");
+        results.appendChild(sum);
+      });
+    });
+  }
+
+  function downloadAllowlist() {
+    var blob = new Blob([JSON.stringify(approvedList, null, 2) + "\n"], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "allowlist.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
   // ---------- wire the page ----------
   function mount() {
+    // Approve Buyers (M-F2)
+    if ($("approve-sign")) $("approve-sign").onclick = runApprove;
+    if ($("approve-download")) $("approve-download").onclick = downloadAllowlist;
     // Access panel
     $("acc-review").onclick = function () {
       prepareDrop("access", {

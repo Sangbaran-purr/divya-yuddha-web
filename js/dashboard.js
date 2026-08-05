@@ -42,6 +42,7 @@ window.DYDash = (function () {
     "function claim() returns (uint256)",
     "function stake(uint256) returns (uint256)",
     "function registerVested() returns (uint256)",
+    "function syncVested() returns (uint256)",
     "event Staked(address indexed staker, uint256 amount, uint256 positionId)",
     "event VestedRegistered(address indexed holder, uint256 principal, uint256 positionId)",
     "event RoiAccrued(address indexed staker, uint256 amount)",
@@ -52,10 +53,24 @@ window.DYDash = (function () {
     "function reserve() view returns (uint256)",
     "event Redeemed(address indexed user, uint256 dycAmount, uint256 usdtOut)",
   ];
+  // M-F2 — DYCoinSale (buy). Round enum: 0 NONE, 1 PRESALE, 2 PUBLIC. USDT is 6-dec (usdE18 = amount * 1e12).
+  var SALE_ABI = [
+    "function currentRound() view returns (uint8)",
+    "function presalePriceE18() view returns (uint256)",
+    "function publicPriceE18() view returns (uint256)",
+    "function quoteDyc(uint256) view returns (uint256)",
+    "function presaleMinUsdE18() view returns (uint256)",
+    "function publicMinUsdE18() view returns (uint256)",
+    "function allowlistSigner() view returns (address)",
+    "function buyWithStable(address,uint256,bytes,string)",
+  ];
+  var ERC20_ABI = ["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)"];
 
   var DAY = 4n; var DAY_DEN = 1000n; // 0.4%/day (RATE is an internal constant; UI-stated per ratified flag)
   var POL_MIN = 20000000000000000n; // 0.02 POL — below this, show the fee banner
-  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000 };
+  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000, buy: 380000 };
+  var buyState = {}; // { round, price, voucher }
+  var allowlist = null; // cached [{wallet, sig}]
   var WAIT_CONFIRMS = 1, WAIT_TIMEOUT_MS = 75000, FEE_HEADROOM = 2n;
 
   var ethersRef = null;
@@ -77,6 +92,8 @@ window.DYDash = (function () {
       vestingVault: oc.vestingVault || fc.vestingVault || null,
       holderStaking: oc.holderStaking || fc.holderStaking || null,
       roiRedemption: oc.roiRedemption || fc.roiRedemption || null,
+      dycoinSale: oc.dycoinSale || fc.dycoinSale || null,
+      usdt: oc.usdt || fc.usdt || null,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
       deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
     };
@@ -155,6 +172,7 @@ window.DYDash = (function () {
     $("runway-days").textContent = "—";
     $("tx-body").innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:22px'>Connect your wallet to see your activity.</td></tr>";
     $("tx-status").textContent = "";
+    if ($("buy-body")) { $("buy-body").innerHTML = "<div class='notlive'>Connect your wallet to buy DYC.</div>"; $("buy-round-chip").innerHTML = ""; }
   }
 
   function notLive(label) {
@@ -313,6 +331,7 @@ window.DYDash = (function () {
         renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderRunway();
         renderPolBanner();
         loadFeed();
+        renderBuy();
       });
     }).catch(function (e) {
       // read failed entirely
@@ -556,6 +575,162 @@ window.DYDash = (function () {
   }
 
   // =========================================================================
+  //  BUY DYC (M-F2) — round display, USDT→DYC calculator, 15/85 split, and a
+  //  single "Buy DYC & Activate Staking" button orchestrating up to three
+  //  narrated confirmations (approve USDT → buy → activate/sync). Every step
+  //  is pre-simulated (staticCall) before it is sent.
+  // =========================================================================
+  function loadAllowlist() {
+    return fetch("allowlist.json?nb=" + (buyState._nb || (buyState._nb = 1)))
+      .then(function (r) { return r.json(); })
+      .then(function (a) { allowlist = Array.isArray(a) ? a : []; return allowlist; })
+      .catch(function () { allowlist = []; return allowlist; });
+  }
+  function voucherFor(addr) {
+    if (!allowlist || !addr) return null;
+    var a = addr.toLowerCase();
+    for (var i = 0; i < allowlist.length; i++) {
+      if ((allowlist[i].wallet || "").toLowerCase() === a) return allowlist[i];
+    }
+    return null;
+  }
+
+  function renderBuy() {
+    var b = $("buy-body"), chip = $("buy-round-chip");
+    if (!b) return;
+    chip.innerHTML = "";
+    if (!isConnected()) { b.innerHTML = "<div class='notlive'>Connect your wallet to buy DYC.</div>"; return; }
+    var c = cfg();
+    if (!c.dycoinSale || !c.usdt) { b.innerHTML = notLive(" Buying DYC"); return; }
+    withEthers().then(function () {
+      var p = readProvider();
+      var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, p);
+      return Promise.all([sale.currentRound(), sale.presalePriceE18().catch(function () { return 0n; }), sale.publicPriceE18().catch(function () { return 0n; })])
+        .then(function (r) {
+          var round = Number(r[0]);
+          buyState.round = round;
+          return loadAllowlist().then(function () {
+            var v = voucherFor(W.state.address);
+            buyState.voucher = v;
+            if (round === 0) {
+              b.innerHTML = "<div class='notlive'><b>Sale not open</b>The sale is not open right now — it opens at the presale window and pauses between rounds.</div>";
+              return;
+            }
+            var isPresale = round === 1;
+            buyState.price = isPresale ? r[1] : r[2];
+            chip.innerHTML = "<span class='buy-round " + (isPresale ? "presale" : "public") + "'>" + (isPresale ? "PRESALE @ $0.008" : "PUBLIC @ $0.010") + "</span>";
+            if (isPresale && !v) { renderRegister(b); return; }
+            renderCalculator(b, isPresale);
+          });
+        });
+    }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the sale — check the address in config.</div>"; });
+  }
+
+  function renderRegister(b) {
+    b.innerHTML =
+      "<div class='buy-reg'>" +
+      "<div class='buy-reg-title'>Register to buy</div>" +
+      "<p>Presale is allowlist-gated. Register once with the form below — then the owner approves your wallet <b>manually</b>, which can take a few hours. You do not need to do anything else after registering.</p>" +
+      "<a class='btn-g btn-p' href='https://forms.gle/37pgo2ebYrDpME2w7' target='_blank' rel='noopener'>Open the registration form →</a>" +
+      "<button class='btn-g' id='buy-recheck'>Check my status</button>" +
+      "<div class='note'>Already registered? Approval is manual — check back in a few hours.</div>" +
+      "</div>";
+    $("buy-recheck").onclick = function () { allowlist = null; buyState._nb = (buyState._nb || 1) + 1; renderBuy(); };
+  }
+
+  function renderCalculator(b, isPresale) {
+    b.innerHTML =
+      (isPresale ? "<div class='buy-ok'>✓ Your wallet is approved to buy in the presale.</div>" : "") +
+      "<label class='fld'>Amount in (USDT)</label>" +
+      "<div class='buy-calc'><input class='txt' id='buy-amt' inputmode='decimal' placeholder='100' /><span class='buy-out'>You receive <b id='buy-dyc'>—</b> DYC</span></div>" +
+      "<div class='split-preview'>" +
+      "<div class='split liq'><div class='sl'>15% Liquid</div><div class='sv' id='split-liq'>—</div><div class='su'>DYC to your wallet now</div></div>" +
+      "<div class='split ves'><div class='sl'>85% Vesting</div><div class='sv' id='split-ves'>—</div><div class='su'>DYC into vesting</div></div>" +
+      "</div>" +
+      "<button class='btn-g btn-p btn-block' id='buy-go'>⚡ Buy DYC &amp; Activate Staking</button>" +
+      "<div class='buy-narrate'>One tap runs the whole flow with clear wallet prompts: approve USDT (only if needed) → buy (15% lands in your wallet, 85% into vesting) → activate that vesting so it starts earning 0.40%/day.</div>";
+    $("buy-amt").oninput = updateCalc;
+    $("buy-go").onclick = buyFlow;
+    updateCalc();
+  }
+  function updateCalc() {
+    var price = buyState.price || 0n, raw = $("buy-amt") ? $("buy-amt").value : "";
+    var dyc = "—", liq = "—", ves = "—";
+    try {
+      var usdt = ethersRef.parseUnits((raw || "0").trim(), 6);
+      var usdE18 = usdt * 1000000000000n;
+      var d = price > 0n ? (usdE18 * 1000000000000000000n) / price : 0n;
+      dyc = fmt(d); liq = fmt((d * 1500n) / 10000n); ves = fmt(d - (d * 1500n) / 10000n);
+    } catch (e) {}
+    if ($("buy-dyc")) { $("buy-dyc").textContent = dyc; $("split-liq").textContent = liq; $("split-ves").textContent = ves; }
+  }
+  function gasOv(fo, gas) {
+    var ov = { gasLimit: gas };
+    if (fo && fo.maxFeePerGas != null) { ov.maxFeePerGas = fo.maxFeePerGas; ov.maxPriorityFeePerGas = fo.maxPriorityFeePerGas; }
+    return ov;
+  }
+
+  function buyFlow() {
+    var c = cfg(), amt;
+    try { amt = ethersRef.parseUnits(($("buy-amt").value || "").trim(), 6); if (amt <= 0n) throw 0; }
+    catch (e) { failBox("Enter a positive USDT amount."); return; }
+    var pg = polGuard(); if (pg) { failBox(pg); return; }
+    var isPresale = buyState.round === 1;
+    var sig = isPresale && buyState.voucher ? buyState.voucher.sig : "0x";
+    withEthers().then(function () {
+      var provider = new ethersRef.BrowserProvider(window.ethereum);
+      return provider.getSigner().then(function (signer) {
+        var usdt = new ethersRef.Contract(c.usdt, ERC20_ABI, signer);
+        var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, signer);
+        var hs = c.holderStaking ? new ethersRef.Contract(c.holderStaking, STAKE_ABI, signer) : null;
+        var me = W.state.address;
+        return usdt.balanceOf(me).then(function (bal) {
+          if (bal < amt) { failBox("You need " + fmt(amt, 6) + " USDT but have " + fmt(bal, 6) + ". Add USDT and try again."); throw "stop"; }
+          return usdt.allowance(me, c.dycoinSale);
+        }).then(function (allow) {
+          var needApprove = allow < amt;
+          return Promise.all([feeOverrides(provider), hs ? hs.vestedRegistered(me) : Promise.resolve(true)]).then(function (pre) {
+            var fo = pre[0], alreadyReg = pre[1];
+            var nSteps = (needApprove ? 1 : 0) + 1 + (hs ? 1 : 0);
+            var step = 0;
+            var chain = Promise.resolve();
+            if (needApprove) {
+              chain = chain.then(function () {
+                step++; pending(true, "Step " + step + " of " + nSteps + " — Approve USDT");
+                $("ov-pending-msg").textContent = "Your wallet will ask to approve " + fmt(amt, 6) + " USDT so the sale can take your payment. No DYC moves yet.";
+                return usdt.approve.staticCall(c.dycoinSale, amt).then(function () {
+                  return usdt.approve(c.dycoinSale, amt, gasOv(fo, GAS.approve)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                });
+              });
+            }
+            chain = chain.then(function () {
+              step++; pending(true, "Step " + step + " of " + nSteps + " — Buy DYC");
+              $("ov-pending-msg").textContent = "Your wallet will ask to buy. You pay " + fmt(amt, 6) + " USDT and receive DYC — 15% to your wallet now, 85% into vesting.";
+              return sale.buyWithStable.staticCall(c.usdt, amt, sig, "").then(function () {
+                return sale.buyWithStable(c.usdt, amt, sig, "", gasOv(fo, GAS.buy)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+              });
+            });
+            if (hs) {
+              chain = chain.then(function () {
+                step++;
+                var fn = alreadyReg ? "syncVested" : "registerVested";
+                var label = alreadyReg ? "Sync new vesting into earning" : "Activate vesting to start earning";
+                pending(true, "Step " + step + " of " + nSteps + " — " + label);
+                $("ov-pending-msg").textContent = alreadyReg
+                  ? "Your wallet will ask to sync — it adds the DYC you just bought to your earning balance (0.40%/day)."
+                  : "Your wallet will ask to activate — it starts your vested DYC earning 0.40%/day toward the 2X cap.";
+                return hs[fn].staticCall().then(function () {
+                  return hs[fn](gasOv(fo, GAS.activate)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                }).catch(function () { return null; }); // the BUY already succeeded — never fail the flow on a benign activate revert
+              });
+            }
+            return chain.then(function () { pending(false); refresh(); toast("Purchase complete — DYC bought" + (hs ? " and activated" : "") + "."); });
+          });
+        });
+      });
+    }).catch(function (e) { if (e === "stop") return; pending(false); failBox(decodeErr(e)); });
+  }
+
   function doConnect() {
     disconnected = false;
     W.connect().then(function (st) { if (!st.chainOk) return W.ensureChain(); }).then(refresh).catch(function () {});

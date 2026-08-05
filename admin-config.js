@@ -31,6 +31,7 @@ window.DY_ADMIN_CONFIG = {
     accessNFT: null, // G12 fresh AccessNFT (owner-configured; null = NOT CONFIGURED)
     waveCardNFT: null, // G12 fresh WaveCardNFT (owner-configured; null = NOT CONFIGURED)
     dycoin: null, // S9 — the DYC token for COIN DROPS (fresh deployment; NOT config.js's frozen Phase-A proxy; null = coin panel disabled)
+    dycoinSale: null, // M-F2 — the DYCoinSale (for the Approve Buyers EIP-712 domain + allowlistSigner gate; null = panel disabled)
   },
 
   // The block the contracts were deployed at — the mint-history scan starts here

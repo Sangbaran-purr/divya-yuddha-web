@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
     <link rel="stylesheet" href="css/admin.css?v=s5d" />
     <script src="config.js?v=s4"></script>
-    <script src="admin-config.js?v=s9"></script>
+    <script src="admin-config.js?v=s10"></script>
   </head>
   <body class="admin">
     <div class="admin-wrap">
@@ -78,6 +78,24 @@
         <div id="coin-results"></div>
       </section>
 
+      <!-- PANEL 4 — APPROVE BUYERS (M-F2) -->
+      <section class="panel" id="panel-approve">
+        <h2>Approve Buyers — EIP-712 allowlist voucher</h2>
+        <p class="hint">Read a wallet from your private registration Sheet, paste it here, and sign the presale
+          voucher with <b>this wallet</b> (must be the sale's <span class="mono">allowlistSigner</span>). The signature
+          proves nothing personal — the published <span class="mono">allowlist.json</span> holds only addresses +
+          signatures. Publishing = committing that file. Batch supported; a rejected sign never halts the rest.</p>
+        <div id="approve-status" class="mono" style="font-size:0.82rem;margin-bottom:0.6rem"></div>
+        <label class="fld" for="approve-input">Wallet address(es) — one per line</label>
+        <textarea class="txt" id="approve-input" placeholder="0x…&#10;0x…" disabled></textarea>
+        <div class="row-actions">
+          <button class="btn" id="approve-sign" disabled>Sign &amp; add to allowlist</button>
+          <button class="btn" id="approve-download" disabled>Download allowlist.json</button>
+          <span id="approve-count" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+        </div>
+        <div id="approve-results"></div>
+      </section>
+
       <!-- HISTORY -->
       <section class="panel" id="panel-history">
         <h2>Mint history</h2>
@@ -107,6 +125,8 @@
         <input class="txt" id="cfg-wave" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-dyc">DYC token address (for Coin Drops)</label>
         <input class="txt" id="cfg-dyc" type="text" placeholder="0x…" />
+        <label class="fld" for="cfg-sale">DYCoinSale address (for Approve Buyers)</label>
+        <input class="txt" id="cfg-sale" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-deploy">Deploy block (history scan start; 0 = full chunked scan)</label>
         <input class="txt" id="cfg-deploy" type="number" placeholder="0" />
         <label class="fld" for="cfg-readrpc">Read RPC URL (archive-capable — for FULL Mint History; blank = recent-only)</label>
@@ -129,7 +149,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s9"></script>
+    <script src="js/admin.js?v=s10"></script>
     <script>
       window.DYAdmin.mount();
     </script>

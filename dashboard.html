@@ -10,9 +10,9 @@
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
-    <link rel="stylesheet" href="css/dashboard.css?v=mf1" />
+    <link rel="stylesheet" href="css/dashboard.css?v=mf2" />
     <script src="config.js?v=s4"></script>
-    <script src="mf-config.js?v=mf1"></script>
+    <script src="mf-config.js?v=mf2"></script>
   </head>
   <body class="dash">
     <!-- mobile header -->
@@ -121,14 +121,10 @@
             <div class="runway-foot" id="runway-foot">Estimated from pool aggregates · updates periodically.</div>
           </div>
 
-          <!-- Buy DYC — M-F2 (styled placeholder) -->
-          <div class="panel-box">
-            <div class="sec-label"><span class="sec-num">4</span> BUY DYC</div>
-            <div class="soon-panel">
-              <h3>Buy &amp; Register</h3>
-              <p>Purchasing DYC, the 15/85 split preview, and staking activation arrive in the next release.</p>
-              <p style="margin-top:8px;opacity:.7">Presale @ $0.008 · Public @ $0.010</p>
-            </div>
+          <!-- Buy DYC — M-F2 -->
+          <div class="panel-box" id="buy-panel">
+            <div class="sec-label"><span class="sec-num">4</span> BUY DYC <span id="buy-round-chip"></span></div>
+            <div id="buy-body"><div class="notlive">Connect your wallet to buy DYC.</div></div>
           </div>
         </div>
 
@@ -215,7 +211,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/dashboard.js?v=mf1"></script>
+    <script src="js/dashboard.js?v=mf2"></script>
     <script>
       window.DYDash.mount();
     </script>

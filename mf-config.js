@@ -20,6 +20,8 @@ window.DY_MF_CONFIG = {
     vestingVault: null, // fresh; null = "not yet live"
     holderStaking: null, // fresh; null = "not yet live"
     roiRedemption: null, // fresh; null = "not yet live"
+    dycoinSale: null, // M-F2 sale; null = BUY DYC shows "not yet live"
+    usdt: null, // M-F2 payment token (USDT, 6-dec); null = BUY DYC not yet live
   },
 
   // Optional read-only RPC for chain reads + the transaction feed (archive-capable,
