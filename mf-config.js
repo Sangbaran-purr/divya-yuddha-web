@@ -25,23 +25,23 @@ window.DY_MF_CONFIG = {
     usdt: "0x28D92502Fcf4BeEC2d3d1d6F55F4AED9fd6408Ec", // Mock USDT (Amoy practice, 6-dec)
   },
 
-  // Vetted KEYLESS Amoy read endpoints (M-F4 defect 3). All chain reads — the wallet-free
-  // report AND the wallet-connected dashboard — go through these instead of MetaMask's RPC,
-  // so a customer's misconfigured wallet RPC can never blank the page. Tried in order with
-  // automatic fallback (ethers FallbackProvider, quorum 1). Vetted 2026-08-06 against the
-  // live stack for BOTH eth_call and eth_getLogs:
-  //   1. drpc      — eth_call OK, eth_getLogs OK (primary)
-  //   2. publicnode — eth_call OK, eth_getLogs OK (fallback)
-  //   3. thirdweb  — eth_call OK, eth_getLogs OK for small block ranges (last resort)
-  // (rejected: zan.top + ankr need API keys; 1rpc.io unreliable.)
-  // The owner's KEYED Alchemy URL is NEVER committed here — keyless public only.
-  readRpcUrl: "https://polygon-amoy.drpc.org",
+  // ── Amoy read endpoints (M-F4c: end the public-endpoint lottery) ──
+  // PRIMARY = a DOMAIN-RESTRICTED Alchemy key, locked to https://sangbaran-purr.github.io. It is
+  // SAFE TO PUBLISH BY DESIGN: Alchemy refuses any other Origin (verified — no Origin / a wrong
+  // Origin are rejected; only the production origin succeeds). This is NOT the owner's private
+  // terminal key (AMOY_RPC_URL) — that one NEVER appears in the site, ever.
+  // The vetted KEYLESS free endpoints (drpc → publicnode → thirdweb) demote to FALLBACKS; the
+  // connected wallet remains the last-resort rescue. Tried in order (FallbackProvider, quorum 1).
+  readRpcUrl: "https://polygon-amoy.g.alchemy.com/v2/alch_i8MLaVdIkYDguqknRIjen",
   readRpcUrlFallbacks: [
+    "https://polygon-amoy.drpc.org",
     "https://polygon-amoy-bor-rpc.publicnode.com",
     "https://80002.rpc.thirdweb.com",
   ],
-  // getLogs chunk sized to the public line's limit (thirdweb caps ~small; drpc/publicnode
-  // handle more — 3000 is safe across all three).
+  // ⚠ eth_getLogs SPLIT: the domain-locked key's free tier caps eth_getLogs at a 10-block range —
+  // useless for the feed/report scans (thousands of blocks). So getLogs runs on the FREE endpoints
+  // (drpc/publicnode/thirdweb — large ranges OK); only eth_call (the card reads that failed the
+  // owner) uses the reliable site key. logChunk sizes that free-endpoint getLogs line.
   logChunk: 3000,
 
   // The block the live Amoy stack deployed at — the getLogs scans start here.

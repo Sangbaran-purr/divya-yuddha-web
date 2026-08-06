@@ -186,37 +186,38 @@ window.DYDash = (function () {
   }
 
   function withEthers() { return W.loadEthers().then(function (e) { ethersRef = e; return e; }); }
-  // Resilient wallet-free reads (M-F4 defect 3): all chain reads go through the vetted public
-  // endpoints (drpc → publicnode → thirdweb), NEVER MetaMask's RPC — a misconfigured wallet RPC
-  // can no longer blank the dashboard. FallbackProvider (quorum 1) returns the first success.
-  var _readProv = null, _readKey = "";
-  function readProvider() {
-    var c = cfg();
-    // M-F4b: rebuild when the wallet joins/leaves so the connected wallet can (dis)appear from the read chain
-    var connected = !!(window.ethereum && isConnected() && W.state.chainOk);
-    var key = (c.readRpcUrl || "") + "|" + (c.readRpcUrlFallbacks || []).join(",") + "|" + connected;
-    if (_readProv && _readKey === key) return _readProv;
-    _readKey = key;
+  // Resilient reads (M-F4/b/c). Two chains from ONE builder:
+  //   • readProvider() — eth_call (the card reads): SITE KEY (domain-locked Alchemy) primary → free
+  //     endpoints → connected wallet. batchMaxCount:1 (M-F4b) since public endpoints reject batches.
+  //   • logProvider()  — eth_getLogs (feed / report event-counts): FREE endpoints only → wallet. The
+  //     site key's free tier caps getLogs at 10 blocks (useless for multi-thousand-block scans), so
+  //     logs deliberately skip it. The wallet stays the last-resort rescue for both.
+  var _provCache = {};
+  function walletInChain() { return !!(window.ethereum && isConnected() && W.state.chainOk); }
+  function buildProvider(tag, urls, connected) {
     var net = { chainId: PLAYER.chain.id, name: "amoy" };
-    var urls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
+    urls = (urls || []).filter(Boolean);
     if (!urls.length) urls = [PLAYER.chain.rpcUrls[0]];
-    // batchMaxCount:1 (M-F4b ROOT CAUSE) — ethers batches JSON-RPC calls by default; many public Amoy
-    // endpoints reject BATCH requests (single requests work), which silently failed every read from the
-    // owner's network. One request at a time makes the page behave like the passing single-request tests.
+    var key = urls.join(",") + "|" + connected;
+    if (_provCache[tag] && _provCache[tag].key === key) return _provCache[tag].prov;
     var configs = urls.map(function (u, i) {
       return { provider: new ethersRef.JsonRpcProvider(u, net, { staticNetwork: true, batchMaxCount: 1 }), priority: i + 1, stallTimeout: 2500, weight: 1 };
     });
-    // WALLET-FIRST FALLBACK (M-F4b) — a connected wallet joins as the LAST rescue. Public lines stay primary
-    // (and serve wallet-free readers on the report); the wallet's own RPC rescues when public endpoints are
-    // unreachable from the user's browser/network (it carried Alchemy for the owner this morning).
     if (connected) {
       try { configs.push({ provider: new ethersRef.BrowserProvider(window.ethereum), priority: 99, stallTimeout: 5000, weight: 1 }); } catch (e) {}
     }
-    try { _readProv = configs.length > 1 ? new ethersRef.FallbackProvider(configs, net, { quorum: 1 }) : configs[0].provider; }
-    catch (e) { _readProv = configs[0].provider; }
-    return _readProv;
+    var prov;
+    try { prov = configs.length > 1 ? new ethersRef.FallbackProvider(configs, net, { quorum: 1 }) : configs[0].provider; }
+    catch (e) { prov = configs[0].provider; }
+    _provCache[tag] = { key: key, prov: prov };
+    return prov;
   }
-  function resetReadProvider() { _readProv = null; _readKey = ""; }
+  function readProvider() { var c = cfg(); return buildProvider("read", [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []), walletInChain()); }
+  function logProvider() {
+    var c = cfg(), free = (c.readRpcUrlFallbacks || []).filter(Boolean);
+    return buildProvider("log", free.length ? free : [c.readRpcUrl], walletInChain());
+  }
+  function resetReadProvider() { _provCache = {}; }
 
   // M-F4b DIAGNOSTIC HONESTY: on a read failure the addresses are correct — the network line is moody. Say so,
   // auto-retry (rotating the provider), and offer a manual retry once exhausted. Never say "check the address."
@@ -693,7 +694,7 @@ window.DYDash = (function () {
       return;
     }
     status.textContent = "Scanning recent activity…";
-    var provider = readProvider();
+    var provider = logProvider(); // M-F4c: getLogs uses the free endpoints (the site key caps ranges to 10 blocks)
     provider.getBlockNumber().then(function (latest) {
       var from = c.deployBlock || Math.max(0, latest - 45000);
       var evs = [];

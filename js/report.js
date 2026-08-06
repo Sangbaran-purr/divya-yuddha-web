@@ -80,27 +80,30 @@ window.DYReport = (function () {
       " will appear here the moment the contract is deployed. Nothing is wrong — the raise simply hasn't opened yet.</div>";
   }
 
-  // Resilient wallet-free reads (M-F4 defect 3 + M-F4b): the vetted public endpoints (drpc → publicnode →
-  // thirdweb) with automatic fallback (FallbackProvider, quorum 1). NEVER a wallet — public page.
-  // batchMaxCount:1 (M-F4b) — ethers batches by default; several public Amoy endpoints reject JSON-RPC
-  // BATCH requests (single requests pass), which was silently failing every read. One request at a time fixes it.
-  var _readProv = null;
-  function resetReadProvider() { _readProv = null; }
-  function readProvider() {
-    if (_readProv) return _readProv;
-    var c = cfg();
-    var urls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
+  // Resilient wallet-free reads (M-F4/b/c) — NEVER a wallet (public page). batchMaxCount:1 (M-F4b) since
+  // public endpoints reject JSON-RPC batches. Two chains:
+  //   • readProvider() — eth_call (the report aggregates): SITE KEY (domain-locked Alchemy) primary → free.
+  //   • logProvider()  — eth_getLogs (buyer count / claimed / redeemed): FREE endpoints only (the site key's
+  //     free tier caps getLogs at 10 blocks, useless for multi-thousand-block scans).
+  var _provCache = {};
+  function resetReadProvider() { _provCache = {}; }
+  function buildProvider(tag, urls) {
+    urls = (urls || []).filter(Boolean);
     if (!urls.length) urls = [PLAYER.chain.rpcUrls[0]];
+    if (_provCache[tag]) return _provCache[tag];
     var net = { chainId: PLAYER.chain.id, name: "amoy" };
     var opts = { staticNetwork: true, batchMaxCount: 1 };
-    if (urls.length === 1) { _readProv = new ethersRef.JsonRpcProvider(urls[0], net, opts); return _readProv; }
-    var configs = urls.map(function (u, i) {
-      return { provider: new ethersRef.JsonRpcProvider(u, net, opts), priority: i + 1, stallTimeout: 2500, weight: 1 };
-    });
-    try { _readProv = new ethersRef.FallbackProvider(configs, net, { quorum: 1 }); }
-    catch (e) { _readProv = configs[0].provider; }
-    return _readProv;
+    var prov;
+    if (urls.length === 1) prov = new ethersRef.JsonRpcProvider(urls[0], net, opts);
+    else {
+      var configs = urls.map(function (u, i) { return { provider: new ethersRef.JsonRpcProvider(u, net, opts), priority: i + 1, stallTimeout: 2500, weight: 1 }; });
+      try { prov = new ethersRef.FallbackProvider(configs, net, { quorum: 1 }); } catch (e) { prov = configs[0].provider; }
+    }
+    _provCache[tag] = prov;
+    return prov;
   }
+  function readProvider() { var c = cfg(); return buildProvider("read", [c.readRpcUrl].concat(c.readRpcUrlFallbacks || [])); }
+  function logProvider() { var c = cfg(), free = (c.readRpcUrlFallbacks || []).filter(Boolean); return buildProvider("log", free.length ? free : [c.readRpcUrl]); }
 
   // ---- chunked getLogs (S5a pattern): returns [] on any failure so a figure degrades to "—", never throws ----
   function scanLogs(provider, address, topics, fromBlock, toBlock) {
@@ -131,7 +134,7 @@ window.DYReport = (function () {
       var roundTxt = round === 1 ? "PRESALE OPEN" : round === 2 ? "PUBLIC OPEN" : "BETWEEN ROUNDS";
       chip.innerHTML = "<span class='buy-round " + (round === 2 ? "public" : "presale") + "'>" + roundTxt + "</span>";
       var totalSold = pSold + qSold;
-      return countBuyers(provider, c).then(function (buyers) {
+      return countBuyers(logProvider(), c).then(function (buyers) {
         b.innerHTML =
           "<div class='rep-figrow'><span>Current round</span><b>" + roundTxt + "</b></div>" +
           roundBlock("Presale", "$" + fmtUnits(pPrice, 18, 3), pSold, pCap) +
@@ -172,7 +175,7 @@ window.DYReport = (function () {
     var c = cfg(), b = $("vault-body");
     if (!c.vestingVault) { b.innerHTML = notLive(" The vesting vault — DYC locked over the two years after listing"); return Promise.resolve(); }
     var vault = new ethersRef.Contract(c.vestingVault, VAULT_ABI, provider);
-    return Promise.all([vault.totalVested(), sumClaimed(provider, c)]).then(function (r) {
+    return Promise.all([vault.totalVested(), sumClaimed(logProvider(), c)]).then(function (r) {
       var vesting = r[0], claimed = r[1];
       b.innerHTML =
         "<div class='rep-big'><span class='rep-biglabel'>Currently vesting</span><span class='rep-bigval'>" + fmtDyc(vesting) + " <em>DYC</em></span></div>" +
@@ -219,7 +222,7 @@ window.DYReport = (function () {
     var c = cfg(), b = $("desk-body");
     if (!c.roiRedemption) { b.innerHTML = notLive(" The redemption desk — the USDT reserve that cashes ROI out"); return Promise.resolve(); }
     var desk = new ethersRef.Contract(c.roiRedemption, DESK_ABI, provider);
-    return Promise.all([desk.reserve(), sumRedeemed(provider, c)]).then(function (r) {
+    return Promise.all([desk.reserve(), sumRedeemed(logProvider(), c)]).then(function (r) {
       var reserve = r[0], red = r[1];
       b.innerHTML =
         "<div class='rep-big'><span class='rep-biglabel'>USDT reserve backing redemptions</span><span class='rep-bigval'>" + fmtUsd(reserve) + " <em>USDT</em></span></div>" +
