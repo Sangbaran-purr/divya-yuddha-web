@@ -288,3 +288,11 @@ details.cfg summary {
   color: var(--gold-aged);
   line-height: 1.7;
 }
+
+/* ---- M-F3 Purchase Registry ---- */
+.reg-note { font-size: 0.78rem; color: var(--gold-aged); margin: 8px 0 10px; line-height: 1.5; }
+.reg-tablewrap { overflow-x: auto; }
+table.reg-table { min-width: 640px; }
+table.reg-table td.num, table.reg-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.reg-table tr.tot td { border-top: 2px solid var(--gold-aged); color: var(--flame-core); font-weight: 600; }
+.reg-note .mono { color: var(--gold-burnished); }

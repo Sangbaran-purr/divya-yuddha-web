@@ -847,3 +847,56 @@
 .split .sv { font-family: var(--display); font-size: 1.4rem; color: #fff; margin: 2px 0; }
 .split .su { font-size: 0.72rem; color: var(--gold-aged); }
 .buy-narrate { font-size: 0.8rem; color: var(--gold-aged); line-height: 1.5; margin-top: 10px; }
+
+/* ============================================================
+   M-F3 — THE PROCEEDS REPORT (public page, wallet-free)
+   ============================================================ */
+body.report { background: radial-gradient(120% 90% at 50% -10%, rgba(40,30,12,.35), transparent 60%), var(--stone-void); }
+.rep-wrap { max-width: 1120px; margin: 0 auto; padding: 26px 16px 60px; }
+.rep-head { text-align: center; margin: 8px 0 26px; }
+.rep-logo { height: 52px; width: auto; opacity: .96; margin-bottom: 12px; }
+.rep-head h1 {
+  font-family: var(--display); letter-spacing: var(--track-display);
+  color: var(--gold-burnished); font-size: 1.9rem; margin: 0 0 10px; font-weight: 600;
+}
+.rep-promise {
+  max-width: 660px; margin: 0 auto; color: var(--parchment);
+  font-size: .98rem; line-height: 1.6;
+}
+.rep-promise b { color: var(--flame-core); }
+.rep-netrow { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.rep-updated { color: var(--gold-aged); font-size: .8rem; }
+
+.rep-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 900px) { .rep-grid { grid-template-columns: 1fr 1fr; } }
+.rep-chip { margin-left: auto; }
+
+.rep-figrow {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: .92rem;
+}
+.rep-figrow:last-child { border-bottom: none; }
+.rep-figrow > span { color: var(--gold-aged); }
+.rep-figrow > b { color: var(--parchment); font-variant-numeric: tabular-nums; text-align: right; }
+
+.rep-big { margin: 14px 0 6px; padding: 14px; border-radius: 10px;
+  background: linear-gradient(180deg, rgba(40,30,12,.5), rgba(20,15,6,.35)); border: 1px solid var(--line); }
+.rep-biglabel { display: block; color: var(--gold-aged); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; }
+.rep-bigval { display: block; font-family: var(--display); color: var(--flame-core); font-size: 1.5rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.rep-bigval em { font-style: normal; color: var(--gold-aged); font-size: .9rem; }
+
+.rep-round { margin: 6px 0; }
+.rep-bar { height: 8px; border-radius: 5px; background: rgba(255,255,255,.06); overflow: hidden; margin: 6px 0 3px; }
+.rep-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-burnished), var(--flame-core)); border-radius: 5px; }
+.rep-barpct { font-size: .76rem; color: var(--gold-aged); }
+.rep-raised { margin-top: 8px; }
+.rep-note { margin-top: 12px; font-size: .8rem; color: var(--gold-aged); line-height: 1.5; }
+.rep-src { font-size: .68rem; color: var(--blue); border: 1px solid rgba(61,127,214,.4); border-radius: 4px; padding: 1px 5px; margin-left: 4px; white-space: nowrap; }
+.rep-verifyrow { margin-top: 12px; }
+.rep-verify { color: var(--gold-burnished); font-size: .82rem; text-decoration: none; border-bottom: 1px dotted var(--gold-aged); }
+.rep-verify:hover { color: var(--flame-core); }
+
+.rep-foot { margin-top: 28px; text-align: center; }
+.rep-foot p { max-width: 720px; margin: 0 auto 16px; color: var(--gold-aged); font-size: .84rem; line-height: 1.6; }
+.rep-back { color: var(--gold-burnished); text-decoration: none; font-family: var(--display); letter-spacing: .06em; font-size: .9rem; }
+.rep-back:hover { color: var(--flame-core); }

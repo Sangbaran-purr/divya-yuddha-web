@@ -10,9 +10,9 @@
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
-    <link rel="stylesheet" href="css/admin.css?v=s5d" />
+    <link rel="stylesheet" href="css/admin.css?v=s11" />
     <script src="config.js?v=s4"></script>
-    <script src="admin-config.js?v=s10"></script>
+    <script src="admin-config.js?v=s11"></script>
   </head>
   <body class="admin">
     <div class="admin-wrap">
@@ -96,6 +96,25 @@
         <div id="approve-results"></div>
       </section>
 
+      <!-- PANEL 5 — PURCHASE REGISTRY (M-F3) -->
+      <section class="panel" id="panel-registry">
+        <h2>Purchase Registry — per-wallet chain truth</h2>
+        <p class="hint">Loads the approved wallets from <span class="mono">allowlist.json</span> (add any extra wallets
+          below), and for each reads its <b>actual</b> purchases from the sale's <span class="mono">Purchased</span>
+          logs plus the live four-column state. <b>Zero personal data</b> — wallets and numbers only; match names in
+          your private Sheet. Gated on <span class="mono">this wallet == the sale's allowlistSigner</span>, same as
+          Approve Buyers. Read-only; nothing is signed or sent.</p>
+        <div id="registry-status" class="mono" style="font-size:0.82rem;margin-bottom:0.6rem"></div>
+        <label class="fld" for="registry-input">Extra wallet address(es) — one per line (optional; merged with allowlist.json)</label>
+        <textarea class="txt" id="registry-input" placeholder="0x…&#10;0x…" disabled></textarea>
+        <div class="row-actions">
+          <button class="btn" id="registry-load" disabled>Load purchases from chain</button>
+          <button class="btn" id="registry-csv" disabled>Download CSV</button>
+          <span id="registry-count" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+        </div>
+        <div id="registry-results"></div>
+      </section>
+
       <!-- HISTORY -->
       <section class="panel" id="panel-history">
         <h2>Mint history</h2>
@@ -125,8 +144,12 @@
         <input class="txt" id="cfg-wave" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-dyc">DYC token address (for Coin Drops)</label>
         <input class="txt" id="cfg-dyc" type="text" placeholder="0x…" />
-        <label class="fld" for="cfg-sale">DYCoinSale address (for Approve Buyers)</label>
+        <label class="fld" for="cfg-sale">DYCoinSale address (for Approve Buyers + Purchase Registry)</label>
         <input class="txt" id="cfg-sale" type="text" placeholder="0x…" />
+        <label class="fld" for="cfg-vault">VestingVault address (Purchase Registry — VESTED column)</label>
+        <input class="txt" id="cfg-vault" type="text" placeholder="0x…" />
+        <label class="fld" for="cfg-staking">HolderStaking address (Purchase Registry — STAKED + REWARDS)</label>
+        <input class="txt" id="cfg-staking" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-deploy">Deploy block (history scan start; 0 = full chunked scan)</label>
         <input class="txt" id="cfg-deploy" type="number" placeholder="0" />
         <label class="fld" for="cfg-readrpc">Read RPC URL (archive-capable — for FULL Mint History; blank = recent-only)</label>
@@ -149,7 +172,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s10"></script>
+    <script src="js/admin.js?v=s11"></script>
     <script>
       window.DYAdmin.mount();
     </script>

@@ -32,6 +32,8 @@ window.DY_ADMIN_CONFIG = {
     waveCardNFT: null, // G12 fresh WaveCardNFT (owner-configured; null = NOT CONFIGURED)
     dycoin: null, // S9 — the DYC token for COIN DROPS (fresh deployment; NOT config.js's frozen Phase-A proxy; null = coin panel disabled)
     dycoinSale: null, // M-F2 — the DYCoinSale (for the Approve Buyers EIP-712 domain + allowlistSigner gate; null = panel disabled)
+    vestingVault: null, // M-F3 — the VestingVault (Purchase Registry: per-wallet VESTED column; null = registry vested reads skipped)
+    holderStaking: null, // M-F3 — the HolderStaking (Purchase Registry: per-wallet STAKED + REWARDS columns; null = skipped)
   },
 
   // The block the contracts were deployed at — the mint-history scan starts here

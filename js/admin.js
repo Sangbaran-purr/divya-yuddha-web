@@ -63,6 +63,8 @@ window.DYAdmin = (function () {
       waveCardNFT: o.waveCardNFT || fc.waveCardNFT || null,
       dycoin: o.dycoin || fc.dycoin || null, // S9 — the DYC token for COIN DROPS (admin config, never config.js's frozen proxy)
       dycoinSale: o.dycoinSale || fc.dycoinSale || null, // M-F2 — the DYCoinSale (Approve Buyers EIP-712 domain + signer gate)
+      vestingVault: o.vestingVault || fc.vestingVault || null, // M-F3 — Purchase Registry VESTED column
+      holderStaking: o.holderStaking || fc.holderStaking || null, // M-F3 — Purchase Registry STAKED + REWARDS
       deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null, // archive-capable RPC for HISTORY READS only (S5a-FIX-3)
       waveCards: o.waveCards && o.waveCards.length ? o.waveCards : FILE.waveCards || [],
@@ -267,6 +269,7 @@ window.DYAdmin = (function () {
     setPanelEnabled("wave", on);
     setPanelEnabled("coin", on);
     setPanelEnabled("approve", on);
+    setPanelEnabled("registry", on);
   }
   function setPanelEnabled(kind, on) {
     var p = $("panel-" + kind);
@@ -930,6 +933,8 @@ window.DYAdmin = (function () {
     $("cfg-wave").value = c.waveCardNFT || "";
     if ($("cfg-dyc")) $("cfg-dyc").value = c.dycoin || ""; // S9
     if ($("cfg-sale")) $("cfg-sale").value = c.dycoinSale || ""; // M-F2
+    if ($("cfg-vault")) $("cfg-vault").value = c.vestingVault || ""; // M-F3
+    if ($("cfg-staking")) $("cfg-staking").value = c.holderStaking || ""; // M-F3
     $("cfg-deploy").value = c.deployBlock || 0;
     $("cfg-readrpc").value = c.readRpcUrl || "";
     $("cfg-cards").value = c.waveCards.length ? JSON.stringify(c.waveCards, null, 2) : "";
@@ -961,14 +966,20 @@ window.DYAdmin = (function () {
       var w = $("cfg-wave").value.trim();
       var d = $("cfg-dyc") ? $("cfg-dyc").value.trim() : ""; // S9 DYC token
       var sl = $("cfg-sale") ? $("cfg-sale").value.trim() : ""; // M-F2 DYCoinSale
+      var vv = $("cfg-vault") ? $("cfg-vault").value.trim() : ""; // M-F3 VestingVault
+      var hs = $("cfg-staking") ? $("cfg-staking").value.trim() : ""; // M-F3 HolderStaking
       var pa = a ? parseAddr(a) : null;
       var pw = w ? parseAddr(w) : null;
       var pd = d ? parseAddr(d) : null;
       var ps = sl ? parseAddr(sl) : null;
+      var pvv = vv ? parseAddr(vv) : null;
+      var phs = hs ? parseAddr(hs) : null;
       if (a && !pa) return warn(msg, "AccessNFT address is not a valid checksummed address. Nothing saved.");
       if (w && !pw) return warn(msg, "WaveCardNFT address is not a valid checksummed address. Nothing saved.");
       if (d && !pd) return warn(msg, "DYC token address is not a valid checksummed address. Nothing saved.");
       if (sl && !ps) return warn(msg, "DYCoinSale address is not a valid checksummed address. Nothing saved.");
+      if (vv && !pvv) return warn(msg, "VestingVault address is not a valid checksummed address. Nothing saved.");
+      if (hs && !phs) return warn(msg, "HolderStaking address is not a valid checksummed address. Nothing saved.");
 
       var rawCards = $("cfg-cards").value.trim();
       var cards;
@@ -1004,6 +1015,8 @@ window.DYAdmin = (function () {
         waveCardNFT: pw,
         dycoin: pd, // S9
         dycoinSale: ps, // M-F2
+        vestingVault: pvv, // M-F3
+        holderStaking: phs, // M-F3
         deployBlock: Number($("cfg-deploy").value) || 0,
         readRpcUrl: readRpc || null,
         waveCards: cards,
@@ -1036,7 +1049,30 @@ window.DYAdmin = (function () {
   }
 
   // ---------- APPROVE BUYERS (M-F2) — EIP-712 allowlist vouchers, no-server ----------
-  var SALE_ABI = ["function allowlistSigner() view returns (address)"];
+  var SALE_ABI = [
+    "function allowlistSigner() view returns (address)",
+    "event Purchased(address indexed buyer, uint8 round, address asset, uint256 paid, uint256 usdE18, uint256 dycOut, uint256 liquid)",
+  ];
+  var REG_VAULT_ABI = ["function vestedBalanceOf(address) view returns (uint256)"];
+  var REG_STAKE_ABI = [
+    "function positionCount(address) view returns (uint256)",
+    "function getPosition(address,uint256) view returns (tuple(uint256 principal,uint256 startTime,uint256 rewardClaimed,bool staked,bool principalReleased))",
+    "function pendingRoi(address) view returns (uint256)",
+  ];
+  // staked = Σ live position principal (matches the M-F1 dashboard; vested-registered ROI positions are NOT
+  // counted by stakedPrincipalOf, so we sum positions the same way the holder's own dashboard does)
+  function stakedOf(stake, wallet) {
+    return stake.positionCount(wallet).then(function (n) {
+      var reads = [];
+      for (var i = 0; i < Number(n); i++) reads.push(stake.getPosition(wallet, i));
+      return Promise.all(reads).then(function (ps) {
+        var total = 0n;
+        ps.forEach(function (p) { if (!p.principalReleased) total += p.principal; });
+        return total;
+      });
+    });
+  }
+  var registryRows = []; // last-loaded rows, for CSV export
   var approvedList = []; // merged {wallet, sig} (existing allowlist.json + this session's signs)
   var saleSigner = null; // last-read sale.allowlistSigner()
 
@@ -1044,8 +1080,11 @@ window.DYAdmin = (function () {
     var st = $("approve-status");
     var c = cfg();
     setPanelEnabled("approve", false);
+    setPanelEnabled("registry", false);
+    var rst = $("registry-status");
     if (!c.dycoinSale) {
       if (st) st.innerHTML = "<span class='mono'>DYCoinSale NOT CONFIGURED</span> — set the sale address in Configuration to approve buyers.";
+      if (rst) rst.innerHTML = "<span class='mono'>DYCoinSale NOT CONFIGURED</span> — set the sale address to read the registry.";
       return;
     }
     withEthers().then(function () {
@@ -1057,15 +1096,19 @@ window.DYAdmin = (function () {
       var isSigner = eq(signer, me);
       if (isSigner) {
         setPanelEnabled("approve", true);
+        setPanelEnabled("registry", true);
         st.innerHTML = "You are the sale's allowlist signer — your signatures count. " +
           "<span class='mono'>" + shortAddr(me) + "</span>";
         st.style.color = "var(--flame-core)";
+        if (rst) { rst.innerHTML = "Registry unlocked — you are the sale's allowlist signer. Reads on-chain only; nothing is signed."; rst.style.color = "var(--flame-core)"; }
         loadExistingAllowlist();
       } else {
         setPanelEnabled("approve", false);
+        setPanelEnabled("registry", false);
         st.innerHTML = "<span class='bad'>This wallet is not the sale's allowlist signer</span>, so its signatures would be rejected on-chain. " +
           "Connect the approving wallet. Expected: <span class='mono'>" + shortAddr(signer) + "</span>.";
         st.style.color = "var(--gold-aged)";
+        if (rst) { rst.innerHTML = "<span class='bad'>Registry locked</span> — connect the sale's allowlist signer wallet to view purchases. Expected: <span class='mono'>" + shortAddr(signer) + "</span>."; rst.style.color = "var(--gold-aged)"; }
       }
     }).catch(function () {
       st.innerHTML = "<span class='bad'>Could not read the sale</span> — check the DYCoinSale address in Configuration.";
@@ -1082,6 +1125,123 @@ window.DYAdmin = (function () {
   function renderAllowlistCount() {
     var n = $("approve-count");
     if (n) n.textContent = approvedList.length ? approvedList.length + " wallet(s) in the list" : "list empty";
+  }
+
+  // ---------- PURCHASE REGISTRY (M-F3) — per-wallet chain truth, read-only, zero PII ----------
+  function fmtDyc18(v) {
+    if (v == null) return "—";
+    try { return Number(ethersRef.formatUnits(v, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+    catch (e) { return "—"; }
+  }
+  // merge allowlist.json wallets + pasted extras; dedupe (lowercase); keep only valid addresses
+  function registryWallets() {
+    var raw = ($("registry-input") ? $("registry-input").value : "").split(/[\s,]+/);
+    var seen = {}, out = [];
+    function add(a) {
+      if (!a || !ethersRef.isAddress(a)) return;
+      var k = a.toLowerCase();
+      if (seen[k]) return;
+      seen[k] = 1; out.push(ethersRef.getAddress(a));
+    }
+    approvedList.forEach(function (e) { add(e.wallet); });
+    raw.forEach(add);
+    return out;
+  }
+  // sum this wallet's dycOut across its Purchased logs (chunked queryFilter — S5a pattern)
+  function boughtOf(sale, wallet, from, latest) {
+    var total = 0n, start = from;
+    function step() {
+      if (start > latest) return Promise.resolve(total);
+      var end = Math.min(start + LOG_CHUNK - 1, latest);
+      return sale.queryFilter(sale.filters.Purchased(wallet), start, end).then(function (evs) {
+        evs.forEach(function (ev) { total += ev.args.dycOut; });
+        start = end + 1;
+        return sleep(80).then(step);
+      });
+    }
+    return step();
+  }
+  function readRegistryRow(c, provider, latest, wallet) {
+    var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, provider);
+    var reads = [
+      boughtOf(sale, wallet, c.deployBlock || 0, latest).catch(function () { return null; }),
+      c.dycoin ? new ethersRef.Contract(c.dycoin, COIN_ABI, provider).balanceOf(wallet).catch(function () { return null; }) : Promise.resolve(null),
+      c.vestingVault ? new ethersRef.Contract(c.vestingVault, REG_VAULT_ABI, provider).vestedBalanceOf(wallet).catch(function () { return null; }) : Promise.resolve(null),
+      c.holderStaking ? stakedOf(new ethersRef.Contract(c.holderStaking, REG_STAKE_ABI, provider), wallet).catch(function () { return null; }) : Promise.resolve(null),
+      c.holderStaking ? new ethersRef.Contract(c.holderStaking, REG_STAKE_ABI, provider).pendingRoi(wallet).catch(function () { return null; }) : Promise.resolve(null),
+    ];
+    return Promise.all(reads).then(function (r) {
+      return { wallet: wallet, bought: r[0], liquid: r[1], vested: r[2], staked: r[3], rewards: r[4] };
+    });
+  }
+  function loadRegistry() {
+    var c = cfg(), out = $("registry-results"), cnt = $("registry-count");
+    if (!c.dycoinSale) { out.innerHTML = "<div class='q'>Configure the DYCoinSale address first.</div>"; return; }
+    var wallets = registryWallets();
+    if (!wallets.length) { out.innerHTML = "<div class='q'>No wallets — the allowlist is empty and no extra wallets were pasted.</div>"; cnt.textContent = ""; return; }
+    out.innerHTML = "<div class='q'>Reading " + wallets.length + " wallet(s) from chain…</div>";
+    cnt.textContent = "";
+    registryRows = [];
+    withEthers().then(function () {
+      var provider = readProvider();
+      return provider.getBlockNumber().then(function (latest) {
+        // sequential — gentle on the RPC, and order-stable for the table
+        var i = 0;
+        function next() {
+          if (i >= wallets.length) return Promise.resolve();
+          return readRegistryRow(c, provider, latest, wallets[i]).then(function (row) {
+            registryRows.push(row); i++;
+            out.innerHTML = renderRegistryTable(registryRows, wallets.length);
+            return next();
+          });
+        }
+        return next();
+      });
+    }).then(function () {
+      cnt.textContent = registryRows.length + " wallet(s) read";
+      out.innerHTML = renderRegistryTable(registryRows, wallets.length);
+    }).catch(function () {
+      out.innerHTML = "<div class='q bad'>Could not read the registry — check the contract addresses and network.</div>";
+    });
+  }
+  function renderRegistryTable(rows, expected) {
+    var tot = { bought: 0n, liquid: 0n, vested: 0n, staked: 0n, rewards: 0n };
+    var any = { bought: false, liquid: false, vested: false, staked: false, rewards: false };
+    rows.forEach(function (r) {
+      ["bought", "liquid", "vested", "staked", "rewards"].forEach(function (k) {
+        if (r[k] != null) { tot[k] += r[k]; any[k] = true; }
+      });
+    });
+    function cell(v) { return "<td class='num'>" + fmtDyc18(v) + "</td>"; }
+    var body = rows.map(function (r) {
+      return "<tr><td class='mono'>" + shortAddr(r.wallet) + "</td>" +
+        cell(r.bought) + cell(r.liquid) + cell(r.vested) + cell(r.staked) + cell(r.rewards) + "</tr>";
+    }).join("");
+    var totalRow = "<tr class='tot'><td class='mono'>TOTAL · " + rows.length + " wallet(s)</td>" +
+      "<td class='num'>" + (any.bought ? fmtDyc18(tot.bought) : "—") + "</td>" +
+      "<td class='num'>" + (any.liquid ? fmtDyc18(tot.liquid) : "—") + "</td>" +
+      "<td class='num'>" + (any.vested ? fmtDyc18(tot.vested) : "—") + "</td>" +
+      "<td class='num'>" + (any.staked ? fmtDyc18(tot.staked) : "—") + "</td>" +
+      "<td class='num'>" + (any.rewards ? fmtDyc18(tot.rewards) : "—") + "</td></tr>";
+    return "<div class='reg-note'>All amounts in DYC. Bought = Σ dycOut from the sale's <span class='mono'>Purchased</span> logs. " +
+      "Liquid/Vested/Staked/Rewards are live contract reads. Wallets only — no names.</div>" +
+      "<div class='reg-tablewrap'><table class='grid reg-table'><thead><tr>" +
+      "<th>Wallet</th><th class='num'>Bought</th><th class='num'>Liquid</th><th class='num'>Vested</th><th class='num'>Staked</th><th class='num'>Rewards</th>" +
+      "</tr></thead><tbody>" + body + totalRow + "</tbody></table></div>";
+  }
+  function downloadRegistryCsv() {
+    if (!registryRows.length) return;
+    function n(v) { if (v == null) return ""; try { return ethersRef.formatUnits(v, 18); } catch (e) { return ""; } }
+    var lines = ["wallet,bought_dyc,liquid_dyc,vested_dyc,staked_dyc,rewards_dyc"];
+    registryRows.forEach(function (r) {
+      lines.push([r.wallet, n(r.bought), n(r.liquid), n(r.vested), n(r.staked), n(r.rewards)].join(","));
+    });
+    var blob = new Blob([lines.join("\n") + "\n"], { type: "text/csv" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "purchase-registry.csv";
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
   }
 
   // EIP-712 sign the Allowlisted(wallet) voucher with the connected (signer) wallet
@@ -1160,6 +1320,8 @@ window.DYAdmin = (function () {
     // Approve Buyers (M-F2)
     if ($("approve-sign")) $("approve-sign").onclick = runApprove;
     if ($("approve-download")) $("approve-download").onclick = downloadAllowlist;
+    if ($("registry-load")) $("registry-load").onclick = loadRegistry;
+    if ($("registry-csv")) $("registry-csv").onclick = downloadRegistryCsv;
     // Access panel
     $("acc-review").onclick = function () {
       prepareDrop("access", {

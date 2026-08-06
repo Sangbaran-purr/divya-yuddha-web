@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Divya Yuddha — The Proceeds Report</title>
+    <meta name="description" content="Live sale, vault, reward-pool and redemption-desk numbers — read straight from the blockchain, verifiable by anyone." />
+    <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/threshold.css?v=s1e" />
+    <link rel="stylesheet" href="css/dashboard.css?v=mf3" />
+    <script src="config.js?v=s4"></script>
+    <script src="mf-config.js?v=mf2"></script>
+  </head>
+  <body class="dash report">
+    <div class="rep-wrap">
+      <header class="rep-head">
+        <img class="rep-logo" src="assets/brand/logo.webp?v=mf1" alt="Divya Yuddha" />
+        <h1>The Proceeds Report</h1>
+        <p class="rep-promise">
+          Every number below is read <b>live from the blockchain</b> the moment this page loads — not typed by us,
+          not stored on a server. Anyone can verify each figure against the contract on the explorer.
+          No refunds, no hidden ledgers: this is the raise, in the open.
+        </p>
+        <div class="rep-netrow">
+          <span id="rep-net" class="net-chip">◈ reading…</span>
+          <span id="rep-updated" class="rep-updated"></span>
+        </div>
+      </header>
+
+      <div class="rep-grid">
+        <section class="panel-box" id="sale-panel">
+          <div class="sec-label"><span class="sec-num">1</span> THE SALE <span id="sale-chip" class="rep-chip"></span></div>
+          <div id="sale-body"><div class="notlive">Reading the sale…</div></div>
+        </section>
+
+        <section class="panel-box" id="vault-panel">
+          <div class="sec-label"><span class="sec-num">2</span> THE VAULT</div>
+          <div id="vault-body"><div class="notlive">Reading the vault…</div></div>
+        </section>
+
+        <section class="panel-box" id="pool-panel">
+          <div class="sec-label"><span class="sec-num">3</span> THE REWARD POOL</div>
+          <div id="pool-body"><div class="notlive">Reading the pool…</div></div>
+        </section>
+
+        <section class="panel-box" id="desk-panel">
+          <div class="sec-label"><span class="sec-num">4</span> THE REDEMPTION DESK</div>
+          <div id="desk-body"><div class="notlive">Reading the desk…</div></div>
+        </section>
+      </div>
+
+      <footer class="rep-foot">
+        <p>
+          ✦ These figures come straight from the DYCoinSale, VestingVault, HolderStaking and RoiRedemption contracts.
+          A few counts — buyers, total claimed, total redeemed — are tallied from on-chain event logs and are marked
+          <span class="rep-src">from event logs</span>; every other figure is a direct contract read. Nothing here is
+          editable by us after a purchase settles.
+        </p>
+        <a class="rep-back" href="dashboard.html">← Back to your dashboard</a>
+      </footer>
+    </div>
+
+    <script src="js/wallet.js?v=s1e"></script>
+    <script src="js/report.js?v=mf3"></script>
+    <script>
+      window.DYReport.mount();
+    </script>
+  </body>
+</html>
