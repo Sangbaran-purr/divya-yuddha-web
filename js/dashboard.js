@@ -951,7 +951,136 @@ window.DYDash = (function () {
     setTimeout(function () { t.remove(); }, 2600);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════════════════════════
+  //  M-F4d DIAGNOSTIC PANEL — opens with ?diag=1. No console/terminal/DevTools: the owner opens one URL
+  //  and screenshots one box; the root cause reads itself off the screen. Renders ONLY with ?diag=1;
+  //  zero effect on live behaviour otherwise. Inline-styled (immune to a stale CSS cache).
+  // ═══════════════════════════════════════════════════════════════════════════════════════════════
+  var DIAG_BUILD = "mf4d"; // the version this diagnostic ships in — compare against the LOADED stamp below
+  function diagScriptVersion() {
+    try {
+      var s = [].slice.call(document.scripts).map(function (x) { return x.src || ""; }).filter(function (u) { return /js\/dashboard\.js/.test(u); })[0] || "";
+      var m = s.match(/[?&]v=([^&]+)/);
+      return m ? m[1] : "(no ?v= stamp)";
+    } catch (e) { return "(unknown)"; }
+  }
+  function diagHost(u) { try { return String(u).replace(/^https?:\/\//, "").split("/")[0]; } catch (e) { return String(u); } }
+  // one-shot live test of a single endpoint FROM THE PAGE CONTEXT: eth_chainId + one eth_call (currentRound),
+  // as single (non-batched) requests. Verdict distinguishes OK / HTTP code / RPC-refusal / CORS block / timeout.
+  function diagTest(url) {
+    var c = cfg();
+    var callData = c.dycoinSale ? { to: c.dycoinSale, data: "0x8a19c8bc" } // currentRound() — no args
+      : (c.dycoin ? { to: c.dycoin, data: "0x70a08231" + "0".repeat(64) } : null); // balanceOf(0x0)
+    var t0 = (window.performance && performance.now()) || Date.now();
+    var ctrl = new AbortController();
+    var killed = setTimeout(function () { ctrl.abort(); }, 8000);
+    function ms() { return Math.round(((window.performance && performance.now()) || Date.now()) - t0); }
+    function post(body) { return fetch(url, { method: "POST", headers: { "content-type": "application/json" }, signal: ctrl.signal, body: JSON.stringify(body) }); }
+    return post({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }).then(function (res) {
+      return res.text().then(function (txt) {
+        var j = null; try { j = JSON.parse(txt); } catch (e) {}
+        if (!res.ok) { clearTimeout(killed); return "HTTP " + res.status + (j && j.error ? " — " + j.error.message : " — " + txt.slice(0, 90)) + " · " + ms() + "ms"; }
+        if (j && j.error) { clearTimeout(killed); return "REFUSED — " + j.error.message + " · " + ms() + "ms"; }
+        var chainId = j && j.result ? parseInt(j.result, 16) : "?";
+        if (!callData) { clearTimeout(killed); return "OK · chainId=" + chainId + " · " + ms() + "ms"; }
+        return post({ jsonrpc: "2.0", id: 2, method: "eth_call", params: [callData, "latest"] }).then(function (r2) {
+          return r2.text().then(function (t2) {
+            clearTimeout(killed);
+            var j2 = null; try { j2 = JSON.parse(t2); } catch (e) {}
+            if (!r2.ok) return "chainId=" + chainId + " · eth_call HTTP " + r2.status + " · " + ms() + "ms";
+            if (j2 && j2.error) return "chainId=" + chainId + " · eth_call REFUSED — " + j2.error.message + " · " + ms() + "ms";
+            return "OK · chainId=" + chainId + " · eth_call OK · " + ms() + "ms";
+          });
+        });
+      });
+    }).catch(function (e) {
+      clearTimeout(killed);
+      if (e && e.name === "AbortError") return "TIMEOUT >8s (endpoint unreachable/slow)";
+      return "CORS/NETWORK BLOCK — " + ((e && (e.message || e.name)) || "fetch failed") + " · " + ms() + "ms";
+    });
+  }
+  function runDiag() {
+    var c = cfg();
+    var callUrls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
+    var logUrls = (c.readRpcUrlFallbacks || []).filter(Boolean); if (!logUrls.length) logUrls = callUrls.slice();
+    var uniq = []; callUrls.concat(logUrls).forEach(function (u) { if (uniq.indexOf(u) < 0) uniq.push(u); });
+
+    var box = document.createElement("div");
+    box.id = "diag-panel";
+    box.setAttribute("style", "position:fixed;inset:0;z-index:99999;background:#0b0a08;color:#e8e2d2;overflow:auto;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;padding:16px");
+    document.body.appendChild(box);
+
+    var loaded = diagScriptVersion();
+    var stale = loaded !== DIAG_BUILD;
+    var head = "";
+    head += "<div style='font:600 15px/1.4 system-ui;color:#d9a84e;margin-bottom:6px'>DIVYA YUDDHA — READ DIAGNOSTICS</div>";
+    head += "<div style='margin-bottom:10px'><button id='diag-copy' style='background:#d9a84e;color:#0b0a08;border:0;border-radius:6px;padding:6px 12px;font:600 13px system-ui;cursor:pointer'>Copy all</button> <button id='diag-close' style='background:#2a2620;color:#e8e2d2;border:0;border-radius:6px;padding:6px 12px;font:13px system-ui;cursor:pointer'>Close</button> <span style='color:#8a7f66'>screenshot the box below</span></div>";
+    var pre = document.createElement("pre");
+    pre.id = "diag-pre";
+    pre.setAttribute("style", "white-space:pre-wrap;word-break:break-word;margin:0;padding:12px;background:#141210;border:1px solid #2a2620;border-radius:8px");
+    box.innerHTML = head;
+    box.appendChild(pre);
+
+    var lines = [];
+    function paint() { pre.textContent = lines.join("\n"); }
+    lines.push("time:            " + new Date().toISOString());
+    lines.push("page URL:        " + location.href.replace(/\/v2\/[A-Za-z0-9_-]+/g, "/v2/***"));
+    lines.push("dashboard.js:    v=" + loaded + (stale ? "   ⚠️ STALE — expected v=" + DIAG_BUILD + " (hard-refresh / cache is serving an OLD build)" : "   ✓ current (" + DIAG_BUILD + ")"));
+    lines.push("");
+    lines.push("READ CHAIN (eth_call — the cards) in priority order:");
+    callUrls.forEach(function (u, i) { lines.push("  " + (i + 1) + ". " + diagHost(u)); });
+    lines.push("LOG CHAIN (eth_getLogs — the feed):");
+    logUrls.forEach(function (u, i) { lines.push("  " + (i + 1) + ". " + diagHost(u)); });
+    lines.push("");
+    lines.push("WALLET:          " + (window.ethereum ? "injected present" : "ABSENT") + " · connected=" + !!W.state.connected + " · state.chainId=" + (W.state.chainId || "?"));
+    lines.push("");
+    lines.push("PER-ENDPOINT LIVE TEST (from THIS browser + network):");
+    uniq.forEach(function (u) { lines.push("  " + diagHost(u) + " …testing"); });
+    lines.push("");
+    lines.push("FIRST CARD READ (dycoin.balanceOf via the real read chain): …testing");
+    paint();
+
+    // wallet chainId (ask the wallet directly)
+    if (window.ethereum) {
+      try {
+        window.ethereum.request({ method: "eth_chainId" }).then(function (id) {
+          lines[lines.indexOf(lines.filter(function (l) { return l.indexOf("WALLET:") === 0; })[0])] =
+            "WALLET:          injected present · connected=" + !!W.state.connected + " · wallet.chainId=" + parseInt(id, 16) + " (0x13882=80002 Amoy)";
+          paint();
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    // per-endpoint tests (parallel; each updates its own line)
+    uniq.forEach(function (u) {
+      var idx = lines.indexOf("  " + diagHost(u) + " …testing");
+      diagTest(u).then(function (verdict) { if (idx >= 0) { lines[idx] = "  " + diagHost(u) + "  →  " + verdict; paint(); } });
+    });
+
+    // the ACTUAL first card read through the page's real read chain
+    withEthers().then(function () {
+      var addr = W.state.address || "0x0000000000000000000000000000000000000000";
+      if (!c.dycoin) throw new Error("dycoin not configured");
+      var dy = new ethersRef.Contract(c.dycoin, DYCOIN_ABI, readProvider());
+      return dy.balanceOf(addr);
+    }).then(function (bal) {
+      var i = lines.length - 1; lines[i] = "FIRST CARD READ: OK — balanceOf returned " + bal.toString();
+      paint();
+    }).catch(function (e) {
+      var i = lines.length - 1;
+      var detail = ((e && (e.shortMessage || e.message)) || String(e)).replace(/\/v2\/[A-Za-z0-9_-]+/g, "/v2/***");
+      lines[i] = "FIRST CARD READ: FAILED — " + detail.slice(0, 200);
+      paint();
+    });
+
+    document.getElementById("diag-close").onclick = function () { box.remove(); };
+    document.getElementById("diag-copy").onclick = function () {
+      try { navigator.clipboard.writeText(pre.textContent); this.textContent = "Copied ✓"; } catch (e) { this.textContent = "select + copy manually"; }
+    };
+  }
+
   function mount() {
+    if (/[?&]diag=1/.test(location.search)) { try { runDiag(); } catch (e) {} } // M-F4d — diagnostic overlay
     // sidebar soft links
     document.querySelectorAll("[data-soon]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Coming soon."); }; });
     document.querySelectorAll("[data-referrals]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Referrals live on the separate rewards platform."); }; });
