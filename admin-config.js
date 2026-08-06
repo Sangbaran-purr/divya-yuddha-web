@@ -27,13 +27,14 @@
    (the off-chain metadata-freeze convention); faction ∈ devas|asuras|vanaras|nagas.
    ========================================================================= */
 window.DY_ADMIN_CONFIG = {
+  // M-G1 — live Amoy full-stack deployment (2026-08-06). See divya-yuddha-web3/docs/AMOY_STACK_2026-08-06.md.
   contracts: {
-    accessNFT: null, // G12 fresh AccessNFT (owner-configured; null = NOT CONFIGURED)
-    waveCardNFT: null, // G12 fresh WaveCardNFT (owner-configured; null = NOT CONFIGURED)
-    dycoin: null, // S9 — the DYC token for COIN DROPS (fresh deployment; NOT config.js's frozen Phase-A proxy; null = coin panel disabled)
-    dycoinSale: null, // M-F2 — the DYCoinSale (for the Approve Buyers EIP-712 domain + allowlistSigner gate; null = panel disabled)
-    vestingVault: null, // M-F3 — the VestingVault (Purchase Registry: per-wallet VESTED column; null = registry vested reads skipped)
-    holderStaking: null, // M-F3 — the HolderStaking (Purchase Registry: per-wallet STAKED + REWARDS columns; null = skipped)
+    accessNFT: null, // G12 AccessNFT (separate NFT stack; still owner-configured; null = NOT CONFIGURED)
+    waveCardNFT: null, // G12 WaveCardNFT (separate NFT stack; null = NOT CONFIGURED)
+    dycoin: "0x39Daaf5f0729DC5604CeC6660b04c53fb181B694", // S9 COIN DROPS — the live money-stack DYC (proxy)
+    dycoinSale: "0x89c758e200B49DC367b0e1f0674F722A20530e3D", // M-F2 Approve Buyers + M-F3 Registry gate (allowlistSigner = PROD_OWNER)
+    vestingVault: "0x7c7da4FFA7E32018912c18AffE9902969e0a5972", // M-F3 Registry — VESTED column
+    holderStaking: "0xE9A16394c6E78c3ea9B79e757a12C2A64D76C7bf", // M-F3 Registry — STAKED + REWARDS
   },
 
   // The block the contracts were deployed at — the mint-history scan starts here
