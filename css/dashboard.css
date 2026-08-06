@@ -632,62 +632,12 @@
   font-size: 0.9rem;
 }
 
-/* ---------- status states (examples) ---------- */
-.states {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-}
-@media (min-width: 800px) {
-  .states {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-.state-box {
-  border: 1px solid var(--line-soft);
-  border-radius: 12px;
-  padding: 16px;
-  background: rgba(10, 9, 7, 0.5);
-}
-.state-box.fail {
-  border-color: rgba(224, 102, 79, 0.5);
-  background: rgba(50, 18, 12, 0.4);
-}
-.state-title {
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gold-aged);
-  margin-bottom: 12px;
-}
-.state-box.fail .state-title {
+/* ---------- M-F4 defect 1: minimum-purchase note ---------- */
+.buy-min {
   color: var(--bad);
-}
-.mini-icons {
-  display: flex;
-  gap: 10px;
-  justify-content: space-around;
-  opacity: 0.6;
-}
-.mini-icons figure {
-  margin: 0;
-  text-align: center;
-  font-size: 0.68rem;
-  color: var(--gold-aged);
-}
-.mini-icons img {
-  width: 40px;
-  height: 40px;
-  display: block;
-  margin: 0 auto 4px;
-  filter: grayscale(0.3);
-}
-.connect-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
   font-size: 0.82rem;
+  margin: 2px 0 8px;
+  min-height: 1em;
 }
 .spinner {
   width: 40px;

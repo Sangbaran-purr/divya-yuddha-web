@@ -25,12 +25,24 @@ window.DY_MF_CONFIG = {
     usdt: "0x28D92502Fcf4BeEC2d3d1d6F55F4AED9fd6408Ec", // Mock USDT (Amoy practice, 6-dec)
   },
 
-  // Optional read-only RPC for chain reads + the transaction feed (archive-capable,
-  // or a local anvil node for verification). Null = read through the connected wallet.
-  // NOTE (M-G1): the public report reads wallet-free — set this to a working Amoy read
-  // endpoint (config.js's rpc-amoy.polygon.technology is unreliable). The owner's Alchemy
-  // key must NOT be committed here; use a keyless public Amoy RPC or a read-only key.
-  readRpcUrl: null,
+  // Vetted KEYLESS Amoy read endpoints (M-F4 defect 3). All chain reads — the wallet-free
+  // report AND the wallet-connected dashboard — go through these instead of MetaMask's RPC,
+  // so a customer's misconfigured wallet RPC can never blank the page. Tried in order with
+  // automatic fallback (ethers FallbackProvider, quorum 1). Vetted 2026-08-06 against the
+  // live stack for BOTH eth_call and eth_getLogs:
+  //   1. drpc      — eth_call OK, eth_getLogs OK (primary)
+  //   2. publicnode — eth_call OK, eth_getLogs OK (fallback)
+  //   3. thirdweb  — eth_call OK, eth_getLogs OK for small block ranges (last resort)
+  // (rejected: zan.top + ankr need API keys; 1rpc.io unreliable.)
+  // The owner's KEYED Alchemy URL is NEVER committed here — keyless public only.
+  readRpcUrl: "https://polygon-amoy.drpc.org",
+  readRpcUrlFallbacks: [
+    "https://polygon-amoy-bor-rpc.publicnode.com",
+    "https://80002.rpc.thirdweb.com",
+  ],
+  // getLogs chunk sized to the public line's limit (thirdweb caps ~small; drpc/publicnode
+  // handle more — 3000 is safe across all three).
+  logChunk: 3000,
 
   // The block the live Amoy stack deployed at — the getLogs scans start here.
   deployBlock: 44185626,

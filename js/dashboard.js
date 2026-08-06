@@ -66,8 +66,92 @@ window.DYDash = (function () {
   ];
   var ERC20_ABI = ["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)"];
 
+  // ── ERROR DECODER (M-F4 defect 2) — every custom error the five user-facing contracts can throw,
+  //    plus the shared OpenZeppelin base errors, gets a plain-words translation. "Unknown custom
+  //    error" must never reach a customer. Keyed by error NAME (parsed by selector via ethers).
+  var ERR_ABI = [
+    // DYCoinSale
+    "error ZeroAddress()", "error BadWindows()", "error PublicCheaperThanPresale()", "error SaleNotStarted()",
+    "error InGap()", "error SaleEnded()", "error PresaleSoldOut()", "error PublicSoldOut()", "error RoundCapExceeded()",
+    "error UnknownAsset()", "error ZeroPayment()", "error BelowMin()", "error AboveMax()", "error NotAllowlisted()",
+    "error PolDisabled()", "error StaleOracle()", "error OraclePriceOutOfBounds()", "error AffiliateNotActive()",
+    "error NotRegistrationEligible()", "error BadCodeLength()", "error CodeTaken()", "error WalletHasCode()",
+    "error SelfReferral()", "error NothingToSweep()",
+    // HolderStaking
+    "error ZeroAmount()", "error PoolNotInitialized()", "error PoolAlreadyInitialized()", "error NotTreasury()",
+    "error Barred()", "error StakingClosed()", "error TooManyPositions()", "error AlreadyRegistered()",
+    "error NotRegistered()", "error NoVestedBalance()", "error NothingToSync()", "error NotDexDayYet()",
+    "error ReleaseTooEarly()", "error NotDebitor()", "error NotAuthorizedPoolCredit()", "error InsufficientRoi()",
+    // VestingVault
+    "error SaleAlreadySet()", "error NotSale()", "error DexDayAlreadyDeclared()", "error NothingToClaim()",
+    // RoiRedemption
+    "error BadDecimals()", "error DustAmount()", "error ReserveInsufficient()",
+    // DYCoin + OpenZeppelin base
+    "error ERC20ExceededCap(uint256 increasedSupply, uint256 cap)",
+    "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
+    "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
+    "error ERC20InvalidReceiver(address receiver)", "error ERC20InvalidSender(address sender)",
+    "error ERC20InvalidApprover(address approver)", "error ERC20InvalidSpender(address spender)",
+    "error OwnableUnauthorizedAccount(address account)", "error OwnableInvalidOwner(address owner)",
+  ];
+  var ERR_PLAIN = {
+    // token / allowance (the M-F4 defect-2 root cause: an un-approved stake)
+    ERC20InsufficientAllowance: "This needs your approval first. Approve the token for this contract, then try again.",
+    ERC20InsufficientBalance: "You don't have enough of that token in your wallet for this.",
+    ERC20ExceededCap: "This would exceed the token's fixed supply cap.",
+    ERC20InvalidReceiver: "That recipient address can't receive the token.",
+    ERC20InvalidSender: "That sender address is invalid.",
+    OwnableUnauthorizedAccount: "Only the contract owner can do that — this isn't something a holder can call.",
+    // sale
+    SaleNotStarted: "The sale hasn't opened yet. Check back when the presale window starts.",
+    InGap: "The sale is paused between rounds right now. It reopens for the public round.",
+    SaleEnded: "The sale has ended.",
+    PresaleSoldOut: "The presale is sold out.", PublicSoldOut: "The public sale is sold out.",
+    RoundCapExceeded: "This purchase would exceed the amount left in this round. Try a smaller amount.",
+    UnknownAsset: "That payment token isn't accepted — use USDT.",
+    ZeroPayment: "Enter a purchase amount above zero.",
+    BelowMin: "That's below the minimum purchase.",
+    AboveMax: "That's above the per-wallet maximum for this round.",
+    NotAllowlisted: "This wallet isn't approved for the presale yet. Register, then the owner approves you.",
+    PolDisabled: "Paying with POL isn't enabled — use USDT.",
+    NotRegistrationEligible: "This wallet can't register a referral code.",
+    CodeTaken: "That referral code is already taken.", WalletHasCode: "This wallet already has a referral code.",
+    SelfReferral: "You can't refer yourself.", BadCodeLength: "That referral code is the wrong length.",
+    // staking
+    ZeroAmount: "Enter an amount above zero.",
+    PoolNotInitialized: "Staking isn't open yet — the reward pool hasn't been funded.",
+    Barred: "This wallet isn't allowed to stake.",
+    StakingClosed: "Staking has closed for this phase (the exchange listing has been declared).",
+    TooManyPositions: "You've reached the maximum number of separate stakes for one wallet.",
+    AlreadyRegistered: "Your vested DYC is already activated — use Top Up to add more.",
+    NotRegistered: "Activate your vested DYC first before syncing.",
+    NoVestedBalance: "You have no vested DYC to activate yet.",
+    NothingToSync: "There's no new vested DYC to sync right now.",
+    NotDexDayYet: "This unlocks after the exchange listing.", ReleaseTooEarly: "This unlocks after the listing + vesting period.",
+    InsufficientRoi: "You don't have that much earned ROI to draw on.",
+    // vesting
+    NothingToClaim: "There's nothing to claim yet — vesting releases gradually after listing.",
+    // desk
+    ReserveInsufficient: "The cash-out desk's reserve can't cover this right now. Try a smaller amount or check back later.",
+    DustAmount: "That amount is too small to cash out.",
+    // shared
+    ZeroAddress: "An address in this request is invalid.",
+  };
+  var _errIface = null;
+  function errIface() { if (!_errIface && ethersRef) _errIface = new ethersRef.Interface(ERR_ABI); return _errIface; }
+  // dig the revert bytes out of ethers' nested error shapes
+  function revertData(e) {
+    if (!e) return null;
+    if (typeof e.data === "string" && e.data.startsWith("0x")) return e.data;
+    var cands = [e.info && e.info.error && e.info.error.data, e.error && e.error.data, e.revert && e.revert.data,
+      e.data && e.data.data, e.cause && revertData(e.cause)];
+    for (var i = 0; i < cands.length; i++) { var d = cands[i]; if (typeof d === "string" && d.startsWith("0x")) return d; }
+    return null;
+  }
+
   var DAY = 4n; var DAY_DEN = 1000n; // 0.4%/day (RATE is an internal constant; UI-stated per ratified flag)
   var POL_MIN = 20000000000000000n; // 0.02 POL — below this, show the fee banner
+  var MIN_BUY_USDT = 100000000n; // M-F4 defect 1: page-side minimum purchase = 100 USDT (6-dec). Ruled 2026-08-06.
   var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000, buy: 380000 };
   var buyState = {}; // { round, price, voucher }
   var allowlist = null; // cached [{wallet, sig}]
@@ -95,16 +179,30 @@ window.DYDash = (function () {
       dycoinSale: oc.dycoinSale || fc.dycoinSale || null,
       usdt: oc.usdt || fc.usdt || null,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
+      readRpcUrlFallbacks: (o.readRpcUrlFallbacks || FILE.readRpcUrlFallbacks || []),
+      logChunk: o.logChunk || FILE.logChunk || 3000,
       deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
     };
   }
 
   function withEthers() { return W.loadEthers().then(function (e) { ethersRef = e; return e; }); }
+  // Resilient wallet-free reads (M-F4 defect 3): all chain reads go through the vetted public
+  // endpoints (drpc → publicnode → thirdweb), NEVER MetaMask's RPC — a misconfigured wallet RPC
+  // can no longer blank the dashboard. FallbackProvider (quorum 1) returns the first success.
+  var _readProv = null;
   function readProvider() {
+    if (_readProv) return _readProv;
     var c = cfg();
-    if (c.readRpcUrl) return new ethersRef.JsonRpcProvider(c.readRpcUrl);
-    if (window.ethereum && W.state.connected) return new ethersRef.BrowserProvider(window.ethereum);
-    return new ethersRef.JsonRpcProvider(PLAYER.chain.rpcUrls[0]);
+    var urls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
+    if (!urls.length) urls = [PLAYER.chain.rpcUrls[0]];
+    var net = { chainId: PLAYER.chain.id, name: "amoy" };
+    if (urls.length === 1) { _readProv = new ethersRef.JsonRpcProvider(urls[0], net, { staticNetwork: true }); return _readProv; }
+    var configs = urls.map(function (u, i) {
+      return { provider: new ethersRef.JsonRpcProvider(u, net, { staticNetwork: true }), priority: i + 1, stallTimeout: 1800, weight: 1 };
+    });
+    try { _readProv = new ethersRef.FallbackProvider(configs, net, { quorum: 1 }); }
+    catch (e) { _readProv = configs[0].provider; }
+    return _readProv;
   }
 
   // ---- number helpers ----
@@ -363,10 +461,26 @@ window.DYDash = (function () {
   }
   function decodeErr(e) {
     if (e && e.code === "ACTION_REJECTED") return "You declined the signature in your wallet.";
+    // 1) decode a custom error by its on-chain selector → plain words (never surface "unknown custom error")
+    try {
+      var data = revertData(e), ifc = errIface();
+      if (data && ifc) {
+        var parsed = ifc.parseError(data);
+        if (parsed && parsed.name) {
+          if (ERR_PLAIN[parsed.name]) return ERR_PLAIN[parsed.name];
+          return "The contract stopped this (" + parsed.name + "). Please double-check the amount, or contact support.";
+        }
+      }
+    } catch (_) {}
+    // 2) ethers already named it (ABI-known errors)
+    if (e && e.revert && e.revert.name && ERR_PLAIN[e.revert.name]) return ERR_PLAIN[e.revert.name];
+    // 3) gas / funds
     var s = (e && (e.shortMessage || e.reason || e.message)) || "";
-    if (/insufficient funds|gas/i.test(s)) return "You need a small amount of POL for network fees. Add a little POL and try again.";
-    if (e && e.revert && e.revert.name) return e.revert.name;
-    return s ? String(s).slice(0, 120) : "The transaction could not be completed.";
+    if (/insufficient funds|gas required|out of gas/i.test(s)) return "You need a small amount of POL for network fees. Add a little POL and try again.";
+    // 4) a raw selector we couldn't map — still name it, never say "unknown"
+    var d2 = revertData(e);
+    if (d2 && d2.length >= 10) return "The contract rejected this transaction (code " + d2.slice(0, 10) + "). Please check the amount or contact support.";
+    return s ? String(s).slice(0, 140) : "The transaction could not be completed. Please try again.";
   }
 
   function confirmStep(title, bodyHtml, rawText) {
@@ -448,20 +562,57 @@ window.DYDash = (function () {
       body: "Activate your vested DYC so it earns 0.40%/day toward the 2X cap.",
     });
   }
+  // M-F4 defect 2: Top Up is now the SAME narrated multi-step flow as Buy — approve DYC (only if
+  // needed) → stake — each step pre-simulated, plain-words prompts, POL-fee + custom-error decoding.
   function actTopUp() {
     var c = cfg();
-    var raw = window.prompt("Top up staking — amount of DYC to stake:", "");
+    if (!c.holderStaking || !c.dycoin) { failBox("Staking isn't available yet."); return; }
+    var raw = window.prompt("Top up staking — amount of DYC to stake:", data.liquid != null ? fmt(data.liquid) : "");
     if (raw == null) return;
     var amtWei;
-    try { amtWei = ethersRef.parseUnits(String(raw).trim(), 18); if (amtWei <= 0n) throw 0; }
+    try { amtWei = ethersRef.parseUnits(String(raw).trim().replace(/,/g, ""), 18); if (amtWei <= 0n) throw 0; }
     catch (e) { failBox("Enter a positive DYC amount."); return; }
-    runAction({
-      contractAddr: c.holderStaking, abi: STAKE_ABI, gas: GAS.stake,
-      simFn: function (k) { return k.stake.staticCall(amtWei); }, // reverts plain-words if not approved / insufficient
-      sendFn: function (k, o) { return k.stake(amtWei, o); },
-      title: "Top up staking",
-      body: "Stake <b>" + fmt(amtWei) + " DYC</b> (one-way; earns 0.40%/day). Requires DYC approved to the staking contract.",
-      raw: "raw: " + amtWei.toString() + " wei",
+    var pg = polGuard(); if (pg) { failBox(pg); return; }
+    confirmStep("Top up staking",
+      "Stake <b>" + fmt(amtWei) + " DYC</b> — one-way, earns 0.40%/day toward the 2X cap. One tap runs approve (only if needed) then stake, with clear wallet prompts.",
+      "raw: " + amtWei.toString() + " wei"
+    ).then(function (go) {
+      if (!go) return;
+      withEthers().then(function () {
+        var provider = new ethersRef.BrowserProvider(window.ethereum);
+        return provider.getSigner().then(function (signer) {
+          var dyc = new ethersRef.Contract(c.dycoin, DYCOIN_ABI, signer);
+          var hs = new ethersRef.Contract(c.holderStaking, STAKE_ABI, signer);
+          var me = W.state.address;
+          return dyc.balanceOf(me).then(function (bal) {
+            if (bal < amtWei) { failBox("You need " + fmt(amtWei) + " DYC but have " + fmt(bal) + " liquid. Lower the amount and try again."); throw "stop"; }
+            return dyc.allowance(me, c.holderStaking);
+          }).then(function (allow) {
+            var needApprove = allow < amtWei;
+            var nSteps = (needApprove ? 1 : 0) + 1, step = 0;
+            return feeOverrides(provider).then(function (fo) {
+              var chain = Promise.resolve();
+              if (needApprove) {
+                chain = chain.then(function () {
+                  step++; pending(true, "Step " + step + " of " + nSteps + " — Approve DYC");
+                  $("ov-pending-msg").textContent = "Your wallet will ask to approve " + fmt(amtWei) + " DYC so the staking contract can take it. Nothing stakes yet.";
+                  return dyc.approve.staticCall(c.holderStaking, amtWei).then(function () {
+                    return dyc.approve(c.holderStaking, amtWei, gasOv(fo, GAS.approve)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                  });
+                });
+              }
+              chain = chain.then(function () {
+                step++; pending(true, "Step " + step + " of " + nSteps + " — Stake DYC");
+                $("ov-pending-msg").textContent = "Your wallet will ask to stake " + fmt(amtWei) + " DYC. It starts earning 0.40%/day right away.";
+                return hs.stake.staticCall(amtWei).then(function () {
+                  return hs.stake(amtWei, gasOv(fo, GAS.stake)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                });
+              });
+              return chain.then(function () { pending(false); refresh(); toast("Top up complete — " + fmt(amtWei) + " DYC now earning."); });
+            });
+          });
+        });
+      }).catch(function (e) { if (e === "stop") return; pending(false); failBox(decodeErr(e)); });
     });
   }
   function actClaimRewards() {
@@ -490,7 +641,7 @@ window.DYDash = (function () {
   // =========================================================================
   //  TRANSACTION FEED (chunked getLogs, S5a pattern)
   // =========================================================================
-  var LOG_CHUNK = 9000;
+  function LOG_CHUNK_() { return cfg().logChunk || 3000; } // M-F4 defect 3 — sized to the public RPC's getLogs limit
   function loadFeed() {
     var c = cfg(), addr = W.state.address, body = $("tx-body"), status = $("tx-status");
     if (!c.holderStaking && !c.vestingVault && !c.roiRedemption) {
@@ -538,10 +689,10 @@ window.DYDash = (function () {
     });
   }
   function scan(contract, filter, from, latest, push) {
-    var start = from, out = [];
+    var start = from, out = [], chunk = LOG_CHUNK_();
     function step() {
       if (start > latest) return Promise.resolve(out);
-      var end = Math.min(start + LOG_CHUNK - 1, latest);
+      var end = Math.min(start + chunk - 1, latest);
       return contract.queryFilter(filter, start, end).then(function (r) {
         r.forEach(push); start = end + 1; return step();
       });
@@ -647,6 +798,7 @@ window.DYDash = (function () {
       "<div class='split liq'><div class='sl'>15% Liquid</div><div class='sv' id='split-liq'>—</div><div class='su'>DYC to your wallet now</div></div>" +
       "<div class='split ves'><div class='sl'>85% Vesting</div><div class='sv' id='split-ves'>—</div><div class='su'>DYC into vesting</div></div>" +
       "</div>" +
+      "<div class='buy-min' id='buy-min'></div>" +
       "<button class='btn-g btn-p btn-block' id='buy-go'>⚡ Buy DYC &amp; Activate Staking</button>" +
       "<div class='buy-narrate'>One tap runs the whole flow with clear wallet prompts: approve USDT (only if needed) → buy (15% lands in your wallet, 85% into vesting) → activate that vesting so it starts earning 0.40%/day.</div>";
     $("buy-amt").oninput = updateCalc;
@@ -655,14 +807,24 @@ window.DYDash = (function () {
   }
   function updateCalc() {
     var price = buyState.price || 0n, raw = $("buy-amt") ? $("buy-amt").value : "";
-    var dyc = "—", liq = "—", ves = "—";
+    var dyc = "—", liq = "—", ves = "—", usdt = 0n, ok = false;
     try {
-      var usdt = ethersRef.parseUnits((raw || "0").trim(), 6);
+      usdt = ethersRef.parseUnits((raw || "0").trim().replace(/,/g, ""), 6);
       var usdE18 = usdt * 1000000000000n;
       var d = price > 0n ? (usdE18 * 1000000000000000000n) / price : 0n;
-      dyc = fmt(d); liq = fmt((d * 1500n) / 10000n); ves = fmt(d - (d * 1500n) / 10000n);
+      dyc = fmt(d); liq = fmt((d * 1500n) / 10000n); ves = fmt(d - (d * 1500n) / 10000n); ok = true;
     } catch (e) {}
     if ($("buy-dyc")) { $("buy-dyc").textContent = dyc; $("split-liq").textContent = liq; $("split-ves").textContent = ves; }
+    // M-F4 defect 1: page-side minimum-purchase floor (100 USDT). The calculator still shows the math.
+    var go = $("buy-go"), min = $("buy-min");
+    if (go && min) {
+      var below = !ok || usdt < MIN_BUY_USDT;
+      var empty = !raw || !raw.trim();
+      go.disabled = below;
+      go.style.opacity = below ? "0.5" : "1";
+      go.style.cursor = below ? "not-allowed" : "pointer";
+      min.textContent = (below && !empty) ? "Minimum purchase is 100 USDT." : "";
+    }
   }
   function gasOv(fo, gas) {
     var ov = { gasLimit: gas };
@@ -672,8 +834,9 @@ window.DYDash = (function () {
 
   function buyFlow() {
     var c = cfg(), amt;
-    try { amt = ethersRef.parseUnits(($("buy-amt").value || "").trim(), 6); if (amt <= 0n) throw 0; }
+    try { amt = ethersRef.parseUnits(($("buy-amt").value || "").trim().replace(/,/g, ""), 6); if (amt <= 0n) throw 0; }
     catch (e) { failBox("Enter a positive USDT amount."); return; }
+    if (amt < MIN_BUY_USDT) { failBox("Minimum purchase is 100 USDT."); return; } // M-F4 defect 1 (defense-in-depth)
     var pg = polGuard(); if (pg) { failBox(pg); return; }
     var isPresale = buyState.round === 1;
     var sig = isPresale && buyState.voucher ? buyState.voucher.sig : "0x";
@@ -753,5 +916,5 @@ window.DYDash = (function () {
     refresh();
   }
 
-  return { mount: mount, _cfg: cfg, _refresh: refresh };
+  return { mount: mount, _cfg: cfg, _refresh: refresh, _decodeErr: decodeErr };
 })();

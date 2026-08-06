@@ -20,6 +20,8 @@ window.DYReport = (function () {
       roiRedemption: oc.roiRedemption || fc.roiRedemption || null,
       dycoinSale: oc.dycoinSale || fc.dycoinSale || null,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
+      readRpcUrlFallbacks: (o.readRpcUrlFallbacks || FILE.readRpcUrlFallbacks || []),
+      logChunk: o.logChunk || FILE.logChunk || 3000,
       deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
     };
   }
@@ -78,15 +80,27 @@ window.DYReport = (function () {
       " will appear here the moment the contract is deployed. Nothing is wrong — the raise simply hasn't opened yet.</div>";
   }
 
+  // Resilient wallet-free reads (M-F4 defect 3): the vetted public endpoints (drpc → publicnode →
+  // thirdweb) with automatic fallback (FallbackProvider, quorum 1). NEVER a wallet — public page.
+  var _readProv = null;
   function readProvider() {
+    if (_readProv) return _readProv;
     var c = cfg();
-    if (c.readRpcUrl) return new ethersRef.JsonRpcProvider(c.readRpcUrl);
-    return new ethersRef.JsonRpcProvider(PLAYER.chain.rpcUrls[0]); // NEVER a wallet — public page
+    var urls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
+    if (!urls.length) urls = [PLAYER.chain.rpcUrls[0]];
+    var net = { chainId: PLAYER.chain.id, name: "amoy" };
+    if (urls.length === 1) { _readProv = new ethersRef.JsonRpcProvider(urls[0], net, { staticNetwork: true }); return _readProv; }
+    var configs = urls.map(function (u, i) {
+      return { provider: new ethersRef.JsonRpcProvider(u, net, { staticNetwork: true }), priority: i + 1, stallTimeout: 1800, weight: 1 };
+    });
+    try { _readProv = new ethersRef.FallbackProvider(configs, net, { quorum: 1 }); }
+    catch (e) { _readProv = configs[0].provider; }
+    return _readProv;
   }
 
   // ---- chunked getLogs (S5a pattern): returns [] on any failure so a figure degrades to "—", never throws ----
   function scanLogs(provider, address, topics, fromBlock, toBlock) {
-    var CHUNK = 45000, out = [], from = fromBlock;
+    var CHUNK = cfg().logChunk || 3000, out = [], from = fromBlock;
     function step() {
       if (from > toBlock) return Promise.resolve(out);
       var to = Math.min(from + CHUNK - 1, toBlock);
