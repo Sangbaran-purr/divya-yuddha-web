@@ -80,18 +80,22 @@ window.DYReport = (function () {
       " will appear here the moment the contract is deployed. Nothing is wrong — the raise simply hasn't opened yet.</div>";
   }
 
-  // Resilient wallet-free reads (M-F4 defect 3): the vetted public endpoints (drpc → publicnode →
+  // Resilient wallet-free reads (M-F4 defect 3 + M-F4b): the vetted public endpoints (drpc → publicnode →
   // thirdweb) with automatic fallback (FallbackProvider, quorum 1). NEVER a wallet — public page.
+  // batchMaxCount:1 (M-F4b) — ethers batches by default; several public Amoy endpoints reject JSON-RPC
+  // BATCH requests (single requests pass), which was silently failing every read. One request at a time fixes it.
   var _readProv = null;
+  function resetReadProvider() { _readProv = null; }
   function readProvider() {
     if (_readProv) return _readProv;
     var c = cfg();
     var urls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
     if (!urls.length) urls = [PLAYER.chain.rpcUrls[0]];
     var net = { chainId: PLAYER.chain.id, name: "amoy" };
-    if (urls.length === 1) { _readProv = new ethersRef.JsonRpcProvider(urls[0], net, { staticNetwork: true }); return _readProv; }
+    var opts = { staticNetwork: true, batchMaxCount: 1 };
+    if (urls.length === 1) { _readProv = new ethersRef.JsonRpcProvider(urls[0], net, opts); return _readProv; }
     var configs = urls.map(function (u, i) {
-      return { provider: new ethersRef.JsonRpcProvider(u, net, { staticNetwork: true }), priority: i + 1, stallTimeout: 1800, weight: 1 };
+      return { provider: new ethersRef.JsonRpcProvider(u, net, opts), priority: i + 1, stallTimeout: 2500, weight: 1 };
     });
     try { _readProv = new ethersRef.FallbackProvider(configs, net, { quorum: 1 }); }
     catch (e) { _readProv = configs[0].provider; }
@@ -238,6 +242,13 @@ window.DYReport = (function () {
   }
 
   // ============================ ORCHESTRATION ============================
+  // M-F4b: auto-retry (rotating endpoints) on a network read failure; honest message, never "check the address".
+  var reportRetry = 0, reportRetryTimer = null, MAX_REPORT_RETRY = 5;
+  function scheduleReportRetry() {
+    if (reportRetryTimer || reportRetry >= MAX_REPORT_RETRY) return;
+    reportRetry++;
+    reportRetryTimer = setTimeout(function () { reportRetryTimer = null; resetReadProvider(); refresh(); }, Math.min(1200 * reportRetry, 5000));
+  }
   function refresh() {
     return W.loadEthers().then(function (e) {
       ethersRef = e;
@@ -246,17 +257,20 @@ window.DYReport = (function () {
       return provider.getNetwork().then(function (n) {
         net.className = "net-chip ok";
         net.innerHTML = "◈ " + PLAYER.chain.name.replace(" Testnet", "") + " · block reads live";
+        reportRetry = 0; // a live network read succeeded
       }).catch(function () {
         net.className = "net-chip";
-        net.textContent = "◈ chain unreachable";
+        net.innerHTML = reportRetry < MAX_REPORT_RETRY ? "◈ network trouble — retrying…" : "◈ network unreachable";
+        scheduleReportRetry();
       }).then(function () {
         return Promise.all([renderSale(provider), renderVault(provider), renderPool(provider), renderDesk(provider)]);
       }).then(function () {
         $("rep-updated").textContent = "read just now";
       });
     }).catch(function () {
+      scheduleReportRetry();
       ["sale-body", "vault-body", "pool-body", "desk-body"].forEach(function (id) {
-        $(id).innerHTML = "<div class='notlive'>Could not reach the network to read this.</div>";
+        $(id).innerHTML = "<div class='notlive'>Network connection trouble — retrying…</div>";
       });
     });
   }

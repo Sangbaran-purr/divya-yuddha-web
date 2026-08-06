@@ -189,20 +189,55 @@ window.DYDash = (function () {
   // Resilient wallet-free reads (M-F4 defect 3): all chain reads go through the vetted public
   // endpoints (drpc → publicnode → thirdweb), NEVER MetaMask's RPC — a misconfigured wallet RPC
   // can no longer blank the dashboard. FallbackProvider (quorum 1) returns the first success.
-  var _readProv = null;
+  var _readProv = null, _readKey = "";
   function readProvider() {
-    if (_readProv) return _readProv;
     var c = cfg();
+    // M-F4b: rebuild when the wallet joins/leaves so the connected wallet can (dis)appear from the read chain
+    var connected = !!(window.ethereum && isConnected() && W.state.chainOk);
+    var key = (c.readRpcUrl || "") + "|" + (c.readRpcUrlFallbacks || []).join(",") + "|" + connected;
+    if (_readProv && _readKey === key) return _readProv;
+    _readKey = key;
+    var net = { chainId: PLAYER.chain.id, name: "amoy" };
     var urls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
     if (!urls.length) urls = [PLAYER.chain.rpcUrls[0]];
-    var net = { chainId: PLAYER.chain.id, name: "amoy" };
-    if (urls.length === 1) { _readProv = new ethersRef.JsonRpcProvider(urls[0], net, { staticNetwork: true }); return _readProv; }
+    // batchMaxCount:1 (M-F4b ROOT CAUSE) — ethers batches JSON-RPC calls by default; many public Amoy
+    // endpoints reject BATCH requests (single requests work), which silently failed every read from the
+    // owner's network. One request at a time makes the page behave like the passing single-request tests.
     var configs = urls.map(function (u, i) {
-      return { provider: new ethersRef.JsonRpcProvider(u, net, { staticNetwork: true }), priority: i + 1, stallTimeout: 1800, weight: 1 };
+      return { provider: new ethersRef.JsonRpcProvider(u, net, { staticNetwork: true, batchMaxCount: 1 }), priority: i + 1, stallTimeout: 2500, weight: 1 };
     });
-    try { _readProv = new ethersRef.FallbackProvider(configs, net, { quorum: 1 }); }
+    // WALLET-FIRST FALLBACK (M-F4b) — a connected wallet joins as the LAST rescue. Public lines stay primary
+    // (and serve wallet-free readers on the report); the wallet's own RPC rescues when public endpoints are
+    // unreachable from the user's browser/network (it carried Alchemy for the owner this morning).
+    if (connected) {
+      try { configs.push({ provider: new ethersRef.BrowserProvider(window.ethereum), priority: 99, stallTimeout: 5000, weight: 1 }); } catch (e) {}
+    }
+    try { _readProv = configs.length > 1 ? new ethersRef.FallbackProvider(configs, net, { quorum: 1 }) : configs[0].provider; }
     catch (e) { _readProv = configs[0].provider; }
     return _readProv;
+  }
+  function resetReadProvider() { _readProv = null; _readKey = ""; }
+
+  // M-F4b DIAGNOSTIC HONESTY: on a read failure the addresses are correct — the network line is moody. Say so,
+  // auto-retry (rotating the provider), and offer a manual retry once exhausted. Never say "check the address."
+  var readTrouble = false, readRetry = 0, readRetryTimer = null;
+  var MAX_READ_RETRY = 5;
+  function netMsg() {
+    return readRetry < MAX_READ_RETRY
+      ? "Network connection trouble — retrying…"
+      : "Network connection trouble. <a href='#' class='read-retry' style='color:var(--gold-burnished)'>Tap to retry</a>";
+  }
+  function scheduleReadRetry() {
+    readTrouble = true;
+    if (readRetryTimer || readRetry >= MAX_READ_RETRY) return;
+    readRetry++;
+    readRetryTimer = setTimeout(function () { readRetryTimer = null; resetReadProvider(); refresh(); }, Math.min(1200 * readRetry, 5000));
+  }
+  function readSucceeded() { readTrouble = false; readRetry = 0; if (readRetryTimer) { clearTimeout(readRetryTimer); readRetryTimer = null; } }
+  function wireReadRetry() {
+    document.querySelectorAll(".read-retry").forEach(function (a) {
+      a.onclick = function (e) { e.preventDefault(); readRetry = 0; readTrouble = false; resetReadProvider(); refresh(); };
+    });
   }
 
   // ---- number helpers ----
@@ -279,7 +314,7 @@ window.DYDash = (function () {
   }
 
   function renderLiquid() {
-    if (data.liqErr) { $("liq-amt").textContent = "—"; $("liq-note").innerHTML = "<span>Could not read the token.</span>"; return; }
+    if (data.liqErr) { $("liq-amt").textContent = "—"; $("liq-note").innerHTML = "<span>" + netMsg() + "</span>"; return; }
     $("liq-amt").textContent = fmt(data.liquid, data.dycDec);
     $("liq-note").innerHTML = "";
   }
@@ -287,7 +322,7 @@ window.DYDash = (function () {
   function renderVesting() {
     var b = $("vest-body");
     if (!cfg().vestingVault) { b.innerHTML = notLive(" Your locked DYC and its release schedule"); return; }
-    if (data.vestErr) { b.innerHTML = "<div class='notlive'>Could not read vesting. Check the address.</div>"; return; }
+    if (data.vestErr) { b.innerHTML = "<div class='notlive'>" + netMsg() + "</div>"; return; }
     var granted = data.vest.granted, vested = data.vest.vested, releasable = data.vest.releasable;
     var locked = granted > vested ? granted - vested : 0n;
     var pct = granted > 0n ? Number((vested * 10000n) / granted) / 100 : 0;
@@ -309,7 +344,7 @@ window.DYDash = (function () {
   function renderStaked() {
     var b = $("stake-body");
     if (!cfg().holderStaking) { b.innerHTML = notLive(" Your staked DYC, daily earnings and progress to 2X"); return; }
-    if (data.stakeErr) { b.innerHTML = "<div class='notlive'>Could not read staking. Check the address.</div>"; return; }
+    if (data.stakeErr) { b.innerHTML = "<div class='notlive'>" + netMsg() + "</div>"; return; }
     var st = data.stake;
     var mult = st.principal > 0n ? Number(((st.rewardTotal) * 10000n) / st.principal) / 10000 : 0;
     var cap = Number(st.cap);
@@ -333,7 +368,7 @@ window.DYDash = (function () {
   function renderRewards() {
     var b = $("reward-body");
     if (!cfg().holderStaking) { b.innerHTML = notLive(" Your claimable rewards and USDT cash-out"); return; }
-    if (data.rewardErr) { b.innerHTML = "<div class='notlive'>Could not read rewards.</div>"; return; }
+    if (data.rewardErr) { b.innerHTML = "<div class='notlive'>" + netMsg() + "</div>"; return; }
     var claimable = data.stake.pending, roiCol = data.stake.roi;
     var hasDesk = !!cfg().roiRedemption;
     var deskFunded = data.deskReserve != null && data.deskReserve > 0n;
@@ -426,14 +461,23 @@ window.DYDash = (function () {
           return rd.quote(data.stake.roi).then(function (q) { data.cashoutUsdt = q[0]; }).catch(function () {});
         }
       }).then(function () {
+        // M-F4b: a configured read that threw is a NETWORK failure (not a bad address) → retry + honest message
+        var failed = !!(data.liqErr || data.vestErr || data.stakeErr || data.rewardErr);
+        if (failed) scheduleReadRetry(); else readSucceeded();
         renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderRunway();
         renderPolBanner();
         loadFeed();
         renderBuy();
+        wireReadRetry();
       });
     }).catch(function (e) {
-      // read failed entirely
+      // the very first read (getBlock) failed → the whole line is down: retry + show the honest message
       dimCards(false);
+      scheduleReadRetry();
+      data.liqErr = data.vestErr = data.stakeErr = data.rewardErr = true;
+      renderLiquid(); renderVesting(); renderStaked(); renderRewards();
+      renderBuy();
+      wireReadRetry();
     });
   }
 
@@ -684,7 +728,7 @@ window.DYDash = (function () {
       renderFeed(evs);
       status.textContent = evs.length ? "Showing " + evs.length + " recent event(s)." : "";
     }).catch(function () {
-      body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>Could not read recent activity.</td></tr>";
+      body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>" + netMsg() + "</td></tr>"; wireReadRetry();
       status.textContent = "";
     });
   }
@@ -774,7 +818,7 @@ window.DYDash = (function () {
             renderCalculator(b, isPresale);
           });
         });
-    }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the sale — check the address in config.</div>"; });
+    }).catch(function () { scheduleReadRetry(); b.innerHTML = "<div class='notlive'>" + netMsg() + "</div>"; wireReadRetry(); });
   }
 
   function renderRegister(b) {
