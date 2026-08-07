@@ -86,6 +86,10 @@ window.DYDash = (function () {
     "error SaleAlreadySet()", "error NotSale()", "error DexDayAlreadyDeclared()", "error NothingToClaim()",
     // RoiRedemption
     "error BadDecimals()", "error DustAmount()", "error ReserveInsufficient()",
+    // DropDesk (M-F6)
+    "error ExpiredCoupon(uint256 deadline)", "error CancelledCoupon(uint256 nonce)",
+    "error AlreadyRedeemed(uint256 nonce)", "error DeskNeedsRefill(uint256 amount, uint256 balance)",
+    "error BadSignature(address recovered)", "error ZeroSigner()", "error InsufficientBalance(uint256 amount, uint256 balance)",
     // DYCoin + OpenZeppelin base
     "error ERC20ExceededCap(uint256 increasedSupply, uint256 cap)",
     "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
@@ -134,6 +138,14 @@ window.DYDash = (function () {
     // desk
     ReserveInsufficient: "The cash-out desk's reserve can't cover this right now. Try a smaller amount or check back later.",
     DustAmount: "That amount is too small to cash out.",
+    // drop desk (M-F6)
+    ExpiredCoupon: "This drop coupon has expired. Coupons are valid for 90 days from when they're issued.",
+    CancelledCoupon: "This drop coupon was cancelled and can no longer be redeemed.",
+    AlreadyRedeemed: "This drop coupon has already been redeemed.",
+    DeskNeedsRefill: "Desk refilling — your coupon is safe. The drop desk is topping up; try again shortly.",
+    BadSignature: "This drop coupon couldn't be verified. It may be from an old signing key — ask for a fresh coupon.",
+    InsufficientBalance: "The desk doesn't hold enough for this right now.",
+    ZeroSigner: "The drop desk isn't configured with a signer yet.",
     // shared
     ZeroAddress: "An address in this request is invalid.",
   };
@@ -152,7 +164,16 @@ window.DYDash = (function () {
   var DAY = 4n; var DAY_DEN = 1000n; // 0.4%/day (RATE is an internal constant; UI-stated per ratified flag)
   var POL_MIN = 20000000000000000n; // 0.02 POL — below this, show the fee banner
   var MIN_BUY_USDT = 100000000n; // M-F4 defect 1: page-side minimum purchase = 100 USDT (6-dec). Ruled 2026-08-06.
-  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000, buy: 380000 };
+  // GAS floors (house law: explicit gas limit for every state-touching call). redeem cold-state floor: measured max
+  // 140,296 (cold nonce SSTORE + cold recipient + funding reconcile) → 160,000 with margin.
+  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000, buy: 380000, redeem: 160000 };
+  // DropDesk read/write ABI (M-F6)
+  var DROP_ABI = [
+    "function redeem(address wallet, uint256 amount, uint256 deadline, uint256 nonce, bytes sig)",
+    "function nonceRedeemed(uint256) view returns (bool)",
+    "function nonceCancelled(uint256) view returns (bool)",
+    "function dropSigner() view returns (address)",
+  ];
   var buyState = {}; // { round, price, voucher }
   var allowlist = null; // cached [{wallet, sig}]
   var WAIT_CONFIRMS = 1, WAIT_TIMEOUT_MS = 75000, FEE_HEADROOM = 2n;
@@ -177,6 +198,7 @@ window.DYDash = (function () {
       holderStaking: oc.holderStaking || fc.holderStaking || null,
       roiRedemption: oc.roiRedemption || fc.roiRedemption || null,
       dycoinSale: oc.dycoinSale || fc.dycoinSale || null,
+      dropDesk: oc.dropDesk || fc.dropDesk || null, // M-F6 — the Drop Desk (coupon redemption)
       usdt: oc.usdt || fc.usdt || null,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
       readRpcUrlFallbacks: (o.readRpcUrlFallbacks || FILE.readRpcUrlFallbacks || []),
@@ -454,6 +476,24 @@ window.DYDash = (function () {
           var rd = new ethersRef.Contract(c.roiRedemption, DESK_ABI, provider);
           jobs.push(rd.reserve().then(function (res) { data.deskReserve = res; }).catch(function () {}));
         }
+        // DROP DESK coupon (M-F6): find the FIRST live coupon this wallet holds (unredeemed, uncancelled, unexpired).
+        if (c.dropDesk) {
+          var dd = new ethersRef.Contract(c.dropDesk, DROP_ABI, provider);
+          jobs.push(loadCoupons().then(function (list) {
+            var mine = list.filter(function (x) { return (x.wallet || "").toLowerCase() === addr.toLowerCase(); });
+            var chain = Promise.resolve(null);
+            mine.forEach(function (cp) {
+              chain = chain.then(function (found) {
+                if (found) return found;
+                if (Number(cp.deadline) < data.now) return null; // expired
+                return Promise.all([dd.nonceRedeemed(cp.nonce), dd.nonceCancelled(cp.nonce)]).then(function (r) {
+                  return (r[0] || r[1]) ? null : cp; // redeemed or cancelled → not live
+                }).catch(function () { return null; });
+              });
+            });
+            return chain.then(function (found) { data.coupon = found; });
+          }).catch(function () {}));
+        }
         return Promise.all(jobs);
       }).then(function () {
         // cash-out quote needs roi + desk
@@ -469,6 +509,7 @@ window.DYDash = (function () {
         renderPolBanner();
         loadFeed();
         renderBuy();
+        renderRedeem();
         wireReadRetry();
       });
     }).catch(function (e) {
@@ -776,6 +817,41 @@ window.DYDash = (function () {
   //  narrated confirmations (approve USDT → buy → activate/sync). Every step
   //  is pre-simulated (staticCall) before it is sent.
   // =========================================================================
+  // ── DROP DESK (M-F6): the public coupon file (zero PII: [{wallet, amount, deadline, nonce, sig}]) ──
+  function loadCoupons() {
+    return fetch("coupons.json?nb=" + Date.now())
+      .then(function (r) { return r.json(); })
+      .then(function (a) { return Array.isArray(a) ? a : []; })
+      .catch(function () { return []; });
+  }
+  // The Redeem card is visible ONLY when the connected wallet holds a live coupon (unredeemed, unexpired, uncancelled).
+  function renderRedeem() {
+    var host = $("redeem-panel"); if (!host) return;
+    var c = cfg();
+    if (!c.dropDesk || !data || !data.coupon) { host.style.display = "none"; return; } // hidden unless a live coupon exists
+    host.style.display = "";
+    var cp = data.coupon;
+    var amt = fmt(BigInt(cp.amount));
+    var daysLeft = Math.max(0, Math.ceil((Number(cp.deadline) - data.now) / 86400));
+    $("redeem-body").innerHTML =
+      "<div class='redeem-amt'>" + amt + " <span class='redeem-unit'>DYC</span></div>"
+      + "<div class='redeem-sub'>A drop is waiting for your wallet — <b>" + daysLeft + " day" + (daysLeft === 1 ? "" : "s") + "</b> left to claim.</div>"
+      + "<button class='rite-btn' id='redeem-btn'>Redeem my drop</button>"
+      + "<div class='redeem-note'>One tap sends it straight to your wallet — no approval, no fee token needed.</div>";
+    $("redeem-btn").onclick = function () { actRedeem(cp); };
+  }
+  function actRedeem(cp) {
+    var c = cfg();
+    runAction({
+      contractAddr: c.dropDesk, abi: DROP_ABI, gas: GAS.redeem,
+      simFn: function (k) { return k.redeem.staticCall(cp.wallet, cp.amount, cp.deadline, cp.nonce, cp.sig); },
+      sendFn: function (k, o) { return k.redeem(cp.wallet, cp.amount, cp.deadline, cp.nonce, cp.sig, o); },
+      title: "Redeem your drop",
+      body: "Redeem <b>" + fmt(BigInt(cp.amount)) + " DYC</b> to your wallet. One tap — the coupon proves it's yours; no approval needed.",
+      raw: "raw: " + String(cp.amount) + " wei · nonce " + String(cp.nonce),
+    });
+  }
+
   function loadAllowlist() {
     return fetch("allowlist.json?nb=" + (buyState._nb || (buyState._nb = 1)))
       .then(function (r) { return r.json(); })

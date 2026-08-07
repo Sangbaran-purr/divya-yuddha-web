@@ -157,6 +157,47 @@
         </table>
       </section>
 
+      <!-- PANEL 8 — DROP DESK (M-F6) — sign drop coupons, publish, cancel, read desk figures -->
+      <section class="panel" id="panel-drop">
+        <h2>Drop Desk — sign &amp; publish drop coupons</h2>
+        <p class="hint">Hand-sign one-time <b>drop coupons</b> with <b>this wallet</b> (must be the desk's
+          <span class="mono">dropSigner</span>). Each coupon is signed EIP-712 <span class="mono">DropCoupon(wallet,
+          amount, deadline, nonce)</span> with a <b>fixed 90-day</b> deadline baked in. The published
+          <span class="mono">coupons.json</span> holds only <b>address, amount, deadline, nonce, signature</b> — zero
+          personal data. Publishing = committing that file (the robot can absorb this later). Fund the desk by a plain
+          DYC transfer from the ecosystem allocation; withdraw unspent balance with the contract's
+          <span class="mono">withdraw</span>.</p>
+
+        <label class="fld" for="drop-input">Batch — one <span class="mono">wallet, amount(DYC)</span> per line</label>
+        <textarea class="txt" id="drop-input" placeholder="0x…, 150&#10;0x…, 50&#10;0x…, 12.5" disabled></textarea>
+        <div class="row-actions">
+          <button class="btn" id="drop-sign" disabled>Sign coupons</button>
+          <button class="btn" id="drop-merge" data-always="1">Load published coupons.json</button>
+          <button class="btn" id="drop-download" data-always="1">Download coupons.json</button>
+          <button class="btn tiny" id="drop-clear" data-always="1">Clear batch</button>
+        </div>
+        <div id="drop-msg" class="mono" style="font-size:0.82rem;margin:0.5rem 0;color:var(--gold-aged)"></div>
+        <div id="drop-coupons"></div>
+
+        <div style="margin-top:1rem;border-top:1px solid rgba(232,200,116,0.14);padding-top:0.8rem">
+          <label class="fld" for="drop-cancel-nonce">Void an unclaimed coupon — nonce</label>
+          <input class="txt" id="drop-cancel-nonce" type="text" placeholder="coupon nonce (decimal)" disabled />
+          <div class="row-actions">
+            <button class="btn" id="drop-cancel-btn" disabled>Cancel coupon</button>
+            <span id="drop-cancel-msg" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+          </div>
+          <p class="hint" style="margin-top:0.3rem">Voids an <b>unclaimed</b> coupon only — a redeemed coupon is final
+            and reverts. Owner-only (this wallet must be the desk owner).</p>
+        </div>
+
+        <div style="margin-top:1rem;border-top:1px solid rgba(232,200,116,0.14);padding-top:0.8rem">
+          <div class="row-actions">
+            <button class="btn tiny" id="drop-figures-load" data-always="1">Read desk figures</button>
+          </div>
+          <div id="drop-figures" style="margin-top:0.5rem"></div>
+        </div>
+      </section>
+
       <!-- CONFIGURATION — localStorage override (no rehearsal addresses committed) -->
       <details class="cfg">
         <summary>Configuration (this browser only)</summary>
@@ -175,6 +216,8 @@
         <input class="txt" id="cfg-vault" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-staking">HolderStaking address (Purchase Registry — STAKED + REWARDS)</label>
         <input class="txt" id="cfg-staking" type="text" placeholder="0x…" />
+        <label class="fld" for="cfg-dropdesk">DropDesk address (Drop Desk — coupon signing + cancel + figures)</label>
+        <input class="txt" id="cfg-dropdesk" type="text" placeholder="0x…" />
         <label class="fld" for="cfg-deploy">Deploy block (history scan start; 0 = full chunked scan)</label>
         <input class="txt" id="cfg-deploy" type="number" placeholder="0" />
         <label class="fld" for="cfg-readrpc">Read RPC URL (archive-capable — for FULL Mint History; blank = recent-only)</label>
@@ -197,7 +240,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s13"></script>
+    <script src="js/admin.js?v=s14"></script>
     <script>
       window.DYAdmin.mount();
     </script>

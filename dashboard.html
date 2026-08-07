@@ -122,6 +122,12 @@
             <div class="runway-foot" id="runway-foot">Estimated from pool aggregates · updates periodically.</div>
           </div>
 
+          <!-- Redeem a Drop — M-F6 (hidden unless the connected wallet holds a live coupon) -->
+          <div class="panel-box redeem-panel" id="redeem-panel" style="display:none">
+            <div class="sec-label"><span class="sec-num">★</span> A DROP FOR YOU</div>
+            <div id="redeem-body"></div>
+          </div>
+
           <!-- Buy DYC — M-F2 -->
           <div class="panel-box" id="buy-panel">
             <div class="sec-label"><span class="sec-num">4</span> BUY DYC <span id="buy-round-chip"></span></div>
@@ -184,7 +190,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/dashboard.js?v=mf4d"></script>
+    <script src="js/dashboard.js?v=mf6"></script>
     <script>
       window.DYDash.mount();
     </script>

@@ -63,6 +63,7 @@ window.DYAdmin = (function () {
       waveCardNFT: o.waveCardNFT || fc.waveCardNFT || null,
       dycoin: o.dycoin || fc.dycoin || null, // S9 — the DYC token for COIN DROPS (admin config, never config.js's frozen proxy)
       dycoinSale: o.dycoinSale || fc.dycoinSale || null, // M-F2 — the DYCoinSale (Approve Buyers EIP-712 domain + signer gate)
+      dropDesk: o.dropDesk || fc.dropDesk || null, // M-F6 — the Drop Desk (coupon signing + cancel + figures)
       vestingVault: o.vestingVault || fc.vestingVault || null, // M-F3 — Purchase Registry VESTED column
       holderStaking: o.holderStaking || fc.holderStaking || null, // M-F3 — Purchase Registry STAKED + REWARDS
       deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
@@ -270,6 +271,7 @@ window.DYAdmin = (function () {
     setPanelEnabled("coin", on);
     setPanelEnabled("approve", on);
     setPanelEnabled("registry", on);
+    setPanelEnabled("drop", on);
   }
   function setPanelEnabled(kind, on) {
     var p = $("panel-" + kind);
@@ -935,6 +937,7 @@ window.DYAdmin = (function () {
     if ($("cfg-sale")) $("cfg-sale").value = c.dycoinSale || ""; // M-F2
     if ($("cfg-vault")) $("cfg-vault").value = c.vestingVault || ""; // M-F3
     if ($("cfg-staking")) $("cfg-staking").value = c.holderStaking || ""; // M-F3
+    if ($("cfg-dropdesk")) $("cfg-dropdesk").value = c.dropDesk || ""; // M-F6
     $("cfg-deploy").value = c.deployBlock || 0;
     $("cfg-readrpc").value = c.readRpcUrl || "";
     $("cfg-cards").value = c.waveCards.length ? JSON.stringify(c.waveCards, null, 2) : "";
@@ -968,18 +971,21 @@ window.DYAdmin = (function () {
       var sl = $("cfg-sale") ? $("cfg-sale").value.trim() : ""; // M-F2 DYCoinSale
       var vv = $("cfg-vault") ? $("cfg-vault").value.trim() : ""; // M-F3 VestingVault
       var hs = $("cfg-staking") ? $("cfg-staking").value.trim() : ""; // M-F3 HolderStaking
+      var dk = $("cfg-dropdesk") ? $("cfg-dropdesk").value.trim() : ""; // M-F6 DropDesk
       var pa = a ? parseAddr(a) : null;
       var pw = w ? parseAddr(w) : null;
       var pd = d ? parseAddr(d) : null;
       var ps = sl ? parseAddr(sl) : null;
       var pvv = vv ? parseAddr(vv) : null;
       var phs = hs ? parseAddr(hs) : null;
+      var pdd = dk ? parseAddr(dk) : null;
       if (a && !pa) return warn(msg, "AccessNFT address is not a valid checksummed address. Nothing saved.");
       if (w && !pw) return warn(msg, "WaveCardNFT address is not a valid checksummed address. Nothing saved.");
       if (d && !pd) return warn(msg, "DYC token address is not a valid checksummed address. Nothing saved.");
       if (sl && !ps) return warn(msg, "DYCoinSale address is not a valid checksummed address. Nothing saved.");
       if (vv && !pvv) return warn(msg, "VestingVault address is not a valid checksummed address. Nothing saved.");
       if (hs && !phs) return warn(msg, "HolderStaking address is not a valid checksummed address. Nothing saved.");
+      if (dk && !pdd) return warn(msg, "DropDesk address is not a valid checksummed address. Nothing saved.");
 
       var rawCards = $("cfg-cards").value.trim();
       var cards;
@@ -1017,6 +1023,7 @@ window.DYAdmin = (function () {
         dycoinSale: ps, // M-F2
         vestingVault: pvv, // M-F3
         holderStaking: phs, // M-F3
+        dropDesk: pdd, // M-F6
         deployBlock: Number($("cfg-deploy").value) || 0,
         readRpcUrl: readRpc || null,
         waveCards: cards,
@@ -1382,6 +1389,164 @@ window.DYAdmin = (function () {
     }
   }
 
+  // ================= DROP DESK (M-F6) — sign coupons, publish the coupon file, cancel, read desk figures =========
+  // The owner's admin wallet hand-signs EIP-712 DropCoupons (the Approve-Buyers pattern). The coupon file is public
+  // and zero-PII: [{wallet, amount, deadline, nonce, sig}]. Working set persists under the dyadmin:: namespace.
+  var DROP_DESK_ABI = [
+    "function cancel(uint256 nonce)",
+    "function nonceRedeemed(uint256) view returns (bool)",
+    "function nonceCancelled(uint256) view returns (bool)",
+    "function dropSigner() view returns (address)",
+    "function totalFunded() view returns (uint256)",
+    "function totalRedeemed() view returns (uint256)",
+    "function totalWithdrawn() view returns (uint256)",
+    "function dyc() view returns (address)",
+  ];
+  var DROP_COIN_ABI = ["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)"];
+  var DROP_LS = "dyadmin::dropdesk_coupons"; // namespace law: dyadmin:: = admin surface
+  var COUPON_TTL_DAYS = 90; // owner ruling: FIXED 90-day coupon lifetime, baked into the signed deadline
+  var deskCoupons = [];
+
+  function loadDeskCoupons() {
+    try { deskCoupons = JSON.parse(localStorage.getItem(DROP_LS)) || []; } catch (e) { deskCoupons = []; }
+    if (!Array.isArray(deskCoupons)) deskCoupons = [];
+  }
+  function saveDeskCoupons() { try { localStorage.setItem(DROP_LS, JSON.stringify(deskCoupons)); } catch (e) {} }
+  function randNonce() {
+    var b = new Uint8Array(16); (window.crypto || {}).getRandomValues ? window.crypto.getRandomValues(b) : b;
+    var h = "0x"; for (var i = 0; i < b.length; i++) h += ("0" + b[i].toString(16)).slice(-2);
+    return BigInt(h).toString(); // 128-bit decimal nonce string
+  }
+  function couponUpsert(cp) {
+    for (var i = 0; i < deskCoupons.length; i++) { if (String(deskCoupons[i].nonce) === String(cp.nonce)) { deskCoupons[i] = cp; return; } }
+    deskCoupons.push(cp);
+  }
+  function signDropCoupon(wallet, amountWei, deadline, nonce) {
+    var c = cfg();
+    var provider = new ethersRef.BrowserProvider(window.ethereum);
+    return provider.getSigner().then(function (signer) {
+      var domain = { name: "DropDesk", version: "1", chainId: PLAYER.chain.id, verifyingContract: c.dropDesk };
+      var types = { DropCoupon: [{ name: "wallet", type: "address" }, { name: "amount", type: "uint256" }, { name: "deadline", type: "uint256" }, { name: "nonce", type: "uint256" }] };
+      return signer.signTypedData(domain, types, { wallet: wallet, amount: amountWei, deadline: deadline, nonce: nonce });
+    });
+  }
+
+  function renderDeskCoupons() {
+    var out = $("drop-coupons"); if (!out) return;
+    if (!deskCoupons.length) { out.innerHTML = "<div class='q'>No coupons in this batch yet. Sign some above, or load the published file.</div>"; return; }
+    var now = Math.floor(Date.now() / 1000);
+    var rows = deskCoupons.map(function (cp) {
+      var days = Math.max(0, Math.ceil((Number(cp.deadline) - now) / 86400));
+      var dyc = ethersRef ? ethersRef.formatUnits(cp.amount, 18) : cp.amount;
+      return "<tr><td class='addr'>" + shortAddr(cp.wallet) + "</td><td>" + dyc + " DYC</td><td class='mono' style='font-size:.72rem'>"
+        + String(cp.nonce).slice(0, 10) + "…</td><td>" + days + "d</td></tr>";
+    }).join("");
+    out.innerHTML = "<table class='grid'><thead><tr><th>Wallet</th><th>Amount</th><th>Nonce</th><th>Expires</th></tr></thead><tbody>"
+      + rows + "</tbody></table><div class='mono' style='font-size:.78rem;margin-top:.4rem'>" + deskCoupons.length + " coupon(s) in this batch.</div>";
+  }
+
+  function runDropSign() {
+    var msg = $("drop-msg"); msg.textContent = "";
+    var c = cfg();
+    if (!c.dropDesk) { msg.textContent = "Set the DropDesk address in Configuration first."; return; }
+    withEthers().then(function () {
+      var raw = $("drop-input").value || "";
+      var lines = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      if (!lines.length) { msg.textContent = "Enter one \"wallet, amount\" per line."; return; }
+      var deadline = Math.floor(Date.now() / 1000) + COUPON_TTL_DAYS * 86400; // 90 days, baked into the signature
+      var parsed = [];
+      for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split(/[,\s]+/).filter(Boolean);
+        var addr = parseAddr(parts[0] || "");
+        var amtWei = null;
+        try { amtWei = ethersRef.parseUnits(String(parts[1] || "").replace(/,/g, ""), 18); } catch (e) { amtWei = null; }
+        parsed.push({ addr: addr, amtWei: amtWei, ok: !!(addr && amtWei && amtWei > 0n), raw: lines[i] });
+      }
+      var good = parsed.filter(function (p) { return p.ok; });
+      if (!good.length) { msg.textContent = "No valid rows — each line needs a checksummed wallet and a positive DYC amount."; return; }
+      msg.textContent = "Signing " + good.length + " coupon(s) — approve each in your wallet…";
+      var chain = Promise.resolve(), signed = 0, failed = 0;
+      good.forEach(function (p) {
+        chain = chain.then(function () {
+          var nonce = randNonce();
+          return signDropCoupon(p.addr, p.amtWei.toString(), deadline, nonce).then(function (sig) {
+            couponUpsert({ wallet: p.addr, amount: p.amtWei.toString(), deadline: deadline, nonce: nonce, sig: sig });
+            signed++; saveDeskCoupons(); renderDeskCoupons();
+          }).catch(function () { failed++; });
+        });
+      });
+      chain.then(function () {
+        msg.textContent = "Signed " + signed + " coupon(s)" + (failed ? ", " + failed + " skipped" : "") + ". Download the file and commit coupons.json to publish.";
+        msg.style.color = "var(--flame-core)";
+      });
+    });
+  }
+
+  function downloadDeskCoupons() {
+    // publish shape: zero-PII [{wallet, amount, deadline, nonce, sig}] — amounts as wei strings
+    var pub = deskCoupons.map(function (cp) { return { wallet: cp.wallet, amount: String(cp.amount), deadline: Number(cp.deadline), nonce: String(cp.nonce), sig: cp.sig }; });
+    var blob = new Blob([JSON.stringify(pub, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = "coupons.json"; a.click(); URL.revokeObjectURL(url);
+  }
+
+  function mergePublishedCoupons() {
+    var msg = $("drop-msg");
+    fetch("coupons.json?nb=" + Date.now()).then(function (r) { return r.json(); }).then(function (list) {
+      if (!Array.isArray(list)) return;
+      var added = 0;
+      list.forEach(function (cp) { if (cp && cp.nonce != null) { var seen = deskCoupons.some(function (x) { return String(x.nonce) === String(cp.nonce); }); if (!seen) { deskCoupons.push(cp); added++; } } });
+      saveDeskCoupons(); renderDeskCoupons();
+      msg.textContent = "Merged the published file (+" + added + " new). Total " + deskCoupons.length + ".";
+    }).catch(function () { msg.textContent = "No published coupons.json found yet (that's fine before the first publish)."; });
+  }
+
+  function runDropCancel() {
+    var msg = $("drop-cancel-msg"); msg.textContent = "";
+    var c = cfg();
+    if (!c.dropDesk) { msg.textContent = "Set the DropDesk address first."; return; }
+    var nonce = ($("drop-cancel-nonce").value || "").trim();
+    if (!nonce) { msg.textContent = "Enter the coupon nonce to void."; return; }
+    withEthers().then(function () {
+      var provider = new ethersRef.BrowserProvider(window.ethereum);
+      return provider.getSigner().then(function (signer) {
+        var desk = new ethersRef.Contract(c.dropDesk, DROP_DESK_ABI, signer);
+        msg.textContent = "Simulating…";
+        return desk.cancel.staticCall(nonce).then(function () {
+          msg.textContent = "Confirm in your wallet…";
+          return desk.cancel(nonce, { gasLimit: 60000 }).then(function (tx) { return tx.wait(); }).then(function () {
+            msg.textContent = "Coupon " + nonce.slice(0, 10) + "… voided. It can never be redeemed."; msg.style.color = "var(--flame-core)";
+          });
+        });
+      });
+    }).catch(function (e) { msg.textContent = "Could not cancel: " + decodeErr(e); });
+  }
+
+  function loadDeskFigures() {
+    var out = $("drop-figures"); if (!out) return;
+    var c = cfg();
+    if (!c.dropDesk) { out.innerHTML = "<div class='q'>Set the DropDesk address to read desk figures.</div>"; return; }
+    out.innerHTML = "<div class='q'>Reading chain…</div>";
+    withEthers().then(function () {
+      var p = readProvider();
+      var desk = new ethersRef.Contract(c.dropDesk, DROP_DESK_ABI, p);
+      return desk.dyc().then(function (dycAddr) {
+        var token = new ethersRef.Contract(dycAddr, DROP_COIN_ABI, p);
+        return Promise.all([token.balanceOf(c.dropDesk), desk.totalFunded(), desk.totalRedeemed(), desk.totalWithdrawn(), desk.dropSigner()]);
+      }).then(function (r) {
+        var f = function (x) { return ethersRef.formatUnits(x, 18); };
+        out.innerHTML =
+          "<table class='grid'><tbody>"
+          + "<tr><th>Desk balance</th><td>" + f(r[0]) + " DYC</td></tr>"
+          + "<tr><th>Total funded</th><td>" + f(r[1]) + " DYC</td></tr>"
+          + "<tr><th>Total redeemed</th><td>" + f(r[2]) + " DYC</td></tr>"
+          + "<tr><th>Total withdrawn</th><td>" + f(r[3]) + " DYC</td></tr>"
+          + "<tr><th>Coupon signer</th><td class='addr'>" + shortAddr(r[4]) + "</td></tr>"
+          + "</tbody></table>";
+      });
+    }).catch(function (e) { out.innerHTML = "<div class='q'>Couldn't read the desk: " + escHtml(decodeErr ? decodeErr(e) : String(e && e.message || e)) + "</div>"; });
+  }
+
   function mount() {
     // Approve Buyers (M-F2)
     if ($("approve-sign")) $("approve-sign").onclick = runApprove;
@@ -1425,6 +1590,16 @@ window.DYAdmin = (function () {
     };
     // Robot Registry (M-F5) — read-only; independent of the wallet gate
     if ($("robot-load")) { $("robot-load").onclick = loadRobotRegistry; robotFillInputs(); }
+    // Drop Desk (M-F6)
+    if ($("drop-sign")) {
+      loadDeskCoupons(); renderDeskCoupons();
+      $("drop-sign").onclick = runDropSign;
+      $("drop-download").onclick = downloadDeskCoupons;
+      $("drop-merge").onclick = mergePublishedCoupons;
+      $("drop-clear").onclick = function () { if (confirm("Clear this local coupon batch? (The published file is not affected.)")) { deskCoupons = []; saveDeskCoupons(); renderDeskCoupons(); } };
+      $("drop-cancel-btn").onclick = runDropCancel;
+      $("drop-figures-load").onclick = loadDeskFigures;
+    }
     // Configuration
     $("cfg-save").onclick = saveCfg;
     $("cfg-clear").onclick = clearCfg;
