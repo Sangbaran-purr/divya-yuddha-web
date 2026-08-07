@@ -295,8 +295,45 @@ window.DYAdmin = (function () {
       .then(function (st) {
         if (!st.chainOk) return window.DYWallet.ensureChain();
       })
-      .then(refreshGate)
-      .catch(function () {});
+      .then(function () { renderStatusStrip(); refreshGate(); })
+      .catch(function () { renderStatusStrip(); });
+  }
+
+  // S-ADMIN-CONNECT — pinned, always-visible status strip (independent of the per-collection gate banner). It is the
+  // one control that is NEVER hidden: it always shows the connection state in plain words + a Connect button when
+  // not connected, so the owner never faces dark panels with no explanation and no button.
+  var OWNER_WALLET = "0xbab57f595b80318A79006Cd1f6Fde11464AaF86e"; // PROD_OWNER admin wallet (public)
+  function renderStatusStrip() {
+    var el = $("admin-status");
+    if (!el) return;
+    var s = window.DYWallet.state;
+    if (!s.hasProvider) {
+      el.className = "admin-status st-warn";
+      el.textContent = "MetaMask not detected in this browser.";
+      return;
+    }
+    if (!s.connected) {
+      el.className = "admin-status st-info";
+      el.innerHTML = "<span>Not connected.</span> <button id='status-connect'>Connect</button>";
+      var b = $("status-connect");
+      if (b) b.onclick = doConnect;
+      return;
+    }
+    var me = s.address || "";
+    if (me.toLowerCase() !== OWNER_WALLET.toLowerCase()) {
+      el.className = "admin-status st-warn";
+      el.innerHTML = "Connected as <span class='mono'>" + shortAddr(me) + "</span> — this is not the owner wallet. Panels stay locked.";
+      return;
+    }
+    // owner connected — surface the network; wrong network is called out in red with the expected name.
+    if (!s.chainOk) {
+      el.className = "admin-status st-err";
+      el.innerHTML = "Connected as owner <span class='mono'>" + shortAddr(me) + "</span> — <span class='st-red'>wrong network. Switch to "
+        + PLAYER.chain.name + " (80002).</span>";
+      return;
+    }
+    el.className = "admin-status st-ok";
+    el.innerHTML = "Connected as owner <span class='mono'>" + shortAddr(me) + "</span>. Network: " + PLAYER.chain.name + ".";
   }
 
   // ---------- the DROP engine (shared by single + batch, both panels) ----------
@@ -1693,6 +1730,12 @@ window.DYAdmin = (function () {
   }
 
   function mount() {
+    // S-ADMIN-CONNECT — bring the status strip + wallet up FIRST, before any panel wiring can throw, so the owner
+    // always has a visible connection state + a Connect button no matter what happens below.
+    window.DYWallet.onChange(function () { renderStatusStrip(); refreshGate(); });
+    window.DYWallet.init(); // sets hasProvider synchronously, then a silent eth_accounts (no prompt) → onChange
+    renderStatusStrip();
+
     // Approve Buyers (M-F2)
     if ($("approve-sign")) $("approve-sign").onclick = runApprove;
     if ($("approve-download")) $("approve-download").onclick = downloadAllowlist;
@@ -1756,10 +1799,7 @@ window.DYAdmin = (function () {
 
     buildPicker();
     fillCfgForm();
-    window.DYWallet.onChange(function () {
-      refreshGate();
-    });
-    window.DYWallet.init();
+    // wallet init + onChange are registered at the TOP of mount (S-ADMIN-CONNECT), so the status strip is live first.
   }
 
   return { mount: mount };

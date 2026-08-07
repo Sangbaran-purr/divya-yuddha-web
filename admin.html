@@ -15,6 +15,22 @@
     <script src="admin-config.js?v=s13"></script>
   </head>
   <body class="admin">
+    <!-- S-ADMIN-CONNECT: pinned, always-visible connection status strip. Never let the owner face dark panels
+         without the page saying plainly why. JS refines it; this static default shows before/if JS is slow. -->
+    <style>
+      .admin-status { position: sticky; top: 0; z-index: 100; padding: 0.55rem 1rem; font-size: 0.9rem;
+        display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; border-bottom: 1px solid rgba(232,200,116,0.25);
+        font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
+      .admin-status .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .admin-status button { font: inherit; cursor: pointer; border-radius: 6px; padding: 0.3rem 0.9rem;
+        border: 1px solid var(--gold, #e8c874); background: rgba(232,200,116,0.14); color: var(--gold, #e8c874); }
+      .admin-status.st-info { background: #14110b; color: #cdbb8f; }
+      .admin-status.st-ok   { background: #0e1a0e; color: #9fd39f; border-bottom-color: rgba(120,200,120,0.35); }
+      .admin-status.st-warn { background: #1a140b; color: #e8c874; }
+      .admin-status.st-err  { background: #1e0d0b; color: #ff9a86; border-bottom-color: rgba(220,90,60,0.5); }
+      .admin-status .st-red { color: #ff6b52; font-weight: 600; }
+    </style>
+    <div id="admin-status" class="admin-status st-info">Checking wallet…</div>
     <div class="admin-wrap">
       <header class="admin-head">
         <h1>Admin Drops</h1>
@@ -260,7 +276,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s15"></script>
+    <script src="js/admin.js?v=s16"></script>
     <script>
       window.DYAdmin.mount();
     </script>
