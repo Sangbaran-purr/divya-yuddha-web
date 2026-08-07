@@ -108,6 +108,11 @@ window.DYAdmin = (function () {
       var args = e.revert.args || [];
       if (n === "AlreadyHolds") return "already holds an Access NFT (one per wallet)";
       if (n === "NotAuthorizedMinter") return "caller is not an authorized minter";
+      // S-CLAIM-2B — creditRoi grant path
+      if (n === "NotDebitor") return "this wallet isn't a registered debitor yet — the owner must call setDebitor(adminWallet) via the timelock before grants work (go-live step)";
+      if (n === "ERC20InsufficientAllowance") return "approve DYC to the staking contract first (the approve step below)";
+      if (n === "ERC20InsufficientBalance") return "this admin wallet doesn't hold enough DYC to fund this grant";
+      if (n === "ZeroAmount") return "enter an amount above zero";
       return n + (args.length ? "(" + args.join(", ") + ")" : "");
     }
     if (e && e.reason) return e.reason;
@@ -272,6 +277,7 @@ window.DYAdmin = (function () {
     setPanelEnabled("approve", on);
     setPanelEnabled("registry", on);
     setPanelEnabled("drop", on);
+    setPanelEnabled("grant", on); // S-CLAIM-2B — grant panel gated like siblings (owner-connect)
   }
   function setPanelEnabled(kind, on) {
     var p = $("panel-" + kind);
@@ -1547,6 +1553,145 @@ window.DYAdmin = (function () {
     }).catch(function (e) { out.innerHTML = "<div class='q'>Couldn't read the desk: " + escHtml(decodeErr ? decodeErr(e) : String(e && e.message || e)) + "</div>"; });
   }
 
+  // ─────────────── Process Claim / Grant Rewards (S-CLAIM-2B) ───────────────
+  // Owner ruling: rewards are ADMIN GRANTS via HolderStaking.creditRoi (the admin wallet is a debitor — registered
+  // by the owner via setDebitor at go-live, NOT here). creditRoi pulls DYC from the admin's own balance
+  // (safeTransferFrom) → so the admin must APPROVE DYC to HolderStaking first (the approve-then-act Top Up pattern).
+  // Grants are in MULTIPLES OF 1,000 DYC (client-side refusal before any send). The 2X lifetime cap is POLICY here,
+  // not contract code — the ledger shows granted-so-far beside chain accrual so the owner can eyeball it.
+  var STAKE_GRANT_ABI = [
+    "function creditRoi(address player, uint256 amount)",
+    "function pendingRoi(address) view returns (uint256)",
+    "function roi(address) view returns (uint256)",
+    "event RoiCredited(address indexed player, uint256 amount, address indexed from)",
+    "error NotDebitor()", "error ZeroAddress()",
+  ];
+  var GRANT_COIN_ABI = [
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function approve(address spender, uint256 amount) returns (bool)",
+    "function decimals() view returns (uint8)",
+    "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
+    "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
+  ];
+  // gas floors (house law). approve ~46k → 90k. creditRoi cold-state = roi[player] cold SSTORE (~20k) +
+  // DYC safeTransferFrom (~50k, warm contract recipient) + event → ~120k measured band; 160k with margin.
+  var GRANT_APPROVE_GAS = 90000, CREDIT_ROI_GAS = 160000;
+  var GRANT_MULTIPLE = 1000n; // DYC, whole units
+
+  // client-side 1,000-multiple check on a human DYC string → { ok, wei?, err? }. Refuses BEFORE any chain touch.
+  function parseGrantAmount(str) {
+    var s = String(str || "").replace(/,/g, "").trim();
+    if (!s) return { ok: false, err: "Enter a DYC amount." };
+    var whole;
+    try { whole = ethersRef.parseUnits(s, 18); } catch (e) { return { ok: false, err: "That's not a valid DYC amount." }; }
+    if (whole <= 0n) return { ok: false, err: "Enter an amount above zero." };
+    var oneK = GRANT_MULTIPLE * 1000000000000000000n; // 1,000 DYC in wei
+    if (whole % oneK !== 0n) return { ok: false, err: "Grants must be in multiples of 1,000 DYC (e.g. 1,000 / 2,000 / 5,000)." };
+    return { ok: true, wei: whole };
+  }
+
+  function processClaimGrant() {
+    var msg = $("grant-msg"); msg.style.color = ""; msg.textContent = "";
+    var c = cfg();
+    if (!c.holderStaking || !c.dycoin) { msg.textContent = "Set the HolderStaking and DYC token addresses in Configuration first."; return; }
+    var wallet = parseAddr(($("grant-wallet").value || "").trim());
+    if (!wallet) { msg.textContent = "Enter a valid user wallet address (checksummed 0x…)."; return; }
+    withEthers().then(function () {
+      var amt = parseGrantAmount($("grant-amount").value);
+      if (!amt.ok) { msg.textContent = amt.err; return; } // 1,000-multiple refusal — BEFORE any send
+      var amtWei = amt.wei, dycStr = ethersRef.formatUnits(amtWei, 18);
+      var provider = new ethersRef.BrowserProvider(window.ethereum);
+      provider.getSigner().then(function (signer) {
+        return signer.getAddress().then(function (adminAddr) {
+          var dyc = new ethersRef.Contract(c.dycoin, GRANT_COIN_ABI, signer);
+          var hs = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, signer);
+          // step 1 — approve DYC to HolderStaking if allowance is short
+          return dyc.allowance(adminAddr, c.holderStaking).then(function (allow) {
+            var needApprove = allow < amtWei;
+            var pre = needApprove
+              ? (function () {
+                  msg.textContent = "Step 1/2 — simulating approve…";
+                  return dyc.approve.staticCall(c.holderStaking, amtWei).then(function () {
+                    msg.textContent = "Step 1/2 — confirm the DYC approval in your wallet…";
+                    return dyc.approve(c.holderStaking, amtWei, { gasLimit: GRANT_APPROVE_GAS }).then(function (tx) { return tx.wait(); }).then(function () {
+                      msg.textContent = "Approved. Step 2/2 — granting…";
+                    });
+                  });
+                })()
+              : Promise.resolve();
+            // step 2 — creditRoi(wallet, amount): pre-sim, then send with the cold-state gas floor
+            return pre.then(function () {
+              msg.textContent = "Step 2/2 — simulating grant…";
+              return hs.creditRoi.staticCall(wallet, amtWei).then(function () {
+                msg.textContent = "Step 2/2 — confirm the grant in your wallet…";
+                return hs.creditRoi(wallet, amtWei, { gasLimit: CREDIT_ROI_GAS }).then(function (tx) {
+                  return tx.wait().then(function (rc) {
+                    // chain-truth confirmation: re-read the user's ROI column
+                    var hsRead = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, readProvider());
+                    return hsRead.roi(wallet).then(function (roiNow) {
+                      msg.style.color = "var(--flame-core)";
+                      msg.innerHTML = "Granted <b>" + escHtml(dycStr) + " DYC</b> to " + escHtml(shortAddr(wallet))
+                        + ". Their ROI column now reads <b>" + escHtml(ethersRef.formatUnits(roiNow, 18)) + " DYC</b> (chain truth). Tx "
+                        + escHtml(String(tx.hash).slice(0, 12)) + "…";
+                      loadGrantLedger(); // refresh the per-wallet ledger
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      }).catch(function (e) { msg.style.color = ""; msg.textContent = "Grant failed: " + decodeErr(e); });
+    });
+  }
+
+  // per-wallet grant ledger: sum RoiCredited(player=wallet, from=this admin) via chunked getLogs, shown beside the
+  // wallet's chain-visible accrual (pending + roi) so the owner can eyeball the 2X policy cap before granting.
+  function loadGrantLedger() {
+    var out = $("grant-ledger"); if (!out) return;
+    var c = cfg();
+    var wallet = parseAddr(($("grant-wallet").value || "").trim());
+    if (!c.holderStaking) { out.innerHTML = "<div class='q'>Set the HolderStaking address first.</div>"; return; }
+    if (!wallet) { out.innerHTML = "<div class='q'>Enter a user wallet above to see its grant ledger + accrual.</div>"; return; }
+    out.innerHTML = "<div class='q'>Reading chain…</div>";
+    withEthers().then(function () {
+      var provider = new ethersRef.BrowserProvider(window.ethereum);
+      return provider.getSigner().then(function (signer) {
+        return signer.getAddress().then(function (adminAddr) {
+          var p = readProvider();
+          var hs = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, p);
+          return p.getBlockNumber().then(function (latest) {
+            var start = cfg().deployBlock || 0;
+            var filter = hs.filters.RoiCredited(wallet, null, adminAddr);
+            var granted = 0n, jobs = Promise.resolve();
+            for (var from = start; from <= latest; from += LOG_CHUNK) {
+              (function (a, b) {
+                jobs = jobs.then(function () {
+                  return hs.queryFilter(filter, a, b).then(function (evs) {
+                    evs.forEach(function (ev) { granted += ev.args.amount; });
+                  });
+                });
+              })(from, Math.min(from + LOG_CHUNK - 1, latest));
+            }
+            return jobs.then(function () {
+              return Promise.all([hs.pendingRoi(wallet), hs.roi(wallet)]).then(function (r) {
+                var f = function (x) { return ethersRef.formatUnits(x, 18); };
+                out.innerHTML =
+                  "<table class='grid'><tbody>"
+                  + "<tr><th>Granted so far (this admin)</th><td>" + escHtml(f(granted)) + " DYC</td></tr>"
+                  + "<tr><th>Chain accrual — pending</th><td>" + escHtml(f(r[0])) + " DYC</td></tr>"
+                  + "<tr><th>Chain accrual — ROI column</th><td>" + escHtml(f(r[1])) + " DYC</td></tr>"
+                  + "</tbody></table>"
+                  + "<div class='mono' style='font-size:.72rem;margin-top:.4rem;color:var(--gold-aged)'>The 2X lifetime cap is a POLICY guide, not enforced on-chain here — check granted-so-far against the wallet's staked principal before granting.</div>";
+              });
+            });
+          });
+        });
+      });
+    }).catch(function (e) { out.innerHTML = "<div class='q'>Couldn't read the ledger: " + escHtml(decodeErr(e)) + "</div>"; });
+  }
+
   function mount() {
     // Approve Buyers (M-F2)
     if ($("approve-sign")) $("approve-sign").onclick = runApprove;
@@ -1599,6 +1744,11 @@ window.DYAdmin = (function () {
       $("drop-clear").onclick = function () { if (confirm("Clear this local coupon batch? (The published file is not affected.)")) { deskCoupons = []; saveDeskCoupons(); renderDeskCoupons(); } };
       $("drop-cancel-btn").onclick = runDropCancel;
       $("drop-figures-load").onclick = loadDeskFigures;
+    }
+    // Process Claim / Grant Rewards (S-CLAIM-2B)
+    if ($("grant-btn")) {
+      $("grant-btn").onclick = processClaimGrant;
+      $("grant-ledger-load").onclick = loadGrantLedger;
     }
     // Configuration
     $("cfg-save").onclick = saveCfg;

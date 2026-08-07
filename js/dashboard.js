@@ -161,6 +161,18 @@ window.DYDash = (function () {
     return null;
   }
 
+  // ── S-CLAIM-2B (owner ruling 2026-08-07): self-claim UI OFF; rewards are admin-granted on request. One-flip
+  //    restore (set CLAIM_UI_ON = true to bring the Claim button back — the Deva-hero-entry pattern; no deletion).
+  //    The rewards FIGURE + history keep rendering regardless. Contacts ship as visible PLACEHOLDERS — the owner
+  //    fills the real Discord link + support email before go-live (never invent real-looking contacts).
+  var CLAIM_UI_ON = false;
+  var CLAIM_CONTACTS = { discord: "Discord (link coming)", email: "support@ (address coming)" };
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
   var DAY = 4n; var DAY_DEN = 1000n; // 0.4%/day (RATE is an internal constant; UI-stated per ratified flag)
   var POL_MIN = 20000000000000000n; // 0.02 POL — below this, show the fee banner
   var MIN_BUY_USDT = 100000000n; // M-F4 defect 1: page-side minimum purchase = 100 USDT (6-dec). Ruled 2026-08-06.
@@ -398,7 +410,11 @@ window.DYDash = (function () {
     b.innerHTML =
       "<div class='stat-label'>Claimable Amount</div>" +
       "<div class='big-num' style='font-size:1.9rem'>" + fmt(claimable) + "<span class='u'>DYC</span></div>" +
-      "<div class='card-actions'><button class='btn-g btn-purple btn-block' id='act-rclaim'" + (claimable > 0n ? "" : " disabled") + ">Claim</button></div>" +
+      // S-CLAIM-2B: self-claim button only when CLAIM_UI_ON; otherwise the two ruled policy lines in its place.
+      (CLAIM_UI_ON
+        ? "<div class='card-actions'><button class='btn-g btn-purple btn-block' id='act-rclaim'" + (claimable > 0n ? "" : " disabled") + ">Claim</button></div>"
+        : "<div class='note' style='margin-top:10px;line-height:1.5'>Rewards are credited by DY Animation on request — reach us on " +
+          esc(CLAIM_CONTACTS.discord) + " or by " + esc(CLAIM_CONTACTS.email) + ".<br>Claims are processed in multiples of 1,000 DYC.</div>") +
       (hasDesk
         ? "<button class='btn-g btn-block' id='act-cashout' style='margin-top:10px'" + (roiCol > 0n && deskFunded ? "" : " disabled") + ">Cash Out (USDT)<br><span style='font-size:.8rem;opacity:.85'>" +
           fmt(roiCol) + " DYC → " + (data.cashoutUsdt != null ? fmt(data.cashoutUsdt, 6) : "—") + " USDT</span></button>" +

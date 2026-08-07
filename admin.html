@@ -198,6 +198,26 @@
         </div>
       </section>
 
+      <!-- PANEL 9 — PROCESS CLAIM / GRANT REWARDS (S-CLAIM-2B) — admin grants staking rewards via creditRoi -->
+      <section class="panel" id="panel-grant">
+        <h2>Process Claim — Grant Rewards</h2>
+        <p class="hint">Users request their staking rewards by Discord/email; grant them here. This calls
+          <span class="mono">HolderStaking.creditRoi(wallet, amount)</span> — the admin wallet must be a registered
+          <span class="mono">debitor</span> (owner sets that via the timelock at go-live) and must hold DYC.
+          <b>creditRoi pulls DYC from this wallet</b>, so the flow approves DYC to the staking contract first, then
+          grants. <b>Grants are in multiples of 1,000 DYC only</b> — anything else is refused before any transaction.</p>
+        <label class="fld" for="grant-wallet">User wallet address</label>
+        <input class="txt" id="grant-wallet" type="text" placeholder="0x… (checksummed)" />
+        <label class="fld" for="grant-amount">Grant amount — DYC (multiple of 1,000)</label>
+        <input class="txt" id="grant-amount" type="text" placeholder="1000" />
+        <div class="row-actions">
+          <button class="btn" id="grant-btn">Approve &amp; Grant</button>
+          <button class="btn tiny" id="grant-ledger-load" data-always="1">Load this wallet's ledger</button>
+        </div>
+        <div id="grant-msg" class="mono" style="font-size:0.82rem;margin-top:0.5rem"></div>
+        <div id="grant-ledger" style="margin-top:0.6rem"></div>
+      </section>
+
       <!-- CONFIGURATION — localStorage override (no rehearsal addresses committed) -->
       <details class="cfg">
         <summary>Configuration (this browser only)</summary>
@@ -240,7 +260,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s14"></script>
+    <script src="js/admin.js?v=s15"></script>
     <script>
       window.DYAdmin.mount();
     </script>
