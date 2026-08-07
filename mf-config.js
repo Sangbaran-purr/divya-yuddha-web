@@ -26,9 +26,10 @@ window.DY_MF_CONFIG = {
   },
 
   // ── Amoy read endpoints (M-F4c: end the public-endpoint lottery) ──
-  // PRIMARY = a DOMAIN-RESTRICTED Alchemy key, locked to https://sangbaran-purr.github.io. It is
+  // PRIMARY = a DOMAIN-RESTRICTED Alchemy key, locked to the production origins https://divyayuddha.games
+  // (custom domain, DOM-1) and https://sangbaran-purr.github.io (Pages fallback). It is
   // SAFE TO PUBLISH BY DESIGN: Alchemy refuses any other Origin (verified — no Origin / a wrong
-  // Origin are rejected; only the production origin succeeds). This is NOT the owner's private
+  // Origin are rejected; only the production origins succeed). This is NOT the owner's private
   // terminal key (AMOY_RPC_URL) — that one NEVER appears in the site, ever.
   // The vetted KEYLESS free endpoints (drpc → publicnode → thirdweb) demote to FALLBACKS; the
   // connected wallet remains the last-resort rescue. Tried in order (FallbackProvider, quorum 1).
