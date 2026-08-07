@@ -1316,6 +1316,72 @@ window.DYAdmin = (function () {
   }
 
   // ---------- wire the page ----------
+  // ---------- Robot Registry (M-F5) — read-only view of the approval-bot ----------
+  // Fetches the service's /registry projection (bearer-gated). NEVER signs/sends/publishes. The projection holds
+  // no signatures and no verify tokens. Service URL + view token persist in THIS BROWSER only.
+  var ROBOT_LS = "dyadmin::robot_view"; // registry namespace law: dyadmin:: = admin surface
+  function escHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function robotSaveInputs() {
+    try { localStorage.setItem(ROBOT_LS, JSON.stringify({ url: $("robot-url").value.trim(), token: $("robot-token").value })); } catch (e) {}
+  }
+  function robotFillInputs() {
+    try {
+      var o = JSON.parse(localStorage.getItem(ROBOT_LS) || "{}");
+      if (o.url && $("robot-url")) $("robot-url").value = o.url;
+      if (o.token && $("robot-token")) $("robot-token").value = o.token;
+    } catch (e) {}
+  }
+  function fmtTs(ms) { return ms ? new Date(ms).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "—"; }
+  async function loadRobotRegistry() {
+    var st = $("robot-status"), body = $("robot-body"), sum = $("robot-summary");
+    var base = $("robot-url").value.trim().replace(/\/+$/, ""), token = $("robot-token").value;
+    if (!base || !token) { st.textContent = "Enter the service URL and view token first."; return; }
+    robotSaveInputs();
+    st.textContent = "Loading…"; body.innerHTML = ""; sum.textContent = "";
+    try {
+      var res = await fetch(base + "/registry", { headers: { authorization: "Bearer " + token }, cache: "no-store" });
+      if (res.status === 401) { st.textContent = "Unauthorized — check the view token."; return; }
+      if (!res.ok) { st.textContent = "HTTP " + res.status; return; }
+      var data = await res.json();
+      var rows = data.registrants || [];
+      var counts = data.counts || {};
+      var alertHtml = data.alert
+        ? "<div style='margin:0 0 0.5rem;padding:0.6rem 0.8rem;border:1px solid var(--flame-core);border-radius:6px;"
+          + "background:rgba(200,60,30,0.12);color:var(--flame-core);font-weight:600'>⚠ INTAKE PAUSED — "
+          + escHtml(data.alert) + "</div>"
+        : "";
+      sum.innerHTML = alertHtml
+        + "Last publish: <b>" + fmtTs(data.lastPublishAt) + "</b> &nbsp; · &nbsp; "
+        + Object.keys(counts).sort().map(function (k) { return escHtml(k) + ": " + counts[k]; }).join(" &nbsp; ");
+      // sort: OFAC holds first, then clustered, then most-recent
+      rows.sort(function (a, b) {
+        var ap = (a.ofacHit ? 0 : a.clusterId ? 1 : 2), bp = (b.ofacHit ? 0 : b.clusterId ? 1 : 2);
+        return ap - bp || (b.receivedAt || 0) - (a.receivedAt || 0);
+      });
+      body.innerHTML = rows.map(function (r) {
+        var flags = [];
+        if (r.ofacHit) flags.push("<b style='color:var(--flame-core)'>OFAC HIT</b>");
+        if (r.clusterId) flags.push("<span style='color:var(--gold-aged)'>" + escHtml(r.clusterId) + "</span>");
+        if (r.reason) flags.push("<span title='" + escHtml(r.reason) + "'>reason ⓘ</span>");
+        return "<tr>"
+          + "<td class='mono'>" + escHtml(r.wallet ? shortAddr(r.wallet) : "—") + "</td>"
+          + "<td>" + escHtml(r.status) + "</td>"
+          + "<td>" + (flags.join(" ") || "—") + "</td>"
+          + "<td class='mono' style='font-size:0.72rem'>" + escHtml(r.email || "—") + "</td>"
+          + "<td class='mono' style='font-size:0.72rem'>" + fmtTs(r.receivedAt) + "</td>"
+          + "<td class='mono' style='font-size:0.72rem'>" + fmtTs(r.signedAt) + "</td>"
+          + "</tr>";
+      }).join("") || "<tr><td colspan='6' class='mono'>No registrants yet.</td></tr>";
+      st.textContent = rows.length + " registrant(s) · read-only";
+    } catch (e) {
+      st.textContent = "Fetch failed: " + (e && e.message ? e.message : e);
+    }
+  }
+
   function mount() {
     // Approve Buyers (M-F2)
     if ($("approve-sign")) $("approve-sign").onclick = runApprove;
@@ -1357,6 +1423,8 @@ window.DYAdmin = (function () {
       histLoaded = false;
       loadHistory();
     };
+    // Robot Registry (M-F5) — read-only; independent of the wallet gate
+    if ($("robot-load")) { $("robot-load").onclick = loadRobotRegistry; robotFillInputs(); }
     // Configuration
     $("cfg-save").onclick = saveCfg;
     $("cfg-clear").onclick = clearCfg;

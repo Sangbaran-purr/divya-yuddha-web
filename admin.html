@@ -132,6 +132,31 @@
         </table>
       </section>
 
+      <!-- PANEL 7 — ROBOT REGISTRY (M-F5) — read-only view of the approval-bot -->
+      <section class="panel" id="panel-robot">
+        <h2>Robot Registry — approval-bot status</h2>
+        <p class="hint">Read-only window into the automated approval service. Fetches the bot's own state projection
+          (<span class="mono">GET /registry</span>, bearer-gated) — <b>never signs, never sends, never publishes</b>.
+          The projection carries <b>no signatures and no verify tokens</b>. Use it to watch the queue, catch
+          <b>OFAC holds</b>, and see <b>duplicate clusters</b>. The manual Approve Buyers panel above stays your
+          fallback. Service URL + view token are stored in this browser only.</p>
+        <label class="fld" for="robot-url">Service base URL</label>
+        <input class="txt" id="robot-url" type="text" placeholder="https://…  (the approval-bot host)" />
+        <label class="fld" for="robot-token">Admin view token (bearer)</label>
+        <input class="txt" id="robot-token" type="password" placeholder="ADMIN_VIEW_TOKEN (this browser only)" />
+        <div class="row-actions">
+          <button class="btn" id="robot-load">Load robot registry</button>
+          <span id="robot-status" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+        </div>
+        <div id="robot-summary" class="mono" style="font-size:0.82rem;margin:0.5rem 0"></div>
+        <table class="grid">
+          <thead>
+            <tr><th>Wallet</th><th>Status</th><th>Flags</th><th>Email</th><th>Received</th><th>Signed</th></tr>
+          </thead>
+          <tbody id="robot-body"></tbody>
+        </table>
+      </section>
+
       <!-- CONFIGURATION — localStorage override (no rehearsal addresses committed) -->
       <details class="cfg">
         <summary>Configuration (this browser only)</summary>
@@ -172,7 +197,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s11"></script>
+    <script src="js/admin.js?v=s13"></script>
     <script>
       window.DYAdmin.mount();
     </script>

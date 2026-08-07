@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Divya Yuddha — Presale Registration</title>
+    <meta name="description" content="Register your wallet for the Divya Yuddha presale allowlist." />
+    <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/brand/icon-512.png" />
+    <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
+    <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/threshold.css?v=s1e" />
+    <link rel="stylesheet" href="css/pages.css?v=s1h" />
+    <style>
+      /* register-only dress — leans on threshold.css tokens (--gold, --ink, fonts) */
+      .reg-wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1.1rem 3rem; }
+      .reg-crest { text-align: center; padding: 1.4rem 0 0.6rem; }
+      .reg-crest img { width: 220px; max-width: 62%; height: auto; }
+      .reg-card {
+        background: rgba(14, 11, 7, 0.72); border: 1px solid rgba(232, 200, 116, 0.28);
+        border-radius: 12px; padding: 1.4rem 1.3rem 1.6rem; margin-top: 1rem;
+        box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+      }
+      .reg-card h1 { font-family: "Cinzel", Georgia, serif; color: var(--gold, #e8c874); font-size: 1.5rem; margin: 0 0 0.4rem; letter-spacing: 0.02em; }
+      .reg-lede { color: #cdbb8f; line-height: 1.6; margin: 0 0 0.6rem; }
+      .reg-steps { color: #b7a878; line-height: 1.7; font-size: 0.94rem; margin: 0.4rem 0 1rem; padding-left: 1.1rem; }
+      .reg-steps b { color: var(--gold, #e8c874); }
+      .reg-frame { width: 100%; min-height: 1200px; border: 0; background: #fff; border-radius: 8px; }
+      .reg-fallback { text-align: center; margin-top: 1rem; }
+      .reg-fallback a { color: var(--gold, #e8c874); }
+      .reg-privacy {
+        margin-top: 1.3rem; padding: 0.9rem 1rem; border-left: 3px solid rgba(232, 200, 116, 0.4);
+        background: rgba(232, 200, 116, 0.06); color: #b7a878; font-size: 0.86rem; line-height: 1.65; border-radius: 4px;
+      }
+      .reg-foot { text-align: center; color: #8a7a52; font-size: 0.78rem; margin-top: 2rem; }
+      .reg-foot a { color: #b7a878; }
+      /* owner sets FORM_EMBED_URL below; until then this notice shows instead of a blank iframe */
+      #reg-unset { display: none; text-align: center; color: #cdbb8f; padding: 2rem 1rem; line-height: 1.7; }
+    </style>
+  </head>
+  <body class="gate">
+    <div class="reg-crest">
+      <a href="index.html"><img src="assets/brand/logo.webp" alt="Divya Yuddha — Battle of the Celestials" /></a>
+    </div>
+
+    <div class="reg-wrap">
+      <div class="reg-card">
+        <h1>Presale Registration</h1>
+        <p class="reg-lede">Register the wallet you'll buy with. We'll email you a one-tap confirmation link — your
+          wallet is approved for the presale <b>only after</b> you click it.</p>
+        <ol class="reg-steps">
+          <li>Fill in the form below (your <b>email</b> and <b>wallet address</b> are required).</li>
+          <li>Check your inbox for a confirmation email and click the link (it's valid for <b>48 hours</b>).</li>
+          <li>That's it — your wallet is added to the allowlist automatically. No wallet connection, no signing here.</li>
+        </ol>
+
+        <!-- Google Form embed. The form URL is PUBLIC (registrants use it); it is NOT a secret. The owner sets
+             FORM_EMBED_URL once — the linked Sheet + its credentials stay host secrets, never in this repo. -->
+        <div id="reg-unset">
+          Registration opens shortly. <br />Please check back, or return to <a href="index.html">the Gate</a>.
+        </div>
+        <iframe id="reg-frame" class="reg-frame" title="Divya Yuddha presale registration form" loading="lazy"
+          src="about:blank" referrerpolicy="no-referrer">Loading…</iframe>
+        <p class="reg-fallback">Form not loading? <a id="reg-open" href="#" target="_blank" rel="noopener">Open it in a new tab →</a></p>
+
+        <div class="reg-privacy">
+          <b>Your privacy.</b> We collect only what the form asks, and we use it only to run the presale allowlist and
+          to email you about your registration. Your wallet's approval voucher is public (it's just an address and a
+          signature); <b>your email and personal details are never published</b> and never put on-chain. If your link
+          expires, simply register again — there's no penalty and no limit on tries.
+        </div>
+      </div>
+
+      <p class="reg-foot">Divya Yuddha · <a href="index.html">divyayuddha.games</a> · The gate remains open for those who dare.</p>
+    </div>
+
+    <script>
+      // ── FORM LINKS (PUBLIC by nature — not secrets) ───────────────────────────
+      // Canonical presale form (owner-ruled, 2026-08-07): https://forms.gle/H15nEv2wrdSgRj486
+      // Embed target = its docs.google.com viewform with ?embedded=true.
+      // Fallback "open form directly" = the canonical short responder link.
+      var FORM_EMBED_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfJSVwRuvgBBmr07gJtQlKC--2oCRg8lco4Az98tlOqCt2FRQ/viewform?embedded=true";
+      var FORM_RESPONDER_URL = "https://forms.gle/H15nEv2wrdSgRj486";
+      // ──────────────────────────────────────────────────────────────────────────
+      (function () {
+        var frame = document.getElementById("reg-frame");
+        var unset = document.getElementById("reg-unset");
+        var open = document.getElementById("reg-open");
+        if (FORM_EMBED_URL && /^https:\/\/docs\.google\.com\//.test(FORM_EMBED_URL)) {
+          frame.src = FORM_EMBED_URL;
+          open.href = FORM_RESPONDER_URL || FORM_EMBED_URL;
+        } else {
+          frame.style.display = "none";
+          document.querySelector(".reg-fallback").style.display = "none";
+          unset.style.display = "block";
+        }
+      })();
+    </script>
+  </body>
+</html>
