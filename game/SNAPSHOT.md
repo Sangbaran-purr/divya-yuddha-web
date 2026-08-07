@@ -8,12 +8,12 @@
 ## Copied from the commit
 - index.html (+ gate preamble AND the S3 economy-suppression block, injected between the DYW-GATE markers)
 - src/chapters.js (Story Mode data)
-- assets/cards, assets/img, assets/audio, assets/story, assets/thumbs
-- assets/board (BOARD_ART_V zoomed tiles), assets/vendor (pixi runtime)
+- assets/vendor (pixi runtime, ~780KB — the only heavy dir still copied)
 
 ## Excluded / transformed
 - assets/video/ (~47MB) — NOT copied. The VIDEO_BASE web branch is rewritten to the free game's live same-origin URL (https://sangbaran-purr.github.io/divya-yuddha/assets/video/); the intro streams from there and fails open to the landing if unavailable (the game's own law).
 - assets/vfx/ (~285MB, S8 WORD 1) — NOT copied. The three sheet-URL builders (mvURL/sheetURL/stillURL) are rewritten from 'assets/vfx/ to the free game's live Pages URL (https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/); VFX sheets stream same-origin. Guarded: the sync fails if the builder count is not exactly 3.
+- assets/cards (~73MB) + assets/img (~80MB) + assets/audio (~2MB) + assets/thumbs (~4MB) + assets/board (~12MB) + assets/story (~13MB) — NOT copied (M-F4e). ~184MB of asset copies pushed the Pages artifact to 262MB and timed the deploy out at ~11min. Each base path (assets/<dir>/) is rewritten — every context, quoted or backtick-templated — to the free game's live Pages origin (https://sangbaran-purr.github.io/divya-yuddha/assets/<dir>/) so the assets stream same-origin. Guarded per dir: at least one relative ref must exist and EVERY one must become absolute; a double-prefix aborts. Gameplay is byte-faithful — only asset origins change.
 - .DS_Store — not in the commit; never copied.
 
 ## S3 economy suppression (marker: DYW-S3-SUPPRESS-START / -END; S8 WORD 2)
@@ -28,7 +28,7 @@
 
 ## Notes at sync time
 - Source working tree dirty files: 1 (ignored by the archive method).
-- game/ in-repo size: 189732 KB.
+- game/ in-repo size: 1664 KB.
 
 ## Entry-link stamps (S8 flag-1)
 - The five site->game links (rite.html x3, index.html x2) are stamped game/index.html?v=7abbc28 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 5.

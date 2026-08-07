@@ -19,10 +19,13 @@ SITE_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEST="$SITE_REPO/game"
 VIDEO_URL="https://sangbaran-purr.github.io/divya-yuddha/assets/video/"
 VFX_URL="https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/"
+ASSET_URL="https://sangbaran-purr.github.io/divya-yuddha/assets/" # M-F4e: base for the heavy-dir cross-links
 NS_PREFIX="dyw::"
-# assets/vfx is NOT archived (285MB): the three VFX URL builders are cross-linked to the free game's live Pages
-# origin (S8 owner ruling, WORD 1 — mirrors the video cross-link). assets/board + assets/vendor (pixi) ARE copied.
-ARCHIVE_PATHS="index.html src/chapters.js assets/cards assets/img assets/audio assets/story assets/thumbs assets/board assets/vendor"
+# M-F4e (deploy-weight fix): the heavy asset dirs are NO LONGER copied. 184MB of card/img/audio/board/story/thumb
+# copies pushed the Pages artifact to 262MB and timed the deploy out at ~11min. Same proven pattern as video (47MB)
+# + vfx (285MB): each heavy dir's base path is cross-linked to the free game's live Pages origin (they stream
+# same-origin from there). ONLY assets/vendor (the ~780KB pixi runtime) is still copied. See the cross-link block.
+ARCHIVE_PATHS="index.html src/chapters.js assets/vendor"
 
 if [ ! -f "$GAME_REPO/index.html" ] || [ ! -d "$GAME_REPO/assets/cards" ]; then
   echo "error: GAME_REPO does not look like the game ($GAME_REPO)" >&2
@@ -75,6 +78,33 @@ if [ "$(grep -o "'$VFX_URL" "$DEST/index.html" | wc -l | tr -d ' ')" != "3" ]; t
 fi
 if [ "$(grep -c "'assets/vfx/" "$DEST/index.html")" != "0" ]; then
   echo "error: VFX cross-link left a relative 'assets/vfx/ reference behind" >&2
+  exit 1
+fi
+
+# ── M-F4e HEAVY-DIR CROSS-LINK (cards/img/audio/thumbs/board/story) ──
+# These dirs are no longer archived; their base paths are rewritten to the free game's live Pages origin so they
+# stream same-origin. The bases appear in mixed contexts (single/double quotes AND backtick templates, e.g.
+# cardArtSrc and cutImgUrl), so we rewrite the BARE substring "assets/<dir>/" — catching every context. The
+# trailing slash + the "assets/" prefix keep the rewrites disjoint (assets/img/board_x.jpg is NOT assets/board/).
+# Each is guarded: at least one relative ref must exist and EVERY one must become absolute, else fail loudly.
+for B in cards img audio thumbs board story; do
+  REL="$(grep -oF "assets/$B/" "$DEST/index.html" | wc -l | tr -d ' ')"
+  if [ "$REL" = "0" ]; then
+    echo "error: no relative assets/$B/ references to cross-link (game asset wiring changed)" >&2
+    exit 1
+  fi
+  sed "s#assets/$B/#${ASSET_URL}$B/#g" "$DEST/index.html" > "$DEST/index.html.x"
+  mv "$DEST/index.html.x" "$DEST/index.html"
+  ABS="$(grep -oF "${ASSET_URL}$B/" "$DEST/index.html" | wc -l | tr -d ' ')"
+  if [ "$ABS" != "$REL" ]; then
+    echo "error: assets/$B/ cross-link — expected $REL absolute refs, got $ABS" >&2
+    exit 1
+  fi
+  echo "sync_game: cross-linked assets/$B/ -> ${ASSET_URL}$B/ ($REL refs)"
+done
+# re-run / nesting safety: no doubled origin anywhere
+if [ "$(grep -c "${ASSET_URL}${ASSET_URL}" "$DEST/index.html")" != "0" ]; then
+  echo "error: an asset base was double-prefixed (URL nesting) — aborting" >&2
   exit 1
 fi
 
@@ -187,12 +217,12 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 ## Copied from the commit
 - index.html (+ gate preamble AND the S3 economy-suppression block, injected between the DYW-GATE markers)
 - src/chapters.js (Story Mode data)
-- assets/cards, assets/img, assets/audio, assets/story, assets/thumbs
-- assets/board (BOARD_ART_V zoomed tiles), assets/vendor (pixi runtime)
+- assets/vendor (pixi runtime, ~780KB — the only heavy dir still copied)
 
 ## Excluded / transformed
 - assets/video/ (~47MB) — NOT copied. The VIDEO_BASE web branch is rewritten to the free game's live same-origin URL ($VIDEO_URL); the intro streams from there and fails open to the landing if unavailable (the game's own law).
 - assets/vfx/ (~285MB, S8 WORD 1) — NOT copied. The three sheet-URL builders (mvURL/sheetURL/stillURL) are rewritten from 'assets/vfx/ to the free game's live Pages URL ($VFX_URL); VFX sheets stream same-origin. Guarded: the sync fails if the builder count is not exactly 3.
+- assets/cards (~73MB) + assets/img (~80MB) + assets/audio (~2MB) + assets/thumbs (~4MB) + assets/board (~12MB) + assets/story (~13MB) — NOT copied (M-F4e). ~184MB of asset copies pushed the Pages artifact to 262MB and timed the deploy out at ~11min. Each base path (assets/<dir>/) is rewritten — every context, quoted or backtick-templated — to the free game's live Pages origin ($ASSET_URL<dir>/) so the assets stream same-origin. Guarded per dir: at least one relative ref must exist and EVERY one must become absolute; a double-prefix aborts. Gameplay is byte-faithful — only asset origins change.
 - .DS_Store — not in the commit; never copied.
 
 ## S3 economy suppression (marker: DYW-S3-SUPPRESS-START / -END; S8 WORD 2)

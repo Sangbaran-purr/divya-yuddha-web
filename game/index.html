@@ -143,7 +143,7 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 /* battlefield */
 #field{ position:relative; flex:1; display:flex; flex-direction:column; overflow:hidden; background:#0a0704; }
 /* celestial arena: center/cover so the golden mandala (image vertical center) aligns with the divider (field vertical center) */
-#field::before{ content:''; position:absolute; inset:0; z-index:0; background:url('assets/img/board_bg.jpg') center center/cover no-repeat; }   /* base board = Mrityulok (board_bg), also the lazy-load/404 fallback shown under #realmboard */
+#field::before{ content:''; position:absolute; inset:0; z-index:0; background:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_bg.jpg') center center/cover no-repeat; }   /* base board = Mrityulok (board_bg), also the lazy-load/404 fallback shown under #realmboard */
 #realmboard{ position:absolute; inset:0; z-index:0; background:center center/cover no-repeat; opacity:0; transition:opacity .45s ease; pointer-events:none; }   /* per-realm board, crossfaded in over the base once its image loads */
 #field::after{ content:''; position:absolute; inset:0; z-index:1; background:rgba(6,4,2,var(--board-overlay,.30)); pointer-events:none; }   /* dark overlay for readability; per-realm strength via --board-overlay */
 #vfxcanvas{ position:absolute; inset:0; z-index:5; pointer-events:none; }
@@ -211,7 +211,7 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 
 /* board mini — art-first, no name strip */
 .bc{ flex:0 0 auto; height:var(--mini-h,90px); width:calc(var(--mini-h,90px)*0.75); background:var(--panel); border:1px solid var(--line); border-radius:7px; position:relative; overflow:hidden; cursor:pointer; }
-/* T93/T93b: board card = FRAMELESS ART-FORWARD tile (assets/board/, art window template-cropped from the framed
+/* T93/T93b: board card = FRAMELESS ART-FORWARD tile (https://sangbaran-purr.github.io/divya-yuddha/assets/board/, art window template-cropped from the framed
    finals). The art COVER-FILLS the whole slot (height:100%, was the T42b top-65% framed crop) — no frame, no nameplate,
    no rules text. object-position stays TOP so a framed FALLBACK (a card with no tile, e.g. The Setu Stones) still hides
    its baked nameplate at the bottom. A bottom scrim (.bc.has-art::after) seats the medallion + bottom badges over the
@@ -485,34 +485,34 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 /* menu background — subtle: cover art, desaturated + blurred, dark bottom-heavy gradient so faction panels stay the focus */
 /* menu is FRAMELESS — faction selection sits directly on the image; per-tile scrims keep text readable */
 #landing, #factionintro, #storyselect, #quests{ background:#0a0704; overflow:hidden; }   /* T36: #factionselect left this group — it carries its OWN plate now (A3) */
-#factionintro::before, #storyselect::before, #quests::before{ content:''; position:fixed; inset:0; z-index:0; background:url('assets/img/menu_bg.jpg') center/cover no-repeat; filter:brightness(.9); }   /* image shows through — only ~10% darken, no blur/desat */
+#factionintro::before, #storyselect::before, #quests::before{ content:''; position:fixed; inset:0; z-index:0; background:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg') center/cover no-repeat; filter:brightness(.9); }   /* image shows through — only ~10% darken, no blur/desat */
 #factionintro::after, #storyselect::after, #quests::after{ content:''; position:fixed; inset:0; z-index:0; background:linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.10) 45%, rgba(0,0,0,.6) 100%); }   /* soft bottom gradient for legibility */
 /* T57 — STORY LANDING dedicated backdrop (T55 #quests pattern). Scoped to #storyselect, overrides the shared base ::before/::after above: the codex art over a menu_bg fallback layer (404 → menu_bg shows, no broken state) + the .42/.50/.66 scrim standard. Overrides background-image only → center/cover/no-repeat/brightness inherit from the base rule and repeat across both layers. */
-#storyselect::before{ background-image:url('assets/img/story_codex_bg_portrait.png?v=1'), url('assets/img/menu_bg.jpg'); }
-@media(min-width:1024px){ #storyselect::before{ background-image:url('assets/img/story_codex_bg_landscape.png?v=1'), url('assets/img/menu_bg.jpg'); } }
+#storyselect::before{ background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/story_codex_bg_portrait.png?v=1'), url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+@media(min-width:1024px){ #storyselect::before{ background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/story_codex_bg_landscape.png?v=1'), url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); } }
 #storyselect::after{ background:linear-gradient(to bottom, rgba(6,4,1,.42) 0%, rgba(6,4,1,.50) 48%, rgba(6,4,1,.66) 100%); }
 /* T54 — PER-TAB CODEX BACKGROUNDS (generalizes T53/T53b). Each fi tab carries its own backdrop via a single tab-<name> class on #factionintro (toggled in fiSelectTab), overriding the shared #factionintro backdrop pseudos which sit fixed BEHIND .fi-col — so zero tab-bar overlap, zero bleed (only one tab-* class at a time), zero effect on battle screens (#factionintro is intro-only). menu_bg is layered UNDER the art as the 404 fallback: a not-yet-intaken pair (asuras/vanaras/nagas/realms) renders nothing for the art layer → menu_bg shows (no broken state); the file lights up automatically on intake. Rollback: per-tab = delete that tab's two lines; whole = revert. size/position/repeat (center/cover/no-repeat) inherit from the base rule, repeated across both layers. */
-#factionintro.tab-win::before{      background-image:url('assets/img/win_codex_bg_portrait.png?v=1'),      url('assets/img/menu_bg.jpg'); }
-#factionintro.tab-devas::before{    background-image:url('assets/img/devas_codex_bg_portrait.png?v=1'),    url('assets/img/menu_bg.jpg'); }
-#factionintro.tab-asuras::before{   background-image:url('assets/img/asuras_codex_bg_portrait.png?v=1'),   url('assets/img/menu_bg.jpg'); }   /* pair not yet intaken → menu_bg fallback */
-#factionintro.tab-vanaras::before{  background-image:url('assets/img/vanaras_codex_bg_portrait.png?v=1'),  url('assets/img/menu_bg.jpg'); }   /* pair not yet intaken → menu_bg fallback */
-#factionintro.tab-nagas::before{    background-image:url('assets/img/nagas_codex_bg_portrait.png?v=1'),    url('assets/img/menu_bg.jpg'); }   /* pair not yet intaken → menu_bg fallback */
-#factionintro.tab-realms::before{   background-image:url('assets/img/realms_codex_bg_portrait.png?v=1'),   url('assets/img/menu_bg.jpg'); }   /* pair not yet intaken → menu_bg fallback */
+#factionintro.tab-win::before{      background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/win_codex_bg_portrait.png?v=1'),      url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+#factionintro.tab-devas::before{    background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/devas_codex_bg_portrait.png?v=1'),    url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+#factionintro.tab-asuras::before{   background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/asuras_codex_bg_portrait.png?v=1'),   url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }   /* pair not yet intaken → menu_bg fallback */
+#factionintro.tab-vanaras::before{  background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/vanaras_codex_bg_portrait.png?v=1'),  url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }   /* pair not yet intaken → menu_bg fallback */
+#factionintro.tab-nagas::before{    background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/nagas_codex_bg_portrait.png?v=1'),    url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }   /* pair not yet intaken → menu_bg fallback */
+#factionintro.tab-realms::before{   background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/realms_codex_bg_portrait.png?v=1'),   url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }   /* pair not yet intaken → menu_bg fallback */
 @media(min-width:1024px){
-  #factionintro.tab-win::before{      background-image:url('assets/img/win_codex_bg_landscape.png?v=1'),      url('assets/img/menu_bg.jpg'); }
-  #factionintro.tab-devas::before{    background-image:url('assets/img/devas_codex_bg_landscape.png?v=1'),    url('assets/img/menu_bg.jpg'); }
-  #factionintro.tab-asuras::before{   background-image:url('assets/img/asuras_codex_bg_landscape.png?v=1'),   url('assets/img/menu_bg.jpg'); }
-  #factionintro.tab-vanaras::before{  background-image:url('assets/img/vanaras_codex_bg_landscape.png?v=1'),  url('assets/img/menu_bg.jpg'); }
-  #factionintro.tab-nagas::before{    background-image:url('assets/img/nagas_codex_bg_landscape.png?v=1'),    url('assets/img/menu_bg.jpg'); }
-  #factionintro.tab-realms::before{   background-image:url('assets/img/realms_codex_bg_landscape.png?v=1'),   url('assets/img/menu_bg.jpg'); }
+  #factionintro.tab-win::before{      background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/win_codex_bg_landscape.png?v=1'),      url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+  #factionintro.tab-devas::before{    background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/devas_codex_bg_landscape.png?v=1'),    url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+  #factionintro.tab-asuras::before{   background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/asuras_codex_bg_landscape.png?v=1'),   url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+  #factionintro.tab-vanaras::before{  background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/vanaras_codex_bg_landscape.png?v=1'),  url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+  #factionintro.tab-nagas::before{    background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/nagas_codex_bg_landscape.png?v=1'),    url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+  #factionintro.tab-realms::before{   background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/realms_codex_bg_landscape.png?v=1'),   url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
 }
 #factionintro[class*="tab-"]::after{ background:linear-gradient(to bottom, rgba(6,4,1,.42) 0%, rgba(6,4,1,.50) 48%, rgba(6,4,1,.66) 100%); }   /* T53b .42/.50/.66 legibility scrim — shared by all six tabs; specificity (1,1,1) beats the base #factionintro::after; storyselect/quests never carry a tab-* class */
 /* T55 — QUESTS backdrop. Scoped to #quests, overrides the shared base ::before/::after (menu_bg group @above): same pattern as T54 — the codex art over a menu_bg fallback layer (404 → menu_bg shows, no broken state) + the .42/.50/.66 scrim standard. No tab toggle (single backdrop). size/position/repeat inherit from the base #quests::before and repeat across both layers. */
-#quests::before{ background-image:url('assets/img/quests_codex_bg_portrait.png?v=1'), url('assets/img/menu_bg.jpg'); }
-@media(min-width:1024px){ #quests::before{ background-image:url('assets/img/quests_codex_bg_landscape.png?v=1'), url('assets/img/menu_bg.jpg'); } }
+#quests::before{ background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/quests_codex_bg_portrait.png?v=1'), url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); }
+@media(min-width:1024px){ #quests::before{ background-image:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/quests_codex_bg_landscape.png?v=1'), url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'); } }
 #quests::after{ background:linear-gradient(to bottom, rgba(6,4,1,.42) 0%, rgba(6,4,1,.50) 48%, rgba(6,4,1,.66) 100%); }
 /* T34: the landing's Mount-Meru #landingbg + its ::before scrims are RETIRED — replaced by the sky-rotunda plate stage
-   (#landstage below). assets/img/landing_bg.jpg is now unreferenced (left on disk; not deleted by this task). */
+   (#landstage below). https://sangbaran-purr.github.io/divya-yuddha/assets/img/landing_bg.jpg is now unreferenced (left on disk; not deleted by this task). */
 
 /* ===== M1 slice 2: Quests (landing entry button + panel) ===== */
 .lp-quests{ position:relative; display:flex; align-items:center; gap:10px; width:100%; margin:0 0 12px; padding:11px 14px; border-radius:12px; background:rgba(0,0,0,.42); backdrop-filter:blur(6px); border:1px solid var(--gold-dim); color:#fff; cursor:pointer; text-align:left; }
@@ -546,7 +546,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .q-row.done .q-ic{ border-color:var(--gold); }
 .q-row.claimed .q-ic{ filter:saturate(.7); }
 #q-flourish{ margin:14px auto 26px; }   /* T55b: the GAP — lotus emblem breathes above the intro line (overrides .earn-extra:empty margin via #id specificity) */
-#q-flourish:empty::before{ content:''; display:block; width:60px; height:60px; margin:0 auto; background:url('assets/img/q_flourish_lotus.png?v=1') center/contain no-repeat; opacity:.92; }
+#q-flourish:empty::before{ content:''; display:block; width:60px; height:60px; margin:0 auto; background:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/q_flourish_lotus.png?v=1') center/contain no-repeat; opacity:.92; }
 #q-daily + .q-sect{ margin-top:26px; padding-top:20px; position:relative; border-top:1px solid transparent; border-image:linear-gradient(90deg, transparent, var(--gold-dim) 28%, var(--gold-dim) 72%, transparent) 1; }
 #q-daily + .q-sect::before{ content:'✦'; position:absolute; top:-9px; left:50%; transform:translateX(-50%); color:var(--gold); font-size:12px; }
 /* T55b — desktop: relax the quest column to 680 (quests-only; the 520 rule on other screens is untouched) + a size step up for the larger rows */
@@ -807,7 +807,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
   animation:lsHaze 36s ease-in-out infinite alternate; }
 @keyframes lsHaze{ from{ transform:translate3d(-2%,-.8%,0); } to{ transform:translate3d(2%,1%,0); } }
 #landfx{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-.ls-grain{ opacity:.06; mix-blend-mode:overlay; background:url('assets/img/ui_grain.png'); animation:lsGrain .5s steps(2) infinite; }
+.ls-grain{ opacity:.06; mix-blend-mode:overlay; background:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/ui_grain.png'); animation:lsGrain .5s steps(2) infinite; }
 @keyframes lsGrain{ 0%{ transform:translate(0,0); } 50%{ transform:translate(-16px,9px); } 100%{ transform:translate(11px,-13px); } }
 .ls-dim{ background:radial-gradient(62% 40% at 50% 17%, rgba(0,0,0,.46), transparent 72%),   /* logo-zone radial */
                     radial-gradient(70% 46% at 50% 66%, rgba(0,0,0,.22), transparent 75%); }
@@ -1902,7 +1902,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .cc-in{ position:absolute; inset:0; transform-style:preserve-3d; transition:transform .5s cubic-bezier(.2,.7,.3,1); }
 .cc.flipped .cc-in{ transform:rotateY(180deg); }
 .cc-face,.cc-back{ position:absolute; inset:0; backface-visibility:hidden; border-radius:6px; overflow:hidden; }
-.cc-back{ /* universal card back — CSS placeholder (assets/img/card_back.png absent at build time) */
+.cc-back{ /* universal card back — CSS placeholder (https://sangbaran-purr.github.io/divya-yuddha/assets/img/card_back.png absent at build time) */
   background:radial-gradient(circle at 50% 42%, #1b2b52 0%, #0e1730 62%, #070c1a 100%);
   border:1px solid rgba(232,200,116,.42); display:flex; align-items:center; justify-content:center; }
 .cc-back.hasimg{ background:#070c1a center/cover no-repeat; border-color:rgba(232,200,116,.42); }
@@ -2122,7 +2122,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
     </div>
     <div id="mull-story" class="mull-story hidden"></div>
     <div class="mull-medallion">
-      <img class="mm-ring" src="assets/img/ring_progress.png?v=1" alt="">
+      <img class="mm-ring" src="https://sangbaran-purr.github.io/divya-yuddha/assets/img/ring_progress.png?v=1" alt="">
       <div class="mm-count" id="mullcount">0 / 3</div>
     </div>
     <div class="mm-tray" id="mull-tray"></div>
@@ -2144,7 +2144,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
   </div>
   <div id="landmast">
     <div class="land-deva">दिव्य युद्ध</div>
-    <img class="land-lockup" src="assets/img/logo_lockup.png" alt="Divya Yuddha — Battle of the Celestials">
+    <img class="land-lockup" src="https://sangbaran-purr.github.io/divya-yuddha/assets/img/logo_lockup.png" alt="Divya Yuddha — Battle of the Celestials">
   </div>
   <button id="landgear" title="settings">⚙</button>
   <div class="land-col">
@@ -2279,7 +2279,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
   <div class="col-head">
     <button class="metaback" id="col-back">‹ Back</button>
     <div class="col-masthead">
-      <img class="col-plaque" src="assets/img/meta_masthead_plaque.png" alt="">
+      <img class="col-plaque" src="https://sangbaran-purr.github.io/divya-yuddha/assets/img/meta_masthead_plaque.png" alt="">
       <div class="col-title">COLLECTION</div>
     </div>
     <div class="col-wallet" id="col-wallet">✦ 0</div>
@@ -2288,8 +2288,8 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
   <div class="col-roundels" id="col-roundels">
     <button class="roundel" id="col-r-quests" title="Quests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 5h6M9 5a2 2 0 0 0-2 2v0H5.5A1.5 1.5 0 0 0 4 8.5v10A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-10A1.5 1.5 0 0 0 18.5 7H17v0a2 2 0 0 0-2-2M8 12l2.5 2.5L16 9"/></svg></button>
     <button class="roundel" id="col-r-settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg></button>
-    <button class="roundel roundel-img locked" data-soon title="Journal — coming soon"><img src="assets/img/icon_journal.png" alt=""><span class="rlock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span></button>
-    <button class="roundel roundel-img locked" data-soon title="Rewards — coming soon"><img src="assets/img/icon_rewards.png" alt=""><span class="rlock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span></button>
+    <button class="roundel roundel-img locked" data-soon title="Journal — coming soon"><img src="https://sangbaran-purr.github.io/divya-yuddha/assets/img/icon_journal.png" alt=""><span class="rlock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span></button>
+    <button class="roundel roundel-img locked" data-soon title="Rewards — coming soon"><img src="https://sangbaran-purr.github.io/divya-yuddha/assets/img/icon_rewards.png" alt=""><span class="rlock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span></button>
     <button class="roundel locked" data-soon title="Decks — coming soon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="7" width="11" height="14" rx="1.6"/><path d="M8 4h9a2 2 0 0 1 2 2v11"/></svg><span class="rlock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span></button>
     <button class="roundel locked" data-soon title="Store — coming soon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8h16l-1.3 11.2a1.6 1.6 0 0 1-1.6 1.4H6.9a1.6 1.6 0 0 1-1.6-1.4z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg><span class="rlock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span></button>
   </div>
@@ -2377,7 +2377,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
     </div>
     <div id="diffdisclose" class="diff-disclose"></div>
 
-    <button id="fselstart" aria-label="Begin Battle"><img src="assets/img/begin_battle_btn.png" alt="Begin Battle"></button>
+    <button id="fselstart" aria-label="Begin Battle"><img src="https://sangbaran-purr.github.io/divya-yuddha/assets/img/begin_battle_btn.png" alt="Begin Battle"></button>
   </div>
 
   <div class="fsel-roundels fsel-bl">
@@ -4822,15 +4822,15 @@ const FAC_LABEL = f => f==='asuras' ? 'ASURA' : f==='vanaras' ? 'VANARA' : f==='
    realm id → { img, overlay, ambience? }. Add a future realm as ONE line here.
    `overlay` is the dark-overlay strength (--board-overlay) tuned per realm for readability.
    `ambience` is a RESERVED slot for a future per-realm ambience track — NOT implemented (no audio wired). */
-const BOARD_FALLBACK = { img:'assets/img/board_bg.jpg', overlay:.30 };   // canonical Mrityulok board; used for any realm not mapped below
+const BOARD_FALLBACK = { img:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_bg.jpg', overlay:.30 };   // canonical Mrityulok board; used for any realm not mapped below
 const REALM_BOARDS = {
-  mrityulok: { img:'assets/img/board_bg.jpg',     overlay:.30 /* , ambience:'assets/audio/amb_mrityulok.mp3' */ },
-  patala:    { img:'assets/img/board_patala.jpg', overlay:.32 /* , ambience:'assets/audio/amb_patala.mp3' */ },
-  swarga:    { img:'assets/img/board_swarga.jpg', overlay:.44 /* , ambience:'assets/audio/amb_swarga.mp3' */ },   // brightest board → deeper overlay so power/Venom badges read over the grey marble
-  kalki:     { img:'assets/img/board_kalki.jpg',  overlay:.32 /* , ambience:'assets/audio/amb_kalki.mp3'  */ },   // dark ash floor (Patala-class darkness)
-  yaksha:    { img:'assets/img/board_yaksha.jpg', overlay:.33 /* , ambience:'assets/audio/amb_yaksha.mp3' */ },
-  rishi:     { img:'assets/img/board_rishi.jpg',  overlay:.32 /* , ambience:'assets/audio/amb_rishi.mp3'  */ },
-  gandharva: { img:'assets/img/board_gandharva.jpg', overlay:.40 /* , ambience:'assets/audio/amb_gandharva.mp3' */ },   // lightest (tan stage) → deeper overlay so badges read; asset pending → 404s to board_bg until it lands
+  mrityulok: { img:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_bg.jpg',     overlay:.30 /* , ambience:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/amb_mrityulok.mp3' */ },
+  patala:    { img:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_patala.jpg', overlay:.32 /* , ambience:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/amb_patala.mp3' */ },
+  swarga:    { img:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_swarga.jpg', overlay:.44 /* , ambience:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/amb_swarga.mp3' */ },   // brightest board → deeper overlay so power/Venom badges read over the grey marble
+  kalki:     { img:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_kalki.jpg',  overlay:.32 /* , ambience:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/amb_kalki.mp3'  */ },   // dark ash floor (Patala-class darkness)
+  yaksha:    { img:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_yaksha.jpg', overlay:.33 /* , ambience:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/amb_yaksha.mp3' */ },
+  rishi:     { img:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_rishi.jpg',  overlay:.32 /* , ambience:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/amb_rishi.mp3'  */ },
+  gandharva: { img:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_gandharva.jpg', overlay:.40 /* , ambience:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/amb_gandharva.mp3' */ },   // lightest (tan stage) → deeper overlay so badges read; asset pending → 404s to board_bg until it lands
 };
 const boardImgLoaded = {};   // per-session cache: img URL → true once decoded (a rematch in the same realm never refetches)
 function applyRealmBoard(realm){
@@ -4871,8 +4871,8 @@ document.addEventListener('click', e=>{ if(!e.target.closest('#realmchip') && !e
    Engine-true throughout. The mulligan CAP is pulled live (g.mulliganCount ?? 3), never hardcoded; the hand renders
    hand.length cards (story hands are 5/8/9/10 — the screen only shows at 10 today, but the code must not assume it).
    The redraw help states EXACTLY what the engine does: marked cards shuffle back, you draw the same number. */
-const MULL_PLATE={ wide:{src:'assets/img/mulligan_plate_wide.png?v=1', w:1536, h:1024},
-                   port:{src:'assets/img/mulligan_plate_port.png?v=1', w:853,  h:1844} };
+const MULL_PLATE={ wide:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/mulligan_plate_wide.png?v=1', w:1536, h:1024},
+                   port:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/mulligan_plate_port.png?v=1', w:853,  h:1844} };
 let mullPlateMode=null;
 function mullPickPlate(){ const m=(innerWidth>=1024)?'wide':'port'; if(m===mullPlateMode) return;
   mullPlateMode=m; const el=$('mullplate'); if(el) el.src=MULL_PLATE[m].src; }
@@ -4952,8 +4952,8 @@ const FSEL_TILES=[
   { f:'vanaras', name:'VANARAS', word:'✦ Green'   },
   { f:'nagas',   name:'NAGAS',   word:'✦ Teal'    },
 ];
-const FSEL_PLATE={ port:{src:'assets/img/factionselect_plate_port.jpg', w:1024, h:1536},
-                   wide:{src:'assets/img/factionselect_plate_wide.jpg', w:1536, h:1024} };
+const FSEL_PLATE={ port:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/factionselect_plate_port.jpg', w:1024, h:1536},
+                   wide:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/factionselect_plate_wide.jpg', w:1536, h:1024} };
 let fselPlateMode=null;
 function fselPickPlate(){                                   // orientation pick — the landing's rule, ported
   const m=(innerHeight>innerWidth*1.05)?'port':'wide';
@@ -4970,7 +4970,7 @@ function fselTile(t, side){
   b.className='ftile'+(fselChoice[side]===t.f?' sel':''); b.dataset.f=t.f; b.dataset.side=side;
   const crest=document.createElement('div'); crest.className='ftile-crest';
   if(t.f==='random'){ const m=document.createElement('span'); m.className='ftile-mark'; m.textContent='✦'; crest.appendChild(m); }
-  else { const im=document.createElement('img'); im.alt=t.name; im.src=`assets/img/crest_${t.f}_tile.png`; crest.appendChild(im); }
+  else { const im=document.createElement('img'); im.alt=t.name; im.src=`https://sangbaran-purr.github.io/divya-yuddha/assets/img/crest_${t.f}_tile.png`; crest.appendChild(im); }
   const n=document.createElement('div'); n.className='ftile-name'; n.textContent=t.name;
   const w=document.createElement('div'); w.className='ftile-word'; w.textContent=t.word;
   b.appendChild(crest); b.appendChild(n); b.appendChild(w);
@@ -5380,7 +5380,7 @@ function questRow(q, scope){
   const row=document.createElement('div'); row.className='q-row'+(done?' done':'')+(q.claimed?' claimed':'');
   const pct=def.target ? Math.min(100, (q.prog|0)/def.target*100) : 0;
   const ic=document.createElement('div'); ic.className='q-ic';   // T55: left icon roundel (mapped by instance id; 404 → remove → plain row)
-  const iimg=new Image(); iimg.alt=''; iimg.onload=()=>ic.classList.add('on'); iimg.onerror=()=>ic.remove(); iimg.src='assets/img/quest_icon_'+q.id+'.png?v=1'; ic.appendChild(iimg);
+  const iimg=new Image(); iimg.alt=''; iimg.onload=()=>ic.classList.add('on'); iimg.onerror=()=>ic.remove(); iimg.src='https://sangbaran-purr.github.io/divya-yuddha/assets/img/quest_icon_'+q.id+'.png?v=1'; ic.appendChild(iimg);
   const main=document.createElement('div'); main.className='q-row-main';
   main.innerHTML=`<div class="q-label">${def.label}</div><div class="q-bar"><i style="width:${pct}%"></i></div><div class="q-reward">+${r.coins} coins · +${r.amsha} Amsha · +${r.xp} XP</div>`;
   const right=document.createElement('div'); right.className='q-right';
@@ -5529,8 +5529,8 @@ function showLanding(){
    BATTERY LAW (DS §2): ONE rAF drives all three. It SELF-TERMINATES the moment #landing is hidden — every screen
    change already routes through classList.add('hidden'), so no caller needs to know about us; and it never starts
    under prefers-reduced-motion. visibilitychange stops it when the tab is backgrounded (the Task-32 precedent). */
-const LAND_PLATE={ port:{src:'assets/img/landing_plate_port.jpg', w:1024, h:1536},
-                   wide:{src:'assets/img/landing_plate_wide.jpg', w:1536, h:1024} };
+const LAND_PLATE={ port:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/landing_plate_port.jpg', w:1024, h:1536},
+                   wide:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/landing_plate_wide.jpg', w:1536, h:1024} };
 function landCol(){ return document.querySelector('#landing .land-col'); }
 const LandFx={ raf:null, mode:null, mastB:180, px:0, py:0, tx:0, ty:0, parts:[], t0:0, ctx:null, density:1.0, desktop:null };   // desktop: T34c capability-split mode, set by landRoller
 function landPickPlate(){                                   // orientation pick: portrait plate when clearly taller
@@ -5629,9 +5629,9 @@ const EMBER_CARD_DENSITY=0.15;                // DS §2 — card screens; the ch
    untouched. renderBattleChrome runs at the tail of render(); the plate + ember start at match start (startGame /
    story), gated on #hudwrap (match-active). */
 const FACTION_BACK={ devas:'card_back_deva', asuras:'card_back_asura', vanaras:'card_back_vanara', nagas:'card_back_naga' };
-function factionBackSrc(faction){ return `assets/img/${FACTION_BACK[faction]||'card_back'}.png?v=1`; }   // R-D lookup
-const BATTLE_PLATE={ wide:{src:'assets/img/battle_plate_wide.png?v=1', w:1536, h:1024},
-                     port:{src:'assets/img/battle_plate_port.png?v=1', w:853,  h:1844} };
+function factionBackSrc(faction){ return `https://sangbaran-purr.github.io/divya-yuddha/assets/img/${FACTION_BACK[faction]||'card_back'}.png?v=1`; }   // R-D lookup
+const BATTLE_PLATE={ wide:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/battle_plate_wide.png?v=1', w:1536, h:1024},
+                     port:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/battle_plate_port.png?v=1', w:853,  h:1844} };
 let battlePlateMode=null;
 function battlePickPlate(){ const m=(innerWidth>=1024)?'wide':'port'; if(m===battlePlateMode) return;
   battlePlateMode=m; const el=$('battleplate'); if(el) el.src=BATTLE_PLATE[m].src; }
@@ -5642,7 +5642,7 @@ function battleSetTable(){ const el=$('boardtable'); if(!el) return;
   /* T71: #app now WIDENS on desktop (min(1000px,90vw)), so the field is landscape ≥1024 — adopt the WIDE table asset
      (the reversal the T42 comment reserved). object-fit:cover on the wide asset now fits a landscape field correctly;
      the tall asset would zoom-crop to a sliver in a wide field. Mobile (<1024) keeps the tall table byte-identical. */
-  el.src = (innerWidth>=1024) ? 'assets/img/board_table_wide.png?v=1' : 'assets/img/board_table_tall.png?v=1'; }
+  el.src = (innerWidth>=1024) ? 'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_table_wide.png?v=1' : 'https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_table_tall.png?v=1'; }
 function battleStageStart(){
   battlePickPlate(); battleFitPlate(); battleSetTable();
   Ember.start('battlestage', EMBER_CARD_DENSITY, 'hudwrap');   // gate on the match being active (#hudwrap)
@@ -5652,12 +5652,12 @@ addEventListener('resize', ()=>{ if(!$('hudwrap').classList.contains('hidden')){
    FALLBACK (R-D): a missing/404 back falls to the neutral shipped back. */
 function setDeckStack(imgId, cntId, faction, count){
   const im=$(imgId); if(im){ const want=factionBackSrc(faction);
-    if(im.getAttribute('data-fac')!==faction){ im.setAttribute('data-fac',faction); im.onerror=()=>{ im.onerror=null; im.src='assets/img/card_back.png?v=1'; }; im.src=want; } }
+    if(im.getAttribute('data-fac')!==faction){ im.setAttribute('data-fac',faction); im.onerror=()=>{ im.onerror=null; im.src='https://sangbaran-purr.github.io/divya-yuddha/assets/img/card_back.png?v=1'; }; im.src=want; } }
   const cn=$(cntId); if(cn) cn.textContent=count;
 }
 function setScoreAvatar(elId, faction){ const el=$(elId); if(!el) return;
   if(el.getAttribute('data-fac')===faction) return; el.setAttribute('data-fac',faction);
-  el.style.backgroundImage=`url('assets/img/crest_${faction}_tile.png')`; }
+  el.style.backgroundImage=`url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/crest_${faction}_tile.png')`; }
 function renderBattleChrome(me, op){
   setDeckStack('deckimg-o','deckcnt-o', op.faction, op.deck.length);
   setDeckStack('deckimg-p','deckcnt-p', me.faction, me.deck.length);
@@ -5869,7 +5869,7 @@ function fh(tag, props, ...kids){
 }
 function fiCardByName(faction, name){ const deck=DECKS[faction]||[]; return deck.find(c=>c.n===name)||null; }
 function fiArtStem(c, faction){ return cardArtSrc({...c, base:c.p}, faction); }   // cardArtSrc keys on base; deck defs carry p
-function fiThumbSrc(c, faction){ return fiArtStem(c, faction).replace('assets/cards/','assets/thumbs/'); }
+function fiThumbSrc(c, faction){ return fiArtStem(c, faction).replace('https://sangbaran-purr.github.io/divya-yuddha/assets/cards/','https://sangbaran-purr.github.io/divya-yuddha/assets/thumbs/'); }
 function fiGalleryOrder(faction){
   const d=DECKS[faction]||[];
   return [
@@ -5995,7 +5995,7 @@ function fiRenderStrip(strip, faction){
    economy with real faction backs, when-to-pass + namaste, closing). The old invented gem economy is GONE. Copy is
    content-locked (owner-approved v2 mockup verbatim). Built with .htw-* classes (reused CSS) inside the 520-cap fi-col. */
 function fiHtwBack(fac){ const im=fh('img',{class:'htw-back', alt:''});
-  im.onerror=()=>{ im.onerror=null; im.src='assets/img/card_back.png?v=1'; }; im.src=factionBackSrc(fac); return im; }   // T42 double fallback
+  im.onerror=()=>{ im.onerror=null; im.src='https://sangbaran-purr.github.io/divya-yuddha/assets/img/card_back.png?v=1'; }; im.src=factionBackSrc(fac); return im; }   // T42 double fallback
 function fiRenderWin(){
   const node=fh('div',{class:'htw-body'});
   node.append(fh('div',{class:'fi-idhead'},
@@ -6011,14 +6011,14 @@ function fiRenderWin(){
    'The player who wins two rounds wins the match.'].forEach(t=>copy.append(fh('p',null,t)));
   copy.append(fh('p',{class:'htw-warn'}, 'The player who tries to win all three usually loses.'));
   node.append(fh('section',{class:'htw-panel htw-objective'}, copy,
-    fh('div',{class:'htw-obj-art'}, fh('img',{src:'assets/img/howtowin_hero.png?v=1', alt:''}))));
+    fh('div',{class:'htw-obj-art'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/howtowin_hero.png?v=1', alt:''}))));
   // THE ROUND FLOW — icon triplet per round
   node.append(fh('div',{class:'htw-sec-title htw-center'}, 'The Round Flow'));
   const flow=fh('div',{class:'htw-flow'});
   HTW_FLOW.forEach(r=>{
     const trip=fh('div',{class:'htw-triplet'});
     r.steps.forEach((s,i)=>{ if(i>0) trip.append(fh('span',{class:'htw-arrow'}, '→'));
-      trip.append(fh('div',{class:'htw-step'}, fh('img',{class:'htw-icon', src:`assets/img/${HTW_ICONS[i]}.png?v=1`, alt:''}), fh('span',{class:'htw-step-lbl'}, s))); });
+      trip.append(fh('div',{class:'htw-step'}, fh('img',{class:'htw-icon', src:`https://sangbaran-purr.github.io/divya-yuddha/assets/img/${HTW_ICONS[i]}.png?v=1`, alt:''}), fh('span',{class:'htw-step-lbl'}, s))); });
     flow.append(fh('section',{class:'htw-panel htw-round'},
       fh('div',{class:'htw-round-head'}, fh('span',{class:'htw-round-n'}, r.n), fh('span',{class:'htw-round-sub'}, r.sub)),
       trip, fh('div',{class:'htw-coach'}, r.coach)));
@@ -6051,7 +6051,7 @@ function fiRenderWin(){
     rows.append(fh('div',{class:'htw-pass-row'}, fh('span',{class:'htw-pass-q'}, q), fh('span',{class:'htw-pass-rule'}, rule), fh('span',{class:'htw-pass-coach'}, coach)));
   });
   node.append(fh('section',{class:'htw-panel htw-pass'}, rows,
-    fh('div',{class:'htw-pass-art'}, fh('img',{src:'assets/img/howtowin_namaste.png?v=1', alt:''}))));
+    fh('div',{class:'htw-pass-art'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/howtowin_namaste.png?v=1', alt:''}))));
   node.append(fh('div',{class:'htw-closing'}, 'Discipline is power. Patience is victory.'));
   return node;
 }
@@ -6082,7 +6082,7 @@ function fiRenderDevas(){
   const node=fh('div',{class:'fi-codex-page fi-devas-page'});
   // ── §1 HERO BANNER ──
   const hero=fh('div',{class:'fi-dhero'});
-  hero.style.backgroundImage="url('assets/img/devas_codex_hero.png?v=2')";
+  hero.style.backgroundImage="url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/devas_codex_hero.png?v=2')";
   hero.append(fh('div',{class:'fi-dhero-scrim'}),
     fh('div',{class:'fi-dhero-in'},
       fh('div',{class:'fi-dhero-eyebrow'}, 'THE SHINING ONES'),
@@ -6094,12 +6094,12 @@ function fiRenderDevas(){
   node.append(hero);
   node.append(fh('div',{class:'fi-dpillars'},
     fh('div',{class:'fi-dpillar'}, fh('div',{class:'fi-dpillar-ic'}, '☀'), fh('div',{class:'fi-dpillar-nm'}, 'Order')),
-    fh('div',{class:'fi-dpillar'}, fh('img',{class:'fi-dpillar-img', src:'assets/img/icon_shield.png?v=1', alt:''}), fh('div',{class:'fi-dpillar-nm'}, 'Protection')),
+    fh('div',{class:'fi-dpillar'}, fh('img',{class:'fi-dpillar-img', src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/icon_shield.png?v=1', alt:''}), fh('div',{class:'fi-dpillar-nm'}, 'Protection')),
     fh('div',{class:'fi-dpillar'}, fh('div',{class:'fi-dpillar-ic'}, '❁'), fh('div',{class:'fi-dpillar-nm'}, 'Renewal'))));
   // ── §2 DHARMA SHIELD ──
   node.append(fiSecTitle('Signature Mechanic — Dharma Shield'));
   const shield=fh('section',{class:'fi-dpanel fi-dshield'});
-  shield.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'assets/img/devas_codex_shield.png?v=2', alt:''})));
+  shield.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/devas_codex_shield.png?v=2', alt:''})));
   const sbody=fh('div',{class:'fi-dshield-body'});
   sbody.append(fh('p',{class:'fi-dlead'}, 'Dharma Shield is the divine favor that guards your chosen Units from harm.'),
     fh('div',{class:'fi-dsub'}, 'How Dharma Shield works'));
@@ -6124,7 +6124,7 @@ function fiRenderDevas(){
     'Revival recovers advantage you thought was lost.',
     'Long-round endurance: your board grows as the round drags on.',
     'Protection of key engines keeps your value flowing.']));
-  sw.append(fh('div',{class:'fi-daltar'}, fh('img',{src:'assets/img/devas_codex_altar.png?v=2', alt:''})));
+  sw.append(fh('div',{class:'fi-daltar'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/devas_codex_altar.png?v=2', alt:''})));
   sw.append(mk('fi-dwk','Weaknesses',[
     'Slower opening tempo.',
     'Protection spent on the wrong target is protection wasted.',
@@ -6186,7 +6186,7 @@ function fiRenderDevas(){
 function fiRenderAsuras(){
   const F='asuras', node=fh('div',{class:'fi-codex-page fi-asuras-page'});
   // §1 HERO
-  const hero=fh('div',{class:'fi-dhero'}); hero.style.backgroundImage="url('assets/img/asuras_codex_hero.png?v=2')";
+  const hero=fh('div',{class:'fi-dhero'}); hero.style.backgroundImage="url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/asuras_codex_hero.png?v=2')";
   hero.append(fh('div',{class:'fi-dhero-scrim'}),
     fh('div',{class:'fi-dhero-in'},
       fh('div',{class:'fi-dhero-eyebrow'}, 'THE BREAKERS OF RULES'),
@@ -6203,7 +6203,7 @@ function fiRenderAsuras(){
   // §2 CHAOS SURGE
   node.append(fiSecTitle('Signature Mechanic — Chaos Surge'));
   const surge=fh('section',{class:'fi-dpanel fi-dshield'});
-  surge.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'assets/img/asuras_codex_surge.png?v=2', alt:''})));
+  surge.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/asuras_codex_surge.png?v=2', alt:''})));
   const body=fh('div',{class:'fi-dshield-body'},
     fh('p',{class:'fi-dlead'}, 'Chaos Surge is the storm the Asura weapons carry — every Astra they loose feeds it.'),
     fh('div',{class:'fi-dsub'}, 'How Chaos Surge works'));
@@ -6227,7 +6227,7 @@ function fiRenderAsuras(){
     'Disruption from every angle — discard (Rahu), stolen turns (Tamasa), negation (Brahmadanda).',
     'Sacrifice converts bodies into cards and tokens (Rudhira Bali, Raktabija’s Curse).',
     'Relentless tempo — free Astra turns (Mayasura’s Blueprint).']));
-  sw.append(fh('div',{class:'fi-daltar'}, fh('img',{src:'assets/img/asuras_codex_throne.png?v=2', alt:''})));
+  sw.append(fh('div',{class:'fi-daltar'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/asuras_codex_throne.png?v=2', alt:''})));
   sw.append(mk('fi-dwk','Weaknesses',[
     'The price is real — your own cards cost you units, power, and turns (Ahamkara, Dhumraksha, Pisacha’s decay, Mahishasura’s hunger).',
     'Single-target removal is blanked by a Dharma Shield.',
@@ -6294,7 +6294,7 @@ function fiVKey(id, chip, faction='vanaras'){      // key-card: mini + live txt 
 function fiRenderVanaras(){
   const F='vanaras', node=fh('div',{class:'fi-codex-page fi-vanaras-page'});
   // §1 HERO
-  const hero=fh('div',{class:'fi-dhero'}); hero.style.backgroundImage="url('assets/img/vanaras_codex_hero.png?v=1')";
+  const hero=fh('div',{class:'fi-dhero'}); hero.style.backgroundImage="url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/vanaras_codex_hero.png?v=1')";
   hero.append(fh('div',{class:'fi-dhero-scrim'}),
     fh('div',{class:'fi-dhero-in'},
       fh('div',{class:'fi-dhero-eyebrow'}, 'THE DEVOTED'),
@@ -6311,7 +6311,7 @@ function fiRenderVanaras(){
   // §2 SIGNATURE MECHANIC — LEAP
   node.append(fiSecTitle('Signature Mechanic — Leap'));
   const leap=fh('section',{class:'fi-dpanel fi-dshield'});
-  leap.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'assets/img/vanaras_codex_mechanic.png?v=1', alt:''})));
+  leap.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/vanaras_codex_mechanic.png?v=1', alt:''})));
   leap.append(fh('div',{class:'fi-dshield-body'},
     fh('p',{class:'fi-dlead'}, 'Once per round, one of your Vanara Units may LEAP — its power becomes equal to an adjacent ally’s current power. A free action: it costs no card and no turn. Go wide first; then leap your line into a wall.'),
     fh('p',{class:'fi-vsub'}, 'Kishkindha Crown raises the limit to twice per round and feeds both — leaper and copied ally each gain +1. Anjana grants a third leap.')));
@@ -6344,7 +6344,7 @@ function fiRenderVanaras(){
     'Venom pressures wide boards — Rama’s Signet is the answer, and only one artifact slot exists.']));
   node.append(sw);
   // §5 DIVIDER (wide strip ~4.9:1)
-  node.append(fh('div',{class:'fi-vdivider'}, fh('img',{src:'assets/img/vanaras_codex_divider.png?v=1', alt:''})));
+  node.append(fh('div',{class:'fi-vdivider'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/vanaras_codex_divider.png?v=1', alt:''})));
   // §6 CORE STRATEGY
   node.append(fiSecTitle('Core Strategy — How Vanaras Win'));
   const strat=fh('div',{class:'fi-dstrats'});
@@ -6391,7 +6391,7 @@ function fiRenderVanaras(){
 function fiRenderNagas(){
   const F='nagas', node=fh('div',{class:'fi-codex-page fi-nagas-page'});
   // §1 HERO
-  const hero=fh('div',{class:'fi-dhero'}); hero.style.backgroundImage="url('assets/img/nagas_codex_hero.png?v=1')";
+  const hero=fh('div',{class:'fi-dhero'}); hero.style.backgroundImage="url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/nagas_codex_hero.png?v=1')";
   hero.append(fh('div',{class:'fi-dhero-scrim'}),
     fh('div',{class:'fi-dhero-in'},
       fh('div',{class:'fi-dhero-eyebrow'}, 'THE SERPENT KINGS'),
@@ -6408,7 +6408,7 @@ function fiRenderNagas(){
   // §2 SIGNATURE MECHANIC — VENOM
   node.append(fiSecTitle('Signature Mechanic — Venom'));
   const ven=fh('section',{class:'fi-dpanel fi-dshield'});
-  ven.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'assets/img/nagas_codex_mechanic.png?v=1', alt:''})));
+  ven.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/nagas_codex_mechanic.png?v=1', alt:''})));
   ven.append(fh('div',{class:'fi-dshield-body'},
     fh('p',{class:'fi-dlead'}, 'The Nagas do not race. Every round’s end, the deep itself drains the enemy — and every Venom Token your cards plant bites for more. No single tick matters. All of them together decide the match.'),
     fh('p',{class:'fi-vsub'}, 'Patala Throne and Vasuki deepen the drain as rounds pass. Karkotaka moves it: your Venom fires once, the moment either player first passes each round, instead of at round end.')));
@@ -6442,7 +6442,7 @@ function fiRenderNagas(){
     'Low bodies: the clock must survive long enough to matter.']));
   node.append(sw);
   // §5 DIVIDER (twin-serpent altar, ~4.6:1)
-  node.append(fh('div',{class:'fi-vdivider'}, fh('img',{src:'assets/img/nagas_codex_divider.png?v=1', alt:''})));
+  node.append(fh('div',{class:'fi-vdivider'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/nagas_codex_divider.png?v=1', alt:''})));
   // §6 CORE STRATEGY
   node.append(fiSecTitle('Core Strategy — How Nagas Win'));
   const strat=fh('div',{class:'fi-dstrats'});
@@ -6541,7 +6541,7 @@ const FI_REALM_CONTENT = {
     suffers:[`Early passers: conceding the round also gifts the enemy a free +2`,`Fragile closers — removal on the last card played erases the blessing`],
     tip:`This realm turns every pass into a bid. The question each turn is no longer "should I pass?" but "can I afford to let them have the last word?"` },
 };
-function fiBoardThumb(id){ return fiBoardImg(id).replace('assets/img/','assets/thumbs/'); }
+function fiBoardThumb(id){ return fiBoardImg(id).replace('https://sangbaran-purr.github.io/divya-yuddha/assets/img/','https://sangbaran-purr.github.io/divya-yuddha/assets/thumbs/'); }
 /* T52 — Realm palette CANON (from the intaken asset trio): swarga gold · yaksha green · gandharva violet ·
    mrityulok white · patala teal · rishi blue · kalki ember. Separate from REALM_ACCENT (still used by the board inspector). */
 const FI_REALM_CANON = { swarga:'#e8c95a', yaksha:'#4fae8a', gandharva:'#a78bda', mrityulok:'#dfe3ea', patala:'#2dd4b8', rishi:'#6d8fe0', kalki:'#e8894a' };
@@ -6556,7 +6556,7 @@ function fiRealmArt(id, box){   // graceful board-thumb crop: onerror → accent
 function fiRenderRealms(){
   const node=fh('div',{class:'fi-codex-page fi-realms-page'});
   // §1 HERO
-  const hero=fh('div',{class:'fi-dhero'}); hero.style.backgroundImage="url('assets/img/realms_codex_hero.png?v=1')";
+  const hero=fh('div',{class:'fi-dhero'}); hero.style.backgroundImage="url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/realms_codex_hero.png?v=1')";
   hero.append(fh('div',{class:'fi-dhero-scrim'}),
     fh('div',{class:'fi-dhero-in'},
       fh('div',{class:'fi-dhero-eyebrow'}, 'THE COSMIC WHEEL'),
@@ -6567,7 +6567,7 @@ function fiRenderRealms(){
   // §2 HOW REALMS WORK — 4 steps beside the mechanic art
   node.append(fiSecTitle('How Realms Work'));
   const panel=fh('section',{class:'fi-dpanel fi-dshield'});
-  panel.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'assets/img/realms_codex_mechanic.png?v=1', alt:''})));
+  panel.append(fh('div',{class:'fi-dshield-art'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/realms_codex_mechanic.png?v=1', alt:''})));
   const body=fh('div',{class:'fi-dshield-body'}), steps=fh('div',{class:'fi-vsteps'});
   [['The Wheel Turns','As the match begins, one of seven Cosmic Realms is drawn at random.'],
    ['The World Bends','The Realm’s law applies to both sides alike.'],
@@ -6609,7 +6609,7 @@ function fiRenderRealms(){
   });
   node.append(grid);
   // §5 DIVIDER
-  node.append(fh('div',{class:'fi-vdivider'}, fh('img',{src:'assets/img/realms_codex_divider.png?v=1', alt:''})));
+  node.append(fh('div',{class:'fi-vdivider'}, fh('img',{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/realms_codex_divider.png?v=1', alt:''})));
   // §6 WINNING WITH REALMS (4)
   node.append(fiSecTitle('Winning With Realms'));
   const strat=fh('div',{class:'fi-dstrats'});
@@ -6655,8 +6655,8 @@ function updateCollectionCta(){ const el=$('cap-collection'); if(!el) return; co
   el.textContent=`${own} of ${allCardIds().length} owned — and the ones still sealed`; }
 let colFaction='devas';
 const COL_FACTIONS=[['devas','Devas'],['asuras','Asuras'],['vanaras','Vanaras'],['nagas','Nagas']];
-let cardBackOk=false;   // assets/img/card_back.png is ABSENT at build time → CSS placeholder; probed so it lights up automatically if it lands
-(function probeBack(){ const im=new Image(); im.onload=()=>{ cardBackOk=true; }; im.onerror=()=>{ cardBackOk=false; }; im.src='assets/img/card_back.png'; })();
+let cardBackOk=false;   // https://sangbaran-purr.github.io/divya-yuddha/assets/img/card_back.png is ABSENT at build time → CSS placeholder; probed so it lights up automatically if it lands
+(function probeBack(){ const im=new Image(); im.onload=()=>{ cardBackOk=true; }; im.onerror=()=>{ cardBackOk=false; }; im.src='https://sangbaran-purr.github.io/divya-yuddha/assets/img/card_back.png'; })();
 function colAcqLine(id){ return isRatna(id) ? 'Ratna Vault' : `✦ ${cardCost(id)}`; }
 /* TASK 30b — ART-PENDING pane. Any card whose frame/thumb 404s renders this instead of a broken image: the FI_HIDDEN
    sealed-slot treatment in the faction colour, carrying the card NAME + type row + a quiet caption (and, in the Vault,
@@ -6678,8 +6678,8 @@ function colHideAll(){ COL_HIDE.forEach(id=>{ const e=$(id); if(e) e.classList.a
    EPITHET SOURCE (ruled): the grid's epithet line reads def.sub LIVE from the engine. There is no EPITHETS map —
    all 176 cards already carry their epithet in-engine, and a parallel map in the UI would be a second source of
    truth for a field the engine owns (the single-source law; the T35-A2 duplicate-FAC_LABEL lesson). */
-const COL_PLATE={ wide:{src:'assets/img/collection_plate_wide.png', w:1672, h:941},
-                  port:{src:'assets/img/collection_plate_port.png', w:941,  h:1672} };
+const COL_PLATE={ wide:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/collection_plate_wide.png', w:1672, h:941},
+                  port:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/collection_plate_port.png', w:941,  h:1672} };
 let colPlateMode=null;
 function colPickPlate(){                                   // wide >=1024px, port below (the task's breakpoint)
   const m=(innerWidth>=1024)?'wide':'port';
@@ -6702,7 +6702,7 @@ function colProgress(M, all){
   const pct = tot ? Math.round(owned/tot*100) : 0;
   const box=$('col-progress'); box.innerHTML='';
   const ring=document.createElement('div'); ring.className='cp-ring';
-  const img=document.createElement('img'); img.src='assets/img/ring_progress.png'; img.alt='';
+  const img=document.createElement('img'); img.src='https://sangbaran-purr.github.io/divya-yuddha/assets/img/ring_progress.png'; img.alt='';
   // the arc is SVG over live data; the ring PNG is ornament around it
   const r=38, circ=2*Math.PI*r;
   ring.innerHTML=`<svg viewBox="0 0 100 100" aria-hidden="true">`+
@@ -6765,7 +6765,7 @@ function renderCollection(){
   COL_FACTIONS.forEach(([f,label])=>{ const b=document.createElement('button'); b.className='col-tab'+(f===colFaction?' on':'');
     b.dataset.f=f;   // A3 tile-ground law — the ground carries the faction colour, the crest carries identity
     const own=DECKS[f].filter(c=>ownsCard(M,c.id)).length;
-    const im=document.createElement('img'); im.src=`assets/img/crest_${f}_tile.png`; im.alt='';
+    const im=document.createElement('img'); im.src=`https://sangbaran-purr.github.io/divya-yuddha/assets/img/crest_${f}_tile.png`; im.alt='';
     const sp=document.createElement('span'); sp.textContent=`${label} ${own}/${DECKS[f].length}`;
     b.appendChild(im); b.appendChild(sp);
     b.onclick=()=>{ colFaction=f; renderCollection(); }; tabs.appendChild(b); });
@@ -6804,7 +6804,7 @@ function buildCardFaces(def, faction, opts={}){
   const back=document.createElement('div'); back.className='cc-back hasimg';
   const bim=document.createElement('img'); bim.className='cc-backimg'; bim.alt='';
   bim.onerror=()=>{ bim.onerror=()=>{ back.classList.remove('hasimg'); bim.remove(); back.innerHTML='<i></i>'; };
-    bim.src='assets/img/card_back.png?v=1'; };   // neutral fallback (A5(f) stamp)
+    bim.src='https://sangbaran-purr.github.io/divya-yuddha/assets/img/card_back.png?v=1'; };   // neutral fallback (A5(f) stamp)
   bim.src=factionBackSrc(faction);
   back.appendChild(bim);
   const face=document.createElement('div'); face.className='cc-face';
@@ -7312,11 +7312,11 @@ const CUT_MOTION = {   // id → { from, to, origin, dur(s), ease, vfx } (BOOK1_
   b1c7_i2:{ from:'scale(1.16)',                to:'scale(1.06)',                origin:'50% 55%', dur:8, ease:'ease-out', vfx:'none' },   // PULL-OUT (intro; the mid reuse carries the flash)
 };
 const CUT_DEFAULT_M={ from:'scale(1.08)', to:'scale(1.12)', origin:'50% 50%', dur:8, ease:'ease-out', vfx:'none' };
-function cutImgUrl(id, mobileOnly){ const wide = !mobileOnly && innerWidth>=1024; return `assets/story/${id}${wide?'_wide':''}.jpg?v=4`; }   // T56: _wide variant at ≥1024 (resolved at call/display time), inline ?v=2 cache stamp — the single de-facto cutscene stamp (bump this ONE literal on a byte-swap). mobileOnly forces the base name for the layered 404-fallback.
+function cutImgUrl(id, mobileOnly){ const wide = !mobileOnly && innerWidth>=1024; return `https://sangbaran-purr.github.io/divya-yuddha/assets/story/${id}${wide?'_wide':''}.jpg?v=4`; }   // T56: _wide variant at ≥1024 (resolved at call/display time), inline ?v=2 cache stamp — the single de-facto cutscene stamp (bump this ONE literal on a byte-swap). mobileOnly forces the base name for the layered 404-fallback.
 // The chapter's first intro image — the backdrop for any text-only / 404 panel (so plates never render over plain black).
-function storyIntroFallback(ch){ const p0=ch && ch.cutscenes && ch.cutscenes.intro && ch.cutscenes.intro[0]; return p0 ? (p0.img||cutImgUrl(p0.id)) : 'assets/img/menu_bg.jpg'; }
+function storyIntroFallback(ch){ const p0=ch && ch.cutscenes && ch.cutscenes.intro && ch.cutscenes.intro[0]; return p0 ? (p0.img||cutImgUrl(p0.id)) : 'https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg'; }
 // Set a panel's backdrop to a fallback image darkened ~65% (over the existing scrim). Chain: fallback → menu_bg.jpg.
-function setCutBackdropFallback(el, url){ const menu='assets/img/menu_bg.jpg', dark=u=>`linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,.65)), url('${u}')`;
+function setCutBackdropFallback(el, url){ const menu='https://sangbaran-purr.github.io/divya-yuddha/assets/img/menu_bg.jpg', dark=u=>`linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,.65)), url('${u}')`;
   el.classList.remove('cut-noart');
   if(!url || url===menu){ el.style.backgroundImage=dark(menu); return; }
   el.style.backgroundImage=dark(url);
@@ -7476,7 +7476,7 @@ function makeEmbers(){
   }
 }
 
-/* Real card art lives in assets/cards/. Two filename patterns (see CLAUDE.md):
+/* Real card art lives in https://sangbaran-purr.github.io/divya-yuddha/assets/cards/. Two filename patterns (see CLAUDE.md):
    • Powered cards (Units/Heroes, base>0): {Faction}_{Type}_{Name}_P{printedPower}_r{RarityName}.png
        e.g. Devas_Hero_Indra_P7_rLegendary.png, Devas_Unit_SuryaDev_P6_rEpic.png
    • Powerless cards (Astra/Mantra/Artifact, base===0): {Faction}_{Type}_{Name}_r{RarityName}.png
@@ -7505,20 +7505,20 @@ function cardArtSrc(c, faction){
      from t/r for a token: without this branch cardArtSrc builds Asuras_Unit_Rakta_P2_rCommon.png and can never
      resolve the accepted frame. Tokens are in no DECKS array, so cardHomeFaction() is null and `fac` falls back to
      the OWNER's faction — which is correct: a Rakta belongs to whoever spawned it. */
-  if (c.token) return `assets/cards/${factionToken(fac)}_Token_${name}_P${c.base}_rToken.png` + v;
+  if (c.token) return `https://sangbaran-purr.github.io/divya-yuddha/assets/cards/${factionToken(fac)}_Token_${name}_P${c.base}_rToken.png` + v;
   const type = c.t.charAt(0).toUpperCase()+c.t.slice(1);
-  const stem = `assets/cards/${factionToken(fac)}_${type}_${name}`;
+  const stem = `https://sangbaran-purr.github.io/divya-yuddha/assets/cards/${factionToken(fac)}_${type}_${name}`;
   const rar = RARITY_NAME[c.r];
   return (c.base > 0
     ? `${stem}_P${c.base}_r${rar}.png`   // Units / Heroes
     : `${stem}_r${rar}.png`)             // Astras / Mantras / Artifacts
     + v;
 }
-/* T93/T93b — BOARD TILE SOURCE. The frameless art-forward tiles live in assets/board/ under the SAME canonical stem as
+/* T93/T93b — BOARD TILE SOURCE. The frameless art-forward tiles live in https://sangbaran-purr.github.io/divya-yuddha/assets/board/ under the SAME canonical stem as
    the framed cards (the thumbs dir-swap precedent), so the mapping is a dir + cache-stamp swap on cardArtSrc. Own stamp
    (BOARD_ART_V) bound to the tile bytes; the framed CARD_ART_V is untouched. */
 const BOARD_ART_V = 'b60';   // bumped from 't93' on the board-art swap — the 60/60 purpose-made zoomed tiles are byte changes across the set, so the cache stamp must move
-function boardTileSrc(c, faction){ return cardArtSrc(c, faction).replace('assets/cards/','assets/board/').replace('?v='+CARD_ART_V, '?v='+BOARD_ART_V); }
+function boardTileSrc(c, faction){ return cardArtSrc(c, faction).replace('https://sangbaran-purr.github.io/divya-yuddha/assets/cards/','https://sangbaran-purr.github.io/divya-yuddha/assets/board/').replace('?v='+CARD_ART_V, '?v='+BOARD_ART_V); }
 function attachArt(el, c, faction, board){
   if (c.ghost || c.id==='ghost') return;            // Yama tokens have no art
   const img=new Image();
@@ -7554,7 +7554,7 @@ function boardCard(c, pi, targetSet){
     (c.bound?'<div class="bindbadge">⛓</div>':'')+
     (c.stolenBy!==-1?'<div class="stealbadge">🌀</div>':'')+
     `<div class="medallion ${state}">${c.bound?'0':ep}${mark?`<span class="mark">${mark}</span>`:''}</div>`;
-  attachArt(d, c, fac, true);   // BOARD-ART SWAP (60/60 purpose-made zoomed tiles landed, all four factions at plain stems): the `true` arg ACTIVATES board-tile mode → boardTileSrc (assets/board/, BOARD_ART_V) with the T93b onerror fallback (zoomed tile → framed card → no-art). Body cards (Units/Heroes) render the purpose-made zoomed art; a card without a tile falls back to the framed card gracefully. Hand + inspect (the other attachArt call sites) keep the framed cardArtSrc, unchanged.
+  attachArt(d, c, fac, true);   // BOARD-ART SWAP (60/60 purpose-made zoomed tiles landed, all four factions at plain stems): the `true` arg ACTIVATES board-tile mode → boardTileSrc (https://sangbaran-purr.github.io/divya-yuddha/assets/board/, BOARD_ART_V) with the T93b onerror fallback (zoomed tile → framed card → no-art). Body cards (Units/Heroes) render the purpose-made zoomed art; a card without a tile falls back to the framed card gracefully. Hand + inspect (the other attachArt call sites) keep the framed cardArtSrc, unchanged.
   // Leap selection (my own units, pi===0): pick a leaper, then an adjacent target.
   const leapPick = pi===0 && leapMode && ((leapMode==='leaper') || (leapMode.leaper && leapMode.adj && leapMode.adj.has(c.uid)));
   // Dharma Shield designation (my own un-shielded Units, pi===0).
@@ -7820,19 +7820,19 @@ function findCardByUid(uid){
 const Audio2 = (()=>{
   let ctx=null, master=null, musicGain=null, sfxGain=null, sfxComp=null, fileGain=null, started=false;
   const MUSIC_LEVEL=0.6;
-  const AUDIO_SRC={ menu:'assets/audio/music_menu.mp3', battle:'assets/audio/music_battle.mp3',
-    sfx_astra:'assets/audio/sfx_astra.mp3', sfx_brahmastra:'assets/audio/sfx_brahmastra.mp3', sfx_unit_clash:'assets/audio/sfx_unit_clash.mp3',
+  const AUDIO_SRC={ menu:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/music_menu.mp3', battle:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/music_battle.mp3',
+    sfx_astra:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_astra.mp3', sfx_brahmastra:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_brahmastra.mp3', sfx_unit_clash:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_unit_clash.mp3',
     // card-play set (completes retirement of synth cardplay): mantra / heal / artifact
-    sfx_mantra:'assets/audio/sfx_mantra.mp3', sfx_heal:'assets/audio/sfx_heal.mp3', sfx_artifact:'assets/audio/sfx_artifact.mp3',
+    sfx_mantra:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_mantra.mp3', sfx_heal:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_heal.mp3', sfx_artifact:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_artifact.mp3',
     // event set (each replaces its synth counterpart)
-    sfx_venom_apply:'assets/audio/sfx_venom_apply.mp3', sfx_unit_destroy:'assets/audio/sfx_unit_destroy.mp3', sfx_leap:'assets/audio/sfx_leap.mp3',
-    sfx_shield_apply:'assets/audio/sfx_shield_apply.mp3', sfx_shield_break:'assets/audio/sfx_shield_break.mp3', sfx_chaos_surge:'assets/audio/sfx_chaos_surge.mp3',
+    sfx_venom_apply:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_venom_apply.mp3', sfx_unit_destroy:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_unit_destroy.mp3', sfx_leap:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_leap.mp3',
+    sfx_shield_apply:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_shield_apply.mp3', sfx_shield_break:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_shield_break.mp3', sfx_chaos_surge:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_chaos_surge.mp3',
     // power-change blips (−17 LUFS, the quietest tier — coalesced, ≤2 overlapping)
-    sfx_buff:'assets/audio/sfx_buff.mp3', sfx_debuff:'assets/audio/sfx_debuff.mp3',
+    sfx_buff:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_buff.mp3', sfx_debuff:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_debuff.mp3',
     // match-start conch + round-end gong (rounds 1&2 only; match end owns the stinger)
-    sfx_conch:'assets/audio/sfx_conch.mp3', sfx_round_end:'assets/audio/sfx_round_end.mp3',
+    sfx_conch:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_conch.mp3', sfx_round_end:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_round_end.mp3',
     // match-result stingers
-    sfx_victory:'assets/audio/sfx_victory.mp3', sfx_defeat:'assets/audio/sfx_defeat.mp3' };
+    sfx_victory:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_victory.mp3', sfx_defeat:'https://sangbaran-purr.github.io/divya-yuddha/assets/audio/sfx_defeat.mp3' };
   const buffers={}; let curSrc=null, curTG=null, curTrack=null, desired='menu', loading=null, loaded=false;
   let sfxOn = localStorage.getItem('dy_sfx')!=='0';
   let musicOn = localStorage.getItem('dy_music')!=='0';      // default ON (real music files now)
