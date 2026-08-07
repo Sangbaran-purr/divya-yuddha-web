@@ -35,6 +35,7 @@ window.DY_ADMIN_CONFIG = {
     dycoinSale: "0x89c758e200B49DC367b0e1f0674F722A20530e3D", // M-F2 Approve Buyers + M-F3 Registry gate (allowlistSigner = PROD_OWNER)
     vestingVault: "0x7c7da4FFA7E32018912c18AffE9902969e0a5972", // M-F3 Registry — VESTED column
     holderStaking: "0xE9A16394c6E78c3ea9B79e757a12C2A64D76C7bf", // M-F3 Registry — STAKED + REWARDS
+    dropDesk: "0x6EC80e9BE34038329291077E126906359e86916a", // M-F6-G3 — Drop Desk (coupon sign/publish/cancel/figures; owner=timelock, signer=PROD_OWNER)
   },
 
   // The block the contracts were deployed at — the mint-history scan starts here

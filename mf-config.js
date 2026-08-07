@@ -22,6 +22,7 @@ window.DY_MF_CONFIG = {
     holderStaking: "0xE9A16394c6E78c3ea9B79e757a12C2A64D76C7bf",
     roiRedemption: "0xEdB8D51a4887A46FDd2669DC5C1eAeb8917D1f32",
     dycoinSale: "0x89c758e200B49DC367b0e1f0674F722A20530e3D",
+    dropDesk: "0x6EC80e9BE34038329291077E126906359e86916a", // M-F6-G3 — Drop Desk (coupon redemption; owner=timelock, signer=PROD_OWNER)
     usdt: "0x28D92502Fcf4BeEC2d3d1d6F55F4AED9fd6408Ec", // Mock USDT (Amoy practice, 6-dec)
   },
 
