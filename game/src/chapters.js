@@ -61,8 +61,8 @@ const CHAPTERS = {
     realm:'mrityulok', playerFaction:'devas', opponentFaction:'asuras',
     mode:'LOCKED',
     scenario:{
-      p0Deck:['Yama','Surya Dev','Marut','Ashwini Kumars','Deva Soldier','Gandharva'],
-      p0Hand:['Yama','Marut','Ashwini Kumars','Surya Dev','Deva Soldier'],
+      p0Deck:['Yama','Chandra Dev','Marut','Ashwini Kumars','Deva Soldier','Gandharva'],
+      p0Hand:['Yama','Marut','Ashwini Kumars','Chandra Dev','Deva Soldier'],
       p1Deck:['Vibhishana','Kali Asura','Asura Berserker','Maricha','Narakasura','Tataka'],
       winTarget:1, handSize:5, mulligan:0
     },
@@ -72,7 +72,7 @@ const CHAPTERS = {
       { highlight:{card:'Yama'},           line:'The gate holds only if someone stands at it. Send the guard.', instruct:'Tap the glowing card: Yama — put a defender on the field.' },
       { highlight:{card:'Marut'},          line:'See their number rise? Power against power — the greater total holds the field.', instruct:'Tap the glowing card: Marut — add another unit to raise your total.' },
       { highlight:{card:'Ashwini Kumars'}, line:'Again. The wall is built one warrior at a time.', instruct:'Tap the glowing card: Ashwini Kumars — one more warrior on the wall.' },
-      { highlight:{card:'Surya Dev'},      line:'They yield the field. One more — make the count beyond dispute — then rest your hand.', instruct:'Tap the glowing card: Surya Dev — a strong unit to seal the lead.' },
+      { highlight:{card:'Chandra Dev'},      line:'They yield the field. One more — make the count beyond dispute — then rest your hand.', instruct:'Tap the glowing card: Chandra Dev — a strong unit to seal the lead.' },
       { highlight:{action:'pass'},         line:'Rest your hand. Strength held in reserve is still strength.', instruct:'Tap PASS ROUND — you are ahead; stop here and win the round.' },
     ],
     // panels: { id, speaker?, plate, ambience? } — plate/speaker VERBATIM from BOOK1_CUTSCENE_BIBLE §3; ambience is a STUB slot
@@ -96,8 +96,8 @@ const CHAPTERS = {
     realm:'mrityulok', playerFaction:'devas', opponentFaction:'asuras',
     mode:'LOCKED',
     scenario:{
-      p0Deck:['Deva Soldier','Surya Dev','Yama','Vayu','Kubera','Urvashi','Marut','Ashwini Kumars','Gandharva','Vishwakarma'],
-      p0Hand:['Deva Soldier','Surya Dev','Yama','Vayu','Kubera','Urvashi','Marut','Ashwini Kumars'],
+      p0Deck:['Deva Soldier','Chandra Dev','Yama','Vayu','Kubera','Urvashi','Marut','Ashwini Kumars','Gandharva','Vishwakarma'],
+      p0Hand:['Deva Soldier','Chandra Dev','Yama','Vayu','Kubera','Urvashi','Marut','Ashwini Kumars'],
       p1Deck:['Kumbhakarna','Ravana','Hiranyakashipu','Meghnad','Bana Asura','Vibhishana','Tataka','Maricha','Kali Asura','Asura Berserker'],
       winTarget:2, handSize:8, mulligan:0
     },
@@ -140,7 +140,7 @@ const CHAPTERS = {
     // this is what makes the shield lesson mechanically real; see the ch3 bonus). handSize 9 applies to BOTH (p1
     // draws 9 of 10); Vajra sits in p1's opening hand. BOOK1_DESIGN §3: "The Asuras unveil a true Astra."
     scenario:{
-      p0Deck:['Indra','Surya Dev','Yama','Vayu','Marut','Ashwini Kumars','Gandharva','Vajra','Sudarshana Chakra'],
+      p0Deck:['Indra','Chandra Dev','Yama','Vayu','Marut','Ashwini Kumars','Gandharva','Vajra','Sudarshana Chakra'],
       p1Deck:['Ravana','Bana Asura','Meghnad','Vajra','Narakasura','Kali Asura','Asura Berserker','Vibhishana','Shukracharya','Tamasa'],
       handSize:9, mulligan:0
     },
@@ -151,8 +151,8 @@ const CHAPTERS = {
     // Beats steer the winning DEFENSIVE line: play the champion, SHIELD it before the strike, develop small Units
     // (hold your other great Unit back so the blade finds no second mark), survive Vajra, then answer + deploy.
     guidance:[
-      { highlight:{card:'Surya Dev'},                    line:'Send your radiance first — the champion the blade will seek.', instruct:"Tap Surya Dev — he is your champion this battle. The enemy's blade will come for him." },
-      { highlight:{shield:'strongest'},                  line:'The blade seeks your champion. Shield first; strike after.', instruct:"Tap SHIELD, then tap Surya Dev. The shield will make the enemy's Vajra fizzle." },
+      { highlight:{card:'Chandra Dev'},                    line:'Send your radiance first — the champion the blade will seek.', instruct:"Tap Chandra Dev — he is your champion this battle. The enemy's blade will come for him." },
+      { highlight:{shield:'strongest'},                  line:'The blade seeks your champion. Shield first; strike after.', instruct:"Tap SHIELD, then tap Chandra Dev. The shield will make the enemy's Vajra fizzle." },
       { highlight:{card:'Marut'},                        line:'Hold your greater warriors in reserve — give the blade no second mark.', instruct:"Tap Marut — play small for now. Save your strong cards." },
       { highlight:{card:'Vajra', target:'largestEnemy'}, line:'The strike is spent. Now answer — Heaven’s weapons answer only when heaven is ready.', instruct:"Tap Vajra, then tap the enemy's biggest unit — destroy it." },
       { highlight:{auto:'bestOrPass'},                   line:'The sky is yours. Bring your host to bear.', instruct:"Play your best card, or tap PASS ROUND if you are ahead." },
@@ -192,14 +192,14 @@ const CHAPTERS = {
     // competent play; ch4 teaches Mantras and carries NO removal Astra, so it needs the Indra aura AND a de-fanged
     // opponent (Ravana / Kumbhakarna / Hiranyakashipu excluded) to be winnable. Both deviations reported to the owner.
     scenario:{
-      p0Deck:['Indra','Surya Dev','Yama','Vayu','Marut','Ashwini Kumars','Gandharva','Deva Soldier','Kubera','Urvashi','Gayatri Mantra','Pavamana'],
+      p0Deck:['Indra','Chandra Dev','Yama','Vayu','Marut','Ashwini Kumars','Gandharva','Deva Soldier','Kubera','Urvashi','Gayatri Mantra','Pavamana'],
       p1Deck:['Bana Asura','Meghnad','Narakasura','Pashupatastra','Kali Asura','Asura Berserker','Vibhishana','Tataka','Maricha','Kalanemi','Tamasa'],
       handSize:10, mulligan:3
     },
     mulliganLine:'Three of your ten may return to the deck. A wise hand is chosen twice.',
     opponentScript:[ {action:'play', cardName:'Bana Asura'}, {action:'play', cardName:'Meghnad'}, {action:'play', cardName:'Narakasura'}, {action:'play', cardName:'Pashupatastra'}, {handoff:'ai'} ],
     guidance:[
-      { highlight:{card:'Surya Dev'},   line:'The churning has begun. Build your line — the sea gives to the steady.', instruct:'Tap the glowing card: Surya Dev — start your line of units.' },
+      { highlight:{card:'Chandra Dev'},   line:'The churning has begun. Build your line — the sea gives to the steady.', instruct:'Tap the glowing card: Chandra Dev — start your line of units.' },
       { highlight:{card:'Yama'},        line:'Another. What the ocean raises, it can also take.', instruct:'Tap the glowing card: Yama — add another unit to the field.' },
       { highlight:{card:'Gayatri Mantra'}, holdForCard:true, line:'What the churning takes, the sacred word returns.', instruct:'You lost a warrior — tap Gayatri Mantra to raise them back from the discard.' },   // holdForCard: waits at this beat until a unit is in discard (the scripted Pashupatastra kill) so Gayatri is legal
       { highlight:{auto:'bestOrPass'},  line:'Now play the tide — spend when you lead, hold when you must.', instruct:'Tap the glowing card to play your best, or PASS ROUND when you lead.' },
@@ -232,8 +232,8 @@ const CHAPTERS = {
     // cleanse). p1 is a LIGHT Naga list (Vasuki / Kaliya / Ashvatara excluded) so the poison is a lesson, not a rout:
     // with these the player wins 12/12 AND the cleanse holds venom deaths to zero (bonus achievable). Reported.
     scenario:{
-      p0Deck:['Indra','Surya Dev','Yama','Vayu','Marut','Ashwini Kumars','Gandharva','Deva Soldier','Kubera','Urvashi','Gayatri Mantra','Pavamana'],
-      p0Hand:['Indra','Surya Dev','Yama','Vayu','Marut','Ashwini Kumars','Gandharva','Deva Soldier','Kubera','Pavamana'],
+      p0Deck:['Indra','Chandra Dev','Yama','Vayu','Marut','Ashwini Kumars','Gandharva','Deva Soldier','Kubera','Urvashi','Gayatri Mantra','Pavamana'],
+      p0Hand:['Indra','Chandra Dev','Yama','Vayu','Marut','Ashwini Kumars','Gandharva','Deva Soldier','Kubera','Pavamana'],
       p1Deck:['Naga Sadhu','Nagastra','Naga Archer','Naga Warrior','Naga Hatchling','Astika','Ulupi','Naga Warrior','Naga Hatchling','Naga Enchantress','Astika','Naga Enchantress'],
       handSize:10, mulligan:3
     },
@@ -244,7 +244,7 @@ const CHAPTERS = {
     // (reported): the bonus reflects power-pressure, earned by cleansing, not a routine unit-death gate.
     opponentScript:[ {action:'play', cardName:'Naga Sadhu'}, {action:'play', cardName:'Nagastra'}, {action:'play', cardName:'Naga Archer'}, {handoff:'ai'} ],
     guidance:[
-      { highlight:{card:'Surya Dev'},  line:'They open with poison, not steel. Stand your line and watch the marks.', instruct:'Tap the glowing card: Surya Dev — hold your line against the poison.' },
+      { highlight:{card:'Chandra Dev'},  line:'They open with poison, not steel. Stand your line and watch the marks.', instruct:'Tap the glowing card: Chandra Dev — hold your line against the poison.' },
       { highlight:{concept:true},      line:'Poison does not duel. It waits.', instruct:'The green marks are Venom — poisoned warriors lose power when the round ends.' },   // T60b R4: concept beat — teaches the Venom marks, no card glow
       { highlight:{card:'Pavamana'},   line:'What the poison stains, the sacred breath washes.', instruct:'Tap Pavamana — it cleanses the Venom from your warriors.' },
       { highlight:{auto:'bestOrPass'}, line:'A short battle starves a slow poison.', instruct:'If you are ahead, tap PASS ROUND — a quick end gives the poison no time to feed.' },
@@ -279,7 +279,7 @@ const CHAPTERS = {
     // (the "Divine Architect" — unmakes the enemy Artifact, the diegetic answer to the stolen moon-blade). p1 = de-fanged
     // Asura tier, NO Kumbhakarna/Ravana (either makes the go-wide Deva board un-winnable) → the honest match is ~9-12/12.
     scenario:{
-      p0Deck:['Indra','Surya Dev','Yama','Vayu','Vishwakarma','Brihaspati','Marut','Ashwini Kumars','Kubera','Amrita Kalasha','Vajra','Pavamana'],
+      p0Deck:['Indra','Chandra Dev','Yama','Vayu','Vishwakarma','Brihaspati','Marut','Ashwini Kumars','Kubera','Amrita Kalasha','Vajra','Pavamana'],
       p1Deck:['Bana Asura','Meghnad','Narakasura','Kali Asura','Asura Berserker','Vibhishana','Tataka','Maricha','Kalanemi','Kali Asura','Pashupatastra','Tamasa'],
       handSize:10, mulligan:3
     },
@@ -314,7 +314,7 @@ const CHAPTERS = {
     // pushes it to 0% — so they are EXCLUDED (reported; Mahabali works across the handoff, he is just too strong). p1Hand
     // GUARANTEES Chandrahas + the two scripted opener Units. Measured ≈6.6/12 (49–59% over 4×96-seed samples) — in band.
     scenario:{
-      p0Deck:['Indra','Surya Dev','Yama','Vayu','Vishwakarma','Brihaspati','Marut','Ashwini Kumars','Kubera','Amrita Kalasha','Vajra','Pavamana'],
+      p0Deck:['Indra','Chandra Dev','Yama','Vayu','Vishwakarma','Brihaspati','Marut','Ashwini Kumars','Kubera','Amrita Kalasha','Vajra','Pavamana'],
       p1Deck:['Kumbhakarna','Bana Asura','Chandrahas','Meghnad','Narakasura','Kalanemi','Maricha','Kali Asura','Pashupatastra','Tamasa','Asura Berserker','Vibhishana'],
       p1Hand:['Kumbhakarna','Bana Asura','Chandrahas','Meghnad','Narakasura','Kalanemi','Pashupatastra','Tamasa','Kali Asura','Maricha'],
       handSize:10, mulligan:3

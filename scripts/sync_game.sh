@@ -63,17 +63,19 @@ fi
 
 # VFX cross-link (S8 WORD 1): the sheet-URL builders anchor on 'assets/vfx/ — rewrite the base to the free game's
 # live Pages origin so the 285MB sheet set streams same-origin instead of being copied. Same guard style as the
-# video: assert the EXACT match count and fail loudly if the pattern drifts. There are THREE builders (mvURL /
-# sheetURL / stillURL), so the count is 3 (the game legitimately has three sheet-URL builders; not one like video).
+# video: assert the EXACT match count and fail loudly if the pattern drifts. There are FIVE refs (3 sheet builders
+# mvURL / sheetURL / stillURL + 2 reduced-motion layer PNGs 'assets/vfx/layers/ — ramanaam_wash, kishkindhaoath_ring;
+# the sed base-rewrite cross-links all five to the free game's live Pages, so the count is 5. (Recalibrated 3->5 after
+# the guard correctly fired on the Rama Naam + Kishkindha Oath reduced-motion additions — both verified 200 on Pages.)
 VFX_BEFORE="$(grep -o "'assets/vfx/" "$DEST/index.html" | wc -l | tr -d ' ')"
-if [ "$VFX_BEFORE" != "3" ]; then
-  echo "error: expected exactly three 'assets/vfx/ builders (mvURL/sheetURL/stillURL), found $VFX_BEFORE (game changed its VFX wiring)" >&2
+if [ "$VFX_BEFORE" != "5" ]; then
+  echo "error: expected exactly five 'assets/vfx/ refs (3 sheet builders + 2 reduced-motion layer PNGs), found $VFX_BEFORE (game changed its VFX wiring)" >&2
   exit 1
 fi
 sed "s#'assets/vfx/#'$VFX_URL#g" "$DEST/index.html" > "$DEST/index.html.v"
 mv "$DEST/index.html.v" "$DEST/index.html"
-if [ "$(grep -o "'$VFX_URL" "$DEST/index.html" | wc -l | tr -d ' ')" != "3" ]; then
-  echo "error: VFX cross-link rewrite did not produce 3 absolute builders" >&2
+if [ "$(grep -o "'$VFX_URL" "$DEST/index.html" | wc -l | tr -d ' ')" != "5" ]; then
+  echo "error: VFX cross-link rewrite did not produce 5 absolute refs" >&2
   exit 1
 fi
 if [ "$(grep -c "'assets/vfx/" "$DEST/index.html")" != "0" ]; then
@@ -221,7 +223,7 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 
 ## Excluded / transformed
 - assets/video/ (~47MB) — NOT copied. The VIDEO_BASE web branch is rewritten to the free game's live same-origin URL ($VIDEO_URL); the intro streams from there and fails open to the landing if unavailable (the game's own law).
-- assets/vfx/ (~285MB, S8 WORD 1) — NOT copied. The three sheet-URL builders (mvURL/sheetURL/stillURL) are rewritten from 'assets/vfx/ to the free game's live Pages URL ($VFX_URL); VFX sheets stream same-origin. Guarded: the sync fails if the builder count is not exactly 3.
+- assets/vfx/ (~285MB, S8 WORD 1) — NOT copied. The FIVE 'assets/vfx/ refs (3 sheet-URL builders mvURL/sheetURL/stillURL + 2 reduced-motion layer PNGs, ramanaam_wash + kishkindhaoath_ring) are rewritten from 'assets/vfx/ to the free game's live Pages URL ($VFX_URL); VFX sheets + layers stream same-origin. Guarded: the sync fails if the ref count is not exactly 5.
 - assets/cards (~73MB) + assets/img (~80MB) + assets/audio (~2MB) + assets/thumbs (~4MB) + assets/board (~12MB) + assets/story (~13MB) — NOT copied (M-F4e). ~184MB of asset copies pushed the Pages artifact to 262MB and timed the deploy out at ~11min. Each base path (assets/<dir>/) is rewritten — every context, quoted or backtick-templated — to the free game's live Pages origin ($ASSET_URL<dir>/) so the assets stream same-origin. Guarded per dir: at least one relative ref must exist and EVERY one must become absolute; a double-prefix aborts. Gameplay is byte-faithful — only asset origins change.
 - .DS_Store — not in the commit; never copied.
 
