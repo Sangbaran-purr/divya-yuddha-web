@@ -19,7 +19,7 @@ window.DY_CARDS = {
 
   // cardId -> card. (Vanara launch run seed.)
   byId: {
-    1: { name: "Hanuman", epithet: "Devotion Incarnate", frame: "Vanaras_Hero_Hanuman_P9_rLegendary.png" },
+    1: { name: "Bali", epithet: "The Unrivalled King", frame: "Vanaras_Hero_Bali_P9_rLegendary.png" },
     2: { name: "Sugriva", epithet: "King of the Vanaras", frame: "Vanaras_Hero_Sugriva_P6_rEpic.png" },
     3: { name: "Angad", epithet: "The Unyielding Messenger", frame: "Vanaras_Hero_Angad_P7_rEpic.png" },
     4: { name: "Nala", epithet: "The Bridge Builder", frame: "Vanaras_Unit_Nala_P5_rEpic.png" },
