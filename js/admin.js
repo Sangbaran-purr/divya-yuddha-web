@@ -191,11 +191,29 @@ window.DYAdmin = (function () {
     // M-F2 Approve Buyers — INDEPENDENT gate (connected == sale.allowlistSigner), evaluated even if the NFT
     // collections are NOT CONFIGURED (the owner may approve buyers without touching the drop panels).
     refreshApprovePanel();
+
+    // S-ADMIN-FIX1 — the money-stack panels (Coin Drops, Drop Desk, Grant Rewards) are governed by the connected
+    // OWNER wallet on the right chain, NOT by the G12 NFT-address config (which only governs the Access/Wave drop
+    // panels). Before this fix, drop/grant had NO enable path at all (only ever set false at line ~279) and coin was
+    // reachable only inside the isConfigured() success branch — so the NOT-CONFIGURED short-circuit below left every
+    // money button dead under a green "connected as owner" strip. The contract still enforces real authority on send.
+    var isOwnerWallet = (s.address || "").toLowerCase() === OWNER_WALLET.toLowerCase();
+    setPanelEnabled("drop", isOwnerWallet);
+    setPanelEnabled("grant", isOwnerWallet);
+    if (isOwnerWallet && cfg().dycoin) {
+      setPanelEnabled("coin", true);
+      withEthers().then(loadCoinMeta).catch(function () {});
+    } else {
+      setPanelEnabled("coin", false);
+      coinMeta = null;
+    }
+
     if (!isConfigured(c)) {
-      banner.className = "banner warn";
-      banner.innerHTML = "<strong>NOT CONFIGURED.</strong> No contract addresses set. " +
-        "Open Configuration below and paste the G12 AccessNFT + WaveCardNFT addresses. " +
-        "All controls stay disabled until then.";
+      // Only the Access/Wave NFT drop panels need the G12 addresses; the money-stack panels above are already gated.
+      banner.className = "banner info";
+      banner.innerHTML = "<strong>Access/Wave drops:</strong> set the G12 AccessNFT + WaveCardNFT addresses in " +
+        "Configuration to enable those two panels. Your money-stack panels (Approve, Registry, Coin, Drop Desk, " +
+        "Grant) are governed by the connected wallet shown in the status strip above.";
       return;
     }
 
@@ -225,21 +243,7 @@ window.DYAdmin = (function () {
         renderGateTruth(me, accMine, wavMine);
         setPanelEnabled("access", accMine);
         setPanelEnabled("wave", wavMine);
-        // S9 COIN DROPS — same owner gate (the recognized admin owns a collection) + a DYC address configured.
-        var coinAdmin = accMine || wavMine;
-        var bal = $("coin-balance");
-        if (coinAdmin && cfg().dycoin) {
-          setPanelEnabled("coin", true);
-          loadCoinMeta();
-        } else {
-          setPanelEnabled("coin", false);
-          coinMeta = null;
-          if (bal) {
-            bal.innerHTML = coinAdmin
-              ? "<span class='bad'>DYC address NOT CONFIGURED</span> — set it in Configuration to enable coin drops."
-              : "";
-          }
-        }
+        // Coin Drops is gated by the owner-wallet check above (S-ADMIN-FIX1), not NFT ownership — leave it as set.
         if ((accMine || wavMine) && !histLoaded) loadHistory();
       })
       .catch(function () {
