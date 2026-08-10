@@ -115,19 +115,44 @@ window.DYAdmin = (function () {
   // + jitter (~500ms, ~1200ms, ~2500ms → 4 attempts total). A NON-rate-limit error (archive/range/pruned) is thrown
   // immediately (no retry) so the caller can fail over or surface the archive message. Exhausted retries throw the last
   // rate-limit error → the caller's plain-words "busy" message (never the raw "server response 500").
-  function withRetry(fn) {
-    var delays = [500, 1200, 2500];
+  function withRetry(fn, onRetry) {
+    // S-LEDGER-FIX-3: TRIMMED to 2 attempts (1 short retry). ethers' now-capped internal throttle (tamedProvider →
+    // maxAttempts 2) handles the fast 429 retries; a fat outer budget compounds past the 75s scan deadline (S-LEDGER-FIX-3).
+    var delays = [400];
     var i = 0;
     function go() {
       return fn().catch(function (e) {
         if (i < delays.length && isRateLimited(e)) {
           var base = delays[i++];
+          if (onRetry) { try { onRetry(); } catch (x) {} } // progress voice: "chunk N/M, retrying"
           return sleep(base + Math.floor(Math.random() * base * 0.3)).then(go); // + up to 30% jitter
         }
         throw e;
       });
     }
     return go();
+  }
+  var SCAN_DEADLINE_MS = 75000; // S-LEDGER-FIX-3: hard cap on the WHOLE history scan → busy message; nothing on the road runs unbounded.
+  // S-LEDGER-FIX-3 — a JsonRpcProvider whose transport is TAMED: 12s per-request timeout (ethers' default is 300s) and the
+  // internal 429 throttle capped at 2 attempts (ethers' default is 12, exponential-backoff to the 300s cap — the root cause
+  // of the >5-min freeze, S-LEDGER-FIX-3 STEP-0). So a single history request can never grind past ~12s or silently retry 12×.
+  function tamedProvider(url) {
+    var req = new ethersRef.FetchRequest(url);
+    req.timeout = 12000;
+    req.setThrottleParams({ maxAttempts: 2 });
+    return new ethersRef.JsonRpcProvider(req, 80002, { staticNetwork: true });
+  }
+  // S-LEDGER-FIX-3 — race a scan promise against a wall-clock deadline. On expiry, reject with a __deadline error (routed to
+  // the busy message). The scan's own per-chunk `Date.now() > deadlineAt` guard stops issuing further chunks, so no orphaned
+  // requests keep firing after expiry — at most the one in-flight request finishes (bounded by the 12s tamed timeout). A late
+  // scan rejection after the deadline won is swallowed (no unhandled rejection).
+  function raceDeadline(promise, deadlineAt) {
+    var timer;
+    var dl = new Promise(function (_res, rej) {
+      timer = setTimeout(function () { var e = new Error("scan deadline"); e.__deadline = true; rej(e); }, Math.max(0, deadlineAt - Date.now()));
+    });
+    promise.catch(function () {});
+    return Promise.race([promise.then(function (v) { clearTimeout(timer); return v; }, function (e) { clearTimeout(timer); throw e; }), dl]);
   }
   function txUrl(hash) {
     return PLAYER.chain.blockExplorerUrls[0] + "/tx/" + hash;
@@ -192,9 +217,10 @@ window.DYAdmin = (function () {
         return Promise.reject(e);
       }
       var url = cands[i++];
-      // static network (Amoy 80002) — skip ethers' chainId-detection round-trip, which can itself flake into a
-      // "could not coalesce error" on a cold JsonRpcProvider and spuriously trip the archive message (harness-observed).
-      var p = new ethersRef.JsonRpcProvider(url, 80002, { staticNetwork: true });
+      // S-LEDGER-FIX-3: TAMED transport (12s timeout, throttle maxAttempts 2) + static network (Amoy 80002, skips ethers'
+      // chainId-detection round-trip that can flake into "could not coalesce error"). Covers the probe AND every chunk (the
+      // scan rides this same provider), on both panels.
+      var p = tamedProvider(url);
       var probe = { fromBlock: probeFrom, toBlock: probeTo };
       if (probeAddress) probe.address = probeAddress;
       // S-LEDGER-FIX-2: a rate-limited probe RETRIES this same endpoint (withRetry) — drpc is busy, not incapable. If it is
@@ -909,35 +935,43 @@ window.DYAdmin = (function () {
       status.textContent = "Not configured.";
       return;
     }
-    status.textContent = "Scanning full history (archive RPC)…";
+    // S-LEDGER-FIX-3: bounded (75s deadline) + voiced (live chunk counter) + settled guard, matching the ledger panel.
+    var settled = false;
+    function progress(msg) { if (!settled) status.textContent = msg; }
+    function finishHtml(html) { settled = true; status.innerHTML = html; }
+    function finishText(msg) { settled = true; status.textContent = msg; }
+    progress("Scanning full history (archive RPC)…");
     body.innerHTML = "";
-    // S-LEDGER-FIX: run a chunked mint scan over a READ-ONLY provider, then attach block times → resolve {rows,mode,fellBack}.
+    var deadlineAt = Date.now() + SCAN_DEADLINE_MS;
+    // S-LEDGER-FIX: run a chunked mint scan over a READ-ONLY provider, then attach block times → resolve rows.
     function scanOn(ethers, provider, from) {
       var access = new ethers.Contract(c.accessNFT, ACCESS_ABI, provider);
       var wave = new ethers.Contract(c.waveCardNFT, WAVE_ABI, provider);
       return provider.getBlockNumber().then(function (latest) {
         var f = from != null ? from : Math.max(0, latest - RECENT_WINDOW);
-        return scanChunked(ethers, access, wave, f, latest).then(function (evs) {
+        return scanChunked(ethers, access, wave, f, latest, function (label) { progress("Scanning history… " + label); }, deadlineAt).then(function (evs) {
           return attachTimes(provider, evs);
         });
       });
     }
-    withEthers()
+    var scan = withEthers()
       .then(function (ethers) {
-        // S-LEDGER-FIX: deep history rides the shared ARCHIVE-capable provider (drpc-first) — NOT the Alchemy readRpcUrl
+        // S-LEDGER-FIX: deep history rides the shared ARCHIVE-capable provider (drpc-first, TAMED) — NOT the Alchemy readRpcUrl
         // (10-block getLogs cap) and NOT the wallet's pruned node.
         return historyProvider(c.accessNFT).then(function (h) {
           return scanOn(ethers, h.provider, c.deployBlock || 0).then(function (rows) {
             return { rows: rows, mode: "archive", fellBack: h.fellBack };
           });
         }).catch(function (e) {
+          if (e && e.__deadline) throw e; // S-LEDGER-FIX-3: deadline → busy message, do NOT drop to the recent window
           if (!isArchiveError(e)) throw e; // a genuine (non-archive) error → surface it below
           // LAST RESORT — every history endpoint failed: recent window on the wallet node (dodges archive gating).
           return scanOn(ethers, readProvider(), null).then(function (rows) {
             return { rows: rows, mode: "recent", fellBack: false };
           });
         });
-      })
+      });
+    raceDeadline(scan, deadlineAt)
       .then(function (res) {
         histLoaded = true;
         var rows = res.rows;
@@ -946,43 +980,48 @@ window.DYAdmin = (function () {
         });
         renderHistory(rows);
         if (res.mode === "archive") {
-          status.innerHTML =
+          finishHtml(
             (rows.length ? rows.length + " mint event(s) (full history)." : "No mints yet.") +
-            (res.fellBack ? " <span style='color:var(--ember)'>Configured Read RPC URL couldn't serve deep history — used drpc.</span>" : "");
+            (res.fellBack ? " <span style='color:var(--ember)'>Configured Read RPC URL couldn't serve deep history — used drpc.</span>" : "")
+          );
         } else {
-          status.innerHTML =
+          finishHtml(
             (rows.length ? rows.length + " recent mint(s). " : "No mints in the last " + RECENT_WINDOW + " blocks. ") +
-            "<span style='color:var(--ember)'>Recent only — no archive RPC reachable; set Read RPC URL in Configuration for full history.</span>";
+            "<span style='color:var(--ember)'>Recent only — no archive RPC reachable; set Read RPC URL in Configuration for full history.</span>"
+          );
         }
       })
       .catch(function (e) {
         histLoaded = false;
-        // S-LEDGER-FIX-2: rate-limit-class FIRST (before isArchiveError — the "too many" overlap; order prevents shadowing).
-        if (isRateLimited(e)) {
-          status.innerHTML =
-            "<span style='color:var(--ember)'>The public archive RPC is busy — retry in a minute, or set a dedicated Read RPC URL in Configuration.</span>";
+        // S-LEDGER-FIX-3: deadline + rate-limit FIRST (busy). Then archive (the "too many" overlap → order prevents shadowing). Else generic.
+        if ((e && e.__deadline) || isRateLimited(e)) {
+          finishHtml("<span style='color:var(--ember)'>The public archive RPC is busy — retry in a minute, or set a dedicated Read RPC URL in Configuration.</span>");
         } else if (isArchiveError(e)) {
-          status.innerHTML =
-            "<span style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</span>";
+          finishHtml("<span style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</span>");
         } else {
-          status.textContent = "Could not read events (" + ((e && e.shortMessage) || "RPC error") + ").";
+          finishText("Could not read events (" + ((e && e.shortMessage) || "RPC error") + ").");
         }
       });
   }
 
-  function scanChunked(ethers, access, wave, from, latest) {
+  function scanChunked(ethers, access, wave, from, latest, onProgress, deadlineAt) {
     var out = [];
     var start = from;
+    var total = Math.max(1, Math.ceil((latest - from + 1) / LOG_CHUNK)), idx = 0; // S-LEDGER-FIX-3: for the progress voice
     function step() {
       if (start > latest) return Promise.resolve(out);
+      if (deadlineAt && Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; return Promise.reject(de); } // S-LEDGER-FIX-3: stop issuing chunks past the deadline
       var end = Math.min(start + LOG_CHUNK - 1, latest);
+      idx++;
+      var label = "chunk " + idx + "/" + total;
+      if (onProgress) onProgress(label);
       // S-LEDGER-FIX-2: retry-with-backoff on drpc's browser-origin rate-limits (the 120ms throttle below already spaces chunks).
       return withRetry(function () {
         return Promise.all([
           access.queryFilter(access.filters.Transfer(ethers.ZeroAddress, null), start, end),
           wave.queryFilter(wave.filters.CardMinted(), start, end),
         ]);
-      }).then(function (res) {
+      }, function () { if (onProgress) onProgress(label + ", retrying"); }).then(function (res) {
         res[0].forEach(function (ev) {
           out.push({ block: ev.blockNumber, logIndex: ev.index, type: "Access", to: ev.args.to, cardId: null, hash: ev.transactionHash });
         });
@@ -1802,25 +1841,36 @@ window.DYAdmin = (function () {
     var wallet = parseAddr(($("grant-wallet").value || "").trim());
     if (!c.holderStaking) { out.innerHTML = "<div class='q'>Set the HolderStaking address first.</div>"; return; }
     if (!wallet) { out.innerHTML = "<div class='q'>Enter a user wallet above to see its grant ledger + accrual.</div>"; return; }
-    out.innerHTML = "<div class='q'>Reading chain…</div>";
-    withEthers().then(function () {
+    // S-LEDGER-FIX-3: bounded + voiced. A 75s deadline caps the WHOLE scan; a live progress line replaces "Reading chain…";
+    // a `settled` guard means a late background settle (after the deadline won) can never overwrite the terminal state.
+    var settled = false;
+    var busy = "<div class='q' style='color:var(--ember)'>The public archive RPC is busy — retry in a minute, or set a dedicated Read RPC URL in Configuration.</div>";
+    function progress(msg) { if (!settled) out.innerHTML = "<div class='q'>" + escHtml(msg) + "</div>"; }
+    function finish(html) { settled = true; out.innerHTML = html; }
+    progress("Reading chain…");
+    var deadlineAt = Date.now() + SCAN_DEADLINE_MS;
+    var scan = withEthers().then(function () {
       return new ethersRef.BrowserProvider(window.ethereum).getSigner().then(function (signer) {
         return signer.getAddress().then(function (adminAddr) {
-          // S-LEDGER-FIX: the deep-history RoiCredited scan rides an ARCHIVE-capable getLogs endpoint (drpc-first),
-          // NOT the wallet's pruned node — the wallet node returns a pruned/range error ethers wraps as
-          // "could not coalesce error" (S-LEDGER-FIX STEP-0). Current-state accrual reads stay on the wallet.
+          // S-LEDGER-FIX: the deep-history RoiCredited scan rides an ARCHIVE-capable getLogs endpoint (drpc-first, TAMED),
+          // NOT the wallet's pruned node. Current-state accrual reads stay on the wallet.
+          progress("Reading chain… selecting archive RPC");
           return historyProvider(c.holderStaking).then(function (h) {
             var hs = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, h.provider);
             return h.provider.getBlockNumber().then(function (latest) {
               var start = c.deployBlock || 0;
+              var total = Math.max(1, Math.ceil((latest - start + 1) / LOG_CHUNK));
               var filter = hs.filters.RoiCredited(wallet, null, adminAddr);
-              var granted = 0n, jobs = Promise.resolve();
+              var granted = 0n, jobs = Promise.resolve(), idx = 0;
               for (var from = start; from <= latest; from += LOG_CHUNK) {
                 (function (a, b) {
                   jobs = jobs.then(function () {
-                    // S-LEDGER-FIX-2: retry-with-backoff on drpc's browser-origin rate-limits + a 120ms inter-chunk throttle
-                    // (scanChunked precedent) — the deep scan no longer hammers the throttled free endpoint bare.
-                    return withRetry(function () { return hs.queryFilter(filter, a, b); }).then(function (evs) {
+                    if (Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; throw de; } // stop issuing chunks past the deadline
+                    idx++;
+                    var label = "Reading chain… chunk " + idx + "/" + total;
+                    progress(label);
+                    // S-LEDGER-FIX-2/3: retry-with-backoff (trimmed) + 120ms inter-chunk throttle; onRetry voices "…, retrying".
+                    return withRetry(function () { return hs.queryFilter(filter, a, b); }, function () { progress(label + ", retrying"); }).then(function (evs) {
                       evs.forEach(function (ev) { granted += ev.args.amount; });
                       return sleep(120);
                     });
@@ -1830,32 +1880,32 @@ window.DYAdmin = (function () {
               return jobs.then(function () {
                 var hsRead = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, readProvider()); // eth_calls on the wallet (current-state)
                 return Promise.all([hsRead.pendingRoi(wallet), hsRead.roi(wallet)]).then(function (r) {
-                  var f = function (x) { return ethersRef.formatUnits(x, 18); };
-                  out.innerHTML =
-                    "<table class='grid'><tbody>"
-                    + "<tr><th>Granted so far (this admin)</th><td>" + escHtml(f(granted)) + " DYC</td></tr>"
-                    + "<tr><th>Chain accrual — pending</th><td>" + escHtml(f(r[0])) + " DYC</td></tr>"
-                    + "<tr><th>Chain accrual — ROI column</th><td>" + escHtml(f(r[1])) + " DYC</td></tr>"
-                    + "</tbody></table>"
-                    + (h.fellBack ? "<div class='q' style='color:var(--ember)'>Configured Read RPC URL couldn't serve deep history — used drpc.</div>" : "")
-                    + "<div class='mono' style='font-size:.72rem;margin-top:.4rem;color:var(--gold-aged)'>The 2X lifetime cap is a POLICY guide, not enforced on-chain here — check granted-so-far against the wallet's staked principal before granting.</div>";
+                  return { granted: granted, r: r, fellBack: h.fellBack };
                 });
               });
             });
           });
         });
       });
+    });
+    raceDeadline(scan, deadlineAt).then(function (res) {
+      var f = function (x) { return ethersRef.formatUnits(x, 18); };
+      finish(
+        "<table class='grid'><tbody>"
+        + "<tr><th>Granted so far (this admin)</th><td>" + escHtml(f(res.granted)) + " DYC</td></tr>"
+        + "<tr><th>Chain accrual — pending</th><td>" + escHtml(f(res.r[0])) + " DYC</td></tr>"
+        + "<tr><th>Chain accrual — ROI column</th><td>" + escHtml(f(res.r[1])) + " DYC</td></tr>"
+        + "</tbody></table>"
+        + (res.fellBack ? "<div class='q' style='color:var(--ember)'>Configured Read RPC URL couldn't serve deep history — used drpc.</div>" : "")
+        + "<div class='mono' style='font-size:.72rem;margin-top:.4rem;color:var(--gold-aged)'>The 2X lifetime cap is a POLICY guide, not enforced on-chain here — check granted-so-far against the wallet's staked principal before granting.</div>"
+      );
     }).catch(function (e) {
-      // S-LEDGER-FIX-2: rate-limit-class FIRST (drpc busy → the raw "server response 500" must never show). It is checked
-      // BEFORE isArchiveError because a "429 too many requests" also matches isArchiveError's bare "too many" — order, not
-      // exclusivity, keeps them from shadowing. Then S-LEDGER-FIX: archive-class speaks plainly (never the raw coalesce text).
-      if (isRateLimited(e)) {
-        out.innerHTML = "<div class='q' style='color:var(--ember)'>The public archive RPC is busy — retry in a minute, or set a dedicated Read RPC URL in Configuration.</div>";
-      } else if (isArchiveError(e)) {
-        out.innerHTML = "<div class='q' style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</div>";
-      } else {
-        out.innerHTML = "<div class='q'>Couldn't read the ledger: " + escHtml(decodeErr(e)) + "</div>";
-      }
+      // S-LEDGER-FIX-3 catch-order: deadline-expiry + rate-limit → the busy message (the raw "server response 500" must never
+      // show); then S-LEDGER-FIX-2/1: archive → plain archive message (checked after rate-limit because a "429 too many
+      // requests" also matches isArchiveError's bare "too many" — order, not exclusivity, prevents shadowing); else generic.
+      if ((e && e.__deadline) || isRateLimited(e)) { finish(busy); }
+      else if (isArchiveError(e)) { finish("<div class='q' style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</div>"); }
+      else { finish("<div class='q'>Couldn't read the ledger: " + escHtml(decodeErr(e)) + "</div>"); }
     });
   }
 
