@@ -163,10 +163,10 @@ window.DYDash = (function () {
 
   // ── S-CLAIM-2B (owner ruling 2026-08-07): self-claim UI OFF; rewards are admin-granted on request. One-flip
   //    restore (set CLAIM_UI_ON = true to bring the Claim button back — the Deva-hero-entry pattern; no deletion).
-  //    The rewards FIGURE + history keep rendering regardless. Contacts ship as visible PLACEHOLDERS — the owner
-  //    fills the real Discord link + support email before go-live (never invent real-looking contacts).
+  //    The rewards FIGURE + history keep rendering regardless. Support contact is the live email; the community/social
+  //    contact is DEFERRED until an invite exists (S-CONTACTS-1, owner-ruled) — no public page points at it until then.
   var CLAIM_UI_ON = false;
-  var CLAIM_CONTACTS = { discord: "Discord (link coming)", email: "support@ (address coming)" };
+  var CLAIM_CONTACTS = { email: "divyayuddha@gmail.com" };
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
@@ -413,8 +413,7 @@ window.DYDash = (function () {
       // S-CLAIM-2B: self-claim button only when CLAIM_UI_ON; otherwise the two ruled policy lines in its place.
       (CLAIM_UI_ON
         ? "<div class='card-actions'><button class='btn-g btn-purple btn-block' id='act-rclaim'" + (claimable > 0n ? "" : " disabled") + ">Claim</button></div>"
-        : "<div class='note' style='margin-top:10px;line-height:1.5'>Rewards are credited by DY Animation on request — reach us on " +
-          esc(CLAIM_CONTACTS.discord) + " or by " + esc(CLAIM_CONTACTS.email) + ".<br>Claims are processed in multiples of 1,000 DYC.</div>") +
+        : "<div class='note' style='margin-top:10px;line-height:1.5'>Rewards are credited by DY Animation on request — reach us by email at <a href='mailto:" + CLAIM_CONTACTS.email + "'>" + esc(CLAIM_CONTACTS.email) + "</a>.<br>Claims are processed in multiples of 1,000 DYC.</div>") +
       (hasDesk
         ? "<button class='btn-g btn-block' id='act-cashout' style='margin-top:10px'" + (roiCol > 0n && deskFunded ? "" : " disabled") + ">Cash Out (USDT)<br><span style='font-size:.8rem;opacity:.85'>" +
           fmt(roiCol) + " DYC → " + (data.cashoutUsdt != null ? fmt(data.cashoutUsdt, 6) : "—") + " USDT</span></button>" +
@@ -1176,7 +1175,7 @@ window.DYDash = (function () {
     // sidebar soft links
     document.querySelectorAll("[data-soon]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Coming soon."); }; });
     document.querySelectorAll("[data-referrals]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Referrals live on the separate rewards platform."); }; });
-    document.querySelectorAll("[data-help]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Support: open a ticket in Discord."); }; });
+    document.querySelectorAll("[data-help]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Support: email divyayuddha@gmail.com"); }; });
     W.onChange(function () { refresh(); });
     W.init();
     refresh();
