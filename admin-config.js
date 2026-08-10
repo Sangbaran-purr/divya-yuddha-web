@@ -41,7 +41,7 @@ window.DY_ADMIN_CONFIG = {
   // The block the contracts were deployed at — the mint-history scan starts here
   // (0 falls back to a full chunked scan). Set to the G12 deploy block to keep
   // the getLogs range tiny.
-  deployBlock: 0,
+  deployBlock: 44185626, // S-LEDGER-FIX: the M-G1 Amoy stack deploy block — bounds the ledger/history getLogs scan to ~38 chunks (was 0 = full-chain scan)
 
   // Archive-capable Amoy RPC used ONLY for the Mint-History getLogs read (never a
   // signing path — all writes stay on the wallet). Public free RPCs reject

@@ -42,6 +42,12 @@ window.DYAdmin = (function () {
   var WAIT_TIMEOUT_MS = 75000; // bound tx.wait — a never-mined/dropped tx must NEVER sit PENDING (S5a-FIX-2)
   var FEE_HEADROOM = 2n; // 2x headroom over the live base+priority fee signal (S5a-FIX-2); wallet override stays possible
   var RECENT_WINDOW = 500; // recent-only history fallback span (no readRpcUrl) — last N blocks, dodges archive gating (S5a-FIX-3)
+  // S-LEDGER-FIX — shared archive-capable getLogs endpoints (drpc FIRST, publicnode next). The wallet node PRUNES deep
+  // history and the domain-locked readRpcUrl (Alchemy) caps eth_getLogs at 10 blocks; drpc is proven archive-capable at
+  // the deploy block (S-LEDGER-FIX STEP-0). Alchemy (10-blk cap) + thirdweb (1000-blk cap < LOG_CHUNK) are EXCLUDED from
+  // getLogs duty. NOTE: admin.js reads DY_ADMIN_CONFIG (admin-config.js), which does NOT carry mf-config's
+  // readRpcUrlFallbacks — so the documented drpc-first list is mirrored here to keep admin self-contained.
+  var HISTORY_RPCS = ["https://polygon-amoy.drpc.org", "https://polygon-amoy-bor-rpc.publicnode.com"];
 
   var owners = { access: null, wave: null }; // last-read on-chain owners
   var histLoaded = false;
@@ -129,6 +135,42 @@ window.DYAdmin = (function () {
   }
   function readProvider() {
     return new ethersRef.BrowserProvider(window.ethereum);
+  }
+
+  // S-LEDGER-FIX — pick an ARCHIVE-CAPABLE getLogs provider for deep-history reads (ledger + drop-history both ride
+  // this). Candidate order: an owner-set Read RPC URL FIRST (honored ONLY if a deep-history probe at the deploy block
+  // succeeds), then HISTORY_RPCS (drpc archive-capable, publicnode next). Each candidate is probed with a small
+  // getLogs AT the deploy block whose span (128 blocks) exceeds the Alchemy 10-block cap and lands on possibly-pruned
+  // history — so a range-capped or pruned endpoint is REJECTED here, before the real scan, and we fail over. Exhausting
+  // every candidate rejects with an archive-class error so the caller surfaces isArchiveError's plain-words message,
+  // never the raw ethers "could not coalesce error". Returns Promise<{ provider, url, fellBack }>. probeAddress bounds
+  // the probe's result size (each surface passes its own contract).
+  function historyProvider(probeAddress) {
+    var c = cfg();
+    var probeFrom = c.deployBlock || 0;
+    var probeTo = probeFrom + 127; // >10 → catches the Alchemy 10-block getLogs cap; at the deploy block → catches pruning
+    var cands = [];
+    if (c.readRpcUrl) cands.push(c.readRpcUrl);
+    HISTORY_RPCS.forEach(function (u) { if (u !== c.readRpcUrl) cands.push(u); });
+    var i = 0, fellBack = false;
+    function attempt() {
+      if (i >= cands.length) {
+        var e = new Error("archive: no getLogs endpoint served the deploy-block range probe");
+        e.__archive = true; // marks the exhaustion so callers/ isArchiveError surface the plain-words message
+        return Promise.reject(e);
+      }
+      var url = cands[i++];
+      // static network (Amoy 80002) — skip ethers' chainId-detection round-trip, which can itself flake into a
+      // "could not coalesce error" on a cold JsonRpcProvider and spuriously trip the archive message (harness-observed).
+      var p = new ethersRef.JsonRpcProvider(url, 80002, { staticNetwork: true });
+      var probe = { fromBlock: probeFrom, toBlock: probeTo };
+      if (probeAddress) probe.address = probeAddress;
+      return p.getLogs(probe).then(
+        function () { return { provider: p, url: url, fellBack: fellBack }; },
+        function () { if (c.readRpcUrl && i === 1) fellBack = true; return attempt(); } // owner URL failed the probe → note the fall-back to drpc
+      );
+    }
+    return attempt();
   }
 
   // (scope 2) size EIP-1559 fees from live base+priority with FEE_HEADROOM so a send isn't dropped under Amoy's
@@ -798,6 +840,7 @@ window.DYAdmin = (function () {
   // ---------- HISTORY (chunked getLogs, newest-first) ----------
   // detect an archive/range rejection so we tell the owner to set a Read RPC URL (vs a generic "could not read")
   function isArchiveError(e) {
+    if (e && e.__archive) return true; // S-LEDGER-FIX: historyProvider exhausted every getLogs endpoint (all pruned/capped)
     var s = "";
     try {
       s = JSON.stringify(e && (e.info || e.error || {})) + " " + ((e && e.message) || "") + " " + ((e && e.shortMessage) || "");
@@ -811,6 +854,9 @@ window.DYAdmin = (function () {
       s.indexOf("block range") >= 0 ||
       s.indexOf("range is too") >= 0 ||
       s.indexOf("-32602") >= 0 ||
+      s.indexOf("-32701") >= 0 || // S-LEDGER-FIX: "History has been pruned for this block" (non-archive node, deep history)
+      s.indexOf("pruned") >= 0 || // S-LEDGER-FIX: same, message-worded
+      s.indexOf("coalesce") >= 0 || // S-LEDGER-FIX: the ethers-v6 wrap of an undigestable getLogs error → route to the plain-words message, never surface it raw
       s.indexOf("too many") >= 0 ||
       (s.indexOf("range") >= 0 && s.indexOf("limit") >= 0)
     );
@@ -824,35 +870,50 @@ window.DYAdmin = (function () {
       status.textContent = "Not configured.";
       return;
     }
-    var useArchive = !!c.readRpcUrl;
-    status.textContent = useArchive ? "Scanning full history (archive RPC)…" : "Scanning recent mints…";
+    status.textContent = "Scanning full history (archive RPC)…";
     body.innerHTML = "";
+    // S-LEDGER-FIX: run a chunked mint scan over a READ-ONLY provider, then attach block times → resolve {rows,mode,fellBack}.
+    function scanOn(ethers, provider, from) {
+      var access = new ethers.Contract(c.accessNFT, ACCESS_ABI, provider);
+      var wave = new ethers.Contract(c.waveCardNFT, WAVE_ABI, provider);
+      return provider.getBlockNumber().then(function (latest) {
+        var f = from != null ? from : Math.max(0, latest - RECENT_WINDOW);
+        return scanChunked(ethers, access, wave, f, latest).then(function (evs) {
+          return attachTimes(provider, evs);
+        });
+      });
+    }
     withEthers()
       .then(function (ethers) {
-        // READ-ONLY provider. With a Read RPC URL → a dedicated JsonRpcProvider (NEVER a signer). Else the wallet
-        // provider, restricted to a recent window so a non-archive node is not asked for historical logs.
-        var provider = useArchive ? new ethers.JsonRpcProvider(c.readRpcUrl) : readProvider();
-        var access = new ethers.Contract(c.accessNFT, ACCESS_ABI, provider);
-        var wave = new ethers.Contract(c.waveCardNFT, WAVE_ABI, provider);
-        return provider.getBlockNumber().then(function (latest) {
-          var from = useArchive ? c.deployBlock || 0 : Math.max(0, latest - RECENT_WINDOW);
-          return scanChunked(ethers, access, wave, from, latest).then(function (evs) {
-            return attachTimes(provider, evs);
+        // S-LEDGER-FIX: deep history rides the shared ARCHIVE-capable provider (drpc-first) — NOT the Alchemy readRpcUrl
+        // (10-block getLogs cap) and NOT the wallet's pruned node.
+        return historyProvider(c.accessNFT).then(function (h) {
+          return scanOn(ethers, h.provider, c.deployBlock || 0).then(function (rows) {
+            return { rows: rows, mode: "archive", fellBack: h.fellBack };
+          });
+        }).catch(function (e) {
+          if (!isArchiveError(e)) throw e; // a genuine (non-archive) error → surface it below
+          // LAST RESORT — every history endpoint failed: recent window on the wallet node (dodges archive gating).
+          return scanOn(ethers, readProvider(), null).then(function (rows) {
+            return { rows: rows, mode: "recent", fellBack: false };
           });
         });
       })
-      .then(function (rows) {
+      .then(function (res) {
         histLoaded = true;
+        var rows = res.rows;
         rows.sort(function (a, b) {
           return b.block - a.block || b.logIndex - a.logIndex;
         });
         renderHistory(rows);
-        if (useArchive) {
-          status.textContent = rows.length ? rows.length + " mint event(s) (full history)." : "No mints yet.";
+        if (res.mode === "archive") {
+          status.innerHTML =
+            (rows.length ? rows.length + " mint event(s) (full history)." : "No mints yet.") +
+            (res.fellBack ? " <span style='color:var(--ember)'>Configured Read RPC URL couldn't serve deep history — used drpc.</span>" : "");
         } else {
           status.innerHTML =
             (rows.length ? rows.length + " recent mint(s). " : "No mints in the last " + RECENT_WINDOW + " blocks. ") +
-            "<span style='color:var(--ember)'>Recent only — set Read RPC URL in Configuration for full history.</span>";
+            "<span style='color:var(--ember)'>Recent only — no archive RPC reachable; set Read RPC URL in Configuration for full history.</span>";
         }
       })
       .catch(function (e) {
@@ -1697,40 +1758,52 @@ window.DYAdmin = (function () {
     if (!wallet) { out.innerHTML = "<div class='q'>Enter a user wallet above to see its grant ledger + accrual.</div>"; return; }
     out.innerHTML = "<div class='q'>Reading chain…</div>";
     withEthers().then(function () {
-      var provider = new ethersRef.BrowserProvider(window.ethereum);
-      return provider.getSigner().then(function (signer) {
+      return new ethersRef.BrowserProvider(window.ethereum).getSigner().then(function (signer) {
         return signer.getAddress().then(function (adminAddr) {
-          var p = readProvider();
-          var hs = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, p);
-          return p.getBlockNumber().then(function (latest) {
-            var start = cfg().deployBlock || 0;
-            var filter = hs.filters.RoiCredited(wallet, null, adminAddr);
-            var granted = 0n, jobs = Promise.resolve();
-            for (var from = start; from <= latest; from += LOG_CHUNK) {
-              (function (a, b) {
-                jobs = jobs.then(function () {
-                  return hs.queryFilter(filter, a, b).then(function (evs) {
-                    evs.forEach(function (ev) { granted += ev.args.amount; });
+          // S-LEDGER-FIX: the deep-history RoiCredited scan rides an ARCHIVE-capable getLogs endpoint (drpc-first),
+          // NOT the wallet's pruned node — the wallet node returns a pruned/range error ethers wraps as
+          // "could not coalesce error" (S-LEDGER-FIX STEP-0). Current-state accrual reads stay on the wallet.
+          return historyProvider(c.holderStaking).then(function (h) {
+            var hs = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, h.provider);
+            return h.provider.getBlockNumber().then(function (latest) {
+              var start = c.deployBlock || 0;
+              var filter = hs.filters.RoiCredited(wallet, null, adminAddr);
+              var granted = 0n, jobs = Promise.resolve();
+              for (var from = start; from <= latest; from += LOG_CHUNK) {
+                (function (a, b) {
+                  jobs = jobs.then(function () {
+                    return hs.queryFilter(filter, a, b).then(function (evs) {
+                      evs.forEach(function (ev) { granted += ev.args.amount; });
+                    });
                   });
+                })(from, Math.min(from + LOG_CHUNK - 1, latest));
+              }
+              return jobs.then(function () {
+                var hsRead = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, readProvider()); // eth_calls on the wallet (current-state)
+                return Promise.all([hsRead.pendingRoi(wallet), hsRead.roi(wallet)]).then(function (r) {
+                  var f = function (x) { return ethersRef.formatUnits(x, 18); };
+                  out.innerHTML =
+                    "<table class='grid'><tbody>"
+                    + "<tr><th>Granted so far (this admin)</th><td>" + escHtml(f(granted)) + " DYC</td></tr>"
+                    + "<tr><th>Chain accrual — pending</th><td>" + escHtml(f(r[0])) + " DYC</td></tr>"
+                    + "<tr><th>Chain accrual — ROI column</th><td>" + escHtml(f(r[1])) + " DYC</td></tr>"
+                    + "</tbody></table>"
+                    + (h.fellBack ? "<div class='q' style='color:var(--ember)'>Configured Read RPC URL couldn't serve deep history — used drpc.</div>" : "")
+                    + "<div class='mono' style='font-size:.72rem;margin-top:.4rem;color:var(--gold-aged)'>The 2X lifetime cap is a POLICY guide, not enforced on-chain here — check granted-so-far against the wallet's staked principal before granting.</div>";
                 });
-              })(from, Math.min(from + LOG_CHUNK - 1, latest));
-            }
-            return jobs.then(function () {
-              return Promise.all([hs.pendingRoi(wallet), hs.roi(wallet)]).then(function (r) {
-                var f = function (x) { return ethersRef.formatUnits(x, 18); };
-                out.innerHTML =
-                  "<table class='grid'><tbody>"
-                  + "<tr><th>Granted so far (this admin)</th><td>" + escHtml(f(granted)) + " DYC</td></tr>"
-                  + "<tr><th>Chain accrual — pending</th><td>" + escHtml(f(r[0])) + " DYC</td></tr>"
-                  + "<tr><th>Chain accrual — ROI column</th><td>" + escHtml(f(r[1])) + " DYC</td></tr>"
-                  + "</tbody></table>"
-                  + "<div class='mono' style='font-size:.72rem;margin-top:.4rem;color:var(--gold-aged)'>The 2X lifetime cap is a POLICY guide, not enforced on-chain here — check granted-so-far against the wallet's staked principal before granting.</div>";
               });
             });
           });
         });
       });
-    }).catch(function (e) { out.innerHTML = "<div class='q'>Couldn't read the ledger: " + escHtml(decodeErr(e)) + "</div>"; });
+    }).catch(function (e) {
+      // S-LEDGER-FIX: archive-class failures speak plainly (never the raw coalesce text) — admin-page law.
+      if (isArchiveError(e)) {
+        out.innerHTML = "<div class='q' style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</div>";
+      } else {
+        out.innerHTML = "<div class='q'>Couldn't read the ledger: " + escHtml(decodeErr(e)) + "</div>";
+      }
+    });
   }
 
   function mount() {
