@@ -37,7 +37,7 @@ window.DYAdmin = (function () {
   var ACCESS_MINT_GAS = 300000;
   var WAVE_MINT_GAS = 300000;
   var COIN_XFER_GAS = 120000; // ERC-20 transfer ~51k–66k (fresh recipient); ~2x floor
-  var LOG_CHUNK = 9000; // getLogs block window — MUST stay under archive-RPC caps (drpc/others reject >10000) (S5a-FIX-3)
+  var LOG_CHUNK = 9999; // getLogs block window — MUST stay under archive-RPC caps (drpc + publicnode reject >10000). S-LEDGER-FIX-2: 9000→9999 (still <10000) shaves the request count on the deep scan (fewer browser-origin hits at drpc).
   var WAIT_CONFIRMS = 1;
   var WAIT_TIMEOUT_MS = 75000; // bound tx.wait — a never-mined/dropped tx must NEVER sit PENDING (S5a-FIX-2)
   var FEE_HEADROOM = 2n; // 2x headroom over the live base+priority fee signal (S5a-FIX-2); wallet override stays possible
@@ -96,6 +96,38 @@ window.DYAdmin = (function () {
     return new Promise(function (r) {
       setTimeout(r, ms);
     });
+  }
+  // S-LEDGER-FIX-2 — a rate-limit / server-class error (distinct from isArchiveError's pruned/range class). drpc throttles
+  // browser-origin traffic: a single labeled request can 429, and under the deep scan's burst it returns HTTP 5xx, which
+  // ethers v6 surfaces as code "SERVER_ERROR" / shortMessage "server response 500". This class RETRIES the SAME endpoint
+  // (the endpoint is fine, just busy) — it must NOT demote drpc to a pruned node.
+  function isRateLimited(e) {
+    if (!e) return false;
+    if (e.code === "SERVER_ERROR") return true; // ethers v6 wraps an HTTP 5xx as SERVER_ERROR
+    var s = ((e.shortMessage || "") + " " + (e.message || "")).toLowerCase();
+    return (
+      s.indexOf("server response 5") >= 0 || // HTTP 5xx (the observed "server response 500 Internal Server Error")
+      s.indexOf("429") >= 0 || // Too Many Requests
+      s.indexOf("too many requests") >= 0 // worded rate-limit (note: isArchiveError also matches bare "too many" → catch isRateLimited FIRST)
+    );
+  }
+  // S-LEDGER-FIX-2 — retry a history read against the SAME endpoint on a rate-limit-class error, with exponential backoff
+  // + jitter (~500ms, ~1200ms, ~2500ms → 4 attempts total). A NON-rate-limit error (archive/range/pruned) is thrown
+  // immediately (no retry) so the caller can fail over or surface the archive message. Exhausted retries throw the last
+  // rate-limit error → the caller's plain-words "busy" message (never the raw "server response 500").
+  function withRetry(fn) {
+    var delays = [500, 1200, 2500];
+    var i = 0;
+    function go() {
+      return fn().catch(function (e) {
+        if (i < delays.length && isRateLimited(e)) {
+          var base = delays[i++];
+          return sleep(base + Math.floor(Math.random() * base * 0.3)).then(go); // + up to 30% jitter
+        }
+        throw e;
+      });
+    }
+    return go();
   }
   function txUrl(hash) {
     return PLAYER.chain.blockExplorerUrls[0] + "/tx/" + hash;
@@ -165,9 +197,16 @@ window.DYAdmin = (function () {
       var p = new ethersRef.JsonRpcProvider(url, 80002, { staticNetwork: true });
       var probe = { fromBlock: probeFrom, toBlock: probeTo };
       if (probeAddress) probe.address = probeAddress;
-      return p.getLogs(probe).then(
+      // S-LEDGER-FIX-2: a rate-limited probe RETRIES this same endpoint (withRetry) — drpc is busy, not incapable. If it is
+      // STILL rate-limited after the retries, THROW (surface the plain-words "busy" message) — do NOT demote drpc to a
+      // pruned node. Only a NON-rate-limit (archive/range/pruned) probe error means "can't serve deep history" → fail over.
+      return withRetry(function () { return p.getLogs(probe); }).then(
         function () { return { provider: p, url: url, fellBack: fellBack }; },
-        function () { if (c.readRpcUrl && i === 1) fellBack = true; return attempt(); } // owner URL failed the probe → note the fall-back to drpc
+        function (err) {
+          if (isRateLimited(err)) throw err; // busy after retries → don't fail over to a pruned node; caller shows the busy message
+          if (c.readRpcUrl && i === 1) fellBack = true; // owner URL can't serve deep history → note the fall-back to drpc
+          return attempt();
+        }
       );
     }
     return attempt();
@@ -918,7 +957,11 @@ window.DYAdmin = (function () {
       })
       .catch(function (e) {
         histLoaded = false;
-        if (isArchiveError(e)) {
+        // S-LEDGER-FIX-2: rate-limit-class FIRST (before isArchiveError — the "too many" overlap; order prevents shadowing).
+        if (isRateLimited(e)) {
+          status.innerHTML =
+            "<span style='color:var(--ember)'>The public archive RPC is busy — retry in a minute, or set a dedicated Read RPC URL in Configuration.</span>";
+        } else if (isArchiveError(e)) {
           status.innerHTML =
             "<span style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</span>";
         } else {
@@ -933,10 +976,13 @@ window.DYAdmin = (function () {
     function step() {
       if (start > latest) return Promise.resolve(out);
       var end = Math.min(start + LOG_CHUNK - 1, latest);
-      return Promise.all([
-        access.queryFilter(access.filters.Transfer(ethers.ZeroAddress, null), start, end),
-        wave.queryFilter(wave.filters.CardMinted(), start, end),
-      ]).then(function (res) {
+      // S-LEDGER-FIX-2: retry-with-backoff on drpc's browser-origin rate-limits (the 120ms throttle below already spaces chunks).
+      return withRetry(function () {
+        return Promise.all([
+          access.queryFilter(access.filters.Transfer(ethers.ZeroAddress, null), start, end),
+          wave.queryFilter(wave.filters.CardMinted(), start, end),
+        ]);
+      }).then(function (res) {
         res[0].forEach(function (ev) {
           out.push({ block: ev.blockNumber, logIndex: ev.index, type: "Access", to: ev.args.to, cardId: null, hash: ev.transactionHash });
         });
@@ -1772,8 +1818,11 @@ window.DYAdmin = (function () {
               for (var from = start; from <= latest; from += LOG_CHUNK) {
                 (function (a, b) {
                   jobs = jobs.then(function () {
-                    return hs.queryFilter(filter, a, b).then(function (evs) {
+                    // S-LEDGER-FIX-2: retry-with-backoff on drpc's browser-origin rate-limits + a 120ms inter-chunk throttle
+                    // (scanChunked precedent) — the deep scan no longer hammers the throttled free endpoint bare.
+                    return withRetry(function () { return hs.queryFilter(filter, a, b); }).then(function (evs) {
                       evs.forEach(function (ev) { granted += ev.args.amount; });
+                      return sleep(120);
                     });
                   });
                 })(from, Math.min(from + LOG_CHUNK - 1, latest));
@@ -1797,8 +1846,12 @@ window.DYAdmin = (function () {
         });
       });
     }).catch(function (e) {
-      // S-LEDGER-FIX: archive-class failures speak plainly (never the raw coalesce text) — admin-page law.
-      if (isArchiveError(e)) {
+      // S-LEDGER-FIX-2: rate-limit-class FIRST (drpc busy → the raw "server response 500" must never show). It is checked
+      // BEFORE isArchiveError because a "429 too many requests" also matches isArchiveError's bare "too many" — order, not
+      // exclusivity, keeps them from shadowing. Then S-LEDGER-FIX: archive-class speaks plainly (never the raw coalesce text).
+      if (isRateLimited(e)) {
+        out.innerHTML = "<div class='q' style='color:var(--ember)'>The public archive RPC is busy — retry in a minute, or set a dedicated Read RPC URL in Configuration.</div>";
+      } else if (isArchiveError(e)) {
         out.innerHTML = "<div class='q' style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</div>";
       } else {
         out.innerHTML = "<div class='q'>Couldn't read the ledger: " + escHtml(decodeErr(e)) + "</div>";
