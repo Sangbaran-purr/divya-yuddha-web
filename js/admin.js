@@ -72,7 +72,8 @@ window.DYAdmin = (function () {
       dropDesk: o.dropDesk || fc.dropDesk || null, // M-F6 — the Drop Desk (coupon signing + cancel + figures)
       vestingVault: o.vestingVault || fc.vestingVault || null, // M-F3 — Purchase Registry VESTED column
       holderStaking: o.holderStaking || fc.holderStaking || null, // M-F3 — Purchase Registry STAKED + REWARDS
-      deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
+      // S-LEDGER-FIX-4: a stored 0 / "" / null / undefined / non-numeric deployBlock counts as UNSET → file default rules; only a genuine positive integer wins (a stored 0 used to win and force a genesis full-chain scan).
+      deployBlock: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.deployBlock || 0); })(o.deployBlock),
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null, // archive-capable RPC for HISTORY READS only (S5a-FIX-3)
       waveCards: o.waveCards && o.waveCards.length ? o.waveCards : FILE.waveCards || [],
       source: o.accessNFT || o.waveCardNFT || o.dycoin ? "localStorage (this browser)" : "admin-config.js",

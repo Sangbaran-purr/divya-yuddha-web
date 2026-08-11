@@ -22,7 +22,8 @@ window.DYReport = (function () {
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
       readRpcUrlFallbacks: (o.readRpcUrlFallbacks || FILE.readRpcUrlFallbacks || []),
       logChunk: o.logChunk || FILE.logChunk || 3000,
-      deployBlock: o.deployBlock != null ? o.deployBlock : FILE.deployBlock || 0,
+      // S-LEDGER-FIX-4: a stored 0 / "" / null / undefined / non-numeric deployBlock counts as UNSET → file default rules; only a genuine positive integer wins (a stored 0 used to win and force a genesis full-chain scan).
+      deployBlock: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.deployBlock || 0); })(o.deployBlock),
     };
   }
 
