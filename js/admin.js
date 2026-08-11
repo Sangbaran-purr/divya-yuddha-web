@@ -15,6 +15,7 @@ window.DYAdmin = (function () {
     "function owner() view returns (address)",
     "function mint(address to) returns (uint256)",
     "function balanceOf(address) view returns (uint256)",
+    "function authorizedMinters(address) view returns (bool)", // S-TORANA-1: the minter gate (owner-managed via setMinter)
     "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
     "error AlreadyHolds(address holder)",
     "error NotAuthorizedMinter(address caller)",
@@ -79,6 +80,9 @@ window.DYAdmin = (function () {
       // localStorage-only (this browser), NEVER admin-config.js / never committed. Full registry wiring stays its own task.
       robotUrl: o.robotUrl || FILE.robotUrl || null,
       robotToken: o.robotToken || null,
+      // S-TORANA-1: two USD eligibility bands (positive; definite ≥ discretion enforced in saveCfg). Defaults 500 / 100.
+      toranaDefiniteUsd: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.toranaDefiniteUsd || 500); })(o.toranaDefiniteUsd),
+      toranaDiscretionUsd: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.toranaDiscretionUsd || 100); })(o.toranaDiscretionUsd),
       waveCards: o.waveCards && o.waveCards.length ? o.waveCards : FILE.waveCards || [],
       source: o.accessNFT || o.waveCardNFT || o.dycoin ? "localStorage (this browser)" : "admin-config.js",
     };
@@ -278,6 +282,9 @@ window.DYAdmin = (function () {
     var banner = $("gate-banner");
     var c = cfg();
     setPanelsEnabled(false); // default locked; re-enabled only when proven owner
+    // S-TORANA-1: run the TORANA gate FIRST so its dark/connect/minter state shows in ALL wallet states (accessNFT-unset
+    // is a config fact independent of connection). refreshToranaPanel handles !accessNFT / !connected / !chainOk / minter.
+    refreshToranaPanel();
 
     if (!s.hasProvider) {
       banner.className = "banner warn";
@@ -1140,6 +1147,8 @@ window.DYAdmin = (function () {
     $("cfg-readrpc").value = c.readRpcUrl || "";
     if ($("cfg-roburl")) $("cfg-roburl").value = c.robotUrl || ""; // S-ROBOT-COUPON-1
     if ($("cfg-robtoken")) $("cfg-robtoken").value = c.robotToken || "";
+    if ($("cfg-torana-definite")) $("cfg-torana-definite").value = c.toranaDefiniteUsd; // S-TORANA-1
+    if ($("cfg-torana-discretion")) $("cfg-torana-discretion").value = c.toranaDiscretionUsd;
     $("cfg-cards").value = c.waveCards.length ? JSON.stringify(c.waveCards, null, 2) : "";
     // (4) persistent readout: what the picker actually got, always visible in the config panel
     var n = c.waveCards.length;
@@ -1221,6 +1230,15 @@ window.DYAdmin = (function () {
         return warn(msg, "Robot base URL must be an http(s) URL. Nothing saved.");
       }
       var robTok = $("cfg-robtoken") ? $("cfg-robtoken").value.trim() : "";
+      // S-TORANA-1: two USD bands — positive numbers, definite ≥ discretion floor
+      var tDef = Number($("cfg-torana-definite") ? $("cfg-torana-definite").value : "");
+      var tDis = Number($("cfg-torana-discretion") ? $("cfg-torana-discretion").value : "");
+      if (!(Number.isFinite(tDef) && tDef > 0) || !(Number.isFinite(tDis) && tDis > 0)) {
+        return warn(msg, "TORANA bands must be positive USD numbers. Nothing saved.");
+      }
+      if (tDef < tDis) {
+        return warn(msg, "TORANA definite band must be ≥ the discretion floor. Nothing saved.");
+      }
       var o = {
         accessNFT: pa,
         waveCardNFT: pw,
@@ -1233,6 +1251,8 @@ window.DYAdmin = (function () {
         readRpcUrl: readRpc || null,
         robotUrl: robUrl || null, // S-ROBOT-COUPON-1 — robot base URL
         robotToken: robTok || null, // S-ROBOT-COUPON-1 — admin bearer, localStorage-only
+        toranaDefiniteUsd: tDef, // S-TORANA-1
+        toranaDiscretionUsd: tDis,
         waveCards: cards,
       };
       localStorage.setItem(LS_KEY, JSON.stringify(o));
@@ -1486,6 +1506,152 @@ window.DYAdmin = (function () {
     a.download = "purchase-registry.csv";
     document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+
+  // ---------- TORANA RELEASE (S-TORANA-1) — admin-push AccessNFT.mint(to) to buyers past the USD threshold ----------
+  // Chain truth end-to-end: eligibility from a single UNFILTERED Purchased() scan (usdE18 summed per buyer) on the shared
+  // archive road (S-REGISTRY-HIST discipline), current holders excluded via balanceOf, and the release fires the CHECKED
+  // set through the proven runDrop mint lineage (owner wallet casts each mint). Two bands: DEFINITE (pre-ticked) /
+  // DISCRETION (unticked). No robot, no new contract, no history view — the chain register is the record.
+  var toranaGateToken = 0, toranaEligible = [];
+  function toranaUsd2dp(e18) { try { return Number(ethersRef.formatUnits(e18, 18)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } catch (e) { return "?"; } }
+  function toranaDim(on) { var p = $("panel-torana"); if (p) p.style.opacity = on ? "1" : "0.7"; }
+
+  // INDEPENDENT async gate: DARK if accessNFT unset; else lit only when the connected wallet is the AccessNFT owner or an
+  // authorized minter (read on-chain). Failing wallet → plain "not a minter". A token guards against stale async results.
+  function refreshToranaPanel() {
+    var st = $("torana-status"); if (!st) return;
+    var c = cfg(), s = window.DYWallet.state;
+    var find = $("torana-find"), release = $("torana-release");
+    function lock(html, lit) { st.innerHTML = html; if (find) find.disabled = true; if (release) release.disabled = true; toranaDim(!!lit); }
+    if ($("torana-list")) $("torana-list").innerHTML = "";
+    if ($("torana-count")) $("torana-count").textContent = "";
+    if ($("torana-results")) $("torana-results").innerHTML = "";
+    if (!c.accessNFT) { st.style.color = "var(--gold-aged)"; lock("<span class='mono'>AccessNFT not configured</span> — set the address in Configuration after the redeploy.", false); return; }
+    if (!s.hasProvider || !s.connected) { st.style.color = "var(--gold-aged)"; lock("Connect the minter wallet to release TORANA.", false); return; }
+    if (!s.chainOk) { st.style.color = "var(--gold-aged)"; lock("Wrong network — cross to " + PLAYER.chain.name + " to release.", false); return; }
+    var myToken = ++toranaGateToken;
+    st.style.color = "var(--gold-aged)"; st.innerHTML = "Checking minter authority…"; toranaDim(true);
+    withEthers().then(function () {
+      var acc = new ethersRef.Contract(c.accessNFT, ACCESS_ABI, readProvider());
+      var me = s.address || "";
+      return Promise.all([acc.owner().catch(function () { return null; }), acc.authorizedMinters(me).catch(function () { return false; })]).then(function (r) {
+        if (myToken !== toranaGateToken) return; // superseded by a newer refresh
+        var isMinter = (r[0] && eq(r[0], me)) || r[1] === true;
+        if (!isMinter) { st.style.color = "var(--gold-aged)"; lock("<span class='bad'>Connected wallet is not a minter</span> — connect the AccessNFT owner or an authorized minter.", false); return; }
+        st.style.color = "var(--flame-core)";
+        st.innerHTML = "Minter authority confirmed — bands: definite ≥ $" + c.toranaDefiniteUsd + ", discretion ≥ $" + c.toranaDiscretionUsd + ". Find eligible buyers, then release the ticked set.";
+        if (find) find.disabled = false;
+        if (release) release.disabled = true;
+        toranaDim(true);
+      });
+    }).catch(function () { if (myToken === toranaGateToken) { st.style.color = "var(--gold-aged)"; lock("<span class='bad'>Could not read minter authority</span> — check the AccessNFT address + network.", false); } });
+  }
+
+  // single UNFILTERED Purchased() scan, usdE18 summed per buyer — the shared archive road primitives (no third copy).
+  function scanPurchasedByBuyer(sale, from, latest, onProgress, deadlineAt) {
+    var byBuyer = {}, start = from;
+    var totalChunks = Math.max(1, Math.ceil((latest - from + 1) / LOG_CHUNK)), idx = 0;
+    function stepp() {
+      if (start > latest) return Promise.resolve(byBuyer);
+      if (Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; return Promise.reject(de); }
+      var end = Math.min(start + LOG_CHUNK - 1, latest);
+      idx++;
+      var label = "chunk " + idx + "/" + totalChunks;
+      if (onProgress) onProgress(label);
+      return withRetry(function () { return sale.queryFilter(sale.filters.Purchased(), start, end); },
+        function () { if (onProgress) onProgress(label + ", retrying"); }).then(function (evs) {
+        evs.forEach(function (ev) { var b = (ev.args.buyer || "").toLowerCase(); byBuyer[b] = (byBuyer[b] || 0n) + ev.args.usdE18; });
+        start = end + 1;
+        return sleep(120).then(stepp);
+      });
+    }
+    return stepp();
+  }
+
+  function toranaFindEligible() {
+    var c = cfg(), st = $("torana-status"), listEl = $("torana-list"), cntEl = $("torana-count"), release = $("torana-release"), find = $("torana-find");
+    if (!c.dycoinSale) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>DYCoinSale not configured</span> — needed to read purchases."; return; }
+    if (!c.accessNFT) { refreshToranaPanel(); return; }
+    var defE18 = 0n, disE18 = 0n;
+    try { defE18 = ethersRef.parseUnits(String(c.toranaDefiniteUsd), 18); disE18 = ethersRef.parseUnits(String(c.toranaDiscretionUsd), 18); } catch (e) {}
+    if (find) find.disabled = true;
+    if (release) release.disabled = true;
+    listEl.innerHTML = ""; cntEl.textContent = "";
+    st.style.color = "var(--gold-aged)"; st.innerHTML = "Waking the archive — this can take ~30 seconds on first contact…";
+    withEthers().then(function () {
+      var provider = readProvider();
+      return provider.getBlockNumber().then(function (latest) {
+        return historyProvider(c.dycoinSale).then(function (h) {
+          var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, h.provider);
+          var deadlineAt = Date.now() + SCAN_DEADLINE_MS;
+          return raceDeadline(scanPurchasedByBuyer(sale, c.deployBlock || 0, latest, function (lbl) { cntEl.textContent = lbl; }, deadlineAt), deadlineAt);
+        });
+      });
+    }).then(function (byBuyer) {
+      var cands = Object.keys(byBuyer).filter(function (a) { return byBuyer[a] >= disE18; });
+      var acc = new ethersRef.Contract(c.accessNFT, ACCESS_ABI, readProvider());
+      cntEl.textContent = "checking " + cands.length + " candidate(s) for existing holdings…";
+      return Promise.all(cands.map(function (a) {
+        return acc.balanceOf(a).then(function (b) { return { addr: a, usd: byBuyer[a], holds: b !== 0n }; }, function () { return { addr: a, usd: byBuyer[a], holds: false }; });
+      })).then(function (rows) {
+        var excluded = rows.filter(function (r) { return r.holds; }).length;
+        var elig = rows.filter(function (r) { return !r.holds; }).map(function (r) { return { addr: r.addr, usd: r.usd, band: r.usd >= defE18 ? "definite" : "discretion" }; });
+        elig.sort(function (a, b) { return (b.usd > a.usd) ? 1 : (b.usd < a.usd ? -1 : 0); });
+        toranaEligible = elig;
+        renderToranaList(elig, excluded);
+      });
+    }).catch(function (e) {
+      if (find) find.disabled = false;
+      if ((e && e.__deadline) || isRateLimited(e) || isArchiveError(e)) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>The archive is busy or unreachable</span> — try again in a moment."; }
+      else { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>Could not read purchases</span> — check the DYCoinSale address + network."; }
+    });
+  }
+
+  function renderToranaList(elig, excluded) {
+    var st = $("torana-status"), listEl = $("torana-list"), cntEl = $("torana-count"), release = $("torana-release"), find = $("torana-find");
+    if (find) find.disabled = false;
+    var nDef = elig.filter(function (e) { return e.band === "definite"; }).length, nDis = elig.length - nDef;
+    cntEl.textContent = nDef + " definite, " + nDis + " discretion, " + excluded + " holder(s) excluded.";
+    if (!elig.length) {
+      listEl.innerHTML = "<div class='q'>No buyers at or above the discretion floor ($" + cfg().toranaDiscretionUsd + ").</div>";
+      if (release) release.disabled = true;
+      st.style.color = "var(--flame-core)"; st.innerHTML = "Scan complete — no eligible buyers.";
+      return;
+    }
+    var body = elig.map(function (e) {
+      var badge = e.band === "definite" ? "<span style=\"color:var(--flame-core)\">definite</span>" : "<span style=\"color:var(--gold-aged);font-style:italic\">discretion</span>";
+      return "<tr><td><input type='checkbox' class='torana-tick' data-addr='" + e.addr + "'" + (e.band === "definite" ? " checked" : "") + "></td>" +
+        "<td class='mono'>" + shortAddr(e.addr) + "</td><td class='num'>$" + toranaUsd2dp(e.usd) + "</td><td>" + badge + "</td></tr>";
+    }).join("");
+    listEl.innerHTML = "<table class='grid'><thead><tr><th>✓</th><th>Wallet</th><th>USD</th><th>Band</th></tr></thead><tbody>" + body + "</tbody></table>";
+    Array.prototype.forEach.call(listEl.querySelectorAll(".torana-tick"), function (cb) { cb.onchange = updateToranaRelease; });
+    updateToranaRelease();
+    st.style.color = "var(--flame-core)"; st.innerHTML = "Scan complete — review the list and Release the ticked wallets.";
+  }
+
+  function updateToranaRelease() {
+    var release = $("torana-release"), listEl = $("torana-list"); if (!release || !listEl) return;
+    var n = listEl.querySelectorAll(".torana-tick:checked").length;
+    release.disabled = n === 0;
+    release.textContent = n ? "Release TORANA to " + n + " wallet(s)" : "Release TORANA (none ticked)";
+  }
+
+  function toranaRelease() {
+    var listEl = $("torana-list"), resultsEl = $("torana-results"), st = $("torana-status");
+    var checks = listEl.querySelectorAll(".torana-tick:checked");
+    var addrs = Array.prototype.map.call(checks, function (cb) { return ethersRef.getAddress(cb.getAttribute("data-addr")); });
+    if (!addrs.length) return;
+    if (!confirm("Release TORANA to " + addrs.length + " wallet(s)? Each is a separate AccessNFT mint you'll confirm in your wallet.")) return;
+    if ($("torana-release")) $("torana-release").disabled = true;
+    if ($("torana-find")) $("torana-find").disabled = true;
+    runDrop("access", null, addrs, resultsEl).then(function () {
+      st.style.color = "var(--flame-core)"; st.innerHTML = "Release batch complete. Re-run <b>Find eligible</b> to refresh — freshly-minted holders drop off automatically.";
+      if ($("torana-find")) $("torana-find").disabled = false;
+    }).catch(function () {
+      st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>Release could not start</span> — check your wallet connection.";
+      if ($("torana-find")) $("torana-find").disabled = false;
+    });
   }
 
   // EIP-712 sign the Allowlisted(wallet) voucher with the connected (signer) wallet
@@ -2052,6 +2218,9 @@ window.DYAdmin = (function () {
     };
     // Robot Registry (M-F5) — read-only; independent of the wallet gate
     if ($("robot-load")) { $("robot-load").onclick = loadRobotRegistry; migrateRobotCreds(); }
+    // TORANA Release (S-TORANA-1) — independent minter gate (refreshToranaPanel runs inside refreshGate)
+    if ($("torana-find")) $("torana-find").onclick = toranaFindEligible;
+    if ($("torana-release")) $("torana-release").onclick = toranaRelease;
     // Drop Desk (M-F6)
     if ($("drop-sign")) {
       loadDeskCoupons(); renderDeskCoupons();

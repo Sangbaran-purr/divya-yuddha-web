@@ -57,6 +57,25 @@
         <div id="acc-results"></div>
       </section>
 
+      <!-- PANEL 1b — TORANA RELEASE (S-TORANA-1) — admin-push AccessNFT.mint(to) to buyers past the USD threshold -->
+      <section class="panel" id="panel-torana">
+        <h2>TORANA Release — mint the Access Card to eligible buyers</h2>
+        <p class="hint">TORANA never auto-mints. This computes eligibility from chain-truth purchases (USD spent, from
+          the sale's <span class="mono">Purchased</span> logs) against the two bands set in Configuration, excludes
+          wallets that already hold one, and releases the ticked set as owner-cast <span class="mono">AccessNFT.mint(to)</span>
+          transactions — one wallet confirm per mint, a failed row never halts the batch. Read is zero-PII (wallets + USD only).</p>
+        <div id="torana-status" class="mono" style="font-size:0.82rem;margin-bottom:0.6rem;color:var(--gold-aged)">Checking…</div>
+        <div class="row-actions">
+          <button class="btn" id="torana-find" disabled>Find eligible</button>
+          <span id="torana-count" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+        </div>
+        <div id="torana-list" style="margin-top:0.5rem"></div>
+        <div class="row-actions" style="margin-top:0.5rem">
+          <button class="btn" id="torana-release" disabled>Release TORANA (none ticked)</button>
+        </div>
+        <div id="torana-results"></div>
+      </section>
+
       <!-- PANEL 2 — WAVE DROP -->
       <section class="panel" id="panel-wave">
         <h2>Wave Drop — WaveCardNFT.mint(to, cardId)</h2>
@@ -263,6 +282,10 @@
         <input class="txt" id="cfg-roburl" type="text" placeholder="https://… (the approval-bot service origin)" />
         <label class="fld" for="cfg-robtoken">Robot admin token (bearer; stored in this browser only, never committed)</label>
         <input class="txt" id="cfg-robtoken" type="password" placeholder="ADMIN_VIEW_TOKEN" autocomplete="off" />
+        <label class="fld" for="cfg-torana-definite">TORANA definite band — USD (auto-ticked for release)</label>
+        <input class="txt" id="cfg-torana-definite" type="number" min="1" step="1" placeholder="500" />
+        <label class="fld" for="cfg-torana-discretion">TORANA discretion floor — USD (listed unticked; must be ≤ definite)</label>
+        <input class="txt" id="cfg-torana-discretion" type="number" min="1" step="1" placeholder="100" />
         <label class="fld" for="cfg-cards">Wave cards — JSON [{ "cardId": 101, "name": "…", "faction": "devas" }]</label>
         <textarea class="txt" id="cfg-cards" placeholder='[&#10;  { "cardId": 101, "name": "Deva Sainika", "faction": "devas" }&#10;]'></textarea>
         <div class="row-actions">
@@ -281,7 +304,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s24"></script>
+    <script src="js/admin.js?v=s25"></script>
     <script>
       window.DYAdmin.mount();
     </script>
