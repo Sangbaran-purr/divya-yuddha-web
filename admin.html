@@ -180,19 +180,22 @@
           <span class="mono">dropSigner</span>). Each coupon is signed EIP-712 <span class="mono">DropCoupon(wallet,
           amount, deadline, nonce)</span> with a <b>fixed 90-day</b> deadline baked in. The published
           <span class="mono">coupons.json</span> holds only <b>address, amount, deadline, nonce, signature</b> — zero
-          personal data. Publishing = committing that file (the robot can absorb this later). Fund the desk by a plain
-          DYC transfer from the ecosystem allocation; withdraw unspent balance with the contract's
-          <span class="mono">withdraw</span>.</p>
+          personal data. Publish either way: <b>Publish via robot</b> (the robot verifies each signature + deadline and
+          commits <span class="mono">coupons.json</span>), or <b>Download</b> the file and commit it by hand (fallback).
+          Fund the desk by a plain DYC transfer from the ecosystem allocation; withdraw unspent balance with the
+          contract's <span class="mono">withdraw</span>.</p>
 
         <label class="fld" for="drop-input">Batch — one <span class="mono">wallet, amount(DYC)</span> per line</label>
         <textarea class="txt" id="drop-input" placeholder="0x…, 150&#10;0x…, 50&#10;0x…, 12.5" disabled></textarea>
         <div class="row-actions">
           <button class="btn" id="drop-sign" disabled>Sign coupons</button>
+          <button class="btn" id="drop-robot" data-always="1">Publish via robot</button>
           <button class="btn" id="drop-merge" data-always="1">Load published coupons.json</button>
           <button class="btn" id="drop-download" data-always="1">Download coupons.json</button>
           <button class="btn tiny" id="drop-clear" data-always="1">Clear batch</button>
         </div>
         <div id="drop-msg" class="mono" style="font-size:0.82rem;margin:0.5rem 0;color:var(--gold-aged)"></div>
+        <div id="drop-robot-out"></div>
         <div id="drop-coupons"></div>
 
         <div style="margin-top:1rem;border-top:1px solid rgba(232,200,116,0.14);padding-top:0.8rem">
@@ -258,6 +261,10 @@
         <input class="txt" id="cfg-deploy" type="number" placeholder="0" />
         <label class="fld" for="cfg-readrpc">Read RPC URL (archive-capable — for FULL Mint History; blank = recent-only)</label>
         <input class="txt" id="cfg-readrpc" type="text" placeholder="https://… (read-only; never signs)" />
+        <label class="fld" for="cfg-roburl">Robot base URL (for "Publish via robot" — coupon publishing)</label>
+        <input class="txt" id="cfg-roburl" type="text" placeholder="https://… (the approval-bot service origin)" />
+        <label class="fld" for="cfg-robtoken">Robot admin token (bearer; stored in this browser only, never committed)</label>
+        <input class="txt" id="cfg-robtoken" type="password" placeholder="ADMIN_VIEW_TOKEN" autocomplete="off" />
         <label class="fld" for="cfg-cards">Wave cards — JSON [{ "cardId": 101, "name": "…", "faction": "devas" }]</label>
         <textarea class="txt" id="cfg-cards" placeholder='[&#10;  { "cardId": 101, "name": "Deva Sainika", "faction": "devas" }&#10;]'></textarea>
         <div class="row-actions">
@@ -276,7 +283,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s21"></script>
+    <script src="js/admin.js?v=s22"></script>
     <script>
       window.DYAdmin.mount();
     </script>

@@ -75,6 +75,10 @@ window.DYAdmin = (function () {
       // S-LEDGER-FIX-4: a stored 0 / "" / null / undefined / non-numeric deployBlock counts as UNSET → file default rules; only a genuine positive integer wins (a stored 0 used to win and force a genesis full-chain scan).
       deployBlock: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.deployBlock || 0); })(o.deployBlock),
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null, // archive-capable RPC for HISTORY READS only (S5a-FIX-3)
+      // S-ROBOT-COUPON-1: robot base URL + admin bearer for "Publish via robot" (coupon publishing). Token is
+      // localStorage-only (this browser), NEVER admin-config.js / never committed. Full registry wiring stays its own task.
+      robotUrl: o.robotUrl || FILE.robotUrl || null,
+      robotToken: o.robotToken || null,
       waveCards: o.waveCards && o.waveCards.length ? o.waveCards : FILE.waveCards || [],
       source: o.accessNFT || o.waveCardNFT || o.dycoin ? "localStorage (this browser)" : "admin-config.js",
     };
@@ -1134,6 +1138,8 @@ window.DYAdmin = (function () {
     if ($("cfg-dropdesk")) $("cfg-dropdesk").value = c.dropDesk || ""; // M-F6
     $("cfg-deploy").value = c.deployBlock || 0;
     $("cfg-readrpc").value = c.readRpcUrl || "";
+    if ($("cfg-roburl")) $("cfg-roburl").value = c.robotUrl || ""; // S-ROBOT-COUPON-1
+    if ($("cfg-robtoken")) $("cfg-robtoken").value = c.robotToken || "";
     $("cfg-cards").value = c.waveCards.length ? JSON.stringify(c.waveCards, null, 2) : "";
     // (4) persistent readout: what the picker actually got, always visible in the config panel
     var n = c.waveCards.length;
@@ -1210,6 +1216,11 @@ window.DYAdmin = (function () {
       if (readRpc && !/^https?:\/\//i.test(readRpc)) {
         return warn(msg, "Read RPC URL must be an http(s) URL. Nothing saved.");
       }
+      var robUrl = $("cfg-roburl") ? $("cfg-roburl").value.trim() : ""; // S-ROBOT-COUPON-1
+      if (robUrl && !/^https?:\/\//i.test(robUrl)) {
+        return warn(msg, "Robot base URL must be an http(s) URL. Nothing saved.");
+      }
+      var robTok = $("cfg-robtoken") ? $("cfg-robtoken").value.trim() : "";
       var o = {
         accessNFT: pa,
         waveCardNFT: pw,
@@ -1220,6 +1231,8 @@ window.DYAdmin = (function () {
         dropDesk: pdd, // M-F6
         deployBlock: Number($("cfg-deploy").value) || 0,
         readRpcUrl: readRpc || null,
+        robotUrl: robUrl || null, // S-ROBOT-COUPON-1 — robot base URL
+        robotToken: robTok || null, // S-ROBOT-COUPON-1 — admin bearer, localStorage-only
         waveCards: cards,
       };
       localStorage.setItem(LS_KEY, JSON.stringify(o));
@@ -1695,6 +1708,41 @@ window.DYAdmin = (function () {
     }).catch(function () { msg.textContent = "No published coupons.json found yet (that's fine before the first publish)."; });
   }
 
+  // S-ROBOT-COUPON-1 — POST the working coupon batch (zero-PII publish shape) to the robot; it verifies each
+  // signature + deadline and commits coupons.json. Download/commit-by-hand stays as the fallback (unchanged).
+  function publishViaRobot() {
+    var msg = $("drop-msg"); msg.textContent = ""; var out = $("drop-robot-out"); if (out) out.innerHTML = "";
+    var c = cfg();
+    if (!c.robotUrl || !c.robotToken) { return warn(msg, "Set the Robot base URL + admin token in Configuration first."); }
+    if (!deskCoupons.length) { return warn(msg, "No coupons in this batch to publish. Sign some (or Load the published file) first."); }
+    var pub = deskCoupons.map(function (cp) { return { wallet: cp.wallet, amount: String(cp.amount), deadline: Number(cp.deadline), nonce: String(cp.nonce), sig: cp.sig }; });
+    var base = c.robotUrl.replace(/\/+$/, "");
+    msg.textContent = "Publishing " + pub.length + " coupon(s) via the robot…";
+    fetch(base + "/admin/coupons/publish", {
+      method: "POST",
+      headers: { "content-type": "application/json", "authorization": "Bearer " + c.robotToken },
+      body: JSON.stringify(pub),
+    }).then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }, function () { return { status: r.status, j: null }; }); })
+      .then(function (res) {
+        if (res.status === 401) { return warn(msg, "Robot rejected the token (401). Check the admin token in Configuration."); }
+        if (res.status === 503) { return warn(msg, "Robot says coupon publishing is not configured on the service yet."); }
+        renderRobotVerdicts(res.j || {});
+      }).catch(function (e) { warn(msg, "Could not reach the robot: " + (e && e.message ? e.message : e)); });
+  }
+
+  function renderRobotVerdicts(j) {
+    var msg = $("drop-msg"), out = $("drop-robot-out");
+    var acc = j.accepted || [], rej = j.rejected || [];
+    if (j.ok && j.committed) { msg.textContent = "Robot published " + j.added + " new coupon(s) — " + acc.length + " accepted, " + rej.length + " rejected."; msg.style.color = "var(--flame-core)"; }
+    else if (j.ok && !j.committed) { msg.textContent = "Robot accepted " + acc.length + ", committed 0 (nothing new — nonce dedup)" + (rej.length ? "; " + rej.length + " rejected." : "."); msg.style.color = "var(--flame-core)"; }
+    else { warn(msg, "Robot did not commit" + (j.error ? " (" + j.error + ")" : "") + (rej.length ? "; " + rej.length + " rejected." : ".")); }
+    if (!out) return;
+    var rows = "";
+    acc.forEach(function (a) { rows += "<tr><td style='color:var(--flame-core)'>✓ accepted</td><td class='addr'>" + shortAddr(a.wallet) + "</td><td class='mono' style='font-size:.72rem'>" + String(a.nonce).slice(0, 10) + "…</td><td>—</td></tr>"; });
+    rej.forEach(function (r) { rows += "<tr><td style='color:var(--gold-aged)'>✗ rejected</td><td class='addr'>" + (r.wallet ? shortAddr(r.wallet) : "—") + "</td><td class='mono' style='font-size:.72rem'>" + (r.nonce ? String(r.nonce).slice(0, 10) + "…" : "—") + "</td><td>" + (r.reason || "") + "</td></tr>"; });
+    out.innerHTML = rows ? "<table class='grid'><thead><tr><th>Verdict</th><th>Wallet</th><th>Nonce</th><th>Reason</th></tr></thead><tbody>" + rows + "</tbody></table>" : "";
+  }
+
   function runDropCancel() {
     var msg = $("drop-cancel-msg"); msg.textContent = "";
     var c = cfg();
@@ -1965,6 +2013,7 @@ window.DYAdmin = (function () {
       $("drop-sign").onclick = runDropSign;
       $("drop-download").onclick = downloadDeskCoupons;
       $("drop-merge").onclick = mergePublishedCoupons;
+      if ($("drop-robot")) $("drop-robot").onclick = publishViaRobot; // S-ROBOT-COUPON-1
       $("drop-clear").onclick = function () { if (confirm("Clear this local coupon batch? (The published file is not affected.)")) { deskCoupons = []; saveDeskCoupons(); renderDeskCoupons(); } };
       $("drop-cancel-btn").onclick = runDropCancel;
       $("drop-figures-load").onclick = loadDeskFigures;
