@@ -221,6 +221,55 @@
             0 12px 44px rgba(0, 0, 0, 0.6);
         }
       }
+      /* S-CONSOLE-DYC-1 — bearer-only DYC balance beside the Enter door. The coin master is on solid black; the 96px
+         variant is CSS-circle-clipped (border-radius:50%), so the corners clip cleanly (and blend into the near-black page). */
+      .rite-dyc {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        margin-top: 1rem;
+      }
+      .rite-dyc[hidden] { display: none; }
+      .rite-dyc-coin {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+        box-shadow: 0 0 0 1px rgba(232, 200, 116, 0.3), 0 2px 12px rgba(0, 0, 0, 0.55);
+      }
+      .rite-dyc-amt {
+        font-family: var(--display, "Cinzel", Georgia, serif);
+        font-size: 1.15rem;
+        letter-spacing: 0.02em;
+        color: var(--flame-core, #ffc96b);
+      }
+      .rite-dyc-amt.bad {
+        font-family: var(--text, Georgia, serif);
+        font-size: 0.9rem;
+        font-style: italic;
+        color: var(--gold-aged, #6b5426);
+      }
+      .rite-dyc-refresh {
+        background: none;
+        border: 1px solid rgba(232, 200, 116, 0.35);
+        color: var(--gold-burnished, #d9a84e);
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 0.95rem;
+        line-height: 1;
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: border-color 0.15s, color 0.15s;
+      }
+      .rite-dyc-refresh:hover {
+        border-color: var(--flame-core, #ffc96b);
+        color: var(--flame-core, #ffc96b);
+      }
     </style>
   </head>
   <body>
@@ -275,6 +324,12 @@
             Declare Yourself<span class="sub">connect wallet</span>
           </button>
           <div id="rite-line" class="state-line" aria-live="polite"></div>
+          <!-- S-CONSOLE-DYC-1: bearer-only DYC balance (hidden until isHolder); coin is CSS-circle-clipped -->
+          <div id="rite-dyc" class="rite-dyc" hidden>
+            <img class="rite-dyc-coin" src="assets/dyc_coin_96.png" width="44" height="44" alt="" aria-hidden="true" />
+            <span class="rite-dyc-amt" id="rite-dyc-amt" aria-live="polite">reading balance…</span>
+            <button type="button" class="rite-dyc-refresh" id="rite-dyc-refresh" title="Refresh balance" aria-label="Refresh DYC balance">↻</button>
+          </div>
         </div>
       </section>
 
@@ -360,6 +415,29 @@
         var npTop = document.getElementById("nameplate-top");
         var addrTop = document.getElementById("addr-top");
 
+        // S-CONSOLE-DYC-1 — bearer-only DYC balance. Reads config.js contracts.dycoin (the frozen Phase-A token) via the
+        // connected wallet's BrowserProvider (the checkHolder road) — a single eth_call, no history scan. Fires once when
+        // isHolder confirms; the refresh affordance re-reads. A read FAILURE is DISTINCT from a real zero (never a silent 0).
+        var dycEl = document.getElementById("rite-dyc");
+        var dycAmt = document.getElementById("rite-dyc-amt");
+        var dycRefresh = document.getElementById("rite-dyc-refresh");
+        var dycRead = false; // read-once-per-bearer-session guard
+        function dycFail() { dycAmt.textContent = "balance unavailable — refresh to retry"; dycAmt.classList.add("bad"); }
+        function readDyc() {
+          if (!dycAmt) return;
+          dycAmt.textContent = "reading balance…"; dycAmt.classList.remove("bad");
+          window.DYWallet.loadEthers().then(function (ethers) {
+            var provider = new ethers.BrowserProvider(window.ethereum);
+            var coin = new ethers.Contract(CFG.contracts.dycoin, ["function balanceOf(address) view returns (uint256)"], provider);
+            return coin.balanceOf(window.DYWallet.state.address).then(function (bal) {
+              var n = Number(ethers.formatUnits(bal, 18)); // whole-number-first, 2dp max; a real 0 renders "0 DYC"
+              dycAmt.textContent = n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + " DYC";
+              dycAmt.classList.remove("bad");
+            });
+          }).catch(dycFail);
+        }
+        if (dycRefresh) dycRefresh.onclick = readDyc;
+
         function setBtn(label, sub, opts) {
           opts = opts || {};
           btn.innerHTML = label + (sub ? '<span class="sub">' + sub + "</span>" : "");
@@ -437,6 +515,9 @@
           npTop.classList.toggle("hidden", !s.connected);
           if (s.connected) addrTop.textContent = window.DYWallet.shortAddr(s.address);
           line.textContent = "";
+          // S-CONSOLE-DYC-1: the DYC balance lives INSIDE the bearer state only — hide + reset the read guard whenever
+          // this is not a confirmed bearer, so a fresh bearer session re-reads and non-holders see nothing new.
+          if (dycEl && s.isHolder !== true) { dycEl.hidden = true; dycRead = false; }
 
           if (!s.hasProvider) {
             msg.textContent = "The rite is spoken with a wallet. You carry none yet.";
@@ -479,6 +560,8 @@
             mark.setAttribute("aria-label", "The rite mark, burning");
             msg.textContent = "You bear the mark. The door is yours.";
             setBtn("Enter", "the hall of war", { onClick: enterTheHall });
+            // S-CONSOLE-DYC-1: reveal the DYC balance beside the door; read once per bearer session.
+            if (dycEl) { dycEl.hidden = false; if (!dycRead) { dycRead = true; readDyc(); } }
             return;
           }
           // not a bearer yet — the claim is honest-dormant in Phase A
