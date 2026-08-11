@@ -287,7 +287,7 @@
             <a href="rite.html" aria-current="page">The Rite</a>
             <a href="explore.html">The Cards</a>
             <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html?v=7540db5">The Game</a>
+            <a href="game/index.html?v=45543ca">The Game</a>
           </div>
           <div id="nav-decl">
             <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
@@ -430,9 +430,14 @@
             var provider = new ethers.BrowserProvider(window.ethereum);
             var coin = new ethers.Contract(CFG.contracts.dycoin, ["function balanceOf(address) view returns (uint256)"], provider);
             return coin.balanceOf(window.DYWallet.state.address).then(function (bal) {
-              var n = Number(ethers.formatUnits(bal, 18)); // whole-number-first, 2dp max; a real 0 renders "0 DYC"
+              var dec = ethers.formatUnits(bal, 18);
+              var n = Number(dec); // whole-number-first, 2dp max; a real 0 renders "0 DYC"
               dycAmt.textContent = n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + " DYC";
               dycAmt.classList.remove("bad");
+              // S-CONSOLE-DYC-2 conduit: hand the balance to the gated game via the dyw::-shimmed key (the embedded game
+              // reads "dy_dyc"). ONLY on a SUCCESSFUL read — dycFail writes nothing, so the game degrades to absent,
+              // never a fake number. The "dyw::" prefix is the snapshot ceremony's localStorage shim (SNAPSHOT.md).
+              try { localStorage.setItem("dyw::dy_dyc", dec); } catch (e) {}
             });
           }).catch(dycFail);
         }
@@ -485,8 +490,8 @@
           var entered = false;
           try { entered = !!localStorage.getItem("dy_site_entered"); } catch (e) {}
           function go() {
-            if (reduce) { window.location.href = "game/index.html?v=7540db5"; return; }
-            doorWipe(function () { window.location.href = "game/index.html?v=7540db5"; });
+            if (reduce) { window.location.href = "game/index.html?v=45543ca"; return; }
+            doorWipe(function () { window.location.href = "game/index.html?v=45543ca"; });
           }
           if (!entered) { thresholdNotice(go); } else { go(); }
         }
