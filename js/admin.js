@@ -1361,24 +1361,42 @@ window.DYAdmin = (function () {
     raw.forEach(add);
     return out;
   }
-  // sum this wallet's dycOut across its Purchased logs (chunked queryFilter — S5a pattern)
-  function boughtOf(sale, wallet, from, latest) {
+  // S-REGISTRY-HIST: a "busy" sentinel for the Bought column — distinct from a genuine 0n and from a null (other-column
+  // read failure). Compared by reference. renders as "busy", never as a bare dash, so throttle/deadline ≠ a real zero.
+  var BOUGHT_BUSY = { busy: true };
+  // Sum this wallet's dycOut across its Purchased logs on the SHARED archive history road (S-REGISTRY-HIST): the
+  // drpc-first tamed `historyProvider` (built once by loadRegistry, passed in as `saleArchive`), chunked getLogs with
+  // withRetry + retry voice, a PER-WALLET raceDeadline(SCAN_DEADLINE_MS), sleep(120) throttle, and isRateLimited/
+  // isArchiveError → the "busy" sentinel. Own loop (per-wallet total), but every discipline is a shared primitive — no
+  // third copy of retry/deadline logic. Returns a BigInt total, or BOUGHT_BUSY on deadline/rate-limit/archive-exhaustion.
+  function boughtOf(saleArchive, wallet, from, latest, onProgress) {
+    if (!saleArchive) return Promise.resolve(BOUGHT_BUSY); // the archive road was unavailable this load → busy, not "—"
     var total = 0n, start = from;
+    var totalChunks = Math.max(1, Math.ceil((latest - from + 1) / LOG_CHUNK)), idx = 0;
+    var deadlineAt = Date.now() + SCAN_DEADLINE_MS; // PER-WALLET deadline (owner ruling): a slow wallet → busy, next proceeds
     function step() {
       if (start > latest) return Promise.resolve(total);
+      if (Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; return Promise.reject(de); } // stop issuing chunks past the deadline
       var end = Math.min(start + LOG_CHUNK - 1, latest);
-      return sale.queryFilter(sale.filters.Purchased(wallet), start, end).then(function (evs) {
+      idx++;
+      var label = "chunk " + idx + "/" + totalChunks;
+      if (onProgress) onProgress(label);
+      return withRetry(function () {
+        return saleArchive.queryFilter(saleArchive.filters.Purchased(wallet), start, end);
+      }, function () { if (onProgress) onProgress(label + ", retrying"); }).then(function (evs) {
         evs.forEach(function (ev) { total += ev.args.dycOut; });
         start = end + 1;
-        return sleep(80).then(step);
+        return sleep(120).then(step); // gentle on the public RPC (matches the shared road)
       });
     }
-    return step();
+    return raceDeadline(step(), deadlineAt).catch(function (e) {
+      if ((e && e.__deadline) || isRateLimited(e) || isArchiveError(e)) return BOUGHT_BUSY; // plain-words busy, not a bare dash
+      throw e; // a genuinely unexpected error still propagates (readRegistryRow's .catch → null → "—")
+    });
   }
-  function readRegistryRow(c, provider, latest, wallet) {
-    var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, provider);
+  function readRegistryRow(c, provider, saleArchive, latest, wallet, onChunk) {
     var reads = [
-      boughtOf(sale, wallet, c.deployBlock || 0, latest).catch(function () { return null; }),
+      boughtOf(saleArchive, wallet, c.deployBlock || 0, latest, onChunk).catch(function () { return null; }),
       c.dycoin ? new ethersRef.Contract(c.dycoin, COIN_ABI, provider).balanceOf(wallet).catch(function () { return null; }) : Promise.resolve(null),
       c.vestingVault ? new ethersRef.Contract(c.vestingVault, REG_VAULT_ABI, provider).vestedBalanceOf(wallet).catch(function () { return null; }) : Promise.resolve(null),
       c.holderStaking ? stakedOf(new ethersRef.Contract(c.holderStaking, REG_STAKE_ABI, provider), wallet).catch(function () { return null; }) : Promise.resolve(null),
@@ -1399,17 +1417,25 @@ window.DYAdmin = (function () {
     withEthers().then(function () {
       var provider = readProvider();
       return provider.getBlockNumber().then(function (latest) {
-        // sequential — gentle on the RPC, and order-stable for the table
-        var i = 0;
-        function next() {
-          if (i >= wallets.length) return Promise.resolve();
-          return readRegistryRow(c, provider, latest, wallets[i]).then(function (row) {
-            registryRows.push(row); i++;
-            out.innerHTML = renderRegistryTable(registryRows, wallets.length);
-            return next();
-          });
-        }
-        return next();
+        // S-REGISTRY-HIST: build the ARCHIVE getLogs provider ONCE (drpc-first, tamed) for the deep Purchased scan; the
+        // other columns stay on readProvider (eth_call). If the archive road is unavailable, saleArchive=null → every
+        // Bought cell renders "busy" while the eth_call columns still load.
+        return historyProvider(c.dycoinSale).then(function (h) { return h.provider; }, function () { return null; }).then(function (archiveProv) {
+          var saleArchive = archiveProv ? new ethersRef.Contract(c.dycoinSale, SALE_ABI, archiveProv) : null;
+          // sequential — gentle on the RPC, and order-stable for the table
+          var i = 0;
+          function next() {
+            if (i >= wallets.length) return Promise.resolve();
+            var wi = i + 1;
+            function onChunk(label) { cnt.textContent = "wallet " + wi + "/" + wallets.length + " · " + label; } // "wallet i/N · chunk j/M"
+            return readRegistryRow(c, provider, saleArchive, latest, wallets[i], onChunk).then(function (row) {
+              registryRows.push(row); i++;
+              out.innerHTML = renderRegistryTable(registryRows, wallets.length);
+              return next();
+            });
+          }
+          return next();
+        });
       });
     }).then(function () {
       cnt.textContent = registryRows.length + " wallet(s) read";
@@ -1423,13 +1449,16 @@ window.DYAdmin = (function () {
     var any = { bought: false, liquid: false, vested: false, staked: false, rewards: false };
     rows.forEach(function (r) {
       ["bought", "liquid", "vested", "staked", "rewards"].forEach(function (k) {
-        if (r[k] != null) { tot[k] += r[k]; any[k] = true; }
+        if (typeof r[k] === "bigint") { tot[k] += r[k]; any[k] = true; } // skips null AND the BOUGHT_BUSY sentinel (never sum a busy read)
       });
     });
     function cell(v) { return "<td class='num'>" + fmtDyc18(v) + "</td>"; }
+    // S-REGISTRY-HIST: the Bought cell shows "busy" for a throttled/deadline-hit read — muted italic, visually distinct
+    // from BOTH a real 0 (a plain numeral) and a "—" (a genuine null read). Explicit inline style (the .bad class is unstyled here).
+    function boughtCell(v) { return v === BOUGHT_BUSY ? "<td class='num'><span style=\"color:var(--gold-aged);font-style:italic\">busy</span></td>" : cell(v); }
     var body = rows.map(function (r) {
       return "<tr><td class='mono'>" + shortAddr(r.wallet) + "</td>" +
-        cell(r.bought) + cell(r.liquid) + cell(r.vested) + cell(r.staked) + cell(r.rewards) + "</tr>";
+        boughtCell(r.bought) + cell(r.liquid) + cell(r.vested) + cell(r.staked) + cell(r.rewards) + "</tr>";
     }).join("");
     var totalRow = "<tr class='tot'><td class='mono'>TOTAL · " + rows.length + " wallet(s)</td>" +
       "<td class='num'>" + (any.bought ? fmtDyc18(tot.bought) : "—") + "</td>" +
@@ -1448,7 +1477,8 @@ window.DYAdmin = (function () {
     function n(v) { if (v == null) return ""; try { return ethersRef.formatUnits(v, 18); } catch (e) { return ""; } }
     var lines = ["wallet,bought_dyc,liquid_dyc,vested_dyc,staked_dyc,rewards_dyc"];
     registryRows.forEach(function (r) {
-      lines.push([r.wallet, n(r.bought), n(r.liquid), n(r.vested), n(r.staked), n(r.rewards)].join(","));
+      var bought = r.bought === BOUGHT_BUSY ? "busy" : n(r.bought); // S-REGISTRY-HIST: don't emit an empty cell for a busy read
+      lines.push([r.wallet, bought, n(r.liquid), n(r.vested), n(r.staked), n(r.rewards)].join(","));
     });
     var blob = new Blob([lines.join("\n") + "\n"], { type: "text/csv" });
     var a = document.createElement("a");
