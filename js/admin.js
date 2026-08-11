@@ -1539,27 +1539,41 @@ window.DYAdmin = (function () {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function robotSaveInputs() {
-    try { localStorage.setItem(ROBOT_LS, JSON.stringify({ url: $("robot-url").value.trim(), token: $("robot-token").value })); } catch (e) {}
-  }
-  function robotFillInputs() {
+  // S-ROBOT-ADMIN-1: ONE config, two consumers. The registry now rides cfg().robotUrl/robotToken (the same pair the
+  // Drop Desk "Publish via robot" button uses). One-time silent migration lifts any legacy dyadmin::robot_view creds
+  // into dyadmin::config when the config fields are empty; the old key is LEFT untouched (no needless storage deletes).
+  function migrateRobotCreds() {
     try {
-      var o = JSON.parse(localStorage.getItem(ROBOT_LS) || "{}");
-      if (o.url && $("robot-url")) $("robot-url").value = o.url;
-      if (o.token && $("robot-token")) $("robot-token").value = o.token;
+      var legacy = JSON.parse(localStorage.getItem(ROBOT_LS) || "{}");
+      if (!legacy || (!legacy.url && !legacy.token)) return;
+      var o = override(), changed = false;
+      if (legacy.url && !o.robotUrl) { o.robotUrl = legacy.url; changed = true; }
+      if (legacy.token && !o.robotToken) { o.robotToken = legacy.token; changed = true; }
+      if (changed) { localStorage.setItem(LS_KEY, JSON.stringify(o)); fillCfgForm(); }
     } catch (e) {}
   }
+  // plain-words state labels for the registry table; an unknown state renders raw (never hide a state the map misses).
+  var ROBOT_STATE_LABELS = {
+    "received": "Received", "email-sent": "Email sent", "verified": "Verified",
+    "signed-pending": "Signed (publishing)", "signed-published": "Published",
+    "rejected": "Rejected", "ofac-hold": "OFAC hold", "expired": "Expired",
+  };
+  function robotStateLabel(s) { return ROBOT_STATE_LABELS[s] || (s || "—"); }
   function fmtTs(ms) { return ms ? new Date(ms).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "—"; }
   async function loadRobotRegistry() {
     var st = $("robot-status"), body = $("robot-body"), sum = $("robot-summary");
-    var base = $("robot-url").value.trim().replace(/\/+$/, ""), token = $("robot-token").value;
-    if (!base || !token) { st.textContent = "Enter the service URL and view token first."; return; }
-    robotSaveInputs();
-    st.textContent = "Loading…"; body.innerHTML = ""; sum.textContent = "";
+    var c = cfg();
+    var base = (c.robotUrl || "").replace(/\/+$/, ""), token = c.robotToken || "";
+    if (!base || !token) { st.textContent = "Set the Robot base URL + admin token in Configuration first."; return; }
+    st.textContent = "Waking the robot — this can take ~30 seconds on first contact…"; body.innerHTML = ""; sum.textContent = "";
+    var ctrl = ("AbortController" in window) ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 38000); // > 35s free-tier cold-start budget
     try {
-      var res = await fetch(base + "/registry", { headers: { authorization: "Bearer " + token }, cache: "no-store" });
-      if (res.status === 401) { st.textContent = "Unauthorized — check the view token."; return; }
-      if (!res.ok) { st.textContent = "HTTP " + res.status; return; }
+      var res = await fetch(base + "/registry", { headers: { authorization: "Bearer " + token }, cache: "no-store", signal: ctrl ? ctrl.signal : undefined });
+      clearTimeout(timer);
+      if (res.status === 401) { st.textContent = "Unauthorized — check the admin token in Configuration."; return; }
+      if (res.status === 502 || res.status === 503 || res.status === 504) { st.textContent = "The robot may be asleep or unreachable — try again in a moment."; return; }
+      if (!res.ok) { st.textContent = "The robot returned HTTP " + res.status + " — try again in a moment."; return; }
       var data = await res.json();
       var rows = data.registrants || [];
       var counts = data.counts || {};
@@ -1583,7 +1597,7 @@ window.DYAdmin = (function () {
         if (r.reason) flags.push("<span title='" + escHtml(r.reason) + "'>reason ⓘ</span>");
         return "<tr>"
           + "<td class='mono'>" + escHtml(r.wallet ? shortAddr(r.wallet) : "—") + "</td>"
-          + "<td>" + escHtml(r.status) + "</td>"
+          + "<td>" + escHtml(robotStateLabel(r.status)) + "</td>"
           + "<td>" + (flags.join(" ") || "—") + "</td>"
           + "<td class='mono' style='font-size:0.72rem'>" + escHtml(r.email || "—") + "</td>"
           + "<td class='mono' style='font-size:0.72rem'>" + fmtTs(r.receivedAt) + "</td>"
@@ -1592,7 +1606,8 @@ window.DYAdmin = (function () {
       }).join("") || "<tr><td colspan='6' class='mono'>No registrants yet.</td></tr>";
       st.textContent = rows.length + " registrant(s) · read-only";
     } catch (e) {
-      st.textContent = "Fetch failed: " + (e && e.message ? e.message : e);
+      clearTimeout(timer);
+      st.textContent = "The robot may be asleep or unreachable — try again in a moment.";
     }
   }
 
@@ -2006,7 +2021,7 @@ window.DYAdmin = (function () {
       loadHistory();
     };
     // Robot Registry (M-F5) — read-only; independent of the wallet gate
-    if ($("robot-load")) { $("robot-load").onclick = loadRobotRegistry; robotFillInputs(); }
+    if ($("robot-load")) { $("robot-load").onclick = loadRobotRegistry; migrateRobotCreds(); }
     // Drop Desk (M-F6)
     if ($("drop-sign")) {
       loadDeskCoupons(); renderDeskCoupons();
