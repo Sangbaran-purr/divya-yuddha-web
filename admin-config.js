@@ -29,8 +29,8 @@
 window.DY_ADMIN_CONFIG = {
   // M-G1 — live Amoy full-stack deployment (2026-08-06). See divya-yuddha-web3/docs/AMOY_STACK_2026-08-06.md.
   contracts: {
-    accessNFT: null, // G12 AccessNFT (separate NFT stack; still owner-configured; null = NOT CONFIGURED)
-    waveCardNFT: null, // G12 WaveCardNFT (separate NFT stack; null = NOT CONFIGURED)
+    accessNFT: "0xA9D7b53598773D20dc78E19dE814f265924d7A51", // RE-FREEZE (2026-08-12) — fresh master-owned AccessNFT (TORANA slot; arms dark→lit)
+    waveCardNFT: "0x4A0717A7c3970daee6161367f80b10B71286A0fD", // RE-FREEZE (2026-08-12) — fresh master-owned WaveCardNFT
     dycoin: "0x39Daaf5f0729DC5604CeC6660b04c53fb181B694", // S9 COIN DROPS — the live money-stack DYC (proxy)
     dycoinSale: "0x89c758e200B49DC367b0e1f0674F722A20530e3D", // M-F2 Approve Buyers + M-F3 Registry gate (allowlistSigner = PROD_OWNER)
     vestingVault: "0x7c7da4FFA7E32018912c18AffE9902969e0a5972", // M-F3 Registry — VESTED column

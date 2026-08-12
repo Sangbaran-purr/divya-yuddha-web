@@ -11,8 +11,8 @@
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
     <link rel="stylesheet" href="css/admin.css?v=s11" />
-    <script src="config.js?v=s4"></script>
-    <script src="admin-config.js?v=s14"></script>
+    <script src="config.js?v=s5"></script>
+    <script src="admin-config.js?v=s15"></script>
   </head>
   <body class="admin">
     <!-- S-ADMIN-CONNECT: pinned, always-visible connection status strip. Never let the owner face dark panels
@@ -217,13 +217,15 @@
 
         <div style="margin-top:1rem;border-top:1px solid rgba(232,200,116,0.14);padding-top:0.8rem">
           <label class="fld" for="drop-cancel-nonce">Void an unclaimed coupon — nonce</label>
-          <input class="txt" id="drop-cancel-nonce" type="text" placeholder="coupon nonce (decimal)" disabled />
+          <input class="txt" id="drop-cancel-nonce" type="text" placeholder="coupon nonce (decimal)" data-always="1" disabled />
           <div class="row-actions">
-            <button class="btn" id="drop-cancel-btn" disabled>Cancel coupon</button>
+            <button class="btn" id="drop-cancel-btn" data-always="1" disabled>Cancel coupon</button>
             <span id="drop-cancel-msg" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
           </div>
-          <p class="hint" style="margin-top:0.3rem">Voids an <b>unclaimed</b> coupon only — a redeemed coupon is final
-            and reverts. Owner-only (this wallet must be the desk owner).</p>
+          <p class="hint" style="margin-top:0.3rem"><b>Voiding is a 48-hour governance act.</b> <code>DropDesk.cancel()</code>
+            is owned by the Timelock — it cannot be sent from this signing wallet. To void an <b>unclaimed</b> coupon,
+            propose and execute <code>cancel(nonce)</code> through governance (48-hour delay); a redeemed coupon is final.
+            This control stays disabled on purpose, so the button never pretends to work.</p>
         </div>
 
         <div style="margin-top:1rem;border-top:1px solid rgba(232,200,116,0.14);padding-top:0.8rem">
@@ -304,7 +306,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s25"></script>
+    <script src="js/admin.js?v=s26"></script>
     <script>
       window.DYAdmin.mount();
     </script>

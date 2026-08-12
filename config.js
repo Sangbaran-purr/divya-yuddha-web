@@ -14,16 +14,24 @@ window.DY_CONFIG = {
     blockExplorerUrls: ["https://amoy.polygonscan.com"],
   },
 
-  // ✓ FROZEN PHASE A (AMOY) — recorded 2026-07-25. The live Polygon Amoy (80002)
-  // deployment from the G11 broadcast (see divya-yuddha-web3/docs/G11_RUNBOOK.md).
-  // The site reads accessNFT (holder gate) and waveCardNFT (the treasury
-  // Transfer-scan); dycoin and marketplace are the frozen proxies, recorded here
-  // for the Phase-B marketplace UI (not yet read by the site).
+  // ✓ RE-FREEZE (2026-08-12) — the sealed G11 Phase-A NFTs (owner()==0x…bEEF, setMinter
+  // permanently uncallable) were REDEPLOYED FRESH under the master and chain-verified
+  // (owner()==0xbab5…F86e on both; see divya-yuddha-web3 DeployPhaseANFTs / RE-FREEZE legs).
+  // The site reads accessNFT (holder gate) and waveCardNFT (the treasury Transfer-scan).
+  // dycoin is now the CANONICAL money-stack DYC (owner-ruled) — read by the rite balance
+  // panel and handed to the game conduit. The OLD sealed pair (0xd2Fc… / 0xF332…) and the
+  // orphan Phase-A DYCoin (0x8573…) are ABANDONED.
+  //
+  // ⚠ COIN-PAIR FLAG (owner rules separately): `marketplace` (0x2b74…) is the FROZEN Phase-A
+  // proxy, NOT LIVE (grep: zero site reads today). It was deployed against the frozen 0x8573
+  // coin; `dycoin` here now points at the money-stack 0x39Da. If the future Phase-B marketplace
+  // UI reads `contracts.dycoin`, it would trade the money-stack coin, not the frozen one — the
+  // marketplace may need its OWN coin field then. Left untouched pending an owner ruling.
   contracts: {
-    accessNFT: "0xd2FcFee0c1D0AD2959b04BB6Cdb9E0e92dF62C13", // FROZEN PHASE A (AMOY)
-    waveCardNFT: "0xF3320378523413EdE0D874CfF80B780CD38cDe64", // FROZEN PHASE A (AMOY)
-    dycoin: "0x85738Bb5176E0800c0e21FB0F424de7Cbbf306ca", // FROZEN PHASE A (AMOY) — DYCoin proxy
-    marketplace: "0x2b74C4C651Dd09D30275EF0dD1c14a699B8502cd", // FROZEN PHASE A (AMOY) — Marketplace proxy
+    accessNFT: "0xA9D7b53598773D20dc78E19dE814f265924d7A51", // RE-FREEZE — fresh master-owned AccessNFT ("Divya Yuddha Access")
+    waveCardNFT: "0x4A0717A7c3970daee6161367f80b10B71286A0fD", // RE-FREEZE — fresh master-owned WaveCardNFT ("Divya Yuddha Wave Card")
+    dycoin: "0x39Daaf5f0729DC5604CeC6660b04c53fb181B694", // RE-FREEZE Leg 2 — CANONICAL money-stack DYC (rite balance read + game conduit)
+    marketplace: "0x2b74C4C651Dd09D30275EF0dD1c14a699B8502cd", // FROZEN PHASE A (AMOY) — Marketplace proxy (NOT LIVE; see coin-pair flag)
   },
 
   // ethers.js — pinned. UMD build, verified to expose BrowserProvider /

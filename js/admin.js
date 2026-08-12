@@ -316,16 +316,16 @@ window.DYAdmin = (function () {
     // panels). Before this fix, drop/grant had NO enable path at all (only ever set false at line ~279) and coin was
     // reachable only inside the isConfigured() success branch — so the NOT-CONFIGURED short-circuit below left every
     // money button dead under a green "connected as owner" strip. The contract still enforces real authority on send.
-    var isOwnerWallet = (s.address || "").toLowerCase() === OWNER_WALLET.toLowerCase();
-    setPanelEnabled("drop", isOwnerWallet);
-    setPanelEnabled("grant", isOwnerWallet);
-    if (isOwnerWallet && cfg().dycoin) {
-      setPanelEnabled("coin", true);
-      withEthers().then(loadCoinMeta).catch(function () {});
-    } else {
-      setPanelEnabled("coin", false);
-      coinMeta = null;
-    }
+    // RE-FREEZE Leg 2 (TORANA standard): the money-stack panels gate on ON-CHAIN authority read live from chain, NOT
+    // the OWNER_WALLET constant (which now serves display/labels only — never a gate anywhere). Each panel is an
+    // independent read; a failed/absent read leaves it DISABLED (never enable on a silent failure — busy-sentinel
+    // principle). Coin Drops → connected holds the money-stack DYC; Drop Desk → DropDesk.dropSigner()==connected;
+    // Grant → HolderStaking.isDebitor(connected). The contract still enforces real authority on every send.
+    setPanelEnabled("drop", false);
+    setPanelEnabled("grant", false);
+    setPanelEnabled("coin", false);
+    coinMeta = null;
+    gateMoneyPanels(cfg(), s.address);
 
     if (!isConfigured(c)) {
       // Only the Access/Wave NFT drop panels need the G12 addresses; the money-stack panels above are already gated.
@@ -656,6 +656,40 @@ window.DYAdmin = (function () {
     // trim trailing zeros from a formatUnits string for display (150.0 -> 150, 1.500 -> 1.5)
     if (s.indexOf(".") < 0) return s;
     return s.replace(/\.?0+$/, "");
+  }
+
+  // RE-FREEZE Leg 2 — gate the three money-stack panels on LIVE on-chain authority (replaces the OWNER_WALLET-constant
+  // gate). Three independent reads; each defaults the panel OFF and only enables on a positive chain answer. A read
+  // failure/absent-config leaves the panel disabled — we never enable on a silent failure (busy-sentinel principle).
+  // DROP_DESK_ABI / STAKE_GRANT_ABI / COIN_ABI are module-level and assigned before this ever runs (call-time only).
+  function gateMoneyPanels(c, me) {
+    if (!me) return;
+    // Coin Drops (3): the real precondition to a DYC transfer is HOLDING the money-stack DYC — a live balance read.
+    // balance 0 or an unreadable token → off. On a positive balance, loadCoinMeta fills decimals/symbol/balance.
+    if (c.dycoin) {
+      withEthers().then(function () {
+        return new ethersRef.Contract(c.dycoin, COIN_ABI, readProvider()).balanceOf(me);
+      }).then(function (bal) {
+        if (bal && bal > 0n) { setPanelEnabled("coin", true); withEthers().then(loadCoinMeta).catch(function () {}); }
+        else { setPanelEnabled("coin", false); coinMeta = null; }
+      }).catch(function () { setPanelEnabled("coin", false); coinMeta = null; });
+    }
+    // Drop Desk (8): DropDesk.dropSigner() == connected — the on-chain EIP-712 coupon-signing authority.
+    if (c.dropDesk) {
+      withEthers().then(function () {
+        return new ethersRef.Contract(c.dropDesk, DROP_DESK_ABI, readProvider()).dropSigner();
+      }).then(function (signer) {
+        setPanelEnabled("drop", eq(signer, me));
+      }).catch(function () { setPanelEnabled("drop", false); });
+    }
+    // Grant (9): HolderStaking.isDebitor(connected) — the on-chain grant authority (owner registers it via the timelock).
+    if (c.holderStaking) {
+      withEthers().then(function () {
+        return new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, readProvider()).isDebitor(me);
+      }).then(function (ok) {
+        setPanelEnabled("grant", !!ok);
+      }).catch(function () { setPanelEnabled("grant", false); });
+    }
   }
 
   // read the DYC token's decimals/symbol/balance once the panel is enabled (never hardcode decimals blindly)
@@ -2008,6 +2042,7 @@ window.DYAdmin = (function () {
   // not contract code — the ledger shows granted-so-far beside chain accrual so the owner can eyeball it.
   var STAKE_GRANT_ABI = [
     "function creditRoi(address player, uint256 amount)",
+    "function isDebitor(address) view returns (bool)", // RE-FREEZE Leg 2 — Grant-panel authority gate (TORANA standard)
     "function pendingRoi(address) view returns (uint256)",
     "function roi(address) view returns (uint256)",
     "event RoiCredited(address indexed player, uint256 amount, address indexed from)",
