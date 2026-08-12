@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- UNLISTED: nothing on the site points here; keep it out of search too. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Divya Yuddha — Play the Demo</title>
+    <meta name="description" content="Play Divya Yuddha — Battle of the Celestials in your browser." />
+    <link rel="icon" href="../assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" href="../assets/brand/apple-touch-icon.png" />
+
+    <!-- SEED THE HONEST DOOR (seed-then-load). demo/ and game/ share this origin, so a same-origin iframe reads
+         the top tab's sessionStorage. Set the pass HERE, before the iframe is given a src (set at end of body),
+         so the game's gate preamble finds dyw_pass at load and does NOT redirect to ../rite.html. The normal
+         road is untouched — this only seeds THIS tab; a fresh context without the pass still bounces to rite. -->
+    <script>
+      try { sessionStorage.setItem("dyw_pass", "1"); } catch (e) {}
+    </script>
+
+    <style>
+      /* self-hosted site font (same file the site loads) */
+      @font-face {
+        font-family: "Cinzel";
+        src: url("../assets/fonts/Cinzel.woff2") format("woff2");
+        font-weight: 400 600;
+        font-display: swap;
+      }
+      /* palette tokens — verbatim from css/threshold.css (§3) */
+      :root {
+        --stone-void: #0b0a08;
+        --stone-lit: #1a1611;
+        --gold-burnished: #d9a84e;
+        --gold-aged: #6b5426;
+        --gold-hairline: #8a6f3a;
+        --flame-core: #ffc96b;
+        --display: "Cinzel", "Trajan Pro", Georgia, serif;
+        --track-display: 0.11em;
+        --track-epithet: 0.24em;
+      }
+      * , *::before, *::after { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; height: 100%;
+        background: var(--stone-void);
+        overflow: hidden; /* the iframe owns all scrolling */
+      }
+      body { display: flex; flex-direction: column; }
+
+      /* slim branded frame — the funnel rides every screen-recording */
+      .demo-head {
+        flex: 0 0 auto;
+        display: flex; align-items: center; gap: 12px;
+        padding: 8px calc(12px + env(safe-area-inset-right, 0px)) 8px calc(12px + env(safe-area-inset-left, 0px));
+        padding-top: calc(8px + env(safe-area-inset-top, 0px));
+        background: linear-gradient(180deg, var(--stone-lit), var(--stone-void));
+        border-bottom: 1px solid var(--gold-hairline);
+      }
+      .demo-mark { flex: 0 0 auto; width: 34px; height: 34px; display: block; }
+      .demo-brand { display: flex; flex-direction: column; min-width: 0; line-height: 1.05; }
+      .demo-title {
+        font-family: var(--display); font-weight: 600;
+        letter-spacing: var(--track-display);
+        color: var(--gold-burnished);
+        font-size: clamp(14px, 3.6vw, 18px);
+        white-space: nowrap;
+      }
+      .demo-epithet {
+        font-family: var(--display); font-weight: 400;
+        letter-spacing: var(--track-epithet);
+        text-transform: uppercase;
+        color: var(--gold-aged);
+        font-size: clamp(8px, 2vw, 10px);
+        margin-top: 2px; white-space: nowrap;
+      }
+      .demo-spacer { flex: 1 1 auto; }
+      .demo-cta {
+        flex: 0 0 auto;
+        font-family: var(--display); font-weight: 600;
+        letter-spacing: 0.06em;
+        font-size: clamp(11px, 2.8vw, 13px);
+        color: var(--gold-burnished);
+        text-decoration: none; white-space: nowrap;
+        padding: 7px 14px; border-radius: 2px;
+        border: 1px solid var(--gold-aged);
+        background: rgba(232, 200, 116, 0.06);
+        transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+      }
+      .demo-cta:hover, .demo-cta:focus-visible {
+        color: var(--flame-core);
+        border-color: var(--gold-hairline);
+        background: rgba(232, 200, 116, 0.12);
+      }
+
+      /* the game fills everything beneath — its own responsive logic reads THIS frame's size,
+         so a phone frame yields the phone shape and a desktop frame the desktop shape (no separate build) */
+      .demo-frame {
+        flex: 1 1 auto; width: 100%; min-height: 0;
+        border: 0; display: block; background: var(--stone-void);
+      }
+
+      /* on very narrow phones, drop the epithet so the header stays slim and uncrowded — mark + name still carry the brand */
+      @media (max-width: 460px) {
+        .demo-epithet { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="demo-head">
+      <img class="demo-mark" src="../assets/brand/icon-512.png" width="34" height="34" alt="Divya Yuddha" decoding="async" />
+      <div class="demo-brand">
+        <span class="demo-title">Divya Yuddha</span>
+        <span class="demo-epithet">Battle of the Celestials</span>
+      </div>
+      <span class="demo-spacer"></span>
+      <a class="demo-cta" href="../index.html">Get Access</a>
+    </header>
+
+    <!-- src set by the trailing script AFTER the pass is seeded (seed-then-load) -->
+    <iframe
+      class="demo-frame"
+      id="demo-game"
+      title="Divya Yuddha — Battle of the Celestials"
+      allow="autoplay; fullscreen"
+      allowfullscreen
+    ></iframe>
+
+    <script>
+      // The pass is already seeded in <head>; now point the same-origin iframe at the current game snapshot.
+      // ?v=45543ca is the current pin (SNAPSHOT.md source commit). This link IS in sync_game.sh's managed
+      // entry-link set (S-DEMO-1: count grown to 7), so it re-stamps on every future snapshot advance.
+      document.getElementById("demo-game").src = "../game/index.html?v=45543ca";
+    </script>
+  </body>
+</html>
