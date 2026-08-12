@@ -1,28 +1,107 @@
 /* ============================================================================
-   THE TREASURY — collection discovery + hall render.
-   WaveCardNFT is NOT ERC721Enumerable (no tokenOfOwnerByIndex). Owned-token
-   discovery (STEP-0.2 choice, justified): scan Transfer(*, owner) events for
-   candidate tokenIds, verify each with ownerOf == owner (drops ones later
-   transferred away — CardMinted alone would miss secondary transfers), then
-   cardOf(tokenId) -> cardId -> the card map. All reads fail GRACEFULLY (the
-   rehearsal placeholder contract is not deployed) -> the empty hall.
+   YOUR HOLDINGS — the treasury shelf (S-TREASURY-SHELF-1).
+   Connect a wallet -> read that wallet's own holdings from chain, read-only:
+     • the Access mark   — AccessNFT.balanceOf(wallet) ∈ {0,1} (soulbound). Any
+       bearer (incl. TORANA-released) lights the mark; release mints this NFT.
+     • the Wave Cards    — WaveCardNFT is NOT ERC721Enumerable (no
+       tokenOfOwnerByIndex), so discover by scanning Transfer(*, owner) for
+       candidate tokenIds, verify each with ownerOf == owner (drops ones later
+       transferred away), then cardOf(tokenId) -> cardId -> the card map + art.
+   ROADS (per S-TREASURY-SHELF-1):
+     • Scan is BOUNDED (S-REGISTRY-HIST lineage): fromBlock = CFG.deployBlock
+       (0 -> full scan), withRetry on a busy RPC, an overall deadline.
+     • Art rides the canonical explore.js pattern:
+       assets/cards/<faction>/<stem>_320.jpg — references existing assets only.
+     • BUSY-SENTINEL: a dead/failed read renders "busy / unavailable", DISTINCT
+       from a real zero ("No cards yet"). Never a silent empty shelf on a dead RPC.
+     • Read-once on connect + an explicit refresh tap (S-CONSOLE-DYC-1 pattern).
+   No writes, no admin. Config-value indirection for every address (never hardcode).
    ========================================================================= */
 window.DYTreasury = (function () {
   var CFG = window.DY_CONFIG;
+  var ACCESS_ABI = ["function balanceOf(address) view returns (uint256)"];
   var WAVE_ABI = [
     "function balanceOf(address) view returns (uint256)",
     "function ownerOf(uint256) view returns (address)",
     "function cardOf(uint256) view returns (uint256)",
     "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
   ];
-  var activeFilter = null; // faction key or null
 
-  function discover(owner) {
+  var activeFilter = null; // faction key or null
+  // read-once cache (per connected address): reset on address change / manual refresh
+  var cacheAddr = null;
+  var cacheMark = undefined; // true | false | undefined (unread)
+  var cacheRows = null; // array | null (unread)
+  var readGen = 0; // generation token: a stale in-flight read never clobbers a newer one (rapid refresh)
+
+  function el(tag, cls, html) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+
+  // --- scan-road helpers (S-REGISTRY-HIST lineage): withRetry + deadline ------
+  function sleep(ms) {
+    return new Promise(function (r) {
+      setTimeout(r, ms);
+    });
+  }
+  // Retry a read a few times on a transient/busy RPC; give up loudly (reject) so the
+  // caller can render the busy-sentinel — NEVER swallow into an empty result.
+  function withRetry(fn, tries, deadlineAt) {
+    return fn().catch(function (e) {
+      if (tries <= 1 || Date.now() > deadlineAt) throw e;
+      return sleep(400).then(function () {
+        return withRetry(fn, tries - 1, deadlineAt);
+      });
+    });
+  }
+
+  // --- ART ROAD (canonical explore.js pattern) -------------------------------
+  // card.frame is the frame stem + ".png" (e.g. "Vanaras_Hero_Bali_P9_rLegendary.png").
+  // The served art is assets/cards/<faction>/<stem>_320.jpg (thumb) / _720.jpg (large),
+  // faction parsed from the stem's first segment — exactly how js/explore.js resolves art.
+  function artUrls(frame) {
+    if (!frame) return null;
+    var stem = frame.replace(/\.png$/i, "");
+    var fac = stem.split("_")[0].toLowerCase(); // Vanaras -> vanaras
+    var base = "assets/cards/" + fac + "/" + stem;
+    return { thumb: base + "_320.jpg", large: base + "_720.jpg" };
+  }
+
+  // --- CHAIN READS -----------------------------------------------------------
+  function readMark(owner, deadlineAt) {
+    return window.DYWallet.loadEthers().then(function (ethers) {
+      var provider = new ethers.BrowserProvider(window.ethereum);
+      var acc = new ethers.Contract(CFG.contracts.accessNFT, ACCESS_ABI, provider);
+      return withRetry(
+        function () {
+          return acc.balanceOf(owner);
+        },
+        3,
+        deadlineAt
+      ).then(function (bal) {
+        return bal > 0n; // soulbound one-per-wallet -> 0 or 1
+      });
+    });
+  }
+
+  function discover(owner, deadlineAt) {
     return window.DYWallet.loadEthers().then(function (ethers) {
       var provider = new ethers.BrowserProvider(window.ethereum);
       var c = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
-      // incoming transfers to owner (includes mints: Transfer(0, owner, id))
-      return c.queryFilter(c.filters.Transfer(null, owner)).then(function (evs) {
+      var fromBlock = CFG.deployBlock || 0; // bounded scan; 0 -> full scan (S-LEDGER-FIX-4 law)
+      // incoming transfers to owner (includes mints: Transfer(0, owner, id)), from the deploy block.
+      return withRetry(
+        function () {
+          return provider.getBlockNumber().then(function (latest) {
+            return c.queryFilter(c.filters.Transfer(null, owner), fromBlock, latest);
+          });
+        },
+        3,
+        deadlineAt
+      ).then(function (evs) {
         var ids = {};
         evs.forEach(function (e) {
           ids[e.args.tokenId.toString()] = e.args.tokenId;
@@ -30,7 +109,8 @@ window.DYTreasury = (function () {
         var uniq = Object.keys(ids).map(function (k) {
           return ids[k];
         });
-        // verify current ownership + resolve cardId, in parallel
+        // verify CURRENT ownership + resolve cardId, in parallel. A per-token read failure
+        // drops THAT token (best-effort) — the top-level busy-sentinel covers a dead RPC.
         return Promise.all(
           uniq.map(function (tid) {
             return c
@@ -53,34 +133,47 @@ window.DYTreasury = (function () {
   }
 
   function polygonscanUrl(tokenId) {
-    return (
-      CFG.chain.blockExplorerUrls[0] +
-      "/token/" +
-      CFG.contracts.waveCardNFT +
-      "?a=" +
-      tokenId.toString()
-    );
+    return CFG.chain.blockExplorerUrls[0] + "/token/" + CFG.contracts.waveCardNFT + "?a=" + tokenId.toString();
   }
 
-  function el(tag, cls, html) {
-    var e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (html != null) e.innerHTML = html;
-    return e;
+  // --- RENDER: Access mark ---------------------------------------------------
+  // status: "held" | "none" | "busy"
+  function renderMark(markEl, status) {
+    markEl.className = "tre-mark tre-mark-" + status;
+    if (status === "busy") {
+      markEl.innerHTML =
+        '<div class="tre-mark-coin tre-mark-dim" aria-hidden="true"></div>' +
+        '<div class="tre-mark-text"><b>Access mark</b>' +
+        '<span class="tre-mark-sub bad">unavailable — the chain is busy. Refresh to retry.</span></div>';
+      return;
+    }
+    var held = status === "held";
+    var coin =
+      '<img class="tre-mark-coin' +
+      (held ? "" : " tre-mark-dim") +
+      '" src="assets/tokens/access_mark.webp" width="56" height="56" alt="" aria-hidden="true" />';
+    markEl.innerHTML =
+      coin +
+      '<div class="tre-mark-text"><b>Access Card</b>' +
+      (held
+        ? '<span class="tre-mark-sub held">held in your name — the mark is lit.</span>'
+        : '<span class="tre-mark-sub">not yet held. <a href="rite.html">Forge one at the rite.</a></span>') +
+      "</div>";
   }
 
+  // --- RENDER: one Wave Card plinth (full art via the canonical road) --------
   function renderPlinth(row) {
     var card = window.DY_CARDS.lookup(row.cardId);
+    var art = artUrls(card.frame);
     var p = el("figure", "plinth");
     var frame = el("div", "frame");
-    // frame images are owner-supplied later; render a carved placeholder until then
     var ph = el(
       "div",
       "placeholder",
-      '<svg aria-hidden="true"><use href="#dy-gem"/></svg><div class="pep">art arrives with the plates</div>'
+      '<svg aria-hidden="true"><use href="#dy-gem"/></svg><div class="pep">art pending</div>'
     );
     frame.appendChild(ph);
-    if (card.frame) {
+    if (art) {
       var img = new Image();
       img.alt = card.name + " — " + card.epithet;
       img.loading = "lazy";
@@ -89,14 +182,15 @@ window.DYTreasury = (function () {
         frame.appendChild(img);
       };
       img.onerror = function () {
-        /* keep the placeholder */
+        /* keep the carved placeholder — an absent frame is not an error */
       };
-      img.src = window.DY_CARDS.frameBase + card.frame;
+      img.src = art.thumb; // assets/cards/<faction>/<stem>_320.jpg
     }
     p.appendChild(frame);
     p.appendChild(el("div", "stand"));
     p.appendChild(el("figcaption", "pname", card.name));
-    p.appendChild(el("div", "pep", card.epithet));
+    // name + ID under each (cardId · token) — the S-TREASURY-SHELF-1 ask
+    p.appendChild(el("div", "pep", "Card #" + row.cardId.toString() + " · token " + row.tokenId.toString()));
     var link = el(
       "a",
       "chain-link",
@@ -109,18 +203,31 @@ window.DYTreasury = (function () {
     return p;
   }
 
-  function renderEmpty(hall) {
-    hall.className = "hall-empty";
-    hall.innerHTML =
-      '<div class="empty-plinth" aria-hidden="true"></div>' +
-      '<div class="display" style="font-size:1rem">The hall awaits its first card.</div>' +
-      '<div class="state-line">A marketplace to fill it is coming. ' +
-      '<span style="color:var(--gold-aged)">(the doors are not yet open)</span></div>';
+  // filter rows to the active faction chamber
+  function filtered(rows) {
+    if (!activeFilter) return rows;
+    return rows.filter(function (r) {
+      return (window.DY_CARDS.lookup(r.cardId).faction || "vanaras") === activeFilter;
+    });
   }
 
-  function renderHall(hall, rows) {
-    if (!rows.length) {
-      renderEmpty(hall);
+  // --- RENDER: the cards hall ------------------------------------------------
+  // mode: "cards" | "empty" | "busy"
+  function renderHall(hall, mode, rows) {
+    if (mode === "busy") {
+      hall.className = "hall-empty";
+      hall.innerHTML =
+        '<div class="empty-plinth" aria-hidden="true"></div>' +
+        '<div class="display" style="font-size:1rem">The hall could not be read.</div>' +
+        '<div class="state-line bad">The chain is busy or unreachable — your cards are safe on-chain. Refresh to retry.</div>';
+      return;
+    }
+    if (mode === "empty" || !rows || !rows.length) {
+      hall.className = "hall-empty";
+      hall.innerHTML =
+        '<div class="empty-plinth" aria-hidden="true"></div>' +
+        '<div class="display" style="font-size:1rem">No cards yet.</div>' +
+        '<div class="state-line">Wave cards you own will stand here.</div>';
       return;
     }
     hall.className = "hall";
@@ -130,20 +237,61 @@ window.DYTreasury = (function () {
     });
   }
 
-  // filter rows to the active faction chamber (seed run is Vanara; others empty)
-  function filtered(rows) {
-    if (!activeFilter) return rows;
-    return rows.filter(function (r) {
-      return (window.DY_CARDS.lookup(r.cardId).faction || "vanaras") === activeFilter;
-    });
+  // --- the connected read: mark + cards, read-once + refresh ------------------
+  function readHoldings(addr, statusEl, markEl, hall, force) {
+    if (!force && cacheAddr === addr && cacheRows !== null && cacheMark !== undefined) {
+      renderMark(markEl, cacheMark ? "held" : "none");
+      renderHall(hall, "cards", filtered(cacheRows));
+      statusEl.textContent = cacheRows.length ? statusLine(cacheRows.length) : "";
+      return;
+    }
+    cacheAddr = addr;
+    cacheMark = undefined;
+    cacheRows = null;
+    var gen = ++readGen; // this read's generation; a later read supersedes it
+    statusEl.textContent = "Reading your holdings…";
+    var deadlineAt = Date.now() + 20000; // overall deadline for the read
+
+    // The mark and the cards are INDEPENDENT reads — each renders its own state (held/none/busy),
+    // so one failing never blanks the other, and neither failure looks like a real zero.
+    readMark(addr, deadlineAt)
+      .then(function (held) {
+        if (gen !== readGen) return; // superseded by a newer read — do not clobber
+        cacheMark = held;
+        renderMark(markEl, held ? "held" : "none");
+      })
+      .catch(function () {
+        if (gen !== readGen) return;
+        renderMark(markEl, "busy"); // busy-sentinel, NOT "none"
+      });
+
+    discover(addr, deadlineAt)
+      .then(function (rows) {
+        if (gen !== readGen) return; // superseded — a stale card read never clobbers a newer state
+        cacheRows = rows;
+        statusEl.textContent = rows.length ? statusLine(rows.length) : "";
+        renderHall(hall, "cards", filtered(rows));
+      })
+      .catch(function () {
+        if (gen !== readGen) return;
+        statusEl.textContent = ""; // the hall carries the busy message
+        renderHall(hall, "busy"); // busy-sentinel, NOT the empty shelf
+      });
   }
 
-  // wire the treasury page: reacts to wallet state
+  function statusLine(n) {
+    return n + (n === 1 ? " card, held in your name." : " cards, held in your name.");
+  }
+
+  // --- mount: wire the page to wallet state ----------------------------------
   function mount() {
     var statusEl = document.getElementById("tre-status");
     var hall = document.getElementById("tre-hall");
+    var markEl = document.getElementById("tre-mark");
+    var actions = document.getElementById("tre-actions");
+    var connectBtn = document.getElementById("tre-connect");
+    var refreshBtn = document.getElementById("tre-refresh");
     var chambers = document.getElementById("tre-chambers");
-    var lastRows = null;
 
     // faction filter gems warm the hall ambient toward that ground
     if (chambers) {
@@ -156,54 +304,68 @@ window.DYTreasury = (function () {
           });
           activeFilter = on ? null : f;
           g.setAttribute("aria-pressed", on ? "false" : "true");
-          // warm the hall ambient toward the chosen ground (§8.5)
           if (on) delete document.body.dataset.chamber;
           else document.body.dataset.chamber = f;
-          // re-render honoring the filter (seed cards are Vanara; others show empty)
-          if (lastRows) renderHall(hall, filtered(lastRows));
+          if (cacheRows) renderHall(hall, "cards", filtered(cacheRows));
         });
       });
     }
 
+    if (connectBtn) {
+      connectBtn.addEventListener("click", function () {
+        connectBtn.disabled = true;
+        window.DYWallet.connect()
+          .catch(function () {})
+          .then(function () {
+            connectBtn.disabled = false;
+          });
+      });
+    }
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", function () {
+        var s = window.DYWallet.state;
+        if (s.connected && s.chainOk) readHoldings(s.address, statusEl, markEl, hall, true);
+      });
+    }
+
+    // hide the mark row + refresh unless we're in the connected-and-read state
+    function setChrome(showMark, showRefresh, showConnect, showChambers) {
+      if (markEl) markEl.hidden = !showMark;
+      if (refreshBtn) refreshBtn.hidden = !showRefresh;
+      if (connectBtn) connectBtn.hidden = !showConnect;
+      if (actions) actions.hidden = !(showRefresh || showConnect);
+      if (chambers) chambers.hidden = !showChambers;
+    }
+
     window.DYWallet.onChange(function (s) {
       if (!s.hasProvider) {
+        setChrome(false, false, false, false);
         statusEl.innerHTML =
-          'You carry no key. <a href="rite.html">Forge one at the rite.</a> The hall is dark until you declare yourself.';
-        renderEmpty(hall);
+          'You carry no wallet. <a href="rite.html">Forge your key at the rite.</a>';
+        renderHall(hall, "empty");
+        cacheAddr = null;
         return;
       }
       if (!s.connected) {
-        statusEl.innerHTML =
-          'Declare yourself to see your treasury. <a href="rite.html">Go to the rite.</a>';
-        renderEmpty(hall);
+        setChrome(false, false, true, false);
+        statusEl.textContent = "Connect your wallet to see your holdings.";
+        renderHall(hall, "empty");
+        cacheAddr = null;
         return;
       }
       if (!s.chainOk) {
-        statusEl.innerHTML = "You stand at the wrong gate. Cross to Amoy at the rite to read your hall.";
-        renderEmpty(hall);
+        setChrome(false, false, false, false);
+        statusEl.innerHTML =
+          "You stand at the wrong gate — cross to " + CFG.chain.name + " to read your hall.";
+        renderHall(hall, "empty");
+        cacheAddr = null;
         return;
       }
-      statusEl.textContent = "Reading the hall…";
-      if (lastRows) {
-        renderHall(hall, filtered(lastRows));
-        statusEl.textContent = "";
-        return;
-      }
-      discover(s.address)
-        .then(function (rows) {
-          lastRows = rows;
-          statusEl.textContent = rows.length
-            ? rows.length + (rows.length === 1 ? " card, held in your name." : " cards, held in your name.")
-            : "";
-          renderHall(hall, filtered(rows));
-        })
-        .catch(function () {
-          // undeployed placeholder / read failure -> honest empty hall
-          statusEl.textContent = "";
-          renderEmpty(hall);
-        });
+      // connected + right chain -> the holdings road
+      setChrome(true, true, false, true);
+      readHoldings(s.address, statusEl, markEl, hall, false);
     });
   }
 
-  return { discover: discover, mount: mount };
+  return { discover: discover, readMark: readMark, artUrls: artUrls, mount: mount };
 })();

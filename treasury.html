@@ -19,7 +19,49 @@
     <link rel="stylesheet" href="css/pages.css?v=s1h" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="preload" as="image" href="assets/plates/treasury_hall.webp" type="image/webp" />
-    <script src="config.js?v=s5"></script>
+    <!-- S-TREASURY-SHELF-1 — Your Holdings chrome (Access mark + connect/refresh). Palette tokens from threshold.css. -->
+    <style>
+      .tre-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 auto 2.4vh; }
+      .tre-actions[hidden] { display: none; }
+      .tre-connect {
+        font-family: var(--display, "Cinzel", serif); font-weight: 600; letter-spacing: 0.08em;
+        font-size: 0.9rem; color: var(--gold-burnished, #d9a84e); cursor: pointer;
+        padding: 10px 22px; border-radius: 2px; border: 1px solid var(--gold-aged, #6b5426);
+        background: rgba(232, 200, 116, 0.06); transition: color 150ms, border-color 150ms, background 150ms;
+      }
+      .tre-connect:hover, .tre-connect:focus-visible {
+        color: var(--flame-core, #ffc96b); border-color: var(--gold-hairline, #8a6f3a); background: rgba(232, 200, 116, 0.12);
+      }
+      .tre-connect:disabled { opacity: 0.5; cursor: default; }
+      .tre-refresh {
+        width: 34px; height: 34px; border-radius: 50%; line-height: 1; cursor: pointer;
+        color: var(--gold-burnished, #d9a84e); border: 1px solid var(--gold-aged, #6b5426);
+        background: rgba(232, 200, 116, 0.06); font-size: 1rem; transition: color 150ms, border-color 150ms;
+      }
+      .tre-refresh:hover { color: var(--flame-core, #ffc96b); border-color: var(--gold-hairline, #8a6f3a); }
+      .tre-refresh[hidden], .tre-connect[hidden] { display: none; }
+
+      /* the Access mark — coin/mark styling lineage (echoes .rite-dyc-coin) */
+      .tre-mark {
+        display: flex; align-items: center; gap: 14px; max-width: 26rem; margin: 0 auto 3vh;
+        padding: 12px 16px; border: 1px solid var(--gold-aged, #6b5426); border-radius: 3px;
+        background: linear-gradient(180deg, rgba(26, 22, 17, 0.6), rgba(11, 10, 8, 0.5));
+      }
+      .tre-mark[hidden] { display: none; }
+      .tre-mark-coin {
+        width: 56px; height: 56px; border-radius: 50%; flex: 0 0 auto;
+        box-shadow: 0 0 0 1px rgba(232, 200, 116, 0.3), 0 2px 12px rgba(0, 0, 0, 0.55);
+      }
+      .tre-mark-dim { filter: grayscale(0.85) brightness(0.5); opacity: 0.55; }
+      div.tre-mark-coin.tre-mark-dim { background: radial-gradient(circle, rgba(60, 50, 30, 0.5), rgba(11, 10, 8, 0.6)); }
+      .tre-mark-text { display: flex; flex-direction: column; gap: 3px; font-family: var(--text, "EB Garamond", serif); }
+      .tre-mark-text b { font-family: var(--display, "Cinzel", serif); font-weight: 600; letter-spacing: 0.06em; color: var(--gold-burnished, #d9a84e); font-size: 0.95rem; }
+      .tre-mark-sub { font-size: 0.85rem; color: var(--gold-aged, #6b5426); }
+      .tre-mark-sub.held { color: var(--flame-core, #ffc96b); }
+      .tre-mark-sub.bad, .state-line.bad { color: var(--vermilion, #b33a1f); }
+      .tre-mark-sub a { color: var(--gold-burnished, #d9a84e); }
+    </style>
+    <script src="config.js?v=s6"></script>
   </head>
   <body class="treasury">
     <script src="js/ornament.js?v=s1h"></script>
@@ -48,7 +90,16 @@
     <main>
       <section class="section tight wrap" aria-label="The Treasury">
         <div class="lintel"><span></span><span class="display">The Treasury</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
-        <p class="prose" style="text-align:center;max-width:40ch;margin:0 auto 3vh">Your cards, held in your name — traded by your hand, never by ours.</p>
+        <p class="prose" style="text-align:center;max-width:44ch;margin:0 auto 3vh">Your Holdings — the Access mark and the Wave Cards held in your name. Connect your wallet to read them from chain. Yours by your hand, never by ours.</p>
+
+        <!-- S-TREASURY-SHELF-1: connect (disconnected) + refresh (connected) -->
+        <div id="tre-actions" class="tre-actions" hidden>
+          <button type="button" id="tre-connect" class="tre-connect" hidden>Connect wallet</button>
+          <button type="button" id="tre-refresh" class="tre-refresh" hidden title="Refresh holdings" aria-label="Refresh holdings">↻</button>
+        </div>
+
+        <!-- S-TREASURY-SHELF-1: the Access mark (AccessNFT.balanceOf 0/1, soulbound) -->
+        <div id="tre-mark" class="tre-mark" hidden aria-live="polite"></div>
 
         <!-- faction chambers: ground-color gem-marks that warm the hall ambient -->
         <div id="tre-chambers" class="chambers" role="group" aria-label="Faction chambers">
@@ -107,7 +158,7 @@
     <script src="js/light.js?v=s1e"></script>
     <script src="js/wallet.js?v=s1e"></script>
     <script src="js/cards.js?v=s1e"></script>
-    <script src="js/treasury.js?v=s1e"></script>
+    <script src="js/treasury.js?v=s1f"></script>
     <script>
       (function () {
         var npTop = document.getElementById("nameplate-top");

@@ -34,6 +34,12 @@ window.DY_CONFIG = {
     marketplace: "0x2b74C4C651Dd09D30275EF0dD1c14a699B8502cd", // FROZEN PHASE A (AMOY) — Marketplace proxy (NOT LIVE; see coin-pair flag)
   },
 
+  // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;
+  // the full stack landed 44701099–44701101). Bounds the "Your Holdings" Transfer(*, owner) getLogs scan (from here
+  // to latest) so public RPCs don't reject a full-chain range. UNSET/0 → the loader falls back to fromBlock 0 (a
+  // full scan; if the RPC rejects it, the busy-sentinel renders "unavailable", never a silent empty shelf).
+  deployBlock: 44701099,
+
   // ethers.js — pinned. UMD build, verified to expose BrowserProvider /
   // Contract / queryFilter (see S1 STEP-0 report). Loaded via CDN with SRI off
   // (jsDelivr immutable version path is the pin).
