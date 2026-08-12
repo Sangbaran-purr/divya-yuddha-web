@@ -8462,7 +8462,7 @@ const VFX = (()=>{
   }
   function preloadSprites(){ if(sprLoadN>0) return;                                    // idempotent, once per session (0d slot; async → never blocks the mulligan)
     if(!LEGACY_VFX){ spritesReady=true; return; }                                       // T77: legacy stills cannot fire → skip. T81: sheets are NO LONGER chained here — they load per-match via loadMatchSheets (page load fetches no sheets).
-    SPR_NAMES.forEach(key=>{ const im=new Image(); im.decoding='async';
+    SPR_NAMES.forEach(key=>{ const im=new Image(); im.crossOrigin='anonymous'; im.decoding='async';   // VFX-CORS-1: CORS-clean load so bakeAlpha's getImageData doesn't taint on the cross-origin rite road (Pages sends ACAO:*)
       im.onload=()=>{ sprImg[key]=im; try{buildTints(key,im);}catch(e){}
         try{ const t0=performance.now();
           if(!/^smoke/.test(key)) sprImg[key]=bakeAlpha(im);                         // T72: additive stills → luminance-alpha (smoke stills stay opaque; they draw source-over)
@@ -8488,7 +8488,7 @@ const VFX = (()=>{
   function haveSheet(key){ return !!sheetImg[key]; }
   // T81: LOAD ONE SHEET, idempotent per key (skips if already loaded or in-flight). bakeAlpha + grid derivation as before.
   function loadSheet(key){ if(!key || sheetImg[key] || sheetLoading[key]) return; sheetLoading[key]=true;
-    const im=new Image(); im.decoding='async';
+    const im=new Image(); im.crossOrigin='anonymous'; im.decoding='async';   // VFX-CORS-1: CORS-clean load so bakeAlpha's getImageData doesn't taint on the cross-origin rite road (Pages sends ACAO:*)
     im.onload=()=>{ const W=im.naturalWidth||im.width, H=im.naturalHeight||im.height, gc=SHEET_GRID_CFG[key];
       const cols=gc?gc.cols:Math.round(W/SHEET_CELL), rows=gc?gc.rows:Math.round(H/SHEET_CELL), cw=Math.round(W/cols), ch=Math.round(H/rows);
       sheetGrid[key]={cols,rows,frames:cols*rows,cw,ch};   // cw/ch per-sheet cell dims (square: =SHEET_CELL; rectangular row-plate: from SHEET_GRID_CFG)
@@ -8649,7 +8649,7 @@ fn _bp(c:vec3<f32>, thr:f32)->vec3<f32>{ let l=max(c.r,max(c.g,c.b)); return c*s
   }
   // T70-P2H-fix (L9): the kit stills are OPAQUE JPEGs (no alpha). A plain additive sprite of an opaque black-ground texture accumulates alpha → an opaque black tile. Bake a luminance-derived alpha so the black ground is truly transparent; then blendMode='add' draws only the bright energy. (The generated aura/ember textures already have canvas alpha, so they were never affected.)
   async function heroKitTex(url){ const P=gpu.PIXI;
-    try{ const img=await new Promise((res,rej)=>{ const im=new Image(); im.decoding='async'; im.onload=()=>res(im); im.onerror=rej; im.src=url; });
+    try{ const img=await new Promise((res,rej)=>{ const im=new Image(); im.crossOrigin='anonymous'; im.decoding='async'; im.onload=()=>res(im); im.onerror=rej; im.src=url; });   // VFX-CORS-1: CORS-clean load so heroKitTex's getImageData doesn't taint on the cross-origin rite road (Pages sends ACAO:*)
       const w=img.naturalWidth||512, h=img.naturalHeight||512, c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
       g.drawImage(img,0,0,w,h); const id=g.getImageData(0,0,w,h), d=id.data;
       for(let i=0;i<d.length;i+=4){ d[i+3]=Math.max(d[i],d[i+1],d[i+2]); }   // alpha = luminance
