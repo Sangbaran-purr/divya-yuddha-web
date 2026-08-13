@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="css/pages.css?v=s1h" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="preload" as="image" href="assets/plates/rite.webp" type="image/webp" fetchpriority="high" />
-    <script src="config.js?v=s9"></script>
+    <script src="config.js?v=s10"></script>
     <style>
       /* THE THRESHOLD NOTICE — one parchment interstitial before the door (S2) */
       #thresh {
@@ -403,7 +403,7 @@
     </footer>
 
     <script src="js/light.js?v=s1e"></script>
-    <script src="js/wallet.js?v=s1e"></script>
+    <script src="js/wallet.js?v=s1f"></script>
     <script>
       (function () {
         var CFG = window.DY_CONFIG;
@@ -428,7 +428,7 @@
           if (!dycAmt) return;
           dycAmt.textContent = "reading balance…"; dycAmt.classList.remove("bad");
           window.DYWallet.loadEthers().then(function (ethers) {
-            var provider = new ethers.BrowserProvider(window.ethereum);
+            var provider = window.DYWallet.readProvider(); // RUNG4-FIX-3 — tamed publicnode read road, not the wallet's dead RPC
             var coin = new ethers.Contract(CFG.contracts.dycoin, ["function balanceOf(address) view returns (uint256)"], provider);
             return coin.balanceOf(window.DYWallet.state.address).then(function (bal) {
               var dec = ethers.formatUnits(bal, 18);

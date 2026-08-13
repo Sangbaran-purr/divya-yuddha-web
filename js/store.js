@@ -79,7 +79,9 @@ window.DYStore = (function () {
   function eqAddr(a, b) { return a && b && a.toLowerCase() === b.toLowerCase(); }
 
   function loadE() { return window.DYWallet.loadEthers(); }
-  function readProvider(ethers) { return new ethers.JsonRpcProvider(CFG.chain.rpcUrls[0]); }
+  // RUNG4-FIX-3 — reads ride the shared tamed publicnode road (staticNetwork, fail-fast), NOT the dead rpcUrls[0]
+  // JsonRpcProvider that spun the "failed to detect network, retry in 1s" loop. Writes still use signerRoad (wallet).
+  function readProvider() { return window.DYWallet.readProvider(); }
   // the signing road: BrowserProvider -> signer (wallet-estimated gas; NO feeOverrides)
   function signerRoad() {
     return loadE().then(function (ethers) {

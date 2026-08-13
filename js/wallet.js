@@ -160,6 +160,22 @@ window.DYWallet = (function () {
       });
   }
 
+  // --- RUNG4-FIX-3 — THE SITE READ ROAD. A tamed public JSON-RPC provider (publicnode via chain.readRpcUrls[0]),
+  //     shared by every read surface (store / treasury / rite / this holder gate). staticNetwork:true means NO
+  //     eth_chainId auto-detection → NO "failed to detect network, retry in 1s" loop against a dead endpoint; the
+  //     FetchRequest timeout + maxAttempts 2 fail FAST so a caller renders its busy-sentinel instead of spinning.
+  //     Reads only — NEVER the wallet's BrowserProvider (which rides whatever RPC the wallet registered; dead for
+  //     users on the old rpcUrls). Writes stay on the wallet signer, untouched. Requires ethers loaded (callers
+  //     invoke this inside loadEthers().then). ---
+  function readProvider() {
+    var e = window.ethers;
+    var url = (CFG.chain.readRpcUrls && CFG.chain.readRpcUrls[0]) || CFG.chain.rpcUrls[0];
+    var req = new e.FetchRequest(url);
+    req.timeout = 10000; // 10s hard cap per request (ethers default is 300s)
+    req.setThrottleParams({ maxAttempts: 2 }); // fail fast — no exponential-backoff retry storm
+    return new e.JsonRpcProvider(req, CFG.chain.id, { staticNetwork: true });
+  }
+
   // --- holder check: AccessNFT.balanceOf > 0. Fails GRACEFULLY (placeholder
   //     addresses / undeployed rehearsal contract) -> treated as non-holder. ---
   function checkHolder() {
@@ -169,8 +185,7 @@ window.DYWallet = (function () {
     }
     return loadEthers()
       .then(function (ethers) {
-        var provider = new ethers.BrowserProvider(window.ethereum);
-        var c = new ethers.Contract(CFG.contracts.accessNFT, ACCESS_ABI, provider);
+        var c = new ethers.Contract(CFG.contracts.accessNFT, ACCESS_ABI, readProvider());
         return c.balanceOf(state.address);
       })
       .then(function (bal) {
@@ -200,6 +215,7 @@ window.DYWallet = (function () {
     ensureChain: ensureChain,
     checkHolder: checkHolder,
     loadEthers: loadEthers,
+    readProvider: readProvider, // RUNG4-FIX-3 — the shared tamed publicnode read road (store/treasury/rite reuse this)
     shortAddr: shortAddr,
   };
 })();

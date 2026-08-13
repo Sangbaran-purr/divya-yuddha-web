@@ -10,7 +10,14 @@ window.DY_CONFIG = {
     idHex: "0x13882", // 80002
     name: "Polygon Amoy Testnet",
     nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
-    rpcUrls: ["https://rpc-amoy.polygon.technology"],
+    // RUNG4-FIX-3 — WALLET-REGISTRATION list (fed to wallet_addEthereumChain): what MetaMask registers for NEW users.
+    // The old rpc-amoy.polygon.technology is DNS-dead (ERR_NAME_NOT_RESOLVED). publicnode first (CORS-clean, full node,
+    // serves eth_maxPriorityFeePerGas + eth_sendRawTransaction), drpc as a redundant second. Existing users keep
+    // whatever they already registered — the site READ road below is wallet-independent, so their reads still work.
+    rpcUrls: ["https://polygon-amoy-bor-rpc.publicnode.com", "https://polygon-amoy.drpc.org"],
+    // RUNG4-FIX-3 — the SITE READ endpoint (DYWallet.readProvider). Every site read rides this tamed publicnode
+    // provider (staticNetwork, fail-fast) regardless of the user's wallet RPC. Writes stay on the wallet signer.
+    readRpcUrls: ["https://polygon-amoy-bor-rpc.publicnode.com"],
     blockExplorerUrls: ["https://amoy.polygonscan.com"],
   },
 

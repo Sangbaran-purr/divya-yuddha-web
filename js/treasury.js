@@ -75,7 +75,7 @@ window.DYTreasury = (function () {
   // --- CHAIN READS -----------------------------------------------------------
   function readMark(owner, deadlineAt) {
     return window.DYWallet.loadEthers().then(function (ethers) {
-      var provider = new ethers.BrowserProvider(window.ethereum);
+      var provider = window.DYWallet.readProvider(); // RUNG4-FIX-3 — tamed publicnode read road, not the wallet's dead RPC
       var acc = new ethers.Contract(CFG.contracts.accessNFT, ACCESS_ABI, provider);
       return withRetry(
         function () {
@@ -91,7 +91,7 @@ window.DYTreasury = (function () {
 
   function discover(owner, deadlineAt) {
     return window.DYWallet.loadEthers().then(function (ethers) {
-      var provider = new ethers.BrowserProvider(window.ethereum);
+      var provider = window.DYWallet.readProvider(); // RUNG4-FIX-3 — tamed publicnode read road, not the wallet's dead RPC
       var c = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
       var fromBlock = CFG.deployBlock || 0; // bounded scan; 0 -> full scan (S-LEDGER-FIX-4 law)
       // incoming transfers to owner (includes mints: Transfer(0, owner, id)), from the deploy block.
