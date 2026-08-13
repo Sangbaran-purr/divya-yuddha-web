@@ -94,16 +94,9 @@ window.DYTreasury = (function () {
       var provider = window.DYWallet.readProvider(); // RUNG4-FIX-3 — tamed publicnode read road, not the wallet's dead RPC
       var c = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
       var fromBlock = CFG.deployBlock || 0; // bounded scan; 0 -> full scan (S-LEDGER-FIX-4 law)
-      // incoming transfers to owner (includes mints: Transfer(0, owner, id)), from the deploy block.
-      return withRetry(
-        function () {
-          return provider.getBlockNumber().then(function (latest) {
-            return c.queryFilter(c.filters.Transfer(null, owner), fromBlock, latest);
-          });
-        },
-        3,
-        deadlineAt
-      ).then(function (evs) {
+      // RUNG4-FIX-7 — CHUNKED scan via the shared law (publicnode hangs on a single >10k-block getLogs; the
+      // deployBlock→latest range is now >112k). Incoming transfers to owner (includes mints: Transfer(0, owner, id)).
+      return window.DYWallet.scanLogs(c, c.filters.Transfer(null, owner), fromBlock, deadlineAt).then(function (evs) {
         var ids = {};
         evs.forEach(function (e) {
           ids[e.args.tokenId.toString()] = e.args.tokenId;

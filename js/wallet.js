@@ -206,6 +206,40 @@ window.DYWallet = (function () {
       });
   }
 
+  // --- RUNG4-FIX-7 — THE SHARED getLogs SCAN LAW. publicnode/drpc reject (or hang on) a getLogs range > ~10000
+  //     blocks, so a single queryFilter over deployBlock→latest (now >112k blocks) never returns → the caller's
+  //     read dies to the busy-sentinel. So chunk [fromBlock, latest] into <=CHUNK windows, withRetry per chunk,
+  //     accumulate. FORWARD-chunk + DEADLINE-TO-BUSY (owner ruling): if the deadline hits mid-scan we THROW — never
+  //     return a partial set (a truncated forward scan would drop the NEWEST chunks, i.e. a fresh mint). Both the
+  //     treasury shelf (discover) and Your Listings (scanMyListings) ride this one law. Requires ethers loaded.
+  //     `contract` is an ethers Contract on readProvider(); `filter` an ethers event filter. Returns Promise<events[]>. ---
+  var LOG_CHUNK = 9999; // < 10000 — the archive-RPC cap (admin.js LOG_CHUNK precedent)
+  function scanLogs(contract, filter, fromBlock, deadlineAt) {
+    return readProvider().getBlockNumber().then(function (latest) {
+      var acc = [];
+      function scanFrom(start) {
+        if (start > latest) return Promise.resolve(acc);
+        var end = Math.min(start + LOG_CHUNK, latest);
+        return withRetry(function () { return contract.queryFilter(filter, start, end); }, 3, deadlineAt)
+          .then(function (evs) {
+            acc = acc.concat(evs);
+            if (Date.now() > deadlineAt) throw new Error("scan deadline"); // deadline-to-busy: never a partial shelf
+            return scanFrom(end + 1);
+          });
+      }
+      return scanFrom(fromBlock);
+    });
+  }
+
+  // --- scan-road helpers (S-REGISTRY-HIST lineage): withRetry + sleep, for the chunked scan above ---
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function withRetry(fn, tries, deadlineAt) {
+    return fn().catch(function (e) {
+      if (tries <= 1 || Date.now() > deadlineAt) throw e;
+      return sleep(400).then(function () { return withRetry(fn, tries - 1, deadlineAt); });
+    });
+  }
+
   // --- holder check: AccessNFT.balanceOf > 0. Fails GRACEFULLY (placeholder
   //     addresses / undeployed rehearsal contract) -> treated as non-holder. ---
   function checkHolder() {
@@ -247,6 +281,7 @@ window.DYWallet = (function () {
     loadEthers: loadEthers,
     readProvider: readProvider, // RUNG4-FIX-3 — the shared tamed publicnode read road (store/treasury/rite reuse this)
     feeOverrides: feeOverrides, // RUNG4-FIX-6 — player-send fee-field floor (45/30 via publicnode); gasLimit stays wallet
+    scanLogs: scanLogs, // RUNG4-FIX-7 — the shared chunked getLogs scan (treasury discover + store scanMyListings)
     shortAddr: shortAddr,
   };
 })();

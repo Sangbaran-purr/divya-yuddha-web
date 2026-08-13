@@ -568,9 +568,9 @@ window.DYStore = (function () {
       var nft = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
       var fromBlock = CFG.marketDeployBlock || CFG.deployBlock || 0; // market events cannot predate the market's own deploy
       return dycDecimals(ethers, provider).then(function () {
-        return provider.getBlockNumber().then(function (latest) {
-          return market.queryFilter(market.filters.Listed(null, owner), fromBlock, latest);
-        });
+        // RUNG4-FIX-7 — CHUNKED scan via the shared law (the marketDeployBlock→latest range already exceeds the ~10k
+        // getLogs cap; a single queryFilter hangs on publicnode). deadline-to-busy, never a partial listings set.
+        return window.DYWallet.scanLogs(market, market.filters.Listed(null, owner), fromBlock, deadlineAt);
       }).then(function (evs) {
         var ids = {};
         evs.forEach(function (e) { ids[e.args.tokenId.toString()] = e.args.tokenId; });
