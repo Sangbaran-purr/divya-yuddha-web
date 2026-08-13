@@ -36,8 +36,8 @@ window.DY_ADMIN_CONFIG = {
     vestingVault: "0x7c7da4FFA7E32018912c18AffE9902969e0a5972", // M-F3 Registry — VESTED column
     holderStaking: "0xE9A16394c6E78c3ea9B79e757a12C2A64D76C7bf", // M-F3 Registry — STAKED + REWARDS
     dropDesk: "0x6EC80e9BE34038329291077E126906359e86916a", // M-F6-G3 — Drop Desk (coupon sign/publish/cancel/figures; owner=timelock, signer=PROD_OWNER)
-    waveCardSale: "0xe9Ff07bF0e0fD43E56EdEE958a8f40e10090628c", // LEG2/RUNG-4 — WaveCardSale (Price Desk gate owner()==connected + setPrice/setSupplyCap/setSalesOpen target). LIVE 2026-08-13
-    waveCardMarket: "0xB7d09A514Ae054aa4BeEDeA027059fb91Da4576e", // LEG4/RUNG-4 — WaveCardMarket (Price Desk marketsOpen switch target). LIVE 2026-08-13
+    waveCardSale: "0xE9FF07bF0E0fd43E56EDee958a8F40E10090628C", // LEG2/RUNG-4 — WaveCardSale (Price Desk gate owner()==connected + setPrice/setSupplyCap/setSalesOpen target). LIVE 2026-08-13 [RUNG4-FIX-1C: canonical EIP-55]
+    waveCardMarket: "0xB7d09A514AE054Aa4beedea027059Fb91DA4576E", // LEG4/RUNG-4 — WaveCardMarket (Price Desk marketsOpen switch target). LIVE 2026-08-13 [RUNG4-FIX-1C: canonical EIP-55]
   },
 
   // The block the contracts were deployed at — the mint-history scan starts here

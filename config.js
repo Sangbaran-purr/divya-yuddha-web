@@ -38,8 +38,8 @@ window.DY_CONFIG = {
     // chain-verified master-owned, both shipped CLOSED). The store's Buy grid, the
     // Market tab, and the treasury LIST + Your Listings wake now that these carry
     // live addresses. Prices are DYC-native (the `dycoin` money-stack coin above), W-PRICE-1.
-    waveCardSale: "0xe9Ff07bF0e0fD43E56EdEE958a8f40e10090628c", // LEG3/RUNG-4 — WaveCardSale (priceOf/remainingOf/buy); deploy block 44799211
-    waveCardMarket: "0xB7d09A514Ae054aa4BeEDeA027059fb91Da4576e", // LEG5/RUNG-4 — WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 44799212
+    waveCardSale: "0xE9FF07bF0E0fd43E56EDee958a8F40E10090628C", // LEG3/RUNG-4 — WaveCardSale (priceOf/remainingOf/buy); deploy block 44799211 [RUNG4-FIX-1C: canonical EIP-55, was a hand-fabricated bad-checksum mixed-case]
+    waveCardMarket: "0xB7d09A514AE054Aa4beedea027059Fb91DA4576E", // LEG5/RUNG-4 — WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 44799212 [RUNG4-FIX-1C: canonical EIP-55]
   },
 
   // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;

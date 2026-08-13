@@ -191,6 +191,14 @@ window.DYAdmin = (function () {
   function eq(a, b) {
     return a && b && a.toLowerCase() === b.toLowerCase();
   }
+  // RUNG4-FIX-1C — canonical-address guard. ethers.getAddress accepts a valid EIP-55 (or all-lower/all-upper)
+  // address and RETURNS the checksummed form; it THROWS on a bad mixed-case checksum. A malformed address is a
+  // CONFIG error, not a chain-busy or a wrong-wallet — never launder it into either. Returns the usable checksummed
+  // address, or null (caller renders "address is malformed"). Requires ethersRef (call inside withEthers()).
+  function validAddr(a) {
+    if (!a) return null;
+    try { return ethersRef.getAddress(a); } catch (e) { return null; }
+  }
 
   function decodeErr(e) {
     if (e && e.code === "ACTION_REJECTED") return "signature rejected";
@@ -2316,9 +2324,20 @@ window.DYAdmin = (function () {
     }
     st.textContent = "Reading owner() from chain…";
     withEthers().then(function () {
-      var sale = new ethersRef.Contract(c.waveCardSale, WAVESALE_ABI, tamedProvider(PD_RPC)); // Fix A: tamed publicnode, not the wallet
+      // RUNG4-FIX-1C — a malformed (bad-checksum) address is a CONFIG error: name it, never read (ethers would
+      // throw "bad address checksum" and the failure would masquerade as busy). This was the actual RUNG4 defect.
+      var addr = validAddr(c.waveCardSale);
+      if (!addr) {
+        pdSaleOwnerOk = false;
+        st.innerHTML = "<span class='bad'>WaveCardSale address is malformed (bad checksum)</span> — fix the address in config.";
+        pdSetControls(false); pdSetMarketsSwitch(false);
+        if ($("pd-salesopen-state")) $("pd-salesopen-state").textContent = "—";
+        return null; // short-circuit: do NOT read
+      }
+      var sale = new ethersRef.Contract(addr, WAVESALE_ABI, tamedProvider(PD_RPC)); // Fix A: tamed publicnode, not the wallet
       return Promise.all([sale.owner().catch(function () { return null; }), sale.salesOpen().catch(function () { return null; })]);
     }).then(function (r) {
+      if (r === null) return; // malformed-address short-circuit (already rendered)
       if ($("pd-salesopen-state")) $("pd-salesopen-state").textContent = r[1] === null ? "busy" : (r[1] ? "OPEN" : "closed");
       // RUNG4-FIX-1 (Fix B) — busy is busy, never an accusation. A null owner() is a FAILED read (busy-sentinel),
       // NOT a definitive "not the owner". Three states: busy / genuine-mismatch / owner-ok.
@@ -2351,9 +2370,12 @@ window.DYAdmin = (function () {
     if (!c.waveCardMarket) { if (stEl) stEl.textContent = "NOT CONFIGURED"; pdSetMarketsSwitch(false); return; }
     if (!s.connected || !s.chainOk) { pdSetMarketsSwitch(false); return; }
     withEthers().then(function () {
-      var m = new ethersRef.Contract(c.waveCardMarket, MARKET_ABI, tamedProvider(PD_RPC)); // Fix A: tamed publicnode, not the wallet
+      var addr = validAddr(c.waveCardMarket); // RUNG4-FIX-1C — malformed address is a config error, never read/busy
+      if (!addr) { if (stEl) stEl.textContent = "malformed addr"; pdSetMarketsSwitch(false); return null; }
+      var m = new ethersRef.Contract(addr, MARKET_ABI, tamedProvider(PD_RPC)); // Fix A: tamed publicnode, not the wallet
       return Promise.all([m.owner().catch(function () { return null; }), m.marketsOpen().catch(function () { return null; })]);
     }).then(function (r) {
+      if (r === null) return; // malformed-address short-circuit (already rendered)
       if (stEl) stEl.textContent = r[1] === null ? "busy" : (r[1] ? "OPEN" : "closed");
       // Fix B: a null owner() read is busy, never a definitive not-owner → disable the switch, no false verdict.
       pdSetMarketsSwitch(r[0] !== null && eq(r[0], s.address));
