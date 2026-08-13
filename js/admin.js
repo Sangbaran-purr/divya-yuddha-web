@@ -88,6 +88,8 @@ window.DYAdmin = (function () {
       dycoin: o.dycoin || fc.dycoin || null, // S9 — the DYC token for COIN DROPS (admin config, never config.js's frozen proxy)
       dycoinSale: o.dycoinSale || fc.dycoinSale || null, // M-F2 — the DYCoinSale (Approve Buyers EIP-712 domain + signer gate)
       dropDesk: o.dropDesk || fc.dropDesk || null, // M-F6 — the Drop Desk (coupon signing + cancel + figures)
+      waveCardSale: o.waveCardSale || fc.waveCardSale || null, // LEG2 — WaveCardSale (Price Desk)
+      waveCardMarket: o.waveCardMarket || fc.waveCardMarket || null, // LEG4 — WaveCardMarket (marketsOpen switch)
       vestingVault: o.vestingVault || fc.vestingVault || null, // M-F3 — Purchase Registry VESTED column
       holderStaking: o.holderStaking || fc.holderStaking || null, // M-F3 — Purchase Registry STAKED + REWARDS
       // S-LEDGER-FIX-4: a stored 0 / "" / null / undefined / non-numeric deployBlock counts as UNSET → file default rules; only a genuine positive integer wins (a stored 0 used to win and force a genesis full-chain scan).
@@ -302,6 +304,7 @@ window.DYAdmin = (function () {
     // S-TORANA-1: run the TORANA gate FIRST so its dark/connect/minter state shows in ALL wallet states (accessNFT-unset
     // is a config fact independent of connection). refreshToranaPanel handles !accessNFT / !connected / !chainOk / minter.
     refreshToranaPanel();
+    refreshPriceDeskGate(); // LEG2 — like TORANA: runs in ALL wallet states (dark on null address, connect prompt, owner check)
 
     if (!s.hasProvider) {
       banner.className = "banner warn";
@@ -2227,6 +2230,288 @@ window.DYAdmin = (function () {
     });
   }
 
+  // ═══════════════════ PRICE DESK (LEG2) — WaveCardSale prices/caps + live-fire switches ═══════════════════
+  var SALE_ABI = [
+    "function owner() view returns (address)",
+    "function salesOpen() view returns (bool)",
+    "function priceOf(uint256) view returns (uint256)",
+    "function supplyCap(uint256) view returns (uint256)",
+    "function remainingOf(uint256) view returns (uint256)",
+    "function setPrice(uint256 cardId, uint256 price)",
+    "function setPrices(uint256[] cardIds, uint256[] prices)",
+    "function setSupplyCap(uint256 cardId, uint256 cap)",
+    "function setSupplyCaps(uint256[] cardIds, uint256[] caps)",
+    "function setSalesOpen(bool open)",
+  ];
+  var MARKET_ABI = [
+    "function owner() view returns (address)",
+    "function marketsOpen() view returns (bool)",
+    "function setMarketsOpen(bool open)",
+  ];
+  var PD_RARITIES = ["Mythic", "Legendary", "Epic", "Rare", "Uncommon", "Common"];
+  var pdReadGen = 0; // read-generation guard — a stale LOAD never clobbers a newer one
+  var pdChain = {}; // cardId -> { price, cap, remaining } (BigInt) | "busy"
+  var pdCatalog = []; // the live registry rows (held #188 excluded)
+  var pdSaleOwnerOk = false;
+
+  function pdLiveCards() {
+    var reg = window.DY_WAVE_REGISTRY;
+    if (!reg || !reg.list) return [];
+    return reg.list().filter(function (w) { return w.status !== "held"; }).sort(function (a, b) { return a.cardId - b.cardId; });
+  }
+
+  // registry-driven table (renders always; chain columns are "—" until LOAD)
+  function buildPriceDesk() {
+    pdCatalog = pdLiveCards();
+    var host = $("pd-catalog");
+    if (!host) return;
+    var body = pdCatalog.map(function (w) {
+      return "<tr data-card='" + w.cardId + "'><td>" + escHtml(w.name) + "</td><td>" + w.faction +
+        "</td><td>" + w.rarity + "</td><td class='mono'>" + w.supply + "</td>" +
+        "<td class='pd-price mono'>—</td><td class='pd-cap mono'>—</td><td class='pd-remaining mono'>—</td>" +
+        "<td><input class='txt pd-override' data-card='" + w.cardId + "' data-rarity='" + w.rarity +
+        "' type='text' inputmode='decimal' style='width:6rem' placeholder='—' disabled /></td></tr>";
+    }).join("");
+    host.innerHTML =
+      "<div style='font-size:0.78rem;color:var(--gold-aged);margin:0.3rem 0'>" + pdCatalog.length +
+      " live cards (held seat #188 excluded). Chain columns blank until <b>LOAD CHAIN STATE</b>.</div>" +
+      "<table class='pd-table' style='width:100%;border-collapse:collapse;font-size:0.82rem'><thead><tr style='text-align:left'>" +
+      "<th>Card</th><th>Faction</th><th>Rarity</th><th>Supply</th><th>Price (DYC)</th><th>Cap</th><th>Remaining</th><th>Override</th>" +
+      "</tr></thead><tbody>" + body + "</tbody></table>";
+  }
+
+  function pdSetControls(on) {
+    PD_RARITIES.forEach(function (r) { var e = $("pd-def-" + r); if (e) e.disabled = !on; });
+    ["pd-apply-unpriced", "pd-seed-caps", "pd-load", "pd-refresh", "pd-salesopen-word", "pd-salesopen-open", "pd-salesopen-close"].forEach(function (id) {
+      var e = $(id); if (e) e.disabled = !on;
+    });
+    document.querySelectorAll(".pd-override").forEach(function (e) { e.disabled = !on; });
+  }
+  function pdSetMarketsSwitch(on) {
+    ["pd-marketsopen-word", "pd-marketsopen-open", "pd-marketsopen-close"].forEach(function (id) { var e = $(id); if (e) e.disabled = !on; });
+  }
+
+  function refreshPriceDeskGate() {
+    var c = cfg();
+    var st = $("pd-status");
+    if (!st) return;
+    var s = window.DYWallet.state;
+    if (!c.waveCardSale) {
+      st.innerHTML = "<span class='bad'>PRICE DESK NOT CONFIGURED</span> — set the WaveCardSale address in Configuration after deploy (RUNG-4). The catalog is the registry; chain columns wake when configured.";
+      pdSetControls(false); pdSetMarketsSwitch(false);
+      if ($("pd-marketsopen-state")) $("pd-marketsopen-state").textContent = "—";
+      return;
+    }
+    if (!s.hasProvider || !s.connected || !s.chainOk) {
+      st.textContent = "Connect the owner wallet on " + window.DY_CONFIG.chain.name + " to operate the Price Desk.";
+      pdSetControls(false); pdSetMarketsSwitch(false);
+      return;
+    }
+    st.textContent = "Reading owner() from chain…";
+    withEthers().then(function () {
+      var sale = new ethersRef.Contract(c.waveCardSale, SALE_ABI, readProvider());
+      return Promise.all([sale.owner().catch(function () { return null; }), sale.salesOpen().catch(function () { return null; })]);
+    }).then(function (r) {
+      pdSaleOwnerOk = eq(r[0], s.address);
+      if ($("pd-salesopen-state")) $("pd-salesopen-state").textContent = r[1] === null ? "busy" : (r[1] ? "OPEN" : "closed");
+      if (pdSaleOwnerOk) {
+        st.innerHTML = "<span class='ok'>Owner connected.</span> Press <b>LOAD CHAIN STATE</b> to read prices / caps / remaining.";
+        pdSetControls(true);
+      } else {
+        st.innerHTML = "<span class='bad'>Connected wallet is not the WaveCardSale owner</span> — connect the master.";
+        pdSetControls(false);
+      }
+      refreshMarketsSwitchGate();
+    }).catch(function () {
+      st.innerHTML = "<span class='bad'>Could not read owner() from the WaveCardSale address</span> — check the address + network.";
+      pdSetControls(false); pdSetMarketsSwitch(false);
+    });
+  }
+
+  // marketsOpen switch is INDEPENDENTLY gated on WaveCardMarket (flag 1): dark on null address, else market.owner()==connected
+  function refreshMarketsSwitchGate() {
+    var c = cfg();
+    var s = window.DYWallet.state;
+    var stEl = $("pd-marketsopen-state");
+    if (!c.waveCardMarket) { if (stEl) stEl.textContent = "NOT CONFIGURED"; pdSetMarketsSwitch(false); return; }
+    if (!s.connected || !s.chainOk) { pdSetMarketsSwitch(false); return; }
+    withEthers().then(function () {
+      var m = new ethersRef.Contract(c.waveCardMarket, MARKET_ABI, readProvider());
+      return Promise.all([m.owner().catch(function () { return null; }), m.marketsOpen().catch(function () { return null; })]);
+    }).then(function (r) {
+      if (stEl) stEl.textContent = r[1] === null ? "busy" : (r[1] ? "OPEN" : "closed");
+      pdSetMarketsSwitch(eq(r[0], s.address));
+    }).catch(function () { if (stEl) stEl.textContent = "busy"; pdSetMarketsSwitch(false); });
+  }
+
+  // the 261 live reads — ONLY on explicit LOAD/refresh (never auto), read-gen guarded, busy-sentinel per card
+  function pdLoadChainState() {
+    var c = cfg();
+    if (!c.waveCardSale) return;
+    var stEl = $("pd-load-status");
+    var gen = ++pdReadGen;
+    if (stEl) { stEl.textContent = "Reading chain (" + pdCatalog.length + " cards)…"; stEl.style.color = "var(--gold-aged)"; }
+    withEthers().then(function () {
+      var sale = new ethersRef.Contract(c.waveCardSale, SALE_ABI, readProvider());
+      return Promise.all(pdCatalog.map(function (w) {
+        return Promise.all([
+          sale.priceOf(w.cardId).catch(function () { return null; }),
+          sale.supplyCap(w.cardId).catch(function () { return null; }),
+          sale.remainingOf(w.cardId).catch(function () { return null; }),
+        ]).then(function (r) { return { id: w.cardId, price: r[0], cap: r[1], remaining: r[2], busy: r[0] === null || r[1] === null || r[2] === null }; });
+      }));
+    }).then(function (results) {
+      if (gen !== pdReadGen) return; // superseded by a newer LOAD
+      var busyN = 0;
+      results.forEach(function (r) {
+        var tr = document.querySelector("#pd-catalog tr[data-card='" + r.id + "']");
+        if (!tr) return;
+        if (r.busy) {
+          busyN++;
+          tr.querySelector(".pd-price").innerHTML = "<span class='bad'>busy</span>";
+          tr.querySelector(".pd-cap").innerHTML = "<span class='bad'>busy</span>";
+          tr.querySelector(".pd-remaining").innerHTML = "<span class='bad'>busy</span>";
+          pdChain[r.id] = "busy";
+        } else {
+          tr.querySelector(".pd-price").textContent = ethersRef.formatUnits(r.price, 18);
+          tr.querySelector(".pd-cap").textContent = r.cap.toString();
+          tr.querySelector(".pd-remaining").textContent = r.remaining.toString();
+          pdChain[r.id] = { price: r.price, cap: r.cap, remaining: r.remaining };
+        }
+      });
+      if (stEl) {
+        stEl.textContent = busyN ? busyN + " card(s) unavailable — the chain is busy. Refresh to retry." : "Loaded " + results.length + " cards.";
+        stEl.style.color = busyN ? "var(--vermilion)" : "var(--gold-aged)";
+      }
+    }).catch(function () {
+      if (gen !== pdReadGen) return;
+      if (stEl) { stEl.textContent = "Could not read the chain — busy or unreachable. Refresh to retry."; stEl.style.color = "var(--vermilion)"; }
+    });
+  }
+
+  function pdReviewMsg(t) { var r = $("pd-review"); if (r) r.innerHTML = "<div class='q'>" + escHtml(t) + "</div>"; }
+
+  // Apply per-rarity defaults to UNPRICED cards (+ any per-card override, which always applies); stage a setPrices batch
+  function pdApplyUnpriced() {
+    if (!Object.keys(pdChain).length) { pdReviewMsg("Load chain state first — the desk must know which cards are unpriced."); return; }
+    withEthers().then(function () {
+      var defaults = {};
+      PD_RARITIES.forEach(function (r) { var v = (($("pd-def-" + r) || {}).value || "").trim(); if (v) defaults[r] = v; });
+      var ids = [], prices = [], rows = [];
+      pdCatalog.forEach(function (w) {
+        var ch = pdChain[w.cardId];
+        var ovEl = document.querySelector(".pd-override[data-card='" + w.cardId + "']");
+        var override = (ovEl && ovEl.value || "").trim();
+        var human = override || defaults[w.rarity];
+        if (!human) return;
+        var isUnpriced = ch && ch !== "busy" && ch.price === 0n;
+        if (!override && !isUnpriced) return; // defaults touch ONLY unpriced; overrides always
+        var wei;
+        try { wei = ethersRef.parseUnits(human, 18); } catch (e) { return; }
+        if (wei === 0n) return; // zero-price law: never stage a 0
+        ids.push(w.cardId); prices.push(wei);
+        rows.push("<tr><td>" + escHtml(w.name) + " <span style='color:var(--gold-aged)'>#" + w.cardId + "</span></td><td class='mono'>" + escHtml(human) + " DYC</td><td>" + (override ? "override" : "default " + w.rarity) + "</td></tr>");
+      });
+      if (!ids.length) { pdReviewMsg("Nothing to stage — set rarity defaults and/or per-card overrides (defaults apply only to on-chain-unpriced cards)."); return; }
+      pdRenderBatchReview("prices", "setPrices", ids, prices, rows, ["Card", "Price", "Source"]);
+    }).catch(function (e) { pdReviewMsg("Could not stage: " + decodeErr(e)); });
+  }
+
+  // Seed caps from the registry supply for cards whose ON-CHAIN cap is 0 — NEVER overwrites a nonzero cap
+  function pdSeedCaps() {
+    if (!Object.keys(pdChain).length) { pdReviewMsg("Load chain state first."); return; }
+    var ids = [], caps = [], rows = [], mismatched = 0;
+    pdCatalog.forEach(function (w) {
+      var ch = pdChain[w.cardId];
+      if (!ch || ch === "busy") return;
+      if (ch.cap === 0n) {
+        ids.push(w.cardId); caps.push(BigInt(w.supply));
+        rows.push("<tr><td>" + escHtml(w.name) + " <span style='color:var(--gold-aged)'>#" + w.cardId + "</span></td><td class='mono'>" + w.supply + "</td><td>" + w.rarity + "</td></tr>");
+      } else if (ch.cap !== BigInt(w.supply)) { mismatched++; }
+    });
+    if (!ids.length) {
+      pdReviewMsg("No unset caps to seed" + (mismatched ? " — " + mismatched + " card(s) have a different nonzero cap (the seed NEVER overwrites; change those per-card if intended)." : "."));
+      return;
+    }
+    pdRenderBatchReview("caps", "setSupplyCaps", ids, caps, rows, ["Card", "Cap", "Rarity"]);
+  }
+
+  function pdRenderBatchReview(kind, fnLabel, ids, values, rows, heads) {
+    var r = $("pd-review");
+    if (!r) return;
+    r.innerHTML = "<div class='confirm' style='margin-top:0.6rem'><b>Review — " + fnLabel + " (" + ids.length + " card" + (ids.length === 1 ? "" : "s") + "):</b>" +
+      "<table class='pd-table' style='width:100%;border-collapse:collapse;font-size:0.82rem'><thead><tr style='text-align:left'><th>" + heads.join("</th><th>") + "</th></tr></thead><tbody>" +
+      rows.join("") + "</tbody></table><div class='row-actions'><button class='btn' id='pd-send-batch'>Send " + fnLabel + "</button> " +
+      "<button class='btn' id='pd-cancel-batch'>Cancel</button> <span id='pd-review-msg' class='mono' style='font-size:0.78rem;color:var(--gold-aged)'></span></div></div>";
+    $("pd-cancel-batch").onclick = function () { r.innerHTML = ""; };
+    $("pd-send-batch").onclick = function () { $("pd-send-batch").disabled = true; pdSendBatch(kind, ids, values); };
+  }
+
+  function pdSendBatch(kind, ids, values) {
+    var c = cfg();
+    var msg = $("pd-review-msg");
+    withEthers().then(function () {
+      var provider = new ethersRef.BrowserProvider(window.ethereum);
+      return provider.getSigner().then(function (signer) {
+        var sale = new ethersRef.Contract(c.waveCardSale, SALE_ABI, signer);
+        var call = kind === "prices" ? sale.setPrices : sale.setSupplyCaps;
+        if (msg) msg.textContent = "Simulating…";
+        return call.staticCall(ids, values).then(function () {
+          if (msg) msg.textContent = "Confirm in your wallet…";
+          return feeOverrides(provider).then(function (fee) {
+            return call(ids, values, Object.assign({ gasLimit: 120000 + 45000 * ids.length }, fee)).then(function (tx) { return tx.wait(); });
+          });
+        });
+      });
+    }).then(function () {
+      if (msg) { msg.textContent = ids.length + " " + (kind === "prices" ? "price" : "cap") + "(s) set."; msg.style.color = "var(--flame-core)"; }
+      pdLoadChainState();
+    }).catch(function (e) {
+      if (msg) { msg.textContent = "Could not send: " + decodeErr(e); msg.style.color = "var(--vermilion)"; }
+      var b = $("pd-send-batch"); if (b) b.disabled = false;
+    });
+  }
+
+  // the live-fire switches — OPENING requires the typed word OPEN (a misclick cannot go live); closing is unguarded (safe)
+  function pdToggle(which, open) {
+    var c = cfg();
+    var isSale = which === "sales";
+    var addr = isSale ? c.waveCardSale : c.waveCardMarket;
+    var abi = isSale ? SALE_ABI : MARKET_ABI;
+    var wordEl = $(isSale ? "pd-salesopen-word" : "pd-marketsopen-word");
+    var msg = $(isSale ? "pd-salesopen-msg" : "pd-marketsopen-msg");
+    if (open && (wordEl.value || "").trim() !== "OPEN") { msg.textContent = "Type OPEN to arm the open switch."; msg.style.color = "var(--vermilion)"; return; }
+    withEthers().then(function () {
+      var provider = new ethersRef.BrowserProvider(window.ethereum);
+      return provider.getSigner().then(function (signer) {
+        var ct = new ethersRef.Contract(addr, abi, signer);
+        var call = isSale ? ct.setSalesOpen : ct.setMarketsOpen;
+        msg.textContent = "Simulating…";
+        return call.staticCall(open).then(function () {
+          msg.textContent = "Confirm in your wallet…";
+          return feeOverrides(provider).then(function (fee) {
+            return call(open, Object.assign({ gasLimit: 60000 }, fee)).then(function (tx) { return tx.wait(); });
+          });
+        });
+      });
+    }).then(function () {
+      msg.textContent = (isSale ? "salesOpen" : "marketsOpen") + " = " + open + "."; msg.style.color = "var(--flame-core)";
+      wordEl.value = "";
+      if (isSale) refreshPriceDeskGate(); else refreshMarketsSwitchGate();
+    }).catch(function (e) { msg.textContent = "Could not set: " + decodeErr(e); msg.style.color = "var(--vermilion)"; });
+  }
+
+  function wirePriceDesk() {
+    if ($("pd-load")) $("pd-load").onclick = function () { pdLoadChainState(); };
+    if ($("pd-refresh")) $("pd-refresh").onclick = function () { pdLoadChainState(); };
+    if ($("pd-apply-unpriced")) $("pd-apply-unpriced").onclick = pdApplyUnpriced;
+    if ($("pd-seed-caps")) $("pd-seed-caps").onclick = pdSeedCaps;
+    if ($("pd-salesopen-open")) $("pd-salesopen-open").onclick = function () { pdToggle("sales", true); };
+    if ($("pd-salesopen-close")) $("pd-salesopen-close").onclick = function () { pdToggle("sales", false); };
+    if ($("pd-marketsopen-open")) $("pd-marketsopen-open").onclick = function () { pdToggle("markets", true); };
+    if ($("pd-marketsopen-close")) $("pd-marketsopen-close").onclick = function () { pdToggle("markets", false); };
+  }
+
   function mount() {
     // S-ADMIN-CONNECT — bring the status strip + wallet up FIRST, before any panel wiring can throw, so the owner
     // always has a visible connection state + a Connect button no matter what happens below.
@@ -2300,6 +2585,8 @@ window.DYAdmin = (function () {
     $("cfg-clear").onclick = clearCfg;
 
     buildPicker();
+    buildPriceDesk(); // LEG2 — registry-driven catalog table (renders always; chain columns wake on LOAD)
+    wirePriceDesk();
     fillCfgForm();
     // wallet init + onChange are registered at the TOP of mount (S-ADMIN-CONNECT), so the status strip is live first.
   }

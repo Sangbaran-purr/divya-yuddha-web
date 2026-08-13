@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
     <link rel="stylesheet" href="css/admin.css?v=s11" />
     <script src="config.js?v=s6"></script>
-    <script src="admin-config.js?v=s15"></script>
+    <script src="admin-config.js?v=s16"></script>
     <script src="js/wave-registry.js?v=w2"></script>
   </head>
   <body class="admin">
@@ -91,6 +91,68 @@
         <button class="btn" id="wave-review" disabled>Review drop</button>
         <div id="wave-confirm"></div>
         <div id="wave-results"></div>
+      </section>
+
+      <!-- PANEL 2b — PRICE DESK (LEG2) — WaveCardSale prices + caps + the live-fire switches -->
+      <section class="panel" id="panel-pricedesk">
+        <h2>Price Desk — WaveCardSale</h2>
+        <p class="hint">DYC-native prices + edition caps for wave cards (W-PRICE-1 §3). Config-driven; <b>dark until the
+          WaveCardSale address is set</b>. Prices are in DYC (human units), converted to wei on send. Every send is
+          pre-simulated (staticCall) with an explicit gas ceiling.</p>
+        <div id="pd-status" class="mono" style="font-size:0.82rem;margin-bottom:0.7rem;color:var(--gold-aged)">Checking…</div>
+
+        <!-- per-rarity default pricing -->
+        <label class="fld">Per-rarity default price (DYC)</label>
+        <div id="pd-defaults" class="pd-rarity-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:0.4rem">
+          <span>M <input class="txt pd-def" id="pd-def-Mythic" type="text" inputmode="decimal" style="width:6rem" disabled /></span>
+          <span>L <input class="txt pd-def" id="pd-def-Legendary" type="text" inputmode="decimal" style="width:6rem" disabled /></span>
+          <span>E <input class="txt pd-def" id="pd-def-Epic" type="text" inputmode="decimal" style="width:6rem" disabled /></span>
+          <span>R <input class="txt pd-def" id="pd-def-Rare" type="text" inputmode="decimal" style="width:6rem" disabled /></span>
+          <span>U <input class="txt pd-def" id="pd-def-Uncommon" type="text" inputmode="decimal" style="width:6rem" disabled /></span>
+          <span>C <input class="txt pd-def" id="pd-def-Common" type="text" inputmode="decimal" style="width:6rem" disabled /></span>
+        </div>
+        <div class="row-actions" style="margin-bottom:0.6rem">
+          <button class="btn" id="pd-apply-unpriced" disabled>Apply defaults to unpriced →</button>
+          <button class="btn" id="pd-seed-caps" disabled>Seed caps from registry →</button>
+          <button class="btn" id="pd-load" disabled>LOAD CHAIN STATE</button>
+          <button class="btn tiny" id="pd-refresh" disabled title="Re-read prices/caps/remaining">↻</button>
+          <span id="pd-load-status" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+        </div>
+
+        <!-- catalog table (87 live from the registry; held #188 excluded) -->
+        <div id="pd-catalog" style="overflow-x:auto"></div>
+
+        <!-- review of a staged batch before send -->
+        <div id="pd-review"></div>
+
+        <!-- the two live-fire switches (typed-OPEN guard) -->
+        <div id="pd-switches" style="margin-top:1rem;border-top:1px solid rgba(232,200,116,0.14);padding-top:0.8rem">
+          <div style="margin-bottom:0.6rem">
+            <b>salesOpen</b> (WaveCardSale): <span id="pd-salesopen-state" class="mono">—</span>
+            <div class="row-actions" style="margin-top:0.3rem">
+              <input class="txt" id="pd-salesopen-word" type="text" placeholder="type OPEN to arm" style="width:12rem" disabled />
+              <button class="btn" id="pd-salesopen-open" disabled>Open sales</button>
+              <button class="btn" id="pd-salesopen-close" disabled>Close sales</button>
+              <span id="pd-salesopen-msg" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+            </div>
+          </div>
+          <div>
+            <b>marketsOpen</b> (WaveCardMarket): <span id="pd-marketsopen-state" class="mono">—</span>
+            <div class="row-actions" style="margin-top:0.3rem">
+              <input class="txt" id="pd-marketsopen-word" type="text" placeholder="type OPEN to arm" style="width:12rem" disabled />
+              <button class="btn" id="pd-marketsopen-open" disabled>Open market</button>
+              <button class="btn" id="pd-marketsopen-close" disabled>Close market</button>
+              <span id="pd-marketsopen-msg" class="mono" style="font-size:0.78rem;color:var(--gold-aged)"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Access price — display-only (ruled free) -->
+        <div style="margin-top:1rem;border-top:1px solid rgba(232,200,116,0.14);padding-top:0.8rem">
+          <b>Access claim price:</b> <span class="mono">0 DYC</span>
+          <p class="hint" style="margin-top:0.2rem">Access claim is free (ruled). Paid-Access road: future contract task
+            (W-PRICE-1 §4). No write here.</p>
+        </div>
       </section>
 
       <!-- PANEL 3 — COIN DROPS (S9) -->
@@ -307,7 +369,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1e"></script>
-    <script src="js/admin.js?v=s28"></script>
+    <script src="js/admin.js?v=s29"></script>
     <script>
       window.DYAdmin.mount();
     </script>
