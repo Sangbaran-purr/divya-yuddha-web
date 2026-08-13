@@ -2248,6 +2248,11 @@ window.DYAdmin = (function () {
     "function marketsOpen() view returns (bool)",
     "function setMarketsOpen(bool open)",
   ];
+  // RUNG4-FIX-1 (Fix A) — the Price Desk owner-gate READS through this tamed PUBLIC endpoint (publicnode,
+  // cast-verified), NEVER the wallet's BrowserProvider. The wallet's registered Amoy RPC
+  // (rpc-amoy.polygon.technology, from config.js chain.rpcUrls) is dead, so a BrowserProvider owner() read
+  // returns null and the gate would falsely accuse the master. Writes still ride the wallet signer.
+  var PD_RPC = "https://polygon-amoy-bor-rpc.publicnode.com";
   var PD_RARITIES = ["Mythic", "Legendary", "Epic", "Rare", "Uncommon", "Common"];
   var pdReadGen = 0; // read-generation guard — a stale LOAD never clobbers a newer one
   var pdChain = {}; // cardId -> { price, cap, remaining } (BigInt) | "busy"
@@ -2309,21 +2314,29 @@ window.DYAdmin = (function () {
     }
     st.textContent = "Reading owner() from chain…";
     withEthers().then(function () {
-      var sale = new ethersRef.Contract(c.waveCardSale, SALE_ABI, readProvider());
+      var sale = new ethersRef.Contract(c.waveCardSale, SALE_ABI, tamedProvider(PD_RPC)); // Fix A: tamed publicnode, not the wallet
       return Promise.all([sale.owner().catch(function () { return null; }), sale.salesOpen().catch(function () { return null; })]);
     }).then(function (r) {
-      pdSaleOwnerOk = eq(r[0], s.address);
       if ($("pd-salesopen-state")) $("pd-salesopen-state").textContent = r[1] === null ? "busy" : (r[1] ? "OPEN" : "closed");
-      if (pdSaleOwnerOk) {
+      // RUNG4-FIX-1 (Fix B) — busy is busy, never an accusation. A null owner() is a FAILED read (busy-sentinel),
+      // NOT a definitive "not the owner". Three states: busy / genuine-mismatch / owner-ok.
+      if (r[0] === null) {
+        pdSaleOwnerOk = false;
+        st.innerHTML = "<span class='bad'>Could not read owner() — the chain is busy.</span> Refresh to retry.";
+        pdSetControls(false);
+      } else if (eq(r[0], s.address)) {
+        pdSaleOwnerOk = true;
         st.innerHTML = "<span class='ok'>Owner connected.</span> Press <b>LOAD CHAIN STATE</b> to read prices / caps / remaining.";
         pdSetControls(true);
       } else {
+        pdSaleOwnerOk = false;
         st.innerHTML = "<span class='bad'>Connected wallet is not the WaveCardSale owner</span> — connect the master.";
         pdSetControls(false);
       }
       refreshMarketsSwitchGate();
     }).catch(function () {
-      st.innerHTML = "<span class='bad'>Could not read owner() from the WaveCardSale address</span> — check the address + network.";
+      pdSaleOwnerOk = false;
+      st.innerHTML = "<span class='bad'>Could not read owner() — the chain is busy.</span> Refresh to retry.";
       pdSetControls(false); pdSetMarketsSwitch(false);
     });
   }
@@ -2336,11 +2349,12 @@ window.DYAdmin = (function () {
     if (!c.waveCardMarket) { if (stEl) stEl.textContent = "NOT CONFIGURED"; pdSetMarketsSwitch(false); return; }
     if (!s.connected || !s.chainOk) { pdSetMarketsSwitch(false); return; }
     withEthers().then(function () {
-      var m = new ethersRef.Contract(c.waveCardMarket, MARKET_ABI, readProvider());
+      var m = new ethersRef.Contract(c.waveCardMarket, MARKET_ABI, tamedProvider(PD_RPC)); // Fix A: tamed publicnode, not the wallet
       return Promise.all([m.owner().catch(function () { return null; }), m.marketsOpen().catch(function () { return null; })]);
     }).then(function (r) {
       if (stEl) stEl.textContent = r[1] === null ? "busy" : (r[1] ? "OPEN" : "closed");
-      pdSetMarketsSwitch(eq(r[0], s.address));
+      // Fix B: a null owner() read is busy, never a definitive not-owner → disable the switch, no false verdict.
+      pdSetMarketsSwitch(r[0] !== null && eq(r[0], s.address));
     }).catch(function () { if (stEl) stEl.textContent = "busy"; pdSetMarketsSwitch(false); });
   }
 
