@@ -2231,7 +2231,9 @@ window.DYAdmin = (function () {
   }
 
   // ═══════════════════ PRICE DESK (LEG2) — WaveCardSale prices/caps + live-fire switches ═══════════════════
-  var SALE_ABI = [
+  // RUNG4-FIX-2 — the WaveCardSale ABI. Renamed from the colliding `SALE_ABI` (the M-F dycoinSale ABI at ~1346
+  // shares scope; `var` redeclaration made the wave ABI overwrite it, breaking the M-F dycoinSale panel).
+  var WAVESALE_ABI = [
     "function owner() view returns (address)",
     "function salesOpen() view returns (bool)",
     "function priceOf(uint256) view returns (uint256)",
@@ -2314,7 +2316,7 @@ window.DYAdmin = (function () {
     }
     st.textContent = "Reading owner() from chain…";
     withEthers().then(function () {
-      var sale = new ethersRef.Contract(c.waveCardSale, SALE_ABI, tamedProvider(PD_RPC)); // Fix A: tamed publicnode, not the wallet
+      var sale = new ethersRef.Contract(c.waveCardSale, WAVESALE_ABI, tamedProvider(PD_RPC)); // Fix A: tamed publicnode, not the wallet
       return Promise.all([sale.owner().catch(function () { return null; }), sale.salesOpen().catch(function () { return null; })]);
     }).then(function (r) {
       if ($("pd-salesopen-state")) $("pd-salesopen-state").textContent = r[1] === null ? "busy" : (r[1] ? "OPEN" : "closed");
@@ -2366,7 +2368,7 @@ window.DYAdmin = (function () {
     var gen = ++pdReadGen;
     if (stEl) { stEl.textContent = "Reading chain (" + pdCatalog.length + " cards)…"; stEl.style.color = "var(--gold-aged)"; }
     withEthers().then(function () {
-      var sale = new ethersRef.Contract(c.waveCardSale, SALE_ABI, readProvider());
+      var sale = new ethersRef.Contract(c.waveCardSale, WAVESALE_ABI, readProvider());
       return Promise.all(pdCatalog.map(function (w) {
         return Promise.all([
           sale.priceOf(w.cardId).catch(function () { return null; }),
@@ -2467,7 +2469,7 @@ window.DYAdmin = (function () {
     withEthers().then(function () {
       var provider = new ethersRef.BrowserProvider(window.ethereum);
       return provider.getSigner().then(function (signer) {
-        var sale = new ethersRef.Contract(c.waveCardSale, SALE_ABI, signer);
+        var sale = new ethersRef.Contract(c.waveCardSale, WAVESALE_ABI, signer);
         var call = kind === "prices" ? sale.setPrices : sale.setSupplyCaps;
         if (msg) msg.textContent = "Simulating…";
         return call.staticCall(ids, values).then(function () {
@@ -2491,7 +2493,7 @@ window.DYAdmin = (function () {
     var c = cfg();
     var isSale = which === "sales";
     var addr = isSale ? c.waveCardSale : c.waveCardMarket;
-    var abi = isSale ? SALE_ABI : MARKET_ABI;
+    var abi = isSale ? WAVESALE_ABI : MARKET_ABI;
     var wordEl = $(isSale ? "pd-salesopen-word" : "pd-marketsopen-word");
     var msg = $(isSale ? "pd-salesopen-msg" : "pd-marketsopen-msg");
     if (open && (wordEl.value || "").trim() !== "OPEN") { msg.textContent = "Type OPEN to arm the open switch."; msg.style.color = "var(--vermilion)"; return; }
