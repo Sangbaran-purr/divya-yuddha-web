@@ -217,34 +217,66 @@ window.DYWallet = (function () {
   //     Returns { candidates:[tokenId string], complete:bool } — the caller re-verifies each candidate (ownerOf /
   //     listingOf) and applies its completeness gate; an incomplete scan renders BUSY while the checkpoint advances
   //     behind the busy face (owner ruling). SEQUENTIAL — no parallel chunks (gentle on the free-tier getLogs class). ---
+  //     RUNG4-FIX-7C hardening (owner ruling): (1) a SHARED SINGLE-FLIGHT QUEUE — getLogs scans run ONE at a time,
+  //     so the shelf's deep chunk 1 is no longer starved by the concurrent near-head listings scan (both fired on
+  //     connect); the shelf is enqueued first (readHoldings before renderListings). (2) an onProgress(scannedTo,
+  //     from, latest) callback drives the busy face's "walked N of M blocks" register. (3) a per-chunk ARCHIVE
+  //     FAILOVER — publicnode primary, drpc (chain.rpcUrls[1], archive-capable) on a chunk failure (admin
+  //     historyProvider precedent). (4) the deadline is a DURATION computed at RUN-start, so a scan queued behind
+  //     another gets a fresh budget, not a clock that ran down while it waited.
   var LOG_CHUNK = 9999; // < 10000 — the archive-RPC cap (admin.js LOG_CHUNK precedent)
+  var scanQueue = Promise.resolve(); // single-flight: one getLogs scan at a time (shelf then listings)
   function ckptGet(key) {
     try { var v = window.localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; }
   }
   function ckptSet(key, obj) {
     try { window.localStorage.setItem(key, JSON.stringify(obj)); } catch (e) { /* private mode / quota — scan still works, just not O(delta) */ }
   }
-  function scanLogsResumable(contract, filter, deployBlock, deadlineAt, ckptKey) {
-    var ck = ckptGet(ckptKey) || {};
-    var candSet = {};
-    (ck.candidates || []).forEach(function (t) { candSet[t] = true; });
-    var resumeFrom = ck.scannedTo && ck.scannedTo >= deployBlock ? ck.scannedTo + 1 : deployBlock;
-    return readProvider().getBlockNumber().then(function (latest) {
-      function scanFrom(start) {
-        if (start > latest) return Promise.resolve(true); // reached latest → complete
-        var end = Math.min(start + LOG_CHUNK, latest);
-        return withRetry(function () { return contract.queryFilter(filter, start, end); }, 3, deadlineAt)
-          .then(function (evs) {
-            evs.forEach(function (e) { candSet[e.args.tokenId.toString()] = true; });
+  function tamedOn(url) { // tamed provider on an explicit endpoint (drpc archive failover; publicnode is readProvider())
+    var e = window.ethers;
+    var req = new e.FetchRequest(url);
+    req.timeout = 10000; req.setThrottleParams({ maxAttempts: 2 });
+    return new e.JsonRpcProvider(req, CFG.chain.id, { staticNetwork: true });
+  }
+  // deadlineMs is a DURATION (run-start budget); onProgress(scannedTo, deployBlock, latest) is optional.
+  function scanLogsResumable(contract, filter, deployBlock, deadlineMs, ckptKey, onProgress) {
+    function run() {
+      var deadlineAt = Date.now() + (deadlineMs || 18000);
+      var ck = ckptGet(ckptKey) || {};
+      var candSet = {};
+      (ck.candidates || []).forEach(function (t) { candSet[t] = true; });
+      var resumeFrom = ck.scannedTo && ck.scannedTo >= deployBlock ? ck.scannedTo + 1 : deployBlock;
+      var archiveUrl = CFG.chain.rpcUrls && CFG.chain.rpcUrls[1]; // drpc — the archive failover endpoint
+      var archiveContract = null;
+      function readChunk(start, end) {
+        return withRetry(function () { return contract.queryFilter(filter, start, end); }, 2, deadlineAt)
+          .catch(function (e) {
+            if (!archiveUrl || !contract.target) throw e; // no failover available → surface the failure
+            if (!archiveContract) archiveContract = new window.ethers.Contract(contract.target, contract.interface, tamedOn(archiveUrl));
+            return archiveContract.queryFilter(filter, start, end); // FAILOVER: this chunk on drpc archive
+          });
+      }
+      return readProvider().getBlockNumber().then(function (latest) {
+        if (onProgress) { try { onProgress(Math.min(resumeFrom, latest), deployBlock, latest); } catch (e) {} }
+        function scanFrom(start) {
+          if (start > latest) return Promise.resolve(true); // reached latest → complete
+          var end = Math.min(start + LOG_CHUNK, latest);
+          return readChunk(start, end).then(function (evs) {
+            evs.forEach(function (ev) { candSet[ev.args.tokenId.toString()] = true; });
             ckptSet(ckptKey, { scannedTo: end, candidates: Object.keys(candSet) }); // persist progress per chunk
+            if (onProgress) { try { onProgress(end, deployBlock, latest); } catch (e) {} }
             if (Date.now() > deadlineAt) return false; // incomplete — but the checkpoint advanced
             return scanFrom(end + 1);
           });
-      }
-      return scanFrom(resumeFrom).then(function (complete) {
-        return { candidates: Object.keys(candSet), complete: complete };
+        }
+        return scanFrom(resumeFrom).then(function (complete) {
+          return { candidates: Object.keys(candSet), complete: complete };
+        });
       });
-    });
+    }
+    var p = scanQueue.then(run, run); // run regardless of the prior scan's outcome (shelf then listings)
+    scanQueue = p.catch(function () {}); // keep the queue alive even if this scan rejects
+    return p;
   }
 
   // --- scan-road helpers (S-REGISTRY-HIST lineage): withRetry + sleep, for the chunked scan above ---

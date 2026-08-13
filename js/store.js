@@ -560,7 +560,7 @@ window.DYStore = (function () {
   // Listed(*, owner) from deployBlock -> candidate tokenIds -> verify each against
   // listingOf (active && seller==owner) to drop delisted/sold. readGen guard is the
   // caller's; a dead RPC REJECTS so the caller renders busy (never a silent empty).
-  function scanMyListings(owner, deadlineAt) {
+  function scanMyListings(owner, deadlineAt, onProgress) {
     if (!marketConfigured()) return Promise.resolve([]);
     return loadE().then(function (ethers) {
       var provider = readProvider(ethers);
@@ -571,7 +571,7 @@ window.DYStore = (function () {
       return dycDecimals(ethers, provider).then(function () {
         // RUNG4-FIX-7B — RESUMABLE checkpointed scan (dyw:: per-wallet), O(delta) on repeat visits. Candidates are the
         // tokenIds owner has ever Listed; re-verify each via listingOf (active && seller==owner) to drop delisted/sold.
-        return window.DYWallet.scanLogsResumable(market, market.filters.Listed(null, owner), fromBlock, deadlineAt, key);
+        return window.DYWallet.scanLogsResumable(market, market.filters.Listed(null, owner), fromBlock, 18000, key, onProgress);
       }).then(function (scan) {
         return Promise.all(scan.candidates.map(function (tidStr) {
           var tid = BigInt(tidStr);

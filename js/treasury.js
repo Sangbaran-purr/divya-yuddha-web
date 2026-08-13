@@ -89,7 +89,7 @@ window.DYTreasury = (function () {
     });
   }
 
-  function discover(owner, deadlineAt) {
+  function discover(owner, deadlineAt, onProgress) {
     return window.DYWallet.loadEthers().then(function (ethers) {
       var provider = window.DYWallet.readProvider(); // RUNG4-FIX-3 — tamed publicnode read road, not the wallet's dead RPC
       var c = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
@@ -98,7 +98,8 @@ window.DYTreasury = (function () {
       // tokenIds ever transferred TO owner (mints: Transfer(0, owner, id); + any incoming). We re-verify CURRENT
       // ownership each load (a token may have been sent away), so candidates only ever grow — held is a re-check.
       var key = "dyw::shelf::" + CFG.chain.id + "::" + owner.toLowerCase();
-      return window.DYWallet.scanLogsResumable(c, c.filters.Transfer(null, owner), fromBlock, deadlineAt, key).then(function (scan) {
+      // 18000ms run-start budget (single-flight queue gives each scan a fresh budget); onProgress → busy-face register.
+      return window.DYWallet.scanLogsResumable(c, c.filters.Transfer(null, owner), fromBlock, 18000, key, onProgress).then(function (scan) {
         // verify CURRENT ownership + resolve cardId, in parallel. A per-token read failure drops THAT token.
         return Promise.all(
           scan.candidates.map(function (tidStr) {
@@ -272,7 +273,13 @@ window.DYTreasury = (function () {
     var gen = ++listGen;
     statusEl.textContent = "Reading your listings…";
     var deadlineAt = Date.now() + 20000;
-    DYStore.scanMyListings(addr, deadlineAt).then(function (res) {
+    // RUNG4-FIX-7C — progress line while the (single-flight, runs after the shelf) listings scan walks the range.
+    function listingsProgress(scannedTo, from, latest) {
+      if (gen !== listGen) return;
+      var walked = Math.max(0, scannedTo - from), total = Math.max(1, latest - from);
+      statusEl.textContent = "Reading your listings — walked " + Math.min(walked, total).toLocaleString() + " of " + total.toLocaleString() + " blocks…";
+    }
+    DYStore.scanMyListings(addr, deadlineAt, listingsProgress).then(function (res) {
       if (gen !== listGen) return; // superseded
       var rows = res.rows;
       if (!rows.length) {
@@ -359,7 +366,13 @@ window.DYTreasury = (function () {
         renderMark(markEl, "busy"); // busy-sentinel, NOT "none"
       });
 
-    discover(addr, deadlineAt)
+    // RUNG4-FIX-7C — progress line on the busy face while the (single-flight, shelf-first) scan walks the range.
+    function shelfProgress(scannedTo, from, latest) {
+      if (gen !== readGen) return;
+      var walked = Math.max(0, scannedTo - from), total = Math.max(1, latest - from);
+      statusEl.textContent = "Reading your hall — walked " + Math.min(walked, total).toLocaleString() + " of " + total.toLocaleString() + " blocks…";
+    }
+    discover(addr, deadlineAt, shelfProgress)
       .then(function (rows) {
         if (gen !== readGen) return; // superseded — a stale card read never clobbers a newer state
         cacheRows = rows;
