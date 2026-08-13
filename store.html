@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Divya Yuddha — The Store</title>
+    <meta name="description" content="The Store — buy wave cards outright, and trade them hand to hand in the market." />
+    <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/brand/icon-512.png" />
+    <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Divya Yuddha — The Store" />
+    <meta property="og:description" content="Wave cards, bought outright and traded hand to hand — priced in DYC, yours by your own hand." />
+    <meta property="og:image" content="https://divyayuddha.games/assets/plates/facade.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="css/threshold.css?v=s1e" />
+    <link rel="stylesheet" href="css/pages.css?v=s1h" />
+    <link rel="stylesheet" href="css/explore.css?v=2" />
+    <link rel="stylesheet" href="css/store.css?v=s1" />
+    <script src="config.js?v=s7"></script>
+  </head>
+  <body class="treasury">
+    <script src="js/ornament.js?v=s1h"></script>
+    <div id="carried-lamp" aria-hidden="true"></div>
+
+    <header>
+      <nav class="gate-nav wrap" aria-label="Primary">
+        <a class="crest" href="index.html">
+          <img class="brand-logo" src="assets/brand/logo.webp" width="460" height="298" alt="Divya Yuddha — Battle of the Celestials" />
+        </a>
+        <div class="nav-right">
+          <div class="links">
+            <a href="index.html">The Gate</a>
+            <a href="rite.html">The Rite</a>
+            <a href="explore.html">The Cards</a>
+            <a href="store.html" aria-current="page">The Store</a>
+            <a href="treasury.html">The Treasury</a>
+            <a href="game/index.html?v=f9e566e">The Game</a>
+          </div>
+          <div id="nav-decl">
+            <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="section tight wrap" aria-label="The Store">
+        <div class="lintel"><span></span><span class="display">The Store</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+        <p class="prose" style="text-align:center;max-width:46ch;margin:0 auto 2.4vh">Buy wave cards outright from the Store, or trade them hand to hand in the Market. Priced in DYC. Every purchase and every trade is signed by your own wallet — never by ours.</p>
+
+        <!-- connect (disconnected) + refresh (connected) + wallet plate -->
+        <div id="st-actions" class="st-actions" hidden>
+          <button type="button" id="st-connect" class="st-connect" hidden>Connect wallet</button>
+          <span id="st-wallet" class="st-wallet" hidden></span>
+          <button type="button" id="st-refresh" class="st-refresh" hidden title="Refresh" aria-label="Refresh">↻</button>
+        </div>
+
+        <!-- tabs: Buy (primary sale) | Market (secondary listings) -->
+        <div class="st-tabs" role="tablist" aria-label="Store sections">
+          <button type="button" id="st-tab-buy" class="st-tab" role="tab" aria-selected="true" aria-controls="st-buy">Buy</button>
+          <button type="button" id="st-tab-market" class="st-tab" role="tab" aria-selected="false" aria-controls="st-market">Market</button>
+        </div>
+
+        <!-- BUY — primary sale (WaveCardSale). Dark on null waveCardSale. -->
+        <div id="st-buy" class="st-panel" role="tabpanel" aria-labelledby="st-tab-buy">
+          <p id="st-buy-status" class="state-line" style="text-align:center" aria-live="polite"></p>
+          <div id="st-buy-grid" class="ex-grid" aria-live="polite"></div>
+        </div>
+
+        <!-- MARKET — secondary listings (WaveCardMarket). Dark on null waveCardMarket. -->
+        <div id="st-market" class="st-panel" role="tabpanel" aria-labelledby="st-tab-market" hidden>
+          <p id="st-market-status" class="state-line" style="text-align:center" aria-live="polite"></p>
+          <div id="st-market-grid" class="ex-grid" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===================== THE FOOTER ===================== -->
+    <footer class="site-foot">
+      <div class="foot-top wrap">
+        <div class="foot-brand">
+          <img class="foot-logo" src="assets/brand/logo.webp" width="200" height="130" alt="" aria-hidden="true" />
+          <p class="foot-tag">Divya Yuddha<small>Battle of the Celestials</small></p>
+          <div class="foot-icons" role="group" aria-label="Community — coming soon">
+            <span class="soc sleeping" aria-disabled="true" title="X — coming soon"><svg aria-hidden="true"><use href="#dy-x" /></svg></span>
+            <span class="soc sleeping" aria-disabled="true" title="Telegram — coming soon"><svg aria-hidden="true"><use href="#dy-telegram" /></svg></span>
+            <span class="soc sleeping" aria-disabled="true" title="YouTube — coming soon"><svg aria-hidden="true"><use href="#dy-youtube" /></svg></span>
+          </div>
+        </div>
+        <nav class="foot-col" aria-label="Explore">
+          <h4>Explore</h4>
+          <a href="index.html#top">The Gate</a>
+          <a href="index.html#factions">Factions</a>
+          <a href="explore.html">The Cards</a>
+          <a href="store.html">The Store</a>
+          <a href="index.html#panels">The Game</a>
+          <a href="rite.html">The Rite</a>
+          <a href="treasury.html">The Treasury</a>
+        </nav>
+        <div class="foot-col" aria-label="Support">
+          <h4>Support</h4>
+          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Help Center</span>
+          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Guides</span>
+          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Terms of Service</span>
+          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Privacy Policy</span>
+        </div>
+        <div class="foot-col" aria-label="Community">
+          <h4>Community</h4>
+          <span class="foot-soc sleeping" aria-disabled="true" title="coming soon"><svg aria-hidden="true"><use href="#dy-x" /></svg>X</span>
+          <span class="foot-soc sleeping" aria-disabled="true" title="coming soon"><svg aria-hidden="true"><use href="#dy-telegram" /></svg>Telegram</span>
+          <span class="foot-soc sleeping" aria-disabled="true" title="coming soon"><svg aria-hidden="true"><use href="#dy-youtube" /></svg>YouTube</span>
+        </div>
+        <div class="foot-plaque">
+          <svg class="foot-flame" aria-hidden="true"><use href="#dy-flame" /></svg>
+          <p>The gate remains open for those who dare.</p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="js/light.js?v=s1e"></script>
+    <script src="js/wallet.js?v=s1e"></script>
+    <script src="js/cards.js?v=s1e"></script>
+    <script src="js/wave-registry.js?v=w2"></script>
+    <script src="js/store.js?v=s1"></script>
+    <script>
+      (function () {
+        var npTop = document.getElementById("nameplate-top");
+        var addrTop = document.getElementById("addr-top");
+        window.DYWallet.onChange(function (s) {
+          npTop.classList.toggle("hidden", !s.connected);
+          if (s.connected) addrTop.textContent = window.DYWallet.shortAddr(s.address);
+        });
+        window.DYStore.mountStore();
+        window.DYWallet.init();
+      })();
+    </script>
+  </body>
+</html>

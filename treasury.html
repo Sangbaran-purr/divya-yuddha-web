@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="css/threshold.css?v=s1e" />
     <link rel="stylesheet" href="css/pages.css?v=s1h" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
+    <link rel="stylesheet" href="css/store.css?v=s1" />
     <link rel="preload" as="image" href="assets/plates/treasury_hall.webp" type="image/webp" />
     <!-- S-TREASURY-SHELF-1 — Your Holdings chrome (Access mark + connect/refresh). Palette tokens from threshold.css. -->
     <style>
@@ -61,7 +62,7 @@
       .tre-mark-sub.bad, .state-line.bad { color: var(--vermilion, #b33a1f); }
       .tre-mark-sub a { color: var(--gold-burnished, #d9a84e); }
     </style>
-    <script src="config.js?v=s6"></script>
+    <script src="config.js?v=s7"></script>
   </head>
   <body class="treasury">
     <script src="js/ornament.js?v=s1h"></script>
@@ -77,6 +78,7 @@
             <a href="index.html">The Gate</a>
             <a href="rite.html">The Rite</a>
             <a href="explore.html">The Cards</a>
+            <a href="store.html">The Store</a>
             <a href="treasury.html" aria-current="page">The Treasury</a>
             <a href="game/index.html?v=f9e566e">The Game</a>
           </div>
@@ -111,6 +113,17 @@
 
         <p id="tre-status" class="state-line" style="text-align:center" aria-live="polite"></p>
         <div id="tre-hall" class="hall-empty" aria-live="polite"></div>
+      </section>
+
+      <!-- LEG5 — Your Listings: the seller's escrowed cards. A listed card leaves the hall
+           above (the market holds it), so it must remain visible to its seller here.
+           DARK until waveCardMarket is configured (the whole section hides). DELIST is
+           always live — it is never gated by marketsOpen. -->
+      <section id="tre-listings-section" class="section tight wrap" aria-label="Your Listings" hidden>
+        <div class="lintel"><span></span><span class="display">Your Listings</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+        <p class="prose" style="text-align:center;max-width:44ch;margin:0 auto 2vh">Cards you have listed in the Market stand here — held in escrow, not lost. Delist any of them at any time to bring it home; the trade is yours to unmake.</p>
+        <p id="tre-listings-status" class="state-line" style="text-align:center" aria-live="polite"></p>
+        <div id="tre-listings" class="hall-empty" aria-live="polite"></div>
       </section>
     </main>
 
@@ -159,7 +172,8 @@
     <script src="js/wallet.js?v=s1e"></script>
     <script src="js/cards.js?v=s1e"></script>
     <script src="js/wave-registry.js?v=w2"></script>
-    <script src="js/treasury.js?v=s1g"></script>
+    <script src="js/store.js?v=s1"></script>
+    <script src="js/treasury.js?v=s1h"></script>
     <script>
       (function () {
         var npTop = document.getElementById("nameplate-top");

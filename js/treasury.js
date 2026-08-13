@@ -33,6 +33,8 @@ window.DYTreasury = (function () {
   var cacheMark = undefined; // true | false | undefined (unread)
   var cacheRows = null; // array | null (unread)
   var readGen = 0; // generation token: a stale in-flight read never clobbers a newer one (rapid refresh)
+  var listGen = 0; // LEG5 — Your Listings read-generation guard (independent of the holdings read)
+  var pageRefresh = function () {}; // set in mount(): re-read holdings + listings after a list/delist
 
   function el(tag, cls, html) {
     var e = document.createElement(tag);
@@ -212,7 +214,86 @@ window.DYTreasury = (function () {
     link.target = "_blank";
     link.rel = "noopener";
     p.appendChild(link);
+
+    // LEG5 — LIST for sale. Only when the market is configured (dark on null address).
+    // A listed card escrows into the market and leaves this hall for Your Listings below.
+    if (window.DYStore && DYStore.marketConfigured()) {
+      var s = window.DYWallet.state;
+      var actions = el("div", "st-card-actions");
+      var listBtn = el("button", "st-btn");
+      listBtn.type = "button";
+      listBtn.textContent = "List for sale";
+      if (!(s.connected && s.chainOk)) listBtn.disabled = true;
+      else listBtn.onclick = function () { DYStore.openListDialog(row.tokenId, card, pageRefresh); };
+      actions.appendChild(listBtn);
+      p.appendChild(actions);
+    }
     return p;
+  }
+
+  // LEG5 — one Your-Listings plinth (escrowed token: art + price + DELIST).
+  function renderListingPlinth(ethers, r) {
+    var card = resolveCard(r.cardId != null ? r.cardId : 0);
+    var art = artUrls(card.frame);
+    var p = el("figure", "plinth");
+    var frame = el("div", "frame");
+    var ph = el("div", "placeholder", '<svg aria-hidden="true"><use href="#dy-gem"/></svg><div class="pep">art pending</div>');
+    frame.appendChild(ph);
+    if (art) {
+      var img = new Image();
+      img.alt = card.name;
+      img.loading = "lazy";
+      img.onload = function () { frame.innerHTML = ""; frame.appendChild(img); };
+      img.onerror = function () {};
+      img.src = art.thumb;
+    }
+    p.appendChild(frame);
+    p.appendChild(el("div", "stand"));
+    p.appendChild(el("figcaption", "pname", card.name));
+    p.appendChild(el("div", "pep", DYStore.fmtPrice(ethers, r.price) + " DYC · listed · token " + r.tokenId.toString()));
+    var actions = el("div", "st-card-actions");
+    var msg = el("div", "st-msg");
+    var del = el("button", "st-btn danger");
+    del.type = "button";
+    del.textContent = "Delist";
+    // DELIST is NEVER gated by marketsOpen (contract law) — enabled whenever connected.
+    del.onclick = function () { DYStore.delistToken(r.tokenId, del, msg, pageRefresh); };
+    actions.appendChild(del);
+    p.appendChild(actions);
+    p.appendChild(msg);
+    return p;
+  }
+
+  // LEG5 — Your Listings: the event-scan road via DYStore.scanMyListings, readGen + busy-sentinel.
+  function renderListings(section, statusEl, host, addr, force) {
+    if (!(window.DYStore && DYStore.marketConfigured())) { if (section) section.hidden = true; return; }
+    section.hidden = false;
+    var gen = ++listGen;
+    statusEl.textContent = "Reading your listings…";
+    var deadlineAt = Date.now() + 20000;
+    DYStore.scanMyListings(addr, deadlineAt).then(function (res) {
+      if (gen !== listGen) return; // superseded
+      var rows = res.rows;
+      if (!rows.length) {
+        statusEl.textContent = "";
+        host.className = "hall-empty";
+        host.innerHTML =
+          '<div class="empty-plinth" aria-hidden="true"></div>' +
+          '<div class="state-line">Cards you list in the Market will stand here.</div>';
+        return;
+      }
+      statusEl.textContent = rows.length + (rows.length === 1 ? " card listed for sale." : " cards listed for sale.");
+      host.className = "hall";
+      host.innerHTML = "";
+      rows.forEach(function (r) { host.appendChild(renderListingPlinth(res.ethers, r)); });
+    }).catch(function () {
+      if (gen !== listGen) return;
+      statusEl.textContent = "";
+      host.className = "hall-empty";
+      host.innerHTML =
+        '<div class="empty-plinth" aria-hidden="true"></div>' +
+        '<div class="state-line bad">The market could not be read — your listings are safe on-chain. Refresh to retry.</div>';
+    });
   }
 
   // filter rows to the active faction chamber
@@ -304,6 +385,18 @@ window.DYTreasury = (function () {
     var connectBtn = document.getElementById("tre-connect");
     var refreshBtn = document.getElementById("tre-refresh");
     var chambers = document.getElementById("tre-chambers");
+    var listSection = document.getElementById("tre-listings-section");
+    var listStatus = document.getElementById("tre-listings-status");
+    var listHall = document.getElementById("tre-listings");
+
+    // re-read BOTH shelves after a list/delist (owned card escrows out of the hall into listings).
+    pageRefresh = function () {
+      var s = window.DYWallet.state;
+      if (s.connected && s.chainOk) {
+        readHoldings(s.address, statusEl, markEl, hall, true);
+        renderListings(listSection, listStatus, listHall, s.address, true);
+      }
+    };
 
     // faction filter gems warm the hall ambient toward that ground
     if (chambers) {
@@ -335,8 +428,7 @@ window.DYTreasury = (function () {
     }
     if (refreshBtn) {
       refreshBtn.addEventListener("click", function () {
-        var s = window.DYWallet.state;
-        if (s.connected && s.chainOk) readHoldings(s.address, statusEl, markEl, hall, true);
+        pageRefresh();
       });
     }
 
@@ -350,6 +442,8 @@ window.DYTreasury = (function () {
     }
 
     window.DYWallet.onChange(function (s) {
+      // the listings section only stands in the connected-and-right-chain state
+      if (listSection && !(s.connected && s.chainOk)) listSection.hidden = true;
       if (!s.hasProvider) {
         setChrome(false, false, false, false);
         statusEl.innerHTML =
@@ -373,9 +467,10 @@ window.DYTreasury = (function () {
         cacheAddr = null;
         return;
       }
-      // connected + right chain -> the holdings road
+      // connected + right chain -> the holdings road + Your Listings
       setChrome(true, true, false, true);
       readHoldings(s.address, statusEl, markEl, hall, false);
+      renderListings(listSection, listStatus, listHall, s.address, false);
     });
   }
 

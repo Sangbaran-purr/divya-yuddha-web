@@ -30,8 +30,17 @@ window.DY_CONFIG = {
   contracts: {
     accessNFT: "0xA9D7b53598773D20dc78E19dE814f265924d7A51", // RE-FREEZE — fresh master-owned AccessNFT ("Divya Yuddha Access")
     waveCardNFT: "0x4A0717A7c3970daee6161367f80b10B71286A0fD", // RE-FREEZE — fresh master-owned WaveCardNFT ("Divya Yuddha Wave Card")
-    dycoin: "0x39Daaf5f0729DC5604CeC6660b04c53fb181B694", // RE-FREEZE Leg 2 — CANONICAL money-stack DYC (rite balance read + game conduit)
+    dycoin: "0x39Daaf5f0729DC5604CeC6660b04c53fb181B694", // RE-FREEZE Leg 2 — CANONICAL money-stack DYC (rite balance read + game conduit + wave-card price coin)
     marketplace: "0x2b74C4C651Dd09D30275EF0dD1c14a699B8502cd", // FROZEN PHASE A (AMOY) — Marketplace proxy (NOT LIVE; see coin-pair flag)
+
+    // LEG3+5 — the player commerce contracts (WaveCardSale = the primary storefront;
+    // WaveCardMarket = the secondary escrow marketplace). Built + tested in
+    // divya-yuddha-web3, NOT YET DEPLOYED. null = NOT CONFIGURED: the store's Buy
+    // grid, the Market tab, and the treasury LIST + Your Listings all ship DARK on
+    // null and wake only when these carry live addresses (RUNG-4 deploy). Prices are
+    // DYC-native (the `dycoin` money-stack coin above), W-PRICE-1.
+    waveCardSale: null, // LEG3 — WaveCardSale (priceOf/remainingOf/buy). null = storefront dark
+    waveCardMarket: null, // LEG5 — WaveCardMarket (listedIds/listingOf/list/buy/delist). null = market + listings dark
   },
 
   // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;

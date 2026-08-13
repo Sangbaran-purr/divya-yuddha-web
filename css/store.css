@@ -1,0 +1,115 @@
+/* ============================================================================
+   THE STORE — player commerce chrome (LEG3+5).
+   Buy (primary sale) + Market (secondary listings) reuse the explore.css grid
+   (.ex-grid / .ex-card / .ex-frame / .ex-img / .ex-cap). This sheet adds only
+   the commerce surface: tabs, price chip, remaining, and the BUY/LIST/DELIST/
+   APPROVE actions. Palette tokens from threshold.css. Everything ships DARK on
+   null addresses (the register states below).
+   ========================================================================= */
+
+/* --- connect / refresh (treasury lineage) --- */
+.st-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 auto 2vh; flex-wrap: wrap; }
+.st-actions[hidden] { display: none; }
+.st-connect {
+  font-family: var(--display, "Cinzel", serif); font-weight: 600; letter-spacing: 0.08em;
+  font-size: 0.9rem; color: var(--gold-burnished, #d9a84e); cursor: pointer;
+  padding: 10px 22px; border-radius: 2px; border: 1px solid var(--gold-aged, #6b5426);
+  background: rgba(232, 200, 116, 0.06); transition: color 150ms, border-color 150ms, background 150ms;
+}
+.st-connect:hover, .st-connect:focus-visible {
+  color: var(--flame-core, #ffc96b); border-color: var(--gold-hairline, #8a6f3a); background: rgba(232, 200, 116, 0.12);
+}
+.st-connect:disabled { opacity: 0.5; cursor: default; }
+.st-refresh {
+  width: 34px; height: 34px; border-radius: 50%; line-height: 1; cursor: pointer;
+  color: var(--gold-burnished, #d9a84e); border: 1px solid var(--gold-aged, #6b5426);
+  background: rgba(232, 200, 116, 0.06); font-size: 1rem; transition: color 150ms, border-color 150ms;
+}
+.st-refresh:hover { color: var(--flame-core, #ffc96b); border-color: var(--gold-hairline, #8a6f3a); }
+.st-refresh[hidden], .st-connect[hidden] { display: none; }
+.st-wallet { font-family: var(--text, "EB Garamond", serif); font-size: 0.82rem; color: var(--gold-aged, #6b5426); }
+.st-wallet b { color: var(--gold-burnished, #d9a84e); font-weight: 600; }
+
+/* --- tabs (Buy | Market) --- */
+.st-tabs { display: flex; justify-content: center; gap: 8px; margin: 0 auto 2.4vh; }
+.st-tab {
+  font-family: var(--display, "Cinzel", serif); font-weight: 600; letter-spacing: 0.07em; font-size: 0.82rem;
+  color: var(--gold-aged, #6b5426); cursor: pointer; padding: 8px 20px; border-radius: 2px;
+  border: 1px solid transparent; background: transparent; transition: color 150ms, border-color 150ms;
+}
+.st-tab[aria-selected="true"] { color: var(--flame-core, #ffc96b); border-color: var(--gold-aged, #6b5426); background: rgba(232, 200, 116, 0.06); }
+.st-tab:hover { color: var(--gold-burnished, #d9a84e); }
+.st-panel[hidden] { display: none; }
+
+/* --- register / dark states --- */
+.st-register {
+  max-width: 40rem; margin: 3vh auto; padding: 22px 20px; text-align: center;
+  border: 1px solid var(--gold-aged, #6b5426); border-radius: 3px;
+  background: linear-gradient(180deg, rgba(26, 22, 17, 0.55), rgba(11, 10, 8, 0.5));
+  font-family: var(--text, "EB Garamond", serif); color: var(--gold-aged, #6b5426);
+}
+.st-register b { font-family: var(--display, "Cinzel", serif); color: var(--gold-burnished, #d9a84e); display: block; margin-bottom: 6px; letter-spacing: 0.05em; }
+.st-register.bad b { color: var(--vermilion, #b33a1f); }
+
+/* --- the price chip + remaining, laid over the frame bottom --- */
+.st-frame-wrap { position: relative; }
+.st-chip {
+  position: absolute; left: 6px; bottom: 6px; z-index: 2;
+  font-family: var(--display, "Cinzel", serif); font-size: 0.7rem; letter-spacing: 0.03em;
+  color: var(--flame-core, #ffc96b); background: rgba(11, 10, 8, 0.82);
+  border: 1px solid var(--gold-aged, #6b5426); border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+.st-chip.muted { color: var(--gold-aged, #6b5426); }
+.st-chip.bad { color: var(--vermilion, #b33a1f); }
+.st-remaining {
+  font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--gold-aged, #6b5426); padding: 0 0.5rem 0.2rem;
+}
+.st-remaining.soldout { color: var(--vermilion, #b33a1f); }
+.st-seller { font-size: 0.6rem; color: var(--gold-aged, #6b5426); padding: 0 0.5rem 0.2rem; font-family: var(--text, "EB Garamond", serif); }
+
+/* --- card action buttons (BUY / LIST / DELIST / APPROVE) --- */
+.st-card-actions { display: flex; gap: 6px; padding: 0.1rem 0.5rem 0.55rem; }
+.st-btn {
+  flex: 1 1 auto; font-family: var(--display, "Cinzel", serif); font-weight: 600; letter-spacing: 0.05em;
+  font-size: 0.72rem; cursor: pointer; padding: 7px 8px; border-radius: 2px;
+  color: var(--gold-burnished, #d9a84e); border: 1px solid var(--gold-aged, #6b5426);
+  background: rgba(232, 200, 116, 0.06); transition: color 150ms, border-color 150ms, background 150ms;
+}
+.st-btn:hover:not(:disabled), .st-btn:focus-visible:not(:disabled) {
+  color: var(--flame-core, #ffc96b); border-color: var(--gold-hairline, #8a6f3a); background: rgba(232, 200, 116, 0.12);
+}
+.st-btn:disabled { opacity: 0.4; cursor: default; }
+.st-btn.danger { color: var(--vermilion, #b33a1f); border-color: rgba(179, 58, 31, 0.5); }
+.st-btn.danger:hover:not(:disabled) { color: #d8623f; border-color: var(--vermilion, #b33a1f); background: rgba(179, 58, 31, 0.1); }
+.st-msg { font-size: 0.66rem; padding: 0 0.5rem 0.5rem; min-height: 0.9rem; font-family: var(--text, "EB Garamond", serif); color: var(--gold-aged, #6b5426); }
+.st-msg.ok { color: var(--flame-core, #ffc96b); }
+.st-msg.bad { color: var(--vermilion, #b33a1f); }
+
+/* --- list dialog (price + 95/5 disclosure) --- */
+.st-dialog-back {
+  position: fixed; inset: 0; z-index: 120; background: rgba(6, 5, 3, 0.72);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.st-dialog-back[hidden] { display: none; }
+.st-dialog {
+  max-width: 24rem; width: 100%; border: 1px solid var(--gold-hairline, #8a6f3a); border-radius: 4px;
+  background: linear-gradient(180deg, rgba(28, 24, 18, 0.98), rgba(14, 12, 9, 0.98)); padding: 20px;
+  font-family: var(--text, "EB Garamond", serif); color: var(--parchment, #e8dcc0);
+}
+.st-dialog h3 { font-family: var(--display, "Cinzel", serif); color: var(--gold-burnished, #d9a84e); letter-spacing: 0.05em; margin: 0 0 4px; font-size: 1rem; }
+.st-dialog .st-dsub { font-size: 0.82rem; color: var(--gold-aged, #6b5426); margin: 0 0 14px; }
+.st-dialog label { display: block; font-size: 0.78rem; color: var(--gold-aged, #6b5426); margin: 0 0 5px; letter-spacing: 0.03em; }
+.st-dialog input {
+  width: 100%; box-sizing: border-box; font-family: var(--text, "EB Garamond", serif); font-size: 0.95rem;
+  color: var(--flame-core, #ffc96b); background: rgba(11, 10, 8, 0.7);
+  border: 1px solid var(--gold-aged, #6b5426); border-radius: 2px; padding: 9px 11px;
+}
+.st-fee {
+  margin: 12px 0 4px; padding: 11px 12px; border: 1px dashed var(--gold-aged, #6b5426); border-radius: 3px;
+  font-size: 0.8rem; line-height: 1.5; color: var(--parchment, #e8dcc0); background: rgba(232, 200, 116, 0.04);
+}
+.st-fee b { color: var(--flame-core, #ffc96b); }
+.st-fee .st-fee-note { display: block; margin-top: 6px; font-size: 0.72rem; color: var(--gold-aged, #6b5426); }
+.st-dialog-actions { display: flex; gap: 10px; margin-top: 16px; }
+.st-dialog-actions .st-btn { padding: 9px 12px; font-size: 0.8rem; }
