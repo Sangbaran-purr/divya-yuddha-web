@@ -62,6 +62,23 @@ window.DYAdmin = (function () {
       return {};
     }
   }
+  // S-WAVE-REGISTRY: the committed DY_WAVE_REGISTRY is the SOLE catalog base. A dyadmin::
+  // localStorage `waveCards` entry is a TESTNET-ONLY override, layered per-cardId (stored wins);
+  // when active it is announced LOUDLY (no-silent-defaults law). admin-config.js waveCards is
+  // superseded and no longer read here.
+  function mergeWaveCatalog(stored) {
+    var base = (window.DY_WAVE_REGISTRY && DY_WAVE_REGISTRY.list) ? DY_WAVE_REGISTRY.list() : [];
+    if (!stored || !stored.length) return base;
+    var byId = {};
+    base.forEach(function (w) { byId[Number(w.cardId)] = w; });
+    stored.forEach(function (w) { if (w && w.cardId != null) byId[Number(w.cardId)] = w; }); // per-cardId override
+    console.log("[DY admin] wave catalog: localStorage override ACTIVE — " + stored.length +
+      " stored entr" + (stored.length === 1 ? "y" : "ies") + " layered over " + base.length +
+      " registry card" + (base.length === 1 ? "" : "s") + " (testnet only).");
+    var out = [];
+    for (var k in byId) { if (Object.prototype.hasOwnProperty.call(byId, k)) out.push(byId[k]); }
+    return out;
+  }
   function cfg() {
     var o = override();
     var fc = FILE.contracts || {};
@@ -83,7 +100,7 @@ window.DYAdmin = (function () {
       // S-TORANA-1: two USD eligibility bands (positive; definite ≥ discretion enforced in saveCfg). Defaults 500 / 100.
       toranaDefiniteUsd: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.toranaDefiniteUsd || 500); })(o.toranaDefiniteUsd),
       toranaDiscretionUsd: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.toranaDiscretionUsd || 100); })(o.toranaDiscretionUsd),
-      waveCards: o.waveCards && o.waveCards.length ? o.waveCards : FILE.waveCards || [],
+      waveCards: mergeWaveCatalog(o.waveCards), // S-WAVE-REGISTRY: registry base + per-cardId localStorage testnet override
       source: o.accessNFT || o.waveCardNFT || o.dycoin ? "localStorage (this browser)" : "admin-config.js",
     };
   }

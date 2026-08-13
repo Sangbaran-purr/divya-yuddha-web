@@ -161,9 +161,21 @@ window.DYTreasury = (function () {
       "</div>";
   }
 
+  // S-WAVE-REGISTRY: resolve a cardId's display identity + art frame.
+  // Order: DY_CARDS launch map (1-25, UNTOUCHED) -> DY_WAVE_REGISTRY (always NAMED; art->frame when
+  // non-null, else a named placeholder) -> the generic DY_CARDS.lookup fallback ("Card #N").
+  function waveEpithet(w) { return w.status === "test" ? "Test card" : "Wave " + (w.season != null ? w.season : ""); }
+  function resolveCard(cardId) {
+    var id = Number(cardId);
+    if (window.DY_CARDS && DY_CARDS.byId && DY_CARDS.byId[id]) return DY_CARDS.lookup(id); // launch 1-25, untouched
+    var w = (window.DY_WAVE_REGISTRY && DY_WAVE_REGISTRY.lookup) ? DY_WAVE_REGISTRY.lookup(id) : null;
+    if (w) return { name: w.name, epithet: waveEpithet(w), frame: w.art || null, faction: w.faction || "vanaras" };
+    return window.DY_CARDS.lookup(id); // generic placeholder ("Card #N / Awaiting its plate")
+  }
+
   // --- RENDER: one Wave Card plinth (full art via the canonical road) --------
   function renderPlinth(row) {
-    var card = window.DY_CARDS.lookup(row.cardId);
+    var card = resolveCard(row.cardId);
     var art = artUrls(card.frame);
     var p = el("figure", "plinth");
     var frame = el("div", "frame");
@@ -207,7 +219,7 @@ window.DYTreasury = (function () {
   function filtered(rows) {
     if (!activeFilter) return rows;
     return rows.filter(function (r) {
-      return (window.DY_CARDS.lookup(r.cardId).faction || "vanaras") === activeFilter;
+      return (resolveCard(r.cardId).faction || "vanaras") === activeFilter;
     });
   }
 
