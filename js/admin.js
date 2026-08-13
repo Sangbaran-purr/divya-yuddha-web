@@ -1177,7 +1177,13 @@ window.DYAdmin = (function () {
         .forEach(function (w) {
           var o = el("option");
           o.value = w.cardId;
-          o.textContent = w.name + "  (#" + w.cardId + ")";
+          // LEG1.5: a "held" seat (e.g. The Setu Stones, reserved for wave-1.1) is shown but NOT droppable.
+          if (w.status === "held") {
+            o.textContent = w.name + "  (#" + w.cardId + ") — HELD";
+            o.disabled = true;
+          } else {
+            o.textContent = w.name + "  (#" + w.cardId + ")";
+          }
           og.appendChild(o);
         });
       sel.appendChild(og);
