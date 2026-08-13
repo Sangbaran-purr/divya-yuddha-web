@@ -276,21 +276,32 @@ window.DYAdmin = (function () {
 
   // (scope 2) size EIP-1559 fees from live base+priority with FEE_HEADROOM so a send isn't dropped under Amoy's
   // volatile gas floor. maxFeePerGas is a refundable ceiling; the wallet still shows + can override these.
+  // RUNG4-FIX-4 — Amoy's node floor is 25 gwei on the priority tip; the wallet's Amoy RPC serves weak/absent
+  // priority-fee data, so getFeeData through it (and the old {} fallback) let MetaMask default to 1.5 gwei →
+  // rejected under the floor ("gas tip cap 1500000000, minimum needed 25000000000"). So: (1) read the fee signal
+  // through the reliable publicnode provider, and (2) FLOOR both fees at the 45/30 ceremony pattern on EVERY path
+  // (normal, zero-basis, catch) — never return {} on Amoy. This is a SHARED helper → it fixes every admin send.
+  var FEE_FLOOR_MAX = 45_000_000_000n; // 45 gwei — maxFeePerGas floor (ceremony ceiling)
+  var FEE_FLOOR_TIP = 30_000_000_000n; // 30 gwei — maxPriorityFeePerGas floor (> Amoy's 25 gwei node minimum)
+  function feeFloor(ceil, prio) {
+    if (ceil < FEE_FLOOR_MAX) ceil = FEE_FLOOR_MAX;
+    if (prio < FEE_FLOOR_TIP) prio = FEE_FLOOR_TIP;
+    if (ceil < prio) ceil = prio; // maxFee must be ≥ priority
+    return { maxFeePerGas: ceil, maxPriorityFeePerGas: prio };
+  }
   function feeOverrides(provider) {
-    return provider
+    // signal from publicnode (the wallet RPC lacks reliable priority-fee data); the `provider` arg is kept for
+    // call-site compatibility but the fee READ no longer rides it — the FLOOR guarantees a valid tip regardless.
+    return tamedProvider(PD_RPC)
       .getFeeData()
       .then(function (fd) {
-        var gp = fd.gasPrice || 0n; // legacy signal (≈ base+priority; on Amoy base≈0 so this is the real floor)
+        var gp = fd.gasPrice || 0n;
         var mf = fd.maxFeePerGas || 0n;
         var basis = gp > mf ? gp : mf; // whichever price signal is higher
-        if (basis === 0n) return {}; // no signal → let the wallet decide
-        var ceil = basis * FEE_HEADROOM;
-        var prio = basis * FEE_HEADROOM;
-        if (prio > ceil) prio = ceil;
-        return { maxFeePerGas: ceil, maxPriorityFeePerGas: prio };
+        return feeFloor(basis * FEE_HEADROOM, basis * FEE_HEADROOM); // basis 0n → the explicit floor applies
       })
       .catch(function () {
-        return {}; // fee read failed → let the wallet decide (never block the send)
+        return feeFloor(0n, 0n); // fee read failed → the explicit 45/30 floor, NEVER {} (Amoy rejects sub-floor tips)
       });
   }
 
@@ -2390,7 +2401,7 @@ window.DYAdmin = (function () {
     var gen = ++pdReadGen;
     if (stEl) { stEl.textContent = "Reading chain (" + pdCatalog.length + " cards)…"; stEl.style.color = "var(--gold-aged)"; }
     withEthers().then(function () {
-      var sale = new ethersRef.Contract(c.waveCardSale, WAVESALE_ABI, readProvider());
+      var sale = new ethersRef.Contract(c.waveCardSale, WAVESALE_ABI, tamedProvider(PD_RPC)); // RUNG4-FIX-4: publicnode, not the wallet's weak RPC → prices load as numeric 0n, no busy-sentinel exclusion in APPLY
       return Promise.all(pdCatalog.map(function (w) {
         return Promise.all([
           sale.priceOf(w.cardId).catch(function () { return null; }),
@@ -2435,22 +2446,40 @@ window.DYAdmin = (function () {
     withEthers().then(function () {
       var defaults = {};
       PD_RARITIES.forEach(function (r) { var v = (($("pd-def-" + r) || {}).value || "").trim(); if (v) defaults[r] = v; });
+      var anyDefault = Object.keys(defaults).length > 0;
       var ids = [], prices = [], rows = [];
+      // RUNG4-FIX-4 — tally WHY a card was not staged so a 0-row result is NEVER silent (busy-sentinel: an unread
+      // card's price is UNKNOWN, never treated as "priced"). Reasons: unread(busy/unloaded) / alreadyPriced /
+      // noValue(no default+no override) / unparseable(parseUnits threw or resolved 0).
+      var ex = { unread: 0, alreadyPriced: 0, noValue: 0, unparseable: 0 };
       pdCatalog.forEach(function (w) {
         var ch = pdChain[w.cardId];
         var ovEl = document.querySelector(".pd-override[data-card='" + w.cardId + "']");
         var override = (ovEl && ovEl.value || "").trim();
         var human = override || defaults[w.rarity];
-        if (!human) return;
-        var isUnpriced = ch && ch !== "busy" && ch.price === 0n;
-        if (!override && !isUnpriced) return; // defaults touch ONLY unpriced; overrides always
+        if (!human) { if (!override) ex.noValue++; return; }
+        if (!override) {
+          // the DEFAULT path touches ONLY on-chain-unpriced cards — and needs a KNOWN price to decide that.
+          if (!ch || ch === "busy") { ex.unread++; return; } // UNKNOWN, not "priced" — surfaced, never staged silently
+          if (ch.price !== 0n) { ex.alreadyPriced++; return; }
+        }
         var wei;
-        try { wei = ethersRef.parseUnits(human, 18); } catch (e) { return; }
-        if (wei === 0n) return; // zero-price law: never stage a 0
+        try { wei = ethersRef.parseUnits(human, 18); } catch (e) { ex.unparseable++; return; }
+        if (wei === 0n) { ex.unparseable++; return; } // zero-price law: never stage a 0
         ids.push(w.cardId); prices.push(wei);
         rows.push("<tr><td>" + escHtml(w.name) + " <span style='color:var(--gold-aged)'>#" + w.cardId + "</span></td><td class='mono'>" + escHtml(human) + " DYC</td><td>" + (override ? "override" : "default " + w.rarity) + "</td></tr>");
       });
-      if (!ids.length) { pdReviewMsg("Nothing to stage — set rarity defaults and/or per-card overrides (defaults apply only to on-chain-unpriced cards)."); return; }
+      if (!ids.length) {
+        var reasons = [];
+        if (!anyDefault) reasons.push("no rarity defaults entered (and no per-card overrides)");
+        if (ex.unread) reasons.push(ex.unread + " unread — refresh LOAD CHAIN STATE (chain busy)");
+        if (ex.alreadyPriced) reasons.push(ex.alreadyPriced + " already priced");
+        if (ex.unparseable) reasons.push(ex.unparseable + " with an unparseable value (check the numbers — no commas)");
+        if (anyDefault && ex.noValue) reasons.push(ex.noValue + " with no default for their rarity");
+        if (!reasons.length) reasons.push("no cards matched");
+        pdReviewMsg("0 cards staged: " + reasons.join("; ") + ".");
+        return;
+      }
       pdRenderBatchReview("prices", "setPrices", ids, prices, rows, ["Card", "Price", "Source"]);
     }).catch(function (e) { pdReviewMsg("Could not stage: " + decodeErr(e)); });
   }
