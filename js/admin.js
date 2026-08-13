@@ -2524,10 +2524,24 @@ window.DYAdmin = (function () {
         var call = kind === "prices" ? sale.setPrices : sale.setSupplyCaps;
         if (msg) msg.textContent = "Simulating…";
         return call.staticCall(ids, values).then(function () {
-          if (msg) msg.textContent = "Confirm in your wallet…";
-          return feeOverrides(provider).then(function (fee) {
-            return call(ids, values, Object.assign({ gasLimit: 120000 + 45000 * ids.length }, fee)).then(function (tx) { return tx.wait(); });
-          });
+          // RUNG4-FIX-5 — size the gasLimit from a REAL estimate (+25% margin), not the crude 120000+45000*n formula.
+          // For 87 rows the formula supplies ~4.03M vs the real ~2.23M (1.8x over) → MetaMask's max quote
+          // (gasLimit × maxFee) looked ~3x the caps send. Estimate through tamedProvider(PD_RPC) with from = the
+          // connected owner (the wallet's weak RPC could fail/bloat the estimate); fall back to the formula, never
+          // block the send.
+          if (msg) msg.textContent = "Estimating gas…";
+          var readSale = new ethersRef.Contract(c.waveCardSale, WAVESALE_ABI, tamedProvider(PD_RPC));
+          var estFn = kind === "prices" ? readSale.setPrices : readSale.setSupplyCaps;
+          var fallbackLimit = BigInt(120000 + 45000 * ids.length);
+          return estFn.estimateGas(ids, values, { from: window.DYWallet.state.address })
+            .then(function (est) { return est + est / 4n; }) // +25% margin
+            .catch(function () { return fallbackLimit; })
+            .then(function (gasLimit) {
+              if (msg) msg.textContent = "Confirm in your wallet…";
+              return feeOverrides(provider).then(function (fee) {
+                return call(ids, values, Object.assign({ gasLimit: gasLimit }, fee)).then(function (tx) { return tx.wait(); });
+              });
+            });
         });
       });
     }).then(function () {
