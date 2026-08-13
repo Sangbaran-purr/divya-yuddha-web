@@ -94,24 +94,19 @@ window.DYTreasury = (function () {
       var provider = window.DYWallet.readProvider(); // RUNG4-FIX-3 — tamed publicnode read road, not the wallet's dead RPC
       var c = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
       var fromBlock = CFG.deployBlock || 0; // bounded scan; 0 -> full scan (S-LEDGER-FIX-4 law)
-      // RUNG4-FIX-7 — CHUNKED scan via the shared law (publicnode hangs on a single >10k-block getLogs; the
-      // deployBlock→latest range is now >112k). Incoming transfers to owner (includes mints: Transfer(0, owner, id)).
-      return window.DYWallet.scanLogs(c, c.filters.Transfer(null, owner), fromBlock, deadlineAt).then(function (evs) {
-        var ids = {};
-        evs.forEach(function (e) {
-          ids[e.args.tokenId.toString()] = e.args.tokenId;
-        });
-        var uniq = Object.keys(ids).map(function (k) {
-          return ids[k];
-        });
-        // verify CURRENT ownership + resolve cardId, in parallel. A per-token read failure
-        // drops THAT token (best-effort) — the top-level busy-sentinel covers a dead RPC.
+      // RUNG4-FIX-7B — RESUMABLE checkpointed scan (dyw:: per-wallet), O(delta) on repeat visits. Candidates are the
+      // tokenIds ever transferred TO owner (mints: Transfer(0, owner, id); + any incoming). We re-verify CURRENT
+      // ownership each load (a token may have been sent away), so candidates only ever grow — held is a re-check.
+      var key = "dyw::shelf::" + CFG.chain.id + "::" + owner.toLowerCase();
+      return window.DYWallet.scanLogsResumable(c, c.filters.Transfer(null, owner), fromBlock, deadlineAt, key).then(function (scan) {
+        // verify CURRENT ownership + resolve cardId, in parallel. A per-token read failure drops THAT token.
         return Promise.all(
-          uniq.map(function (tid) {
+          scan.candidates.map(function (tidStr) {
+            var tid = BigInt(tidStr);
             return c
               .ownerOf(tid)
               .then(function (cur) {
-                if (cur.toLowerCase() !== owner.toLowerCase()) return null;
+                if (cur.toLowerCase() !== owner.toLowerCase()) return null; // transferred away since received
                 return c.cardOf(tid).then(function (cardId) {
                   return { tokenId: tid, cardId: cardId };
                 });
@@ -121,7 +116,18 @@ window.DYTreasury = (function () {
               });
           })
         ).then(function (rows) {
-          return rows.filter(Boolean);
+          var held = rows.filter(Boolean);
+          // COMPLETENESS GATE — balanceOf is the truth. Render as soon as we've found ALL held tokens (even before
+          // the scan reaches latest); else if the scan is incomplete, render BUSY — the checkpoint advanced, the
+          // next refresh continues behind the busy face (owner ruling). balanceOf failure falls back to scan.complete.
+          return c.balanceOf(owner).then(function (bal) {
+            if (held.length >= Number(bal) || scan.complete) return held;
+            var e = new Error("shelf-incomplete"); e.__incomplete = true; throw e;
+          }).catch(function (e) {
+            if (e && e.__incomplete) throw e;
+            if (scan.complete) return held;
+            var e2 = new Error("shelf-incomplete"); e2.__incomplete = true; throw e2;
+          });
         });
       });
     });
@@ -183,7 +189,9 @@ window.DYTreasury = (function () {
     if (art) {
       var img = new Image();
       img.alt = card.name + " — " + card.epithet;
-      img.loading = "lazy";
+      img.decoding = "async"; // RUNG4-FIX-7B — decode off the main thread; drop loading="lazy" (it deprioritized the
+      //                          first uncached thumb fetch → "art pending until refresh"). These are the user's own
+      //                          few held cards — load them eagerly.
       img.onload = function () {
         frame.innerHTML = "";
         frame.appendChild(img);
@@ -235,7 +243,7 @@ window.DYTreasury = (function () {
     if (art) {
       var img = new Image();
       img.alt = card.name;
-      img.loading = "lazy";
+      img.decoding = "async"; // RUNG4-FIX-7B — eager decode; no lazy (see renderPlinth note)
       img.onload = function () { frame.innerHTML = ""; frame.appendChild(img); };
       img.onerror = function () {};
       img.src = art.thumb;

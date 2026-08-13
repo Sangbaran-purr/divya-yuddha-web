@@ -567,21 +567,26 @@ window.DYStore = (function () {
       var market = new ethers.Contract(marketAddr(), MARKET_ABI, provider);
       var nft = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
       var fromBlock = CFG.marketDeployBlock || CFG.deployBlock || 0; // market events cannot predate the market's own deploy
+      var key = "dyw::listings::" + CFG.chain.id + "::" + owner.toLowerCase();
       return dycDecimals(ethers, provider).then(function () {
-        // RUNG4-FIX-7 — CHUNKED scan via the shared law (the marketDeployBlock→latest range already exceeds the ~10k
-        // getLogs cap; a single queryFilter hangs on publicnode). deadline-to-busy, never a partial listings set.
-        return window.DYWallet.scanLogs(market, market.filters.Listed(null, owner), fromBlock, deadlineAt);
-      }).then(function (evs) {
-        var ids = {};
-        evs.forEach(function (e) { ids[e.args.tokenId.toString()] = e.args.tokenId; });
-        var uniq = Object.keys(ids).map(function (k) { return ids[k]; });
-        return Promise.all(uniq.map(function (tid) {
+        // RUNG4-FIX-7B — RESUMABLE checkpointed scan (dyw:: per-wallet), O(delta) on repeat visits. Candidates are the
+        // tokenIds owner has ever Listed; re-verify each via listingOf (active && seller==owner) to drop delisted/sold.
+        return window.DYWallet.scanLogsResumable(market, market.filters.Listed(null, owner), fromBlock, deadlineAt, key);
+      }).then(function (scan) {
+        return Promise.all(scan.candidates.map(function (tidStr) {
+          var tid = BigInt(tidStr);
           return market.listingOf(tid).then(function (l) {
             if (!l[2] || !eqAddr(l[0], owner)) return null; // not active, or resold/relisted by another
             return nft.cardOf(tid).then(function (cid) { return { tokenId: tid, price: l[1], cardId: cid }; })
               .catch(function () { return { tokenId: tid, price: l[1], cardId: null }; });
           }).catch(function () { return null; });
-        })).then(function (rows) { return { ethers: ethers, rows: rows.filter(Boolean) }; });
+        })).then(function (rows) {
+          var active = rows.filter(Boolean);
+          // No per-seller listing count exists on-chain (only totalListed), so there is no balanceOf-style early gate:
+          // if the scan is incomplete, render BUSY — the checkpoint advanced, the next refresh continues (owner ruling).
+          if (!scan.complete) { var e = new Error("listings-incomplete"); e.__incomplete = true; throw e; }
+          return { ethers: ethers, rows: active };
+        });
       });
     });
   }

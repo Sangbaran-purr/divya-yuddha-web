@@ -206,28 +206,44 @@ window.DYWallet = (function () {
       });
   }
 
-  // --- RUNG4-FIX-7 — THE SHARED getLogs SCAN LAW. publicnode/drpc reject (or hang on) a getLogs range > ~10000
-  //     blocks, so a single queryFilter over deployBlock→latest (now >112k blocks) never returns → the caller's
-  //     read dies to the busy-sentinel. So chunk [fromBlock, latest] into <=CHUNK windows, withRetry per chunk,
-  //     accumulate. FORWARD-chunk + DEADLINE-TO-BUSY (owner ruling): if the deadline hits mid-scan we THROW — never
-  //     return a partial set (a truncated forward scan would drop the NEWEST chunks, i.e. a fresh mint). Both the
-  //     treasury shelf (discover) and Your Listings (scanMyListings) ride this one law. Requires ethers loaded.
-  //     `contract` is an ethers Contract on readProvider(); `filter` an ethers event filter. Returns Promise<events[]>. ---
+  // --- RUNG4-FIX-7B — THE RESUMABLE, CHECKPOINTED getLogs SCAN LAW. publicnode/drpc hang on a single getLogs > ~10k
+  //     blocks, and the deployBlock→latest range grows ~40k blocks/day forever, so a fresh O(history) scan every
+  //     refresh (12 chunks today, more tomorrow) is structurally fragile: on a variable network ONE stalled chunk
+  //     (10s FetchRequest timeout) can eat the whole deadline and fail the load. So:
+  //       • persist a per-wallet checkpoint in localStorage (dyw::<key>) = { scannedTo, candidates:[tokenId strings] };
+  //       • RESUME from scannedTo+1 (deployBlock on first visit), chunk forward <=LOG_CHUNK, and PERSIST after EACH
+  //         successful chunk — a stall/deadline keeps its progress, so the next refresh continues, not restarts;
+  //       • O(delta) on repeat visits (usually 1 chunk), O(history) only on the never-completed first pass.
+  //     Returns { candidates:[tokenId string], complete:bool } — the caller re-verifies each candidate (ownerOf /
+  //     listingOf) and applies its completeness gate; an incomplete scan renders BUSY while the checkpoint advances
+  //     behind the busy face (owner ruling). SEQUENTIAL — no parallel chunks (gentle on the free-tier getLogs class). ---
   var LOG_CHUNK = 9999; // < 10000 — the archive-RPC cap (admin.js LOG_CHUNK precedent)
-  function scanLogs(contract, filter, fromBlock, deadlineAt) {
+  function ckptGet(key) {
+    try { var v = window.localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+  }
+  function ckptSet(key, obj) {
+    try { window.localStorage.setItem(key, JSON.stringify(obj)); } catch (e) { /* private mode / quota — scan still works, just not O(delta) */ }
+  }
+  function scanLogsResumable(contract, filter, deployBlock, deadlineAt, ckptKey) {
+    var ck = ckptGet(ckptKey) || {};
+    var candSet = {};
+    (ck.candidates || []).forEach(function (t) { candSet[t] = true; });
+    var resumeFrom = ck.scannedTo && ck.scannedTo >= deployBlock ? ck.scannedTo + 1 : deployBlock;
     return readProvider().getBlockNumber().then(function (latest) {
-      var acc = [];
       function scanFrom(start) {
-        if (start > latest) return Promise.resolve(acc);
+        if (start > latest) return Promise.resolve(true); // reached latest → complete
         var end = Math.min(start + LOG_CHUNK, latest);
         return withRetry(function () { return contract.queryFilter(filter, start, end); }, 3, deadlineAt)
           .then(function (evs) {
-            acc = acc.concat(evs);
-            if (Date.now() > deadlineAt) throw new Error("scan deadline"); // deadline-to-busy: never a partial shelf
+            evs.forEach(function (e) { candSet[e.args.tokenId.toString()] = true; });
+            ckptSet(ckptKey, { scannedTo: end, candidates: Object.keys(candSet) }); // persist progress per chunk
+            if (Date.now() > deadlineAt) return false; // incomplete — but the checkpoint advanced
             return scanFrom(end + 1);
           });
       }
-      return scanFrom(fromBlock);
+      return scanFrom(resumeFrom).then(function (complete) {
+        return { candidates: Object.keys(candSet), complete: complete };
+      });
     });
   }
 
@@ -281,7 +297,7 @@ window.DYWallet = (function () {
     loadEthers: loadEthers,
     readProvider: readProvider, // RUNG4-FIX-3 — the shared tamed publicnode read road (store/treasury/rite reuse this)
     feeOverrides: feeOverrides, // RUNG4-FIX-6 — player-send fee-field floor (45/30 via publicnode); gasLimit stays wallet
-    scanLogs: scanLogs, // RUNG4-FIX-7 — the shared chunked getLogs scan (treasury discover + store scanMyListings)
+    scanLogsResumable: scanLogsResumable, // RUNG4-FIX-7B — resumable checkpointed getLogs scan (treasury discover + store scanMyListings)
     shortAddr: shortAddr,
   };
 })();
