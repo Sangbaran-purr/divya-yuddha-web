@@ -176,6 +176,36 @@ window.DYWallet = (function () {
     return new e.JsonRpcProvider(req, CFG.chain.id, { staticNetwork: true });
   }
 
+  // --- RUNG4-FIX-6 — PLAYER SEND FEE FLOOR (owner ruling 2026-08-13; supersedes the D2 no-player-feeOverrides rule
+  //     in exactly this scope). Amoy's node floor is 25 gwei on the priority tip; a stale wallet RPC prices ~2 gwei
+  //     → eth_sendRawTransaction rejects. So player writes carry FEE-FIELD-ONLY overrides: maxFeePerGas /
+  //     maxPriorityFeePerGas read from the PUBLICNODE signal (readProvider, not the wallet's weak RPC) and floored at
+  //     the 45/30 ceremony pattern on EVERY path (normal / zero-basis / catch) — NEVER {}. gasLimit stays
+  //     wallet-estimated; MetaMask renders these as editable site-suggested fees. Returns {maxFeePerGas,
+  //     maxPriorityFeePerGas}. ---
+  var FEE_FLOOR_MAX = 45000000000n; // 45 gwei — maxFeePerGas floor (ceremony ceiling)
+  var FEE_FLOOR_TIP = 30000000000n; // 30 gwei — maxPriorityFeePerGas floor (> Amoy's 25 gwei node minimum)
+  var FEE_HEADROOM = 2n; // 2x over the live signal
+  function feeFloor(ceil, prio) {
+    if (ceil < FEE_FLOOR_MAX) ceil = FEE_FLOOR_MAX;
+    if (prio < FEE_FLOOR_TIP) prio = FEE_FLOOR_TIP;
+    if (ceil < prio) ceil = prio; // maxFee must be ≥ priority
+    return { maxFeePerGas: ceil, maxPriorityFeePerGas: prio };
+  }
+  function feeOverrides() {
+    return readProvider()
+      .getFeeData()
+      .then(function (fd) {
+        var gp = fd.gasPrice || 0n;
+        var mf = fd.maxFeePerGas || 0n;
+        var basis = gp > mf ? gp : mf;
+        return feeFloor(basis * FEE_HEADROOM, basis * FEE_HEADROOM); // basis 0n → the explicit floor applies
+      })
+      .catch(function () {
+        return feeFloor(0n, 0n); // fee read failed → the explicit 45/30 floor, NEVER {} (Amoy rejects sub-floor tips)
+      });
+  }
+
   // --- holder check: AccessNFT.balanceOf > 0. Fails GRACEFULLY (placeholder
   //     addresses / undeployed rehearsal contract) -> treated as non-holder. ---
   function checkHolder() {
@@ -216,6 +246,7 @@ window.DYWallet = (function () {
     checkHolder: checkHolder,
     loadEthers: loadEthers,
     readProvider: readProvider, // RUNG4-FIX-3 — the shared tamed publicnode read road (store/treasury/rite reuse this)
+    feeOverrides: feeOverrides, // RUNG4-FIX-6 — player-send fee-field floor (45/30 via publicnode); gasLimit stays wallet
     shortAddr: shortAddr,
   };
 })();

@@ -12,7 +12,10 @@
        (Listed from deployBlock, verified against listingOf), readGen + busy-sentinel.
 
    LAWS (owner-ruled, LEG3+5):
-     • Player gas = WALLET-ESTIMATED. No feeOverrides (that stays admin-only).
+     • Player gasLIMIT = WALLET-ESTIMATED. Player FEE FIELDS = DYWallet.feeOverrides() (45/30 floor via the shared
+       publicnode road, never {}) — RUNG4-FIX-6 (owner ruling 2026-08-13, supersedes the D2 no-player-feeOverrides
+       rule in exactly this scope): a stale wallet RPC prices ~2 gwei, under Amoy's 25-gwei node floor, so every
+       buy/approve/list/delist would die at broadcast. MetaMask still renders the fees as editable site-suggested.
      • Every write is staticCall-pre-simmed so a revert is shown BEFORE signing.
      • DARK on null addresses: waveCardSale null -> Buy is a register; waveCardMarket
        null -> Market + List + Your Listings are registers. No reads fire on null.
@@ -82,7 +85,7 @@ window.DYStore = (function () {
   // RUNG4-FIX-3 — reads ride the shared tamed publicnode road (staticNetwork, fail-fast), NOT the dead rpcUrls[0]
   // JsonRpcProvider that spun the "failed to detect network, retry in 1s" loop. Writes still use signerRoad (wallet).
   function readProvider() { return window.DYWallet.readProvider(); }
-  // the signing road: BrowserProvider -> signer (wallet-estimated gas; NO feeOverrides)
+  // the signing road: BrowserProvider -> signer (wallet-estimated gasLIMIT; fee FIELDS from DYWallet.feeOverrides, RUNG4-FIX-6)
   function signerRoad() {
     return loadE().then(function (ethers) {
       var bp = new ethers.BrowserProvider(window.ethereum);
@@ -275,7 +278,7 @@ window.DYStore = (function () {
     signerRoad().then(function (r) {
       var dyc = new r.ethers.Contract(CFG.contracts.dycoin, DYC_ABI, r.signer);
       return dyc.approve.staticCall(saleAddr(), row.price).then(function () {
-        return dyc.approve(saleAddr(), row.price); // wallet-estimated gas
+        return window.DYWallet.feeOverrides().then(function (fee) { return dyc.approve(saleAddr(), row.price, fee); }); // RUNG4-FIX-6: fee-field floor (45/30), gasLimit stays wallet
       }).then(function (tx) { msg.textContent = "Approving… waiting for confirmation."; return tx.wait(); });
     }).then(function () {
       buyAllowance = row.price; // now sufficient for this card
@@ -293,7 +296,7 @@ window.DYStore = (function () {
       var sale = new r.ethers.Contract(saleAddr(), SALE_ABI, r.signer);
       return sale.buy.staticCall(row.card.cardId).then(function () {
         msg.textContent = "Confirm the purchase in your wallet…";
-        return sale.buy(row.card.cardId); // wallet-estimated gas
+        return window.DYWallet.feeOverrides().then(function (fee) { return sale.buy(row.card.cardId, fee); }); // RUNG4-FIX-6: fee-field floor (45/30), gasLimit stays wallet
       }).then(function (tx) { msg.textContent = "Buying… waiting for confirmation."; return tx.wait(); });
     }).then(function () {
       msg.className = "st-msg ok"; msg.textContent = "Bought — it is in your Treasury.";
@@ -412,7 +415,7 @@ window.DYStore = (function () {
           if (al >= price) return null; // already approved enough
           msg.textContent = "Approve DYC — confirm in your wallet…";
           return dyc.approve.staticCall(marketAddr(), price).then(function () {
-            return dyc.approve(marketAddr(), price);
+            return window.DYWallet.feeOverrides().then(function (fee) { return dyc.approve(marketAddr(), price, fee); }); // RUNG4-FIX-6: fee-field floor (45/30), gasLimit stays wallet
           }).then(function (tx) { msg.textContent = "Approving… waiting."; return tx.wait(); });
         });
       }).then(function () {
@@ -421,7 +424,7 @@ window.DYStore = (function () {
           msg.textContent = "Simulating the purchase…";
           return market.buy.staticCall(tokenId).then(function () {
             msg.textContent = "Confirm the purchase in your wallet…";
-            return market.buy(tokenId);
+            return window.DYWallet.feeOverrides().then(function (fee) { return market.buy(tokenId, fee); }); // RUNG4-FIX-6: fee-field floor (45/30), gasLimit stays wallet
           }).then(function (tx) { msg.textContent = "Buying… waiting for confirmation."; return tx.wait(); });
         });
       }).then(function () {
@@ -440,7 +443,7 @@ window.DYStore = (function () {
       var market = new r.ethers.Contract(marketAddr(), MARKET_ABI, r.signer);
       return market.delist.staticCall(tokenId).then(function () {
         msg.textContent = "Confirm the delist in your wallet…";
-        return market.delist(tokenId);
+        return window.DYWallet.feeOverrides().then(function (fee) { return market.delist(tokenId, fee); }); // RUNG4-FIX-6: fee-field floor (45/30), gasLimit stays wallet
       }).then(function (tx) { msg.textContent = "Delisting… waiting for confirmation."; return tx.wait(); });
     }).then(function () {
       msg.className = "st-msg ok"; msg.textContent = "Delisted — the card is back in your Treasury.";
@@ -527,7 +530,7 @@ window.DYStore = (function () {
         if (ok) return null;
         msg.textContent = "Approve the market to escrow your cards — confirm in your wallet…";
         return nft.setApprovalForAll.staticCall(marketAddr(), true).then(function () {
-          return nft.setApprovalForAll(marketAddr(), true);
+          return window.DYWallet.feeOverrides().then(function (fee) { return nft.setApprovalForAll(marketAddr(), true, fee); }); // RUNG4-FIX-6: fee-field floor (45/30), gasLimit stays wallet
         }).then(function (tx) { msg.textContent = "Approving… waiting."; return tx.wait(); });
       });
     }).then(function () {
@@ -536,7 +539,7 @@ window.DYStore = (function () {
         msg.textContent = "Simulating the listing…";
         return market.list.staticCall(tokenId, wei).then(function () {
           msg.textContent = "Confirm the listing in your wallet…";
-          return market.list(tokenId, wei);
+          return window.DYWallet.feeOverrides().then(function (fee) { return market.list(tokenId, wei, fee); }); // RUNG4-FIX-6: fee-field floor (45/30), gasLimit stays wallet
         }).then(function (tx) { msg.textContent = "Listing… waiting for confirmation."; return tx.wait(); });
       });
     }).then(function () {
