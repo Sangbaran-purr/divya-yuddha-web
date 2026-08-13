@@ -34,13 +34,12 @@ window.DY_CONFIG = {
     marketplace: "0x2b74C4C651Dd09D30275EF0dD1c14a699B8502cd", // FROZEN PHASE A (AMOY) — Marketplace proxy (NOT LIVE; see coin-pair flag)
 
     // LEG3+5 — the player commerce contracts (WaveCardSale = the primary storefront;
-    // WaveCardMarket = the secondary escrow marketplace). Built + tested in
-    // divya-yuddha-web3, NOT YET DEPLOYED. null = NOT CONFIGURED: the store's Buy
-    // grid, the Market tab, and the treasury LIST + Your Listings all ship DARK on
-    // null and wake only when these carry live addresses (RUNG-4 deploy). Prices are
-    // DYC-native (the `dycoin` money-stack coin above), W-PRICE-1.
-    waveCardSale: null, // LEG3 — WaveCardSale (priceOf/remainingOf/buy). null = storefront dark
-    waveCardMarket: null, // LEG5 — WaveCardMarket (listedIds/listingOf/list/buy/delist). null = market + listings dark
+    // WaveCardMarket = the secondary escrow marketplace). RUNG-4 LIVE (2026-08-13,
+    // chain-verified master-owned, both shipped CLOSED). The store's Buy grid, the
+    // Market tab, and the treasury LIST + Your Listings wake now that these carry
+    // live addresses. Prices are DYC-native (the `dycoin` money-stack coin above), W-PRICE-1.
+    waveCardSale: "0xe9Ff07bF0e0fD43E56EdEE958a8f40e10090628c", // LEG3/RUNG-4 — WaveCardSale (priceOf/remainingOf/buy); deploy block 44799211
+    waveCardMarket: "0xB7d09A514Ae054aa4BeEDeA027059fb91Da4576e", // LEG5/RUNG-4 — WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 44799212
   },
 
   // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;
@@ -48,6 +47,14 @@ window.DY_CONFIG = {
   // to latest) so public RPCs don't reject a full-chain range. UNSET/0 → the loader falls back to fromBlock 0 (a
   // full scan; if the RPC rejects it, the busy-sentinel renders "unavailable", never a silent empty shelf).
   deployBlock: 44701099,
+
+  // LEG5/RUNG-4 — the WaveCardMarket deploy block. The Your Listings event-scan
+  // (js/store.js scanMyListings) queries Listed(*, owner) from HERE, not the NFT's
+  // 44701099 — the market's events cannot predate its own deploy, so scanning from
+  // the NFT block would waste ~98k blocks. store.js reads marketDeployBlock, falling
+  // back to deployBlock, then 0 (full scan). Sale landed 44799211, market 44799212;
+  // this is the batch's first block (a safe 1-block floor below the market's events).
+  marketDeployBlock: 44799211,
 
   // ethers.js — pinned. UMD build, verified to expose BrowserProvider /
   // Contract / queryFilter (see S1 STEP-0 report). Loaded via CDN with SRI off

@@ -561,7 +561,7 @@ window.DYStore = (function () {
       var provider = readProvider(ethers);
       var market = new ethers.Contract(marketAddr(), MARKET_ABI, provider);
       var nft = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
-      var fromBlock = CFG.deployBlock || 0;
+      var fromBlock = CFG.marketDeployBlock || CFG.deployBlock || 0; // market events cannot predate the market's own deploy
       return dycDecimals(ethers, provider).then(function () {
         return provider.getBlockNumber().then(function (latest) {
           return market.queryFilter(market.filters.Listed(null, owner), fromBlock, latest);
