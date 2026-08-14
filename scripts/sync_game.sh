@@ -242,29 +242,30 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - game/ in-repo size: ${GAME_BYTES} KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The seven site->game links (rite.html x3, index.html x2, treasury.html x1, demo/index.html x1) are stamped game/index.html?v=$SRC_SHORT — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 7.
+- The ten site->game links (rite.html x3, index.html x2, treasury.html x1, demo/index.html x1, store.html x1, explore.html x1, mint.html x1) are stamped game/index.html?v=$SRC_SHORT — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 10.
 
 ## Refresh
     bash scripts/sync_game.sh
 SNAP
 
-# STAMP THE SITE-TO-GAME ENTRY LINKS (S8 flag-1): bind the seven game/index.html links to the synced HEAD short sha,
+# STAMP THE SITE-TO-GAME ENTRY LINKS (S8 flag-1): bind the ten game/index.html links to the synced HEAD short sha,
 # so browsers refetch the gated entry exactly when the copy changes (stamps bind to bytes). Guarded: assert exactly
-# seven links, fail loudly on drift. Handles re-runs — an existing ?v=<oldsha> is rewritten to the new sha.
-# (S-DEMO-1: treasury.html's bare link + the new unlisted demo/index.html joined the managed set — 5 -> 7; both
-#  covered on every advance. The perl match starts at 'game/index.html', so demo's '../' prefix is preserved.)
-ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html"
+# ten links, fail loudly on drift. Handles re-runs — an existing ?v=<oldsha> is rewritten to the new sha.
+# (S-DEMO-1: treasury.html's bare link + the new unlisted demo/index.html joined the managed set — 5 -> 7. S-PLAY-2
+#  (owner ruling A): store.html + explore.html + mint.html header-nav Game links joined — 7 -> 10. The perl match
+#  starts at 'game/index.html', so demo's '../' prefix is preserved.)
+ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html $SITE_REPO/store.html $SITE_REPO/explore.html $SITE_REPO/mint.html"
 LINKS_BEFORE="$(grep -oF 'game/index.html' $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_BEFORE" != "7" ]; then
-  echo "error: expected exactly 7 site->game entry links (rite.html x3 + index.html x2 + treasury.html x1 + demo/index.html x1), found $LINKS_BEFORE (site nav changed)" >&2
+if [ "$LINKS_BEFORE" != "10" ]; then
+  echo "error: expected exactly 10 site->game entry links (rite.html x3 + index.html x2 + treasury.html x1 + demo/index.html x1 + store.html x1 + explore.html x1 + mint.html x1), found $LINKS_BEFORE (site nav changed)" >&2
   exit 1
 fi
 SHA="$SRC_SHORT" perl -i -pe 's{game/index\.html(\?v=[0-9a-f]+)?}{game/index.html?v=$ENV{SHA}}g' $ENTRY_FILES
 LINKS_STAMPED="$(grep -oF "game/index.html?v=$SRC_SHORT" $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_STAMPED" != "7" ]; then
-  echo "error: entry-link stamping did not produce 7 stamped links (got $LINKS_STAMPED)" >&2
+if [ "$LINKS_STAMPED" != "10" ]; then
+  echo "error: entry-link stamping did not produce 10 stamped links (got $LINKS_STAMPED)" >&2
   exit 1
 fi
-echo "sync_game: stamped 7 entry links -> game/index.html?v=$SRC_SHORT"
+echo "sync_game: stamped 10 entry links -> game/index.html?v=$SRC_SHORT"
 
 echo "sync_game: done. game/ = ${GAME_BYTES} KB (video + vfx cross-linked, not copied)."

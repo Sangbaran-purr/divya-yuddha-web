@@ -4842,7 +4842,10 @@ function startGame(p0Faction, p1Faction){
   Story=null;   // a PvAI match is never a story chapter
   currentFactions={ p0: p0Faction||currentFactions.p0, p1: p1Faction||currentFactions.p1 };
   resetChoreo();   // never inherit a stuck choreoActive from a prior match
-  G=newGame({p0:'You',p1:'Opponent',p0Faction:currentFactions.p0,p1Faction:currentFactions.p1, p1Difficulty:selectedDifficulty}); seenLog=0;   // D2: only the AI (p1) takes the chosen difficulty; the human (p0) stays advanced
+  const _wd=buildWaveDeck(currentFactions.p0, currentFactions.p1);   // S-PLAY-1: owned wave cards of the picked faction enter battle (Road B); null → today's plain match, byte-identical
+  G = _wd
+    ? newGame({p0:'You',p1:'Opponent',p0Faction:currentFactions.p0,p1Faction:currentFactions.p1, p1Difficulty:selectedDifficulty, wave1:true, scenario:{p0Deck:_wd.p0Deck, p1Deck:_wd.p1Deck}})
+    : newGame({p0:'You',p1:'Opponent',p0Faction:currentFactions.p0,p1Faction:currentFactions.p1, p1Difficulty:selectedDifficulty}); seenLog=0;   // D2: only the AI (p1) takes the chosen difficulty; the human (p0) stays advanced
   G.players[0].manualShield=true;   // the human designates Dharma Shield by hand (AI keeps auto-designate)
   applyDiffChip(selectedDifficulty); $('diffchip').classList.remove('hidden');   // in-match tier chip (PvAI); story hides it
   matchRecorded=false;              // arm the one-shot match-result counter for this new match
@@ -5585,6 +5588,25 @@ function readHandedWaveOwned(){
     if(def) cards.push(def.id); else skipped.push(name==null?'(no name)':String(name));   // unknown name → skip, count (never throw)
   }
   return { addr: (p.addr||null), cards: cards, skipped: skipped };
+}
+/* S-PLAY-1 — owned wave cards enter battle (Road B). UI layer only; the g.rng ban is engine-only, so a
+   Math.random Fisher-Yates here is allowed. Returns { p0Deck, p1Deck } of card NAMES (spec.deck is by name),
+   or null when the picked faction owns no wave card → the caller runs today's plain newGame, untouched. */
+function shuffleUI(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function buildWaveDeck(p0Faction, p1Faction){
+  const owned = readHandedWaveOwned();
+  if(!owned || !owned.cards || !owned.cards.length) return null;          // no handed ownership → untouched road
+  const ownedSet = new Set(owned.cards);                                  // def.ids across ALL owned factions
+  const src = DECKS[p0Faction] || DECKS.devas;
+  // FACTION-SCOPED (ruled): membership via the picked faction's OWN deck array — an owned id from another
+  // faction is simply not in DECKS[p0Faction], so it can never leak in.
+  const ownedWaveNames = src.filter(c=>c.wave && ownedSet.has(c.id)).map(c=>c.n);
+  if(!ownedWaveNames.length) return null;                                 // owns none OF THIS faction → plain match, untouched road
+  const launchNames = src.filter(c=>!c.wave).map(c=>c.n);                 // the faction's launch-22 names
+  const p0Deck = shuffleUI(launchNames.concat(ownedWaveNames));           // 22 + N, pre-shuffled (spec.deck injects ORDERED)
+  const aiSrc = DECKS[p1Faction] || DECKS.devas;                          // AI stays launch-22: explicit inject bypasses the wave pool even with wave1:true
+  const p1Deck = shuffleUI(aiSrc.filter(c=>!c.wave).map(c=>c.n));
+  return { p0Deck, p1Deck };
 }
 function fmtDyc(n){ return n.toLocaleString(undefined,{maximumFractionDigits:2})+' DYC'; }
 function rollDyc(el, from, to){
@@ -6895,21 +6917,13 @@ function renderCollection(){
     cell.className='cc'+(isOwned?' owned':' sealed')+(M.sadhana&&M.sadhana.pin===id?' cc-pinned':'');
     const {inner, face}=buildCardFaces(def, colFaction);
     if(!isOwned) colDecorate(face,id,def);   // acq line (into the band) + PIN/BUY sit ABOVE the art layer, real or pending
-    else if(heldWave) colWhenLine(face);     // S-BRIDGE-2: owned-look + the battle-lock honesty line (grid tile)
+    // S-PLAY-1: owned wave cards now enter battle (Road B) → no battle-lock caveat; a held-wave tile renders plain .cc.owned.
     cell.appendChild(inner); grid.appendChild(cell);
     if(isOwned){ if(needCeremony){ cell.classList.add('ceremony'); const M2=loadMeta(); markRevealed(M2,id); saveMeta(M2);
         setTimeout(()=>cell.classList.remove('ceremony'),1600); }
       cell.onclick=()=>openZoom(def, colFaction); return; }   // TASK 32: an OWNED card zooms
     cell.onclick=(e)=>{ if(e.target.closest('button')) return; openSealedZoom(cell, def, id); };   // TASK 33: flip AND zoom, one motion
   });
-}
-/* S-BRIDGE-2 — the battle-lock honesty line on a held-wave (owned-look) grid tile. Reuses the existing .cc-lock-when
-   style; grid-tile only (the owned-card zoom is a queued follow-up rider). VERBATIM copy, straight ASCII apostrophe. */
-function colWhenLine(face){
-  const band=face.querySelector('.cc-band'); if(!band) return;
-  const w=document.createElement('div'); w.className='cc-lock-when';
-  w.textContent='Enters battle when Wave 1\'s balance trial completes.';
-  band.appendChild(w);
 }
 /* The two-face card markup, built once for BOTH the grid cell (thumb) and the TASK 33 zoomed card (full frame), so the
    locked preview cannot drift between them. 30b: the art layer is swapped ALONE on 404 → decorations survive. */
@@ -6950,8 +6964,7 @@ function colDecorate(face,id,def,big){
      zoomed preview (big, no band) it keeps its own absolute slot and gains the ruled honest copy. */
   const lock=document.createElement('div'); lock.className='cc-lock';
   lock.textContent=colAcqLine(id);
-  if(big && !isRatna(id)){ const w=document.createElement('span'); w.className='cc-lock-when';
-    w.textContent='Joins your deck when the Wave opens.'; lock.appendChild(w); }
+  // S-PLAY-1: the "Joins your deck when the Wave opens." preview retired — owned wave cards join the deck now (faction-scoped).
   const band=face.querySelector('.cc-band');
   if(band) band.appendChild(lock); else face.appendChild(lock);
   if(isRatna(id)){ const v=document.createElement('div'); v.className='cc-vault'; v.textContent='RATNA'; face.appendChild(v); return; }
