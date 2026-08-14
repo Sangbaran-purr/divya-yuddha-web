@@ -582,9 +582,12 @@
             });
             msg.textContent = "The rite is open. Claim your Access token — free, one per hand.";
           } else {
+            // S-DECL-1 (R1) — connected-no-mark: the rite sorts. Route the unregistered to the register,
+            // reassure the declared-pending. Both lines show (the rite can't tell which — the visitor self-selects).
             setBtn("The Rite Opens Soon", "the free claim is not yet open", { sleeping: true });
-            msg.textContent =
-              "The free claim is not yet open. When it opens, the token is free — one per hand, bound to you alone.";
+            msg.innerHTML =
+              'No mark on this wallet yet. If you haven\'t declared, <a href="register.html">begin at the register</a>.';
+            line.textContent = "Already declared? Your pass is being prepared — watch your inbox.";
           }
         });
 
