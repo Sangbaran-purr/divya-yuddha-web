@@ -1834,6 +1834,67 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .cc-bpow{ font-family:Cinzel,serif; font-size:7px; letter-spacing:.14em; color:var(--gold-2); margin-top:2px; }
 .cc.sealed .cc-band{ opacity:.55; }
 
+/* ═══════════ S-DECK-2 — THE DECK FORGE ═══════════ */
+#forge{ z-index:87; overflow-y:auto; background:#0b0805 url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-backdrop_1600.jpg') center top/cover no-repeat fixed; }
+.forge-cartouche{ text-align:center; font-family:Cinzel,serif; font-size:14px; letter-spacing:.22em; text-transform:uppercase; color:var(--gold-bright,#f0d999); padding:2px 14px 4px; text-shadow:0 1px 6px #000; }
+.forge-teacher{ min-height:16px; text-align:center; font-family:Cinzel,serif; font-size:11px; letter-spacing:.06em; color:var(--parchment,#d8cdb4); padding:0 14px 8px; }
+.forge-teacher.bad{ color:#e6a24a; }
+.forge-teacher.good{ color:#8fb98a; }
+.forge-stage{ display:flex; flex-direction:column; gap:14px; padding:0 12px 8px; }
+/* ARCH — one full card over the fire-trough */
+.forge-arch{ position:relative; display:flex; flex-direction:column; align-items:center; gap:10px; padding:14px 12px 16px; border:1px solid rgba(201,162,74,.28); border-radius:10px; background:linear-gradient(180deg,rgba(12,9,5,.62),rgba(6,4,2,.72)); backdrop-filter:blur(2px); }
+.forge-arch-card{ width:min(240px,62vw); aspect-ratio:5/7; }
+.forge-arch-card img{ width:100%; height:100%; object-fit:contain; border-radius:8px; display:block; filter:drop-shadow(0 8px 30px rgba(0,0,0,.6)); }
+.forge-arch-ph, .forge-arch-card .ap{ width:100%; height:100%; }
+.forge-arch-act{ display:flex; flex-direction:column; align-items:center; gap:4px; min-height:44px; }
+.forge-arch-btn{ font-family:Cinzel,serif; font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding:10px 24px; border-radius:8px; cursor:pointer; transition:all .2s; }
+.forge-altar{ color:#14100a; background:linear-gradient(180deg,#f0d999,#c9a24a); border:1px solid #f0d999; }
+.forge-altar:hover{ box-shadow:0 0 22px rgba(201,162,74,.4); }
+.forge-return{ color:var(--gold-bright,#f0d999); background:transparent; border:1px solid var(--gold-2,#7a6634); }
+.forge-return:hover{ border-color:var(--gold-bright,#f0d999); }
+.forge-arch-muted{ font-family:Cinzel,serif; font-size:11px; letter-spacing:.06em; color:var(--gold-2,#9c9179); font-style:italic; }
+/* the SEAL flare pulse — plain CSS UI beat (NOT the compositor); screen-blend drops the black ground */
+.forge-flare{ position:absolute; top:6px; left:50%; width:min(320px,80%); aspect-ratio:1; transform:translateX(-50%) scale(.7); background:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-flare_800.jpg') center/contain no-repeat; mix-blend-mode:screen; opacity:0; pointer-events:none; z-index:3; }
+.forge-flare.pulse{ animation:forgeFlare 820ms ease-out; }
+@keyframes forgeFlare{ 0%{opacity:0;transform:translateX(-50%) scale(.68)} 26%{opacity:.92} 100%{opacity:0;transform:translateX(-50%) scale(1.18)} }
+@media (prefers-reduced-motion:reduce){ .forge-flare.pulse{ animation:none; opacity:0; } }
+/* RAILS */
+.forge-rails{ display:flex; flex-direction:column; gap:9px; }
+.forge-rail{ border:1px solid rgba(201,162,74,.18); border-radius:9px; background:linear-gradient(180deg,rgba(10,8,4,.58),rgba(6,4,2,.66)); padding:7px 8px; }
+.forge-rail-head{ display:flex; align-items:center; gap:9px; padding:0 2px 6px; }
+.forge-medallion{ width:32px; height:32px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 0 1px rgba(201,162,74,.3); }
+.forge-rail-name{ font-family:Cinzel,serif; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold-bright,#f0d999); flex:1; }
+.forge-counter{ font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.04em; padding:2px 9px; border-radius:12px; border:1px solid transparent; }
+.forge-counter.exact{ color:#8fb98a; border-color:rgba(143,185,138,.4); }
+.forge-counter.off{ color:#e6a24a; border-color:rgba(230,162,74,.5); }
+.forge-strip{ display:flex; gap:7px; overflow-x:auto; padding:2px 2px 6px; scrollbar-width:thin; }
+.forge-strip::-webkit-scrollbar{ height:5px; } .forge-strip::-webkit-scrollbar-thumb{ background:rgba(201,162,74,.3); border-radius:3px; }
+.forge-tile{ position:relative; flex:0 0 auto; width:64px; cursor:pointer; transition:transform .15s; }
+.forge-tile:hover{ transform:translateY(-2px); }
+.forge-tile .cc-in{ width:64px; }
+.forge-tile.benched{ filter:none; opacity:1; }
+.forge-tile.in-deck{ filter:brightness(.62) sepia(.25); }
+.forge-tile.in-deck::after{ content:""; position:absolute; inset:0; border:1.5px solid #c9a24a; border-radius:8px; box-shadow:0 0 10px rgba(201,162,74,.4) inset; pointer-events:none; }
+.forge-tile.sealed{ filter:brightness(.32) grayscale(.5); }
+.forge-tile-seal{ position:absolute; top:50%; left:50%; width:34px; height:34px; transform:translate(-50%,-50%); z-index:2; filter:drop-shadow(0 1px 3px #000); pointer-events:none; }
+/* FOOT */
+.forge-foot{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; padding:10px 12px 22px; }
+.forge-btn{ font-family:Cinzel,serif; font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding:13px 26px; border-radius:9px; cursor:pointer; transition:all .2s; }
+.forge-seal{ color:#14100a; background:linear-gradient(180deg,#f0d999,#c9a24a); border:1px solid #f0d999; }
+.forge-seal:hover{ box-shadow:0 0 26px rgba(201,162,74,.45); }
+.forge-restore{ color:var(--gold-2,#9c9179); background:transparent; border:1px solid rgba(201,162,74,.3); }
+.forge-restore:hover{ color:var(--gold-bright,#f0d999); border-color:var(--gold-2,#7a6634); }
+/* the door on Collection */
+.forge-door{ display:block; margin:2px auto 8px; font-family:Cinzel,serif; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold-bright,#f0d999); background:linear-gradient(180deg,rgba(201,162,74,.14),rgba(201,162,74,.06)); border:1px solid var(--gold-2,#7a6634); border-radius:8px; padding:10px 22px; cursor:pointer; transition:all .2s; }
+.forge-door:hover{ border-color:var(--gold-bright,#f0d999); box-shadow:0 0 18px rgba(201,162,74,.2); }
+.forge-door-i{ margin-right:6px; }
+@media(min-width:900px){
+  .forge-stage{ flex-direction:row; align-items:flex-start; max-width:960px; margin:0 auto; }
+  .forge-arch{ flex:0 0 300px; position:sticky; top:8px; }
+  .forge-rails{ flex:1; }
+  .forge-arch-card{ width:260px; }
+}
+
 @media(min-width:1024px){
   #collection > *{ max-width:900px; }
   .col-grid{ grid-template-columns:repeat(4,1fr); gap:11px; }
@@ -2339,6 +2400,9 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 
   <div class="col-tabs" id="col-tabs"></div>
 
+  <!-- S-DECK-2 — the Forge door (opens scoped to the active faction tab) -->
+  <button class="forge-door" id="col-forge"><span class="forge-door-i">⚒</span> FORGE YOUR DECK</button>
+
   <div class="col-progress" id="col-progress"></div>
 
   <div class="col-rail" id="col-rail">
@@ -2363,6 +2427,27 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
   <div class="vault-set" id="vault-set"></div>
   <div class="vault-grid" id="vault-grid"></div>
   <div class="vault-gate" id="vault-gate"></div>
+</div>
+<!-- ═══════════ S-DECK-2 — THE DECK FORGE (arch-spotlight; backdrop = https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-backdrop) ═══════════ -->
+<div class="overlay metascreen hidden" id="forge">
+  <div class="col-head">
+    <button class="metaback" id="forge-back">‹ Back</button>
+    <div class="col-title">THE FORGE</div>
+  </div>
+  <div class="forge-cartouche" id="forge-cartouche"></div>
+  <div class="forge-teacher" id="forge-teacher" aria-live="polite"></div>
+  <div class="forge-stage" id="forge-stage">
+    <div class="forge-arch" id="forge-arch">
+      <div class="forge-arch-card" id="forge-arch-card"></div>
+      <div class="forge-flare" id="forge-flare" aria-hidden="true"></div>
+      <div class="forge-arch-act" id="forge-arch-act"></div>
+    </div>
+    <div class="forge-rails" id="forge-rails"></div>
+  </div>
+  <div class="forge-foot" id="forge-foot">
+    <button class="forge-btn forge-seal" id="forge-seal">SEAL THE DECK</button>
+    <button class="forge-btn forge-restore" id="forge-restore">RESTORE LAUNCH DECK</button>
+  </div>
 </div>
 <div class="overlay hidden" id="factionintro">
   <button class="fi-back" id="fi-back" title="back">‹</button>
@@ -5122,7 +5207,7 @@ function profileInitials(name){ const w=name.trim().split(/\s+/); const s=(w.len
    card costs) are present so later slices read from the same source of truth. ENGINE UNTOUCHED — everything below
    reads only the match result and the story-completion hook. */
 const META_CONFIG = {
-  schemaVersion: 6,   // v1: xp/wallet/rewards/daily/story · v2: + quests · v3: + sadhana/bonusAmsha/firstWinAwarded · v4 (slice 4): + rewards.rankSeen/rankGlintPending · v5 (D2): + settings.difficulty · v6 (TASK 30): + cards{id:{owned,revealed}} ownership/ceremony map. NOTE: v6 adds ONLY the cards map — wallet.amsha / daily.firstWinAwarded / sadhana.banked / story.bonusAmsha all keep their shipped v3–v5 shape (no lastFirstWinDate, no second retro path: the ledger is already idempotent).
+  schemaVersion: 7,   // v1: xp/wallet/rewards/daily/story · v2: + quests · v3: + sadhana/bonusAmsha/firstWinAwarded · v4 (slice 4): + rewards.rankSeen/rankGlintPending · v5 (D2): + settings.difficulty · v6 (TASK 30): + cards{id:{owned,revealed}} ownership/ceremony map · v7 (S-DECK-1): + decks{faction:[22 ids]} saved Forge decks (additive, empty {} default, validated at match-start). NOTE: v6/v7 add ONLY their new map — wallet.amsha / daily.firstWinAwarded / sadhana.banked / story.bonusAmsha all keep their shipped v3–v5 shape (no lastFirstWinDate, no second retro path: the ledger is already idempotent).
   DIFFICULTY_REWARD_MULT: { beginner:0.8, advanced:1.0, deathmatch:1.5 },   // D2 §2 — scales PvAI match XP/coins/Amsha/Sadhana income (ONE application point in recordMatchResult; story/PvP untouched)
   xp: {                                  // §1 awards (play-only, win or lose)
     matchComplete: 20, matchWin: 15,
@@ -5179,6 +5264,7 @@ function freshMeta(){ return {
   sadhana: { pin:null, banked:{} },                   // slice 3 — pinned card id + per-id banked progress (persists on pin-switch)
   settings: { difficulty:'advanced' },                // v5 (D2) — last chosen PvAI difficulty, preselected next match
   cards: {},                                          // v6 (TASK 30) — {id:{owned,revealed}}; filled by ensureCards(): launch grandfathered, wave sealed
+  decks: {},                                          // v7 (S-DECK-1) — {faction:[22 engine ids]} saved Forge decks; empty = auto-deck at match-start
 }; }
 function saveMeta(M){ try{ localStorage.setItem('dy_meta', JSON.stringify(M)); }catch(e){} }
 function loadMeta(){
@@ -5200,6 +5286,7 @@ function loadMeta(){
   if(!M.settings || typeof M.settings!=='object'){ M.settings={ difficulty:'advanced' }; changed=true; }   // v5 (D2): additive — older stores keep xp/wallet/quests/sadhana, gain default difficulty
   if(!META_CONFIG.DIFFICULTY_REWARD_MULT[M.settings.difficulty]){ M.settings.difficulty='advanced'; changed=true; }   // guard a corrupt/unknown persisted value
   if(ensureCards(M)) changed=true;   // v6 (TASK 30): additive ownership map — ALL launch grandfathered owned+revealed, ALL wave sealed. Older stores keep xp/wallet/quests/sadhana/story untouched. NO second retro path: story.bonusAmsha (v3) is already idempotent, so a v5→v6 store is never re-credited.
+  if(!M.decks || typeof M.decks!=='object'){ M.decks={}; changed=true; }   // v7 (S-DECK-1): additive saved-decks map — default empty {}; older stores keep everything else untouched.
   if(M.sadhana && M.sadhana.pin && !sadhanaPinnable(M.sadhana.pin)){ M.sadhana.pin=null; changed=true; }   // v6: retire a legacy per-faction pin ('wave_devas' …) — banked is KEPT (per-id carry-over, slice-3 preserve semantics)
   if(M.schemaVersion!==META_CONFIG.schemaVersion){ M.schemaVersion=META_CONFIG.schemaVersion; changed=true; }
   if(!M.daily || M.daily.day!==todayKey()){ M.daily={ day:todayKey(), firstMatchAwarded:false, firstWinAwarded:false }; changed=true; }   // day rollover → re-arm both daily-firsts
@@ -5593,20 +5680,60 @@ function readHandedWaveOwned(){
    Math.random Fisher-Yates here is allowed. Returns { p0Deck, p1Deck } of card NAMES (spec.deck is by name),
    or null when the picked faction owns no wave card → the caller runs today's plain newGame, untouched. */
 function shuffleUI(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+/* S-DECK-1 — validateDeck (pure). Checks IN ORDER; the reason string feeds the future Forge teacher line
+   (plain language, no jargon). Faction-pure + real + composition-exact + every wave id still owned. */
+function validateDeck(faction, ids){
+  if(!Array.isArray(ids) || ids.length!==22) return { valid:false, reason:'a deck needs exactly 22 cards' };            // (a)
+  if(new Set(ids).size!==ids.length)          return { valid:false, reason:'a card is listed twice' };                 // (b)
+  const src = DECKS[faction];
+  if(!src) return { valid:false, reason:'unknown faction' };
+  const byId = {}; for(const c of src) byId[c.id]=c;
+  for(const id of ids){ if(!byId[id]) return { valid:false, reason:'a card does not belong to this faction' }; }       // (c) faction-pure + real
+  const need = { hero:3, unit:12, astra:3, mantra:2, artifact:2 };                                                     // (d) composition EXACT vs c.t
+  const got  = { hero:0, unit:0, astra:0, mantra:0, artifact:0 };
+  for(const id of ids){ got[byId[id].t]++; }
+  const plural = { hero:'heroes', unit:'units', astra:'astras', mantra:'mantras', artifact:'artifacts' };
+  for(const t of ['hero','unit','astra','mantra','artifact']){
+    if(got[t]!==need[t]) return { valid:false, reason:`a deck needs exactly ${need[t]} ${plural[t]}` };
+  }
+  const wo = readHandedWaveOwned(); const ownedSet = new Set(wo ? wo.cards : []);                                      // (e) wave ids must be owned NOW; launch exempt
+  for(const id of ids){ if(byId[id].wave && !ownedSet.has(id)) return { valid:false, reason:'a card in this deck was sold' }; }
+  return { valid:true };
+}
+
+/* S-DECK-1 — the no-saved-deck default (the DESIGN-NOTE flip; owner rules on the S-DECK-1 report):
+   true  = INTERIM — the S-PLAY-1 merge (launch-22 + owned-wave-of-faction, 22+N), preserving the fighting cards
+           players just gained, until the Forge ships.
+   false = LAW-PURE — launch-22 (a saved Forge deck becomes the ONLY way owned wave cards enter a match). */
+const FORGE_NO_SAVED_MERGE = false;   // S-DECK-2: the Forge ships → LAW-PURE. No saved deck → launch-22; owned wave cards enter ONLY via a sealed Forge deck.
+
 function buildWaveDeck(p0Faction, p1Faction){
-  const owned = readHandedWaveOwned();
-  if(!owned || !owned.cards || !owned.cards.length) return null;          // no handed ownership → untouched road
-  const ownedSet = new Set(owned.cards);                                  // def.ids across ALL owned factions
-  const src = DECKS[p0Faction] || DECKS.devas;
-  // FACTION-SCOPED (ruled): membership via the picked faction's OWN deck array — an owned id from another
-  // faction is simply not in DECKS[p0Faction], so it can never leak in.
-  const ownedWaveNames = src.filter(c=>c.wave && ownedSet.has(c.id)).map(c=>c.n);
-  if(!ownedWaveNames.length) return null;                                 // owns none OF THIS faction → plain match, untouched road
-  const launchNames = src.filter(c=>!c.wave).map(c=>c.n);                 // the faction's launch-22 names
-  const p0Deck = shuffleUI(launchNames.concat(ownedWaveNames));           // 22 + N, pre-shuffled (spec.deck injects ORDERED)
-  const aiSrc = DECKS[p1Faction] || DECKS.devas;                          // AI stays launch-22: explicit inject bypasses the wave pool even with wave1:true
-  const p1Deck = shuffleUI(aiSrc.filter(c=>!c.wave).map(c=>c.n));
-  return { p0Deck, p1Deck };
+  const src   = DECKS[p0Faction] || DECKS.devas;
+  const aiSrc = DECKS[p1Faction] || DECKS.devas;
+  const p1Deck = () => shuffleUI(aiSrc.filter(c=>!c.wave).map(c=>c.n));   // AI is ALWAYS launch-22 (owns nothing; explicit inject bypasses the wave pool even with wave1:true)
+
+  // 1) a saved Forge deck, valid against CURRENT ownership + the composition law → play it verbatim
+  const M = loadMeta();
+  const saved = M.decks && M.decks[p0Faction];
+  if(saved && validateDeck(p0Faction, saved).valid){
+    const byId = {}; for(const c of src) byId[c.id]=c;
+    const p0Deck = shuffleUI(saved.map(id=>byId[id].n));                  // id→name (spec.deck is by name), pre-shuffled
+    return { p0Deck, p1Deck: p1Deck() };
+  }
+
+  // 2) no valid saved deck → the ruled default, behind the one-line flip
+  if(FORGE_NO_SAVED_MERGE){
+    // INTERIM (S-PLAY-1, byte-identical): launch-22 + owned-wave-of-faction merge; null when there is nothing to add.
+    const owned = readHandedWaveOwned();
+    if(!owned || !owned.cards || !owned.cards.length) return null;        // no handed ownership → untouched road
+    const ownedSet = new Set(owned.cards);                               // def.ids across ALL owned factions (faction-scoped by the DECKS[p0Faction] filter below)
+    const ownedWaveNames = src.filter(c=>c.wave && ownedSet.has(c.id)).map(c=>c.n);
+    if(!ownedWaveNames.length) return null;                              // owns none OF THIS faction → plain match, untouched road
+    const launchNames = src.filter(c=>!c.wave).map(c=>c.n);
+    const p0Deck = shuffleUI(launchNames.concat(ownedWaveNames));        // 22 + N, pre-shuffled
+    return { p0Deck, p1Deck: p1Deck() };
+  }
+  return null;                                                            // LAW-PURE: no saved deck → plain launch-22 match
 }
 function fmtDyc(n){ return n.toLocaleString(undefined,{maximumFractionDigits:2})+' DYC'; }
 function rollDyc(el, from, to){
@@ -6797,7 +6924,7 @@ function artPending(def, faction, opts={}){
     `<div class="ap-type" style="color:${hex}c0">${type}${pw} · ${rar}</div>`+
     `<div class="ap-cap">art arrives with the wave</div></div>`;
 }
-const COL_HIDE=['hudwrap','gameover','factionselect','settings','mulligan','landing','fi-inspect','factionintro','collection','vault'];
+const COL_HIDE=['hudwrap','gameover','factionselect','settings','mulligan','landing','fi-inspect','factionintro','collection','vault','forge'];
 function colHideAll(){ COL_HIDE.forEach(id=>{ const e=$(id); if(e) e.classList.add('hidden'); }); }
 /* ═══ T39 — COLLECTION: plate, filters, sort, progress ═══
    EPITHET SOURCE (ruled): the grid's epithet line reads def.sub LIVE from the engine. There is no EPITHETS map —
@@ -6883,6 +7010,113 @@ function showCollection(){
   Ember.start('collection', EMBER_CARD_DENSITY);   // DS §2 — card screens run the fire at 0.15
 }
 addEventListener('resize', ()=>{ if(!$('collection').classList.contains('hidden')){ colPickPlate(); colFitPlate(); } });
+
+/* ═══════════ S-DECK-2 — THE DECK FORGE (build against the composition law; SEAL is the only dy_meta write) ═══════════ */
+const FORGE_NEED={ hero:3, unit:12, astra:3, mantra:2, artifact:2 };
+const FORGE_ORDER=['hero','unit','astra','mantra','artifact'];
+const FORGE_GLYPH={ hero:'heroes', unit:'units', astra:'astras', mantra:'mantras', artifact:'artifacts' };
+const FORGE_RNAME={ hero:'Heroes', unit:'Units', astra:'Astras', mantra:'Mantras', artifact:'Artifacts' };
+let forgeFaction=null, forgePicks=[], forgeArchId=null, forgeBaseline='';
+function forgeLaunchIds(f){ return DECKS[f].filter(c=>!c.wave).map(c=>c.id); }
+function forgeKey(ids){ return ids.slice().sort().join(','); }
+function forgeOwnedWave(){ const wo=readHandedWaveOwned(); return new Set(wo?wo.cards:[]); }   // on-chain wave ids (the play-truth)
+function forgeCardOwned(id, ow){ const d=cardById(id); return !!d && (!d.wave || ow.has(id)); }
+function forgeFirstHero(){ return forgePicks.find(id=>{ const d=cardById(id); return d&&d.t==='hero'; }) || forgePicks[0] || null; }
+function forgeTeacher(msg, cls){ const t=$('forge-teacher'); t.textContent=msg||''; t.className='forge-teacher'+(cls?(' '+cls):''); }
+function showForge(faction){
+  forgeFaction = DECKS[faction] ? faction : 'devas';
+  colHideAll(); $('forge').classList.remove('hidden'); $('forge').scrollTop=0; Audio2.playTrack('menu');
+  const M=loadMeta(); const saved=M.decks && M.decks[forgeFaction];
+  let teach='', tcls='';
+  if(saved){ const v=validateDeck(forgeFaction, saved);
+    if(v.valid){ forgePicks=saved.slice(); }
+    else { forgePicks=forgeLaunchIds(forgeFaction); teach=v.reason+' — reverted to the launch deck.'; tcls='bad'; } }   // sold-card teacher moment (ruled)
+  else forgePicks=forgeLaunchIds(forgeFaction);
+  forgeBaseline=forgeKey(forgePicks);                       // dirty-check baseline = the state at open
+  forgeArchId=forgeFirstHero();
+  forgeRender(); forgeTeacher(teach, tcls);
+  Ember.start('forge', EMBER_CARD_DENSITY);
+}
+function forgeRender(){
+  const M=loadMeta(); const ow=forgeOwnedWave();
+  const ownedCount=DECKS[forgeFaction].filter(c=>forgeCardOwned(c.id, ow)).length;
+  $('forge-cartouche').textContent=`${FORGE_RNAME[FORGE_ORDER[0]]?'':''}${forgeFaction.toUpperCase()} · ${ownedCount}/${DECKS[forgeFaction].length} usable`;
+  forgeRenderRails(ow); forgeRenderArch(ow);
+}
+function forgeRenderRails(ow){
+  const wrap=$('forge-rails'); wrap.innerHTML='';
+  for(const t of FORGE_ORDER){
+    const rail=document.createElement('div'); rail.className='forge-rail';
+    const head=document.createElement('div'); head.className='forge-rail-head';
+    const med=document.createElement('img'); med.className='forge-medallion'; med.src=`https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-glyph-${FORGE_GLYPH[t]}_160.png`; med.alt='';
+    const nm=document.createElement('div'); nm.className='forge-rail-name'; nm.textContent=FORGE_RNAME[t];
+    const cnt=document.createElement('div'); cnt.className='forge-counter'; cnt.dataset.t=t;
+    head.appendChild(med); head.appendChild(nm); head.appendChild(cnt); rail.appendChild(head);
+    const strip=document.createElement('div'); strip.className='forge-strip';
+    const cards=DECKS[forgeFaction].filter(c=>c.t===t).slice().sort((a,b)=>(a.wave?1:0)-(b.wave?1:0));   // launch first, wave after
+    for(const c of cards){
+      const tile=document.createElement('div'); tile.className='forge-tile';
+      const {inner}=buildCardFaces(c, forgeFaction);      // thumb
+      const inDeck=forgePicks.includes(c.id), owned=forgeCardOwned(c.id, ow);
+      tile.classList.add(inDeck?'in-deck':(owned?'benched':'sealed'));
+      tile.appendChild(inner);
+      if(inDeck){ const s=document.createElement('img'); s.className='forge-tile-seal'; s.src='https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-seal_120.png'; s.alt=''; tile.appendChild(s); }
+      tile.onclick=()=>{ forgeArchId=c.id; forgeRenderArch(ow); };
+      strip.appendChild(tile);
+    }
+    rail.appendChild(strip); wrap.appendChild(rail);
+  }
+  forgeCounters();
+}
+function forgeCounters(){
+  const got={hero:0,unit:0,astra:0,mantra:0,artifact:0};
+  for(const id of forgePicks){ const d=cardById(id); if(d) got[d.t]++; }
+  for(const t of FORGE_ORDER){ const el=document.querySelector(`.forge-counter[data-t="${t}"]`); if(!el) continue;
+    el.textContent=`${got[t]}/${FORGE_NEED[t]}`;
+    const exact=got[t]===FORGE_NEED[t]; el.classList.toggle('exact',exact); el.classList.toggle('off',!exact); }
+}
+function forgeRenderArch(ow){
+  ow = ow || forgeOwnedWave();
+  const d=forgeArchId?cardById(forgeArchId):null;
+  const box=$('forge-arch-card'); box.innerHTML='';
+  if(d){ const im=document.createElement('img'); im.alt=d.n; im.src=fiArtStem(d, forgeFaction);
+    im.onerror=()=>{ box.innerHTML=artPending(d, forgeFaction, {sigil:true}); }; box.appendChild(im); }
+  const act=$('forge-arch-act'); act.innerHTML='';
+  if(!d) return;
+  const inDeck=forgePicks.includes(d.id), owned=forgeCardOwned(d.id, ow);
+  if(inDeck){ const b=document.createElement('button'); b.className='forge-arch-btn forge-return'; b.textContent='RETURN TO SHELF'; b.onclick=()=>forgeToggle(d.id); act.appendChild(b); }
+  else if(owned){ const b=document.createElement('button'); b.className='forge-arch-btn forge-altar'; b.textContent='TO THE ALTAR'; b.onclick=()=>forgeToggle(d.id); act.appendChild(b); }
+  else { const m=document.createElement('div'); m.className='forge-arch-muted'; m.textContent='Not yet yours — the Store awaits.'; act.appendChild(m); }   // NO link into the web from the game (ruled)
+}
+function forgeToggle(id){
+  const i=forgePicks.indexOf(id);
+  if(i>=0) forgePicks.splice(i,1);
+  else { if(!forgeCardOwned(id, forgeOwnedWave())) return; forgePicks.push(id); }   // benched → altar (owned only)
+  forgeArchId=id; forgeRender();                            // seals, counters, arch button all re-render live
+}
+function forgeSeal(){
+  const v=validateDeck(forgeFaction, forgePicks);
+  if(!v.valid){ forgeTeacher(v.reason, 'bad'); return; }    // NO write on invalid
+  const M=loadMeta(); M.decks[forgeFaction]=forgePicks.slice(); saveMeta(M);
+  forgeBaseline=forgeKey(forgePicks);
+  forgeTeacher('Deck sealed.', 'good'); forgeFlarePulse();
+}
+function forgeRestore(){
+  if(!confirm('Restore the launch deck? Your forged deck for '+forgeFaction+' will be cleared.')) return;
+  const M=loadMeta(); if(M.decks) delete M.decks[forgeFaction]; saveMeta(M);
+  forgePicks=forgeLaunchIds(forgeFaction); forgeBaseline=forgeKey(forgePicks); forgeArchId=forgeFirstHero();
+  forgeRender(); forgeTeacher('Launch deck restored.', 'good');
+}
+function forgeClose(){
+  if(forgeKey(forgePicks)!==forgeBaseline){ if(!confirm('Unsaved deck — seal or discard? OK discards your changes.')) return; }
+  Ember.stop('forge'); showCollection();
+}
+function forgeFlarePulse(){                                  // plain-CSS UI beat; NOT the compositor; skipped under reduced-motion
+  if(reducedMotion && reducedMotion()) return;
+  const fl=$('forge-flare'); if(!fl) return;
+  fl.classList.remove('pulse'); void fl.offsetWidth; fl.classList.add('pulse');
+  setTimeout(()=>{ if(fl) fl.classList.remove('pulse'); }, 900);
+}
 function renderCollection(){
   const M=loadMeta();
   const wo=readHandedWaveOwned(); const waveHeld=new Set(wo?wo.cards:[]);   // S-BRIDGE-2: render-time held-wave ownership from the LATEST complete payload (NOT persisted → reversible)
@@ -7142,6 +7376,10 @@ $('mode-collection').onclick=()=>showCollection();   // TASK 30
 $('mode-vault').onclick=()=>showVault();             // TASK 30
 $('col-back').onclick=()=>showLanding();
 $('vault-back').onclick=()=>showLanding();
+$('col-forge').onclick=()=>showForge(colFaction);   // S-DECK-2: the Forge door on Collection, scoped to the active faction tab
+$('forge-back').onclick=()=>forgeClose();          // S-DECK-2: the Forge is a sub-screen of Collection → back returns there (with the dirty guard)
+$('forge-seal').onclick=()=>forgeSeal();
+$('forge-restore').onclick=()=>forgeRestore();
 
 /* ===================== STORY MODE — DIVYA YATRA (driver) ===================== */
 let Story = null;                 // null = not in a story chapter; else the live driver state
