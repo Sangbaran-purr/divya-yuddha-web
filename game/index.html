@@ -1835,7 +1835,8 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .cc.sealed .cc-band{ opacity:.55; }
 
 /* ═══════════ S-DECK-2 — THE DECK FORGE ═══════════ */
-#forge{ z-index:87; overflow-y:auto; background:#0b0805 url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-backdrop_1600.jpg') center top/cover no-repeat fixed; }
+#forge{ z-index:87; overflow-y:auto; background:#0b0805; }
+#forge::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; background:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-backdrop_1600.jpg') center top/cover no-repeat; }   /* FIX1 — a positioned fixed LAYER, not background-attachment:fixed (which is flaky on iOS Safari); content paints above it */
 .forge-cartouche{ text-align:center; font-family:Cinzel,serif; font-size:14px; letter-spacing:.22em; text-transform:uppercase; color:var(--gold-bright,#f0d999); padding:2px 14px 4px; text-shadow:0 1px 6px #000; }
 .forge-teacher{ min-height:16px; text-align:center; font-family:Cinzel,serif; font-size:11px; letter-spacing:.06em; color:var(--parchment,#d8cdb4); padding:0 14px 8px; }
 .forge-teacher.bad{ color:#e6a24a; }
@@ -1843,7 +1844,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .forge-stage{ display:flex; flex-direction:column; gap:14px; padding:0 12px 8px; }
 /* ARCH — one full card over the fire-trough */
 .forge-arch{ position:relative; display:flex; flex-direction:column; align-items:center; gap:10px; padding:14px 12px 16px; border:1px solid rgba(201,162,74,.28); border-radius:10px; background:linear-gradient(180deg,rgba(12,9,5,.62),rgba(6,4,2,.72)); backdrop-filter:blur(2px); }
-.forge-arch-card{ width:min(240px,62vw); aspect-ratio:5/7; }
+.forge-arch-card{ width:min(200px,50vw); aspect-ratio:5/7; }   /* FIX1 — trimmed on mobile so the rails + sticky foot are reachable without a blind scroll */
 .forge-arch-card img{ width:100%; height:100%; object-fit:contain; border-radius:8px; display:block; filter:drop-shadow(0 8px 30px rgba(0,0,0,.6)); }
 .forge-arch-ph, .forge-arch-card .ap{ width:100%; height:100%; }
 .forge-arch-act{ display:flex; flex-direction:column; align-items:center; gap:4px; min-height:44px; }
@@ -1871,14 +1872,13 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .forge-strip::-webkit-scrollbar{ height:5px; } .forge-strip::-webkit-scrollbar-thumb{ background:rgba(201,162,74,.3); border-radius:3px; }
 .forge-tile{ position:relative; flex:0 0 auto; width:64px; cursor:pointer; transition:transform .15s; }
 .forge-tile:hover{ transform:translateY(-2px); }
-.forge-tile .cc-in{ width:64px; }
 .forge-tile.benched{ filter:none; opacity:1; }
 .forge-tile.in-deck{ filter:brightness(.62) sepia(.25); }
 .forge-tile.in-deck::after{ content:""; position:absolute; inset:0; border:1.5px solid #c9a24a; border-radius:8px; box-shadow:0 0 10px rgba(201,162,74,.4) inset; pointer-events:none; }
 .forge-tile.sealed{ filter:brightness(.32) grayscale(.5); }
 .forge-tile-seal{ position:absolute; top:50%; left:50%; width:34px; height:34px; transform:translate(-50%,-50%); z-index:2; filter:drop-shadow(0 1px 3px #000); pointer-events:none; }
 /* FOOT */
-.forge-foot{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; padding:10px 12px 22px; }
+.forge-foot{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; padding:12px 12px 18px; position:sticky; bottom:0; z-index:4; background:linear-gradient(180deg,transparent,rgba(6,4,2,.92) 34%); }   /* FIX1 — sticky bottom: SEAL/RESTORE always reachable on mobile, no blind scroll */
 .forge-btn{ font-family:Cinzel,serif; font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding:13px 26px; border-radius:9px; cursor:pointer; transition:all .2s; }
 .forge-seal{ color:#14100a; background:linear-gradient(180deg,#f0d999,#c9a24a); border:1px solid #f0d999; }
 .forge-seal:hover{ box-shadow:0 0 26px rgba(201,162,74,.45); }
@@ -7055,10 +7055,11 @@ function forgeRenderRails(ow){
     const strip=document.createElement('div'); strip.className='forge-strip';
     const cards=DECKS[forgeFaction].filter(c=>c.t===t).slice().sort((a,b)=>(a.wave?1:0)-(b.wave?1:0));   // launch first, wave after
     for(const c of cards){
-      const tile=document.createElement('div'); tile.className='forge-tile';
+      const tile=document.createElement('div');
       const {inner}=buildCardFaces(c, forgeFaction);      // thumb
       const inDeck=forgePicks.includes(c.id), owned=forgeCardOwned(c.id, ow);
-      tile.classList.add(inDeck?'in-deck':(owned?'benched':'sealed'));
+      // FIX1 — .cc.owned makes it a real card cell: the 5/7 BOX (height), face-up flip, and `.cc > .cc-in .cc-art` positioning that buildCardFaces depends on. State suffix drives the seal/dim.
+      tile.className='cc forge-tile owned '+(inDeck?'in-deck':(owned?'benched':'sealed'));
       tile.appendChild(inner);
       if(inDeck){ const s=document.createElement('img'); s.className='forge-tile-seal'; s.src='https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-seal_120.png'; s.alt=''; tile.appendChild(s); }
       tile.onclick=()=>{ forgeArchId=c.id; forgeRenderArch(ow); };
