@@ -1891,11 +1891,41 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .forge-door{ display:block; margin:2px auto 8px; font-family:Cinzel,serif; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold-bright,#f0d999); background:linear-gradient(180deg,rgba(201,162,74,.14),rgba(201,162,74,.06)); border:1px solid var(--gold-2,#7a6634); border-radius:8px; padding:10px 22px; cursor:pointer; transition:all .2s; }
 .forge-door:hover{ border-color:var(--gold-bright,#f0d999); box-shadow:0 0 18px rgba(201,162,74,.2); }
 .forge-door-i{ margin-right:6px; }
+/* ═══ FORGE-STAGE-LOCK (FIX4) — painting + furniture ONE object; zones at measured % of the 1600×900 frame ═══ */
+@media(max-width:899.98px){
+  /* mobile: the stage box VANISHES → the exact prior sibling flow; restore only the two bits that box provided */
+  .forge-stage{ display:contents; }
+  .forge-arch{ margin:0 12px 14px; }   /* replaces the stage's 12px side-padding + the arch↔rails 14px gap */
+  .forge-rails{ margin:0 12px; }        /* replaces the stage's 12px side-padding */
+}
 @media(min-width:900px){
-  .forge-stage{ flex-direction:row; align-items:flex-start; max-width:960px; margin:0 auto; }
-  .forge-arch{ flex:0 0 300px; position:sticky; top:8px; }
-  .forge-rails{ flex:1; }
-  .forge-arch-card{ width:260px; }
+  #forge{ display:flex; align-items:center; justify-content:center; }
+  #forge::before{ display:none; }                 /* the backdrop now lives ON the stage (100% 100%) — no double paint */
+  #forge > *{ max-width:none; margin:0; }         /* release the FIX3 1400 column; the stage sizes itself */
+  #forge .col-head{ position:absolute; top:0; left:0; margin:0; padding:8px 10px; z-index:6; background:none; }
+  #forge .col-title{ display:none; }              /* the painted cartouche IS the title */
+  /* the stage = the painted room, aspect-locked, whole room always fully visible, letterboxed on #0b0805 */
+  .forge-stage{
+    position:relative; display:block;
+    aspect-ratio:1600/900;
+    width:min(100%, 90vh*1600/900);
+    margin:0 auto; padding:0; gap:0;
+    background:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/forge-backdrop_1600.jpg') 0 0/100% 100% no-repeat;
+  }
+  .forge-stage > *{ position:absolute; margin:0; }         /* every zone anchored to the stage box */
+  .forge-cartouche{ left:35.5%; top:3.3%; width:29.5%; height:11%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0; border:none; background:none; backdrop-filter:none; font-size:15px; }
+  .forge-teacher{ left:6%; top:80.5%; width:46%; height:6%; display:flex; align-items:center; justify-content:center; padding:0; }
+  .forge-arch{ left:12.4%; top:20%; width:19%; height:56%; position:absolute; padding:0; border:none; background:none; backdrop-filter:none; }
+  .forge-arch-card{ width:100%; }
+  .forge-rails{ left:43.5%; top:22.6%; width:50.5%; height:56.6%; display:flex; flex-direction:column; justify-content:space-between; gap:0; }   /* space-between over ledge1-top→ledge5-bottom == the painted pitch */
+  .forge-rail{ flex:0 0 16.6%; display:flex; flex-direction:row; align-items:center; gap:8px; padding:0 0 0 9%; margin:0; border:none; background:none; backdrop-filter:none; }
+  .forge-medallion{ display:none; }               /* dropped — the painted roundel is the socket */
+  .forge-endchip{ display:none; }                 /* the +N-more note has no room on the shelf; still shown on mobile */
+  .forge-rail-head{ flex:0 0 auto; flex-direction:column; align-items:flex-start; gap:2px; padding:0; }
+  .forge-strip{ flex:1; height:100%; align-items:center; padding:0 6px 0 0; }
+  .forge-tile{ width:auto; height:86%; }          /* tile height = ledge height; aspect 5/7 sets the width */
+  .forge-foot{ left:62.4%; top:87.6%; transform:translate(-50%,-50%); width:auto; display:flex; gap:10px; padding:0; margin:0; background:none; position:absolute; }   /* the two altar buttons as a pair over the two ember glows */
+  .forge-btn{ font-size:10px; padding:9px 15px; letter-spacing:.1em; }
 }
 
 @media(min-width:1024px){
@@ -2437,19 +2467,19 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
     <button class="metaback" id="forge-back">‹ Back</button>
     <div class="col-title">THE FORGE</div>
   </div>
-  <div class="forge-cartouche" id="forge-cartouche"></div>
-  <div class="forge-teacher" id="forge-teacher" aria-live="polite"></div>
   <div class="forge-stage" id="forge-stage">
+    <div class="forge-cartouche" id="forge-cartouche"></div>
+    <div class="forge-teacher" id="forge-teacher" aria-live="polite"></div>
     <div class="forge-arch" id="forge-arch">
       <div class="forge-arch-card" id="forge-arch-card"></div>
       <div class="forge-flare" id="forge-flare" aria-hidden="true"></div>
       <div class="forge-arch-act" id="forge-arch-act"></div>
     </div>
     <div class="forge-rails" id="forge-rails"></div>
-  </div>
-  <div class="forge-foot" id="forge-foot">
-    <button class="forge-btn forge-seal" id="forge-seal">SEAL THE DECK</button>
-    <button class="forge-btn forge-restore" id="forge-restore">RESTORE LAUNCH DECK</button>
+    <div class="forge-foot" id="forge-foot">
+      <button class="forge-btn forge-seal" id="forge-seal">SEAL THE DECK</button>
+      <button class="forge-btn forge-restore" id="forge-restore">RESTORE LAUNCH DECK</button>
+    </div>
   </div>
 </div>
 <div class="overlay hidden" id="factionintro">
