@@ -2347,6 +2347,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
   </div>
 
   <div class="col-note" id="col-note"></div>
+  <div class="col-note" id="col-holdings"></div><!-- S-BRIDGE-2: muted "Holdings read for 0x…" — populated only when a valid payload exists -->
   <div class="col-grid" id="col-grid"></div>
 </div>
 <div class="overlay metascreen hidden" id="vault">
@@ -5564,6 +5565,27 @@ function recordMatchResult(){
    count-rolls + flashes (green gain / ember loss); first-ever shows plain. Standalone serve (no conduit) → hidden, no errors. */
 let dycRoll=null;
 function readHandedDyc(){ try{ const v=localStorage.getItem('dy_dyc'); if(v==null||v==='') return null; const n=Number(v); return isFinite(n)?n:null; }catch(e){ return null; } }
+/* ═══ S-BRIDGE-2 (WAVE-PLAY leg 1b, game leg) — read the site-handed held wave cards ═══
+   THE WALL holds: the game reads NO chain, holds NO wallet. It reads ONE localStorage note the site wrote
+   ('dy_wave_owned'; the DYW-GATE shim namespaces it to dyw::dy_wave_owned in the served snapshot — standalone it
+   reads null → graceful nothing). Trust model = the same as dy_dyc: the LATEST complete payload, no verification
+   (addr/chainId are DISPLAY-ONLY; the game cannot verify them without wallet plumbing THE WALL forbids). Accept ONLY
+   complete===true + a cards array; map name→CARD_BY_NAME→def.id (the collection is keyed by the engine string id, not
+   the numeric 101-188); an unknown name is SKIPPED silently but counted (the game never throws on site data). */
+function shortWaveAddr(a){ return (a && a.length>=10) ? (a.slice(0,6)+'…'+a.slice(-4)) : (a||''); }   // matches the site's DYWallet.shortAddr (first-6, U+2026, last-4)
+function readHandedWaveOwned(){
+  let raw; try{ raw=localStorage.getItem('dy_wave_owned'); }catch(e){ return null; }
+  if(raw==null||raw==='') return null;
+  let p; try{ p=JSON.parse(raw); }catch(e){ return null; }
+  if(!p || p.complete!==true || !Array.isArray(p.cards)) return null;   // ONLY a complete payload with a cards array (no chainId check — R-B2a=b)
+  const cards=[], skipped=[];
+  for(const c of p.cards){
+    const name = c && c.name;
+    const def = name!=null ? CARD_BY_NAME[name] : null;
+    if(def) cards.push(def.id); else skipped.push(name==null?'(no name)':String(name));   // unknown name → skip, count (never throw)
+  }
+  return { addr: (p.addr||null), cards: cards, skipped: skipped };
+}
 function fmtDyc(n){ return n.toLocaleString(undefined,{maximumFractionDigits:2})+' DYC'; }
 function rollDyc(el, from, to){
   if(dycRoll) cancelAnimationFrame(dycRoll);
@@ -5585,7 +5607,9 @@ function renderDycChip(){
   try{ localStorage.setItem('dy_dyc_last', String(n)); }catch(e){}
 }
 document.addEventListener('visibilitychange', function(){
-  if(document.visibilityState==='visible' && $('landing') && !$('landing').classList.contains('hidden')) renderDycChip();
+  if(document.visibilityState!=='visible') return;
+  if($('landing') && !$('landing').classList.contains('hidden')) renderDycChip();
+  if($('collection') && !$('collection').classList.contains('hidden')) renderCollection();   // S-BRIDGE-2: re-read the handed holdings on return (mirrors the dyc chip lifecycle)
 });
 
 function showLanding(){
@@ -6839,6 +6863,7 @@ function showCollection(){
 addEventListener('resize', ()=>{ if(!$('collection').classList.contains('hidden')){ colPickPlate(); colFitPlate(); } });
 function renderCollection(){
   const M=loadMeta();
+  const wo=readHandedWaveOwned(); const waveHeld=new Set(wo?wo.cards:[]);   // S-BRIDGE-2: render-time held-wave ownership from the LATEST complete payload (NOT persisted → reversible)
   $('col-wallet').textContent='✦ '+(M.wallet.amsha|0);
   const tabs=$('col-tabs'); tabs.innerHTML='';
   COL_FACTIONS.forEach(([f,label])=>{ const b=document.createElement('button'); b.className='col-tab'+(f===colFaction?' on':'');
@@ -6859,19 +6884,32 @@ function renderCollection(){
 
   const owned=all.filter(c=>ownsCard(M,c.id)).length;
   $('col-note').textContent=`${owned} of ${all.length} owned · sealed cards can be peeked and pinned before the wave is playable.`;
+  $('col-holdings').textContent = (wo && wo.addr) ? ('Holdings read for '+shortWaveAddr(wo.addr)) : '';   // S-BRIDGE-2: muted, only when a valid payload exists (absent → empty)
   const grid=$('col-grid'); grid.innerHTML='';
   list.forEach(def=>{
-    const id=def.id, isOwned=ownsCard(M,id), needCeremony = isOwned && !cardRevealed(M,id);
+    const id=def.id, ownedDurable=ownsCard(M,id);
+    const heldWave = !ownedDurable && !!def.wave && waveHeld.has(id);   // S-BRIDGE-2: site-handed wave card — render-time only, never persisted
+    const isOwned = ownedDurable || heldWave;
+    const needCeremony = ownedDurable && !cardRevealed(M,id);           // ceremony/markRevealed/saveMeta fire ONLY for durable ownership — NEVER for heldWave (zero dy_meta writes from the payload)
     const cell=document.createElement('div');
     cell.className='cc'+(isOwned?' owned':' sealed')+(M.sadhana&&M.sadhana.pin===id?' cc-pinned':'');
     const {inner, face}=buildCardFaces(def, colFaction);
     if(!isOwned) colDecorate(face,id,def);   // acq line (into the band) + PIN/BUY sit ABOVE the art layer, real or pending
+    else if(heldWave) colWhenLine(face);     // S-BRIDGE-2: owned-look + the battle-lock honesty line (grid tile)
     cell.appendChild(inner); grid.appendChild(cell);
     if(isOwned){ if(needCeremony){ cell.classList.add('ceremony'); const M2=loadMeta(); markRevealed(M2,id); saveMeta(M2);
         setTimeout(()=>cell.classList.remove('ceremony'),1600); }
       cell.onclick=()=>openZoom(def, colFaction); return; }   // TASK 32: an OWNED card zooms
     cell.onclick=(e)=>{ if(e.target.closest('button')) return; openSealedZoom(cell, def, id); };   // TASK 33: flip AND zoom, one motion
   });
+}
+/* S-BRIDGE-2 — the battle-lock honesty line on a held-wave (owned-look) grid tile. Reuses the existing .cc-lock-when
+   style; grid-tile only (the owned-card zoom is a queued follow-up rider). VERBATIM copy, straight ASCII apostrophe. */
+function colWhenLine(face){
+  const band=face.querySelector('.cc-band'); if(!band) return;
+  const w=document.createElement('div'); w.className='cc-lock-when';
+  w.textContent='Enters battle when Wave 1\'s balance trial completes.';
+  band.appendChild(w);
 }
 /* The two-face card markup, built once for BOTH the grid cell (thumb) and the TASK 33 zoomed card (full frame), so the
    locked preview cannot drift between them. 30b: the art layer is swapped ALONE on 404 → decorations survive. */

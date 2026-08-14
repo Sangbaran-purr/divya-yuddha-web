@@ -1,8 +1,8 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `f9e566e8abe9d6cba272f69f01846c3fef308269` (f9e566e)
-- Source committed: 2026-08-12 19:46:03 +0530
+- Source commit: `43408bfd0b09727cd34e409b142edfc051f29c2c` (43408bf)
+- Source committed: 2026-08-14 11:40:09 +0530
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -31,7 +31,7 @@
 - game/ in-repo size: 1732 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The seven site->game links (rite.html x3, index.html x2, treasury.html x1, demo/index.html x1) are stamped game/index.html?v=f9e566e — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 7.
+- The seven site->game links (rite.html x3, index.html x2, treasury.html x1, demo/index.html x1) are stamped game/index.html?v=43408bf — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 7.
 
 ## Refresh
     bash scripts/sync_game.sh
