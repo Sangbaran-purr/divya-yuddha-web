@@ -338,6 +338,35 @@ window.DYTreasury = (function () {
     });
   }
 
+  // WAVE-PLAY leg 1b (S-BRIDGE-1) — hand the embedded same-origin game the held wave cards via ONE dyw:: key (the
+  // dy_dyc precedent, rite.html:441; the site writes the full prefixed key, the game's DYW-GATE shim reads it).
+  // Written ONLY on a completeness-gated FULL result: the caller reaches this solely on discover() RESOLVING, which
+  // happens only past the balanceOf gate — an incomplete/deadline-killed scan THROWS → no write (busy-never-partial;
+  // stale complete:true beats fresh partial). Overwritten WHOLE each complete scan (stale-addr guard is the game's,
+  // it checks addr). cards[] is PER-cardId (many tokens of one card collapse to ONE entry). Names = 17f75f5 catalog,
+  // 87/87 name-parity verified vs the served engine wave:1 defs.
+  function writeWaveOwned(owner, held) {
+    var seen = {}, cards = [];
+    (held || []).forEach(function (r) {
+      var id = Number(r.cardId);
+      if (seen[id]) return; // per-cardId, not per-token
+      var w = (window.DY_WAVE_REGISTRY && DY_WAVE_REGISTRY.lookup) ? DY_WAVE_REGISTRY.lookup(id) : null;
+      if (!w) return; // not a catalog card (defensive; waveCardNFT ids are 101-188)
+      seen[id] = true;
+      cards.push({ id: id, name: w.name });
+    });
+    cards.sort(function (a, b) { return a.id - b.id; });
+    try {
+      window.localStorage.setItem("dyw::dy_wave_owned", JSON.stringify({
+        addr: owner.toLowerCase(),
+        chainId: CFG.chain.id,
+        scannedAt: Date.now(),
+        complete: true,
+        cards: cards
+      }));
+    } catch (e) { /* private mode / quota — non-fatal */ }
+  }
+
   // --- the connected read: mark + cards, read-once + refresh ------------------
   function readHoldings(addr, statusEl, markEl, hall, force) {
     if (!force && cacheAddr === addr && cacheRows !== null && cacheMark !== undefined) {
@@ -376,6 +405,7 @@ window.DYTreasury = (function () {
       .then(function (rows) {
         if (gen !== readGen) return; // superseded — a stale card read never clobbers a newer state
         cacheRows = rows;
+        writeWaveOwned(addr, rows); // S-BRIDGE-1 — reached ONLY on a completeness-gated full result
         statusEl.textContent = rows.length ? statusLine(rows.length) : "";
         renderHall(hall, "cards", filtered(rows));
       })
