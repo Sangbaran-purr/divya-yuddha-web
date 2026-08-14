@@ -289,7 +289,7 @@
             <a href="mint.html">The Mint</a>
             <a href="store.html">The Store</a>
             <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html?v=2033cf1">The Game</a>
+            <a href="game/index.html?v=dbf6a7e">The Game</a>
           </div>
           <div id="nav-decl">
             <span id="nameplate-top" class="nameplate hidden"><span class="flame-dot"></span><span id="addr-top"></span></span>
@@ -492,8 +492,8 @@
           var entered = false;
           try { entered = !!localStorage.getItem("dy_site_entered"); } catch (e) {}
           function go() {
-            if (reduce) { window.location.href = "game/index.html?v=2033cf1"; return; }
-            doorWipe(function () { window.location.href = "game/index.html?v=2033cf1"; });
+            if (reduce) { window.location.href = "game/index.html?v=dbf6a7e"; return; }
+            doorWipe(function () { window.location.href = "game/index.html?v=dbf6a7e"; });
           }
           if (!entered) { thresholdNotice(go); } else { go(); }
         }
