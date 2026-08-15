@@ -398,6 +398,29 @@ main {
   border-radius: 1px;
   padding: 0.4rem 0.8rem;
   background: linear-gradient(180deg, rgba(36, 30, 21, 0.5), rgba(11, 10, 8, 0.5));
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+/* S-PROFILE-1 — the chip IS the person: a link to your dashboard. Subtle right-chevron, existing gold chrome. */
+.nameplate::after {
+  content: "›";
+  margin-left: 0.1rem;
+  color: var(--gold-aged);
+  opacity: 0.55;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.nameplate:hover,
+.nameplate:focus-visible {
+  border-color: var(--gold-burnished);
+}
+.nameplate:hover::after,
+.nameplate:focus-visible::after {
+  opacity: 1;
+  color: var(--gold-burnished);
+  transform: translateX(2px);
 }
 .nameplate .flame-dot {
   width: 8px;

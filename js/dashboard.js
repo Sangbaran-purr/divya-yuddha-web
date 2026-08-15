@@ -332,6 +332,7 @@ window.DYDash = (function () {
   }
 
   function preConnectCards() {
+    var em = $("empty-mint"); if (em) em.classList.add("hidden"); // S-PROFILE-1 — never the empty line pre-connect
     $("liq-amt").textContent = "—";
     $("liq-note").textContent = "";
     var pc = "<div class='notlive'>Connect your wallet to view this balance.</div>";
@@ -423,6 +424,19 @@ window.DYDash = (function () {
         : "<div class='note'>Cash-out desk not yet live.</div>");
     if ($("act-rclaim")) $("act-rclaim").onclick = actClaimRewards;
     if ($("act-cashout")) $("act-cashout").onclick = actCashOut;
+  }
+
+  // S-PROFILE-1 — the honest all-zero empty state. Shown ONLY when every holdings read SUCCEEDED and liquid,
+  // vesting-granted and staked-principal are all 0. Busy-sentinel law is ABSOLUTE: any failed read (*Err) keeps
+  // it hidden — the busy voice owns the cards, never the guiding line.
+  function renderEmptyMint() {
+    var el = $("empty-mint");
+    if (!el) return;
+    var busy = data.liqErr || data.vestErr || data.stakeErr;
+    var liquidZero = data.liquid === 0n;
+    var vestZero = !!data.vest && data.vest.granted === 0n;
+    var stakeZero = !!data.stake && data.stake.principal === 0n;
+    el.classList.toggle("hidden", !(!busy && liquidZero && vestZero && stakeZero));
   }
 
   function renderRunway() {
@@ -522,6 +536,7 @@ window.DYDash = (function () {
         var failed = !!(data.liqErr || data.vestErr || data.stakeErr || data.rewardErr);
         if (failed) scheduleReadRetry(); else readSucceeded();
         renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderRunway();
+        renderEmptyMint();
         renderPolBanner();
         loadFeed();
         renderBuy();
@@ -534,6 +549,7 @@ window.DYDash = (function () {
       scheduleReadRetry();
       data.liqErr = data.vestErr = data.stakeErr = data.rewardErr = true;
       renderLiquid(); renderVesting(); renderStaked(); renderRewards();
+      renderEmptyMint();
       renderBuy();
       wireReadRetry();
     });

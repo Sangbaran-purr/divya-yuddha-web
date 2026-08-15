@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="css/threshold.css?v=s1e" />
-    <link rel="stylesheet" href="css/dashboard.css?v=mf4" />
+    <link rel="stylesheet" href="css/threshold.css?v=s1f" />
+    <link rel="stylesheet" href="css/dashboard.css?v=mf5" />
     <script src="config.js?v=s11"></script>
     <script src="mf-config.js?v=mf5"></script>
   </head>
@@ -68,6 +68,8 @@
 
         <!-- 2 — FOUR BALANCES -->
         <div class="sec-label" id="cards"><span class="sec-num">2</span> FOUR BALANCES</div>
+        <!-- S-PROFILE-1 — honest all-zero empty state (shown only when every read succeeds and all balances are 0). -->
+        <div class="empty-mint hidden" id="empty-mint">No DYC yet — <a href="mint.html">the Mint</a> is where it begins</div>
         <section class="cards">
           <!-- LIQUID -->
           <article class="bcard b-liquid" id="card-liquid">
@@ -190,7 +192,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1j"></script>
-    <script src="js/dashboard.js?v=mf10"></script>
+    <script src="js/dashboard.js?v=mf11"></script>
     <script>
       window.DYDash.mount();
     </script>

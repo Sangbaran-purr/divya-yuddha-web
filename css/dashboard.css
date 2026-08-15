@@ -178,6 +178,26 @@
   font-size: 1.02rem;
   margin: 2px 0;
 }
+/* S-PROFILE-1 — the honest all-zero empty state; a subtle gold card, one guiding line to the Mint. */
+.empty-mint {
+  margin: 10px 0 4px;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--gold-aged);
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(36, 30, 21, 0.4), rgba(11, 10, 8, 0.4));
+  color: var(--gold-burnished);
+  font-family: var(--text);
+  font-size: 0.95rem;
+  text-align: center;
+}
+.empty-mint a {
+  color: var(--gold-burnished);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.empty-mint a:hover {
+  color: var(--flame-core);
+}
 .sec-num {
   display: inline-flex;
   align-items: center;
