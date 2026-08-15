@@ -48,7 +48,7 @@ window.DYAdmin = (function () {
   // the deploy block (S-LEDGER-FIX STEP-0). Alchemy (10-blk cap) + thirdweb (1000-blk cap < LOG_CHUNK) are EXCLUDED from
   // getLogs duty. NOTE: admin.js reads DY_ADMIN_CONFIG (admin-config.js), which does NOT carry mf-config's
   // readRpcUrlFallbacks — so the documented drpc-first list is mirrored here to keep admin self-contained.
-  var HISTORY_RPCS = ["https://polygon-amoy.drpc.org", "https://polygon-amoy-bor-rpc.publicnode.com"];
+  var HISTORY_RPCS = ["https://polygon.drpc.org", "https://polygon-bor-rpc.publicnode.com"];
 
   var owners = { access: null, wave: null }; // last-read on-chain owners
   var histLoaded = false;
@@ -168,7 +168,7 @@ window.DYAdmin = (function () {
     var req = new ethersRef.FetchRequest(url);
     req.timeout = 12000;
     req.setThrottleParams({ maxAttempts: 2 });
-    return new ethersRef.JsonRpcProvider(req, 80002, { staticNetwork: true });
+    return new ethersRef.JsonRpcProvider(req, 137, { staticNetwork: true });
   }
   // S-LEDGER-FIX-3 — race a scan promise against a wall-clock deadline. On expiry, reject with a __deadline error (routed to
   // the busy message). The scan's own per-chunk `Date.now() > deadlineAt` guard stops issuing further chunks, so no orphaned
@@ -253,7 +253,7 @@ window.DYAdmin = (function () {
         return Promise.reject(e);
       }
       var url = cands[i++];
-      // S-LEDGER-FIX-3: TAMED transport (12s timeout, throttle maxAttempts 2) + static network (Amoy 80002, skips ethers'
+      // S-LEDGER-FIX-3: TAMED transport (12s timeout, throttle maxAttempts 2) + static network (Polygon 137, skips ethers'
       // chainId-detection round-trip that can flake into "could not coalesce error"). Covers the probe AND every chunk (the
       // scan rides this same provider), on both panels.
       var p = tamedProvider(url);
@@ -274,15 +274,17 @@ window.DYAdmin = (function () {
     return attempt();
   }
 
-  // (scope 2) size EIP-1559 fees from live base+priority with FEE_HEADROOM so a send isn't dropped under Amoy's
-  // volatile gas floor. maxFeePerGas is a refundable ceiling; the wallet still shows + can override these.
-  // RUNG4-FIX-4 — Amoy's node floor is 25 gwei on the priority tip; the wallet's Amoy RPC serves weak/absent
-  // priority-fee data, so getFeeData through it (and the old {} fallback) let MetaMask default to 1.5 gwei →
-  // rejected under the floor ("gas tip cap 1500000000, minimum needed 25000000000"). So: (1) read the fee signal
-  // through the reliable publicnode provider, and (2) FLOOR both fees at the 45/30 ceremony pattern on EVERY path
-  // (normal, zero-basis, catch) — never return {} on Amoy. This is a SHARED helper → it fixes every admin send.
-  var FEE_FLOOR_MAX = 45_000_000_000n; // 45 gwei — maxFeePerGas floor (ceremony ceiling)
-  var FEE_FLOOR_TIP = 30_000_000_000n; // 30 gwei — maxPriorityFeePerGas floor (> Amoy's 25 gwei node minimum)
+  // (scope 2) size EIP-1559 fees from the live fee signal with FEE_HEADROOM. maxFeePerGas is a refundable ceiling;
+  // the wallet still shows + can override these. The fee signal is read through the reliable publicnode provider
+  // (a wallet RPC may serve weak/absent priority-fee data), and both fees are FLOORED so a send is never dropped
+  // under a node minimum. This is a SHARED helper → it shapes every admin send.
+  // ⚠ W3-MAINNET-1 GAS FLAG (admin-only; owner-review, not a launch blocker): these floors were tuned for Amoy
+  //   (~25 gwei). On Polygon mainnet base fee runs far higher (~250+ gwei), so: (a) the primary path pays the full
+  //   basis*HEADROOM as the tip — it SENDS but over-tips; (b) the fee-read-FAIL fallback (45/30) is below mainnet
+  //   base and would be rejected. publicnode getFeeData is reliable so (b) is rare. Tune the mainnet gas strategy
+  //   (separate tip vs ceiling) as an owner-reviewed follow-on; the wallet UI still shows + can override every send.
+  var FEE_FLOOR_MAX = 45_000_000_000n; // 45 gwei — maxFeePerGas floor (see the mainnet gas flag above)
+  var FEE_FLOOR_TIP = 30_000_000_000n; // 30 gwei — maxPriorityFeePerGas floor
   function feeFloor(ceil, prio) {
     if (ceil < FEE_FLOOR_MAX) ceil = FEE_FLOOR_MAX;
     if (prio < FEE_FLOOR_TIP) prio = FEE_FLOOR_TIP;
@@ -491,7 +493,7 @@ window.DYAdmin = (function () {
     if (!s.chainOk) {
       el.className = "admin-status st-err";
       el.innerHTML = "Connected as owner <span class='mono'>" + shortAddr(me) + "</span> — <span class='st-red'>wrong network. Switch to "
-        + PLAYER.chain.name + " (80002).</span>";
+        + PLAYER.chain.name + " (137).</span>";
       return;
     }
     el.className = "admin-status st-ok";
@@ -2270,10 +2272,10 @@ window.DYAdmin = (function () {
     "function setMarketsOpen(bool open)",
   ];
   // RUNG4-FIX-1 (Fix A) — the Price Desk owner-gate READS through this tamed PUBLIC endpoint (publicnode,
-  // cast-verified), NEVER the wallet's BrowserProvider. The wallet's registered Amoy RPC
-  // (rpc-amoy.polygon.technology, from config.js chain.rpcUrls) is dead, so a BrowserProvider owner() read
-  // returns null and the gate would falsely accuse the master. Writes still ride the wallet signer.
-  var PD_RPC = "https://polygon-amoy-bor-rpc.publicnode.com";
+  // cast-verified), NEVER the wallet's BrowserProvider. A wallet's registered RPC may be weak/absent, so a
+  // BrowserProvider owner() read could return null and the gate would falsely accuse the master. Writes still
+  // ride the wallet signer. W3-MAINNET-1: mainnet publicnode.
+  var PD_RPC = "https://polygon-bor-rpc.publicnode.com";
   var PD_RARITIES = ["Mythic", "Legendary", "Epic", "Rare", "Uncommon", "Common"];
   var pdReadGen = 0; // read-generation guard — a stale LOAD never clobbers a newer one
   var pdChain = {}; // cardId -> { price, cap, remaining } (BigInt) | "busy"

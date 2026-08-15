@@ -4,21 +4,21 @@
    private key, seed, or API secret anywhere in this repo (grep-gated).
    ========================================================================= */
 window.DY_CONFIG = {
-  // Polygon Amoy testnet.
+  // Polygon MAINNET (chain 137). W3-MAINNET-1 — the crossing (2026-08).
   chain: {
-    id: 80002,
-    idHex: "0x13882", // 80002
-    name: "Polygon Amoy Testnet",
+    id: 137,
+    idHex: "0x89", // 137
+    name: "Polygon",
     nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
-    // RUNG4-FIX-3 — WALLET-REGISTRATION list (fed to wallet_addEthereumChain): what MetaMask registers for NEW users.
-    // The old rpc-amoy.polygon.technology is DNS-dead (ERR_NAME_NOT_RESOLVED). publicnode first (CORS-clean, full node,
-    // serves eth_maxPriorityFeePerGas + eth_sendRawTransaction), drpc as a redundant second. Existing users keep
-    // whatever they already registered — the site READ road below is wallet-independent, so their reads still work.
-    rpcUrls: ["https://polygon-amoy-bor-rpc.publicnode.com", "https://polygon-amoy.drpc.org"],
-    // RUNG4-FIX-3 — the SITE READ endpoint (DYWallet.readProvider). Every site read rides this tamed publicnode
-    // provider (staticNetwork, fail-fast) regardless of the user's wallet RPC. Writes stay on the wallet signer.
-    readRpcUrls: ["https://polygon-amoy-bor-rpc.publicnode.com"],
-    blockExplorerUrls: ["https://amoy.polygonscan.com"],
+    // WALLET-REGISTRATION list (fed to wallet_addEthereumChain): what MetaMask registers for NEW users. Polygon
+    // mainnet is well-known to MetaMask, so this is largely a no-op for existing users. publicnode first (CORS-clean,
+    // full node, serves eth_maxPriorityFeePerGas + eth_sendRawTransaction), drpc a redundant second. Existing users
+    // keep whatever they already registered — the site READ road below is wallet-independent, so their reads still work.
+    rpcUrls: ["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"],
+    // the SITE READ endpoint (DYWallet.readProvider). Every site read rides this tamed publicnode provider
+    // (staticNetwork, fail-fast) regardless of the user's wallet RPC. Writes stay on the wallet signer.
+    readRpcUrls: ["https://polygon-bor-rpc.publicnode.com"],
+    blockExplorerUrls: ["https://polygonscan.com"],
   },
 
   // ✓ RE-FREEZE (2026-08-12) — the sealed G11 Phase-A NFTs (owner()==0x…bEEF, setMinter
@@ -35,25 +35,23 @@ window.DY_CONFIG = {
   // UI reads `contracts.dycoin`, it would trade the money-stack coin, not the frozen one — the
   // marketplace may need its OWN coin field then. Left untouched pending an owner ruling.
   contracts: {
-    accessNFT: "0xA9D7b53598773D20dc78E19dE814f265924d7A51", // RE-FREEZE — fresh master-owned AccessNFT ("Divya Yuddha Access")
-    waveCardNFT: "0x4A0717A7c3970daee6161367f80b10B71286A0fD", // RE-FREEZE — fresh master-owned WaveCardNFT ("Divya Yuddha Wave Card")
-    dycoin: "0x39Daaf5f0729DC5604CeC6660b04c53fb181B694", // RE-FREEZE Leg 2 — CANONICAL money-stack DYC (rite balance read + game conduit + wave-card price coin)
-    marketplace: "0x2b74C4C651Dd09D30275EF0dD1c14a699B8502cd", // FROZEN PHASE A (AMOY) — Marketplace proxy (NOT LIVE; see coin-pair flag)
+    accessNFT: "0xcADBA9d1f8B33567AcB7c0120c59Df306f92dd9d", // W3-MAINNET-1 — master-owned AccessNFT (mainnet)
+    waveCardNFT: "0x029D047A30127f73b85a083B462b94A4a12C99bb", // W3-MAINNET-1 — master-owned WaveCardNFT (mainnet)
+    dycoin: "0x10c29BC02A2c3587D0085B0d60E4D6024D25B611", // W3-MAINNET-1 — CANONICAL money-stack DYC (ERC1967 proxy, mainnet)
+    marketplace: null, // no mainnet deploy — the frozen Phase-A Marketplace was Amoy-only (NOT LIVE, zero site reads)
 
-    // LEG3+5 — the player commerce contracts (WaveCardSale = the primary storefront;
-    // WaveCardMarket = the secondary escrow marketplace). RUNG-4 LIVE (2026-08-13,
-    // chain-verified master-owned, both shipped CLOSED). The store's Buy grid, the
-    // Market tab, and the treasury LIST + Your Listings wake now that these carry
-    // live addresses. Prices are DYC-native (the `dycoin` money-stack coin above), W-PRICE-1.
-    waveCardSale: "0xE9FF07bF0E0fd43E56EDee958a8F40E10090628C", // LEG3/RUNG-4 — WaveCardSale (priceOf/remainingOf/buy); deploy block 44799211 [RUNG4-FIX-1C: canonical EIP-55, was a hand-fabricated bad-checksum mixed-case]
-    waveCardMarket: "0xB7d09A514AE054Aa4beedea027059Fb91DA4576E", // LEG5/RUNG-4 — WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 44799212 [RUNG4-FIX-1C: canonical EIP-55]
+    // W3-MAINNET-1 — the player commerce contracts (WaveCardSale = the primary storefront;
+    // WaveCardMarket = the secondary escrow marketplace). LIVE on mainnet, both shipped CLOSED
+    // (seeds deferred to W3-MAINNET-SEED). Prices are DYC-native (the `dycoin` money-stack coin above), W-PRICE-1.
+    waveCardSale: "0x64038319d254C04743D308bD002C87C1Ad0cB268", // W3-MAINNET-1 — WaveCardSale (priceOf/remainingOf/buy); deploy block 92050734
+    waveCardMarket: "0x1D1a2430d3990Df45eCc43569647C3F94bb7c3DD", // W3-MAINNET-1 — WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 92050734
   },
 
   // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;
   // the full stack landed 44701099–44701101). Bounds the "Your Holdings" Transfer(*, owner) getLogs scan (from here
   // to latest) so public RPCs don't reject a full-chain range. UNSET/0 → the loader falls back to fromBlock 0 (a
   // full scan; if the RPC rejects it, the busy-sentinel renders "unavailable", never a silent empty shelf).
-  deployBlock: 44701099,
+  deployBlock: 92050659,
 
   // LEG5/RUNG-4 — the WaveCardMarket deploy block. The Your Listings event-scan
   // (js/store.js scanMyListings) queries Listed(*, owner) from HERE, not the NFT's
@@ -61,7 +59,7 @@ window.DY_CONFIG = {
   // the NFT block would waste ~98k blocks. store.js reads marketDeployBlock, falling
   // back to deployBlock, then 0 (full scan). Sale landed 44799211, market 44799212;
   // this is the batch's first block (a safe 1-block floor below the market's events).
-  marketDeployBlock: 44799211,
+  marketDeployBlock: 92050734,
 
   // ethers.js — pinned. UMD build, verified to expose BrowserProvider /
   // Contract / queryFilter (see S1 STEP-0 report). Loaded via CDN with SRI off

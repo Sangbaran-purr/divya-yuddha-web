@@ -1137,7 +1137,7 @@ window.DYDash = (function () {
       try {
         window.ethereum.request({ method: "eth_chainId" }).then(function (id) {
           lines[lines.indexOf(lines.filter(function (l) { return l.indexOf("WALLET:") === 0; })[0])] =
-            "WALLET:          injected present · connected=" + !!W.state.connected + " · wallet.chainId=" + parseInt(id, 16) + " (0x13882=80002 Amoy)";
+            "WALLET:          injected present · connected=" + !!W.state.connected + " · wallet.chainId=" + parseInt(id, 16) + " (0x89=137 Polygon)";
           paint();
         }).catch(function () {});
       } catch (e) {}

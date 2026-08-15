@@ -15,30 +15,24 @@
    dashboard at a local anvil deployment for verification; nothing committed).
    ========================================================================= */
 window.DY_MF_CONFIG = {
-  // M-G1 — live Amoy full-stack deployment (2026-08-06). See divya-yuddha-web3/docs/AMOY_STACK_2026-08-06.md.
+  // W3-MAINNET-1 — Polygon mainnet full-stack deployment (2026-08). Chain 137. Addresses verbatim from the crossing.
   contracts: {
-    dycoin: "0x39Daaf5f0729DC5604CeC6660b04c53fb181B694", // DYC (ERC1967 proxy) — the money-stack token
-    vestingVault: "0x7c7da4FFA7E32018912c18AffE9902969e0a5972",
-    holderStaking: "0xE9A16394c6E78c3ea9B79e757a12C2A64D76C7bf",
-    roiRedemption: "0xEdB8D51a4887A46FDd2669DC5C1eAeb8917D1f32",
-    dycoinSale: "0x89c758e200B49DC367b0e1f0674F722A20530e3D",
-    dropDesk: "0x6EC80e9BE34038329291077E126906359e86916a", // M-F6-G3 — Drop Desk (coupon redemption; owner=timelock, signer=PROD_OWNER)
-    usdt: "0x28D92502Fcf4BeEC2d3d1d6F55F4AED9fd6408Ec", // Mock USDT (Amoy practice, 6-dec)
+    dycoin: "0x10c29BC02A2c3587D0085B0d60E4D6024D25B611", // DYC (ERC1967 proxy) — the money-stack token
+    vestingVault: "0x4C5c5B3fd72618f2d53E4f131b24e58D65Bcd540",
+    holderStaking: "0xbA73Fd021263b46F68eCe7aa0C7Bb9817701C21f",
+    roiRedemption: "0x60ceb6FEBD8f976c02Cee8123631CcD420489891",
+    dycoinSale: "0x088233d79BD0Df395E364C180F790C2E655F648B",
+    dropDesk: "0x28813f882E3DaefC6329Adf85005Fbfd31CaB8fa", // Drop Desk (coupon redemption; owner=timelock, signer=PROD_OWNER)
+    usdt: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", // Tether USD on Polygon PoS (6-dec; on-chain symbol reads "USDT0")
   },
 
-  // ── Amoy read endpoints (M-F4c: end the public-endpoint lottery) ──
-  // PRIMARY = a DOMAIN-RESTRICTED Alchemy key, locked to the production origins https://divyayuddha.games
-  // (custom domain, DOM-1) and https://sangbaran-purr.github.io (Pages fallback). It is
-  // SAFE TO PUBLISH BY DESIGN: Alchemy refuses any other Origin (verified — no Origin / a wrong
-  // Origin are rejected; only the production origins succeed). This is NOT the owner's private
-  // terminal key (AMOY_RPC_URL) — that one NEVER appears in the site, ever.
-  // The vetted KEYLESS free endpoints (drpc → publicnode → thirdweb) demote to FALLBACKS; the
-  // connected wallet remains the last-resort rescue. Tried in order (FallbackProvider, quorum 1).
-  readRpcUrl: "https://polygon-amoy.g.alchemy.com/v2/alch_i8MLaVdIkYDguqknRIjen",
+  // ── Polygon mainnet read endpoints (W3-MAINNET-1) ──
+  // The verified primary is publicnode (CORS-clean, full node, reliable eth_call), drpc a redundant fallback; the
+  // connected wallet remains the last-resort rescue. Tried in order (FallbackProvider, quorum 1). No API key needed.
+  // (A domain-locked mainnet Alchemy key can be dropped in later for eth_call headroom — small pile, not required.)
+  readRpcUrl: "https://polygon-bor-rpc.publicnode.com",
   readRpcUrlFallbacks: [
-    "https://polygon-amoy.drpc.org",
-    "https://polygon-amoy-bor-rpc.publicnode.com",
-    "https://80002.rpc.thirdweb.com",
+    "https://polygon.drpc.org",
   ],
   // ⚠ eth_getLogs SPLIT: the domain-locked key's free tier caps eth_getLogs at a 10-block range —
   // useless for the feed/report scans (thousands of blocks). So getLogs runs on the FREE endpoints
@@ -46,6 +40,6 @@ window.DY_MF_CONFIG = {
   // owner) uses the reliable site key. logChunk sizes that free-endpoint getLogs line.
   logChunk: 3000,
 
-  // The block the live Amoy stack deployed at — the getLogs scans start here.
-  deployBlock: 44185626,
+  // The block the mainnet stack deployed at — the getLogs scans start here.
+  deployBlock: 92050143,
 };

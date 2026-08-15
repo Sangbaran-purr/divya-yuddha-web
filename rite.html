@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="css/pages.css?v=s1h" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="preload" as="image" href="assets/plates/rite.webp" type="image/webp" fetchpriority="high" />
-    <script src="config.js?v=s10"></script>
+    <script src="config.js?v=s11"></script>
     <style>
       /* THE THRESHOLD NOTICE — one parchment interstitial before the door (S2) */
       #thresh {
@@ -545,7 +545,7 @@
           }
           if (!s.chainOk) {
             msg.textContent = "You stand at the wrong gate.";
-            setBtn("Cross to Amoy", "switch network", {
+            setBtn("Cross to Polygon", "switch network", {
               onClick: function () {
                 line.textContent = "Crossing…";
                 window.DYWallet.ensureChain().catch(function () {

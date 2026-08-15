@@ -27,23 +27,22 @@
    (the off-chain metadata-freeze convention); faction ∈ devas|asuras|vanaras|nagas.
    ========================================================================= */
 window.DY_ADMIN_CONFIG = {
-  // M-G1 — live Amoy full-stack deployment (2026-08-06). See divya-yuddha-web3/docs/AMOY_STACK_2026-08-06.md.
+  // W3-MAINNET-1 — Polygon mainnet full-stack deployment (2026-08). Chain 137. Addresses verbatim from the crossing.
   contracts: {
-    accessNFT: "0xA9D7b53598773D20dc78E19dE814f265924d7A51", // RE-FREEZE (2026-08-12) — fresh master-owned AccessNFT (TORANA slot; arms dark→lit)
-    waveCardNFT: "0x4A0717A7c3970daee6161367f80b10B71286A0fD", // RE-FREEZE (2026-08-12) — fresh master-owned WaveCardNFT
-    dycoin: "0x39Daaf5f0729DC5604CeC6660b04c53fb181B694", // S9 COIN DROPS — the live money-stack DYC (proxy)
-    dycoinSale: "0x89c758e200B49DC367b0e1f0674F722A20530e3D", // M-F2 Approve Buyers + M-F3 Registry gate (allowlistSigner = PROD_OWNER)
-    vestingVault: "0x7c7da4FFA7E32018912c18AffE9902969e0a5972", // M-F3 Registry — VESTED column
-    holderStaking: "0xE9A16394c6E78c3ea9B79e757a12C2A64D76C7bf", // M-F3 Registry — STAKED + REWARDS
-    dropDesk: "0x6EC80e9BE34038329291077E126906359e86916a", // M-F6-G3 — Drop Desk (coupon sign/publish/cancel/figures; owner=timelock, signer=PROD_OWNER)
-    waveCardSale: "0xE9FF07bF0E0fd43E56EDee958a8F40E10090628C", // LEG2/RUNG-4 — WaveCardSale (Price Desk gate owner()==connected + setPrice/setSupplyCap/setSalesOpen target). LIVE 2026-08-13 [RUNG4-FIX-1C: canonical EIP-55]
-    waveCardMarket: "0xB7d09A514AE054Aa4beedea027059Fb91DA4576E", // LEG4/RUNG-4 — WaveCardMarket (Price Desk marketsOpen switch target). LIVE 2026-08-13 [RUNG4-FIX-1C: canonical EIP-55]
+    accessNFT: "0xcADBA9d1f8B33567AcB7c0120c59Df306f92dd9d", // master-owned AccessNFT (TORANA slot; arms dark→lit)
+    waveCardNFT: "0x029D047A30127f73b85a083B462b94A4a12C99bb", // master-owned WaveCardNFT
+    dycoin: "0x10c29BC02A2c3587D0085B0d60E4D6024D25B611", // money-stack DYC (ERC1967 proxy)
+    dycoinSale: "0x088233d79BD0Df395E364C180F790C2E655F648B", // DYCoinSale — Approve Buyers + Registry gate (allowlistSigner = robot)
+    vestingVault: "0x4C5c5B3fd72618f2d53E4f131b24e58D65Bcd540", // VESTED column
+    holderStaking: "0xbA73Fd021263b46F68eCe7aa0C7Bb9817701C21f", // STAKED + REWARDS
+    dropDesk: "0x28813f882E3DaefC6329Adf85005Fbfd31CaB8fa", // Drop Desk (coupon sign/publish/cancel/figures; owner=timelock, signer=PROD_OWNER)
+    waveCardSale: "0x64038319d254C04743D308bD002C87C1Ad0cB268", // WaveCardSale (Price Desk gate owner()==connected + setPrice/setSupplyCap/setSalesOpen target)
+    waveCardMarket: "0x1D1a2430d3990Df45eCc43569647C3F94bb7c3DD", // WaveCardMarket (Price Desk marketsOpen switch target)
   },
 
   // The block the contracts were deployed at — the mint-history scan starts here
-  // (0 falls back to a full chunked scan). Set to the G12 deploy block to keep
-  // the getLogs range tiny.
-  deployBlock: 44185626, // S-LEDGER-FIX: the M-G1 Amoy stack deploy block — bounds the ledger/history getLogs scan to ~38 chunks (was 0 = full-chain scan)
+  // (0 falls back to a full chunked scan). The mainnet money-stack deploy block keeps the getLogs range tiny.
+  deployBlock: 92050143, // W3-MAINNET-1: the mainnet money-stack deploy block — bounds the ledger/history getLogs scan
 
   // Archive-capable Amoy RPC used ONLY for the Mint-History getLogs read (never a
   // signing path — all writes stay on the wallet). Public free RPCs reject
