@@ -270,6 +270,25 @@
         border-color: var(--flame-core, #ffc96b);
         color: var(--flame-core, #ffc96b);
       }
+      /* S-DECL-2 — the register door made prominent: the .rite-btn "lit" look at REST (not only on hover), so a
+         stranger finds it in two seconds. Existing chrome (gold-burnished + the flame glow); no new design language. */
+      .rite-register {
+        display: block;
+        width: fit-content;
+        margin: 0.55rem auto 0;
+        text-decoration: none;
+        color: var(--gold-burnished);
+        border-color: var(--gold-burnished);
+        background: linear-gradient(180deg, rgba(58, 46, 28, 0.7), rgba(26, 22, 17, 0.7));
+        box-shadow: 0 0 26px rgba(232, 147, 58, 0.28), inset 0 0 12px rgba(232, 147, 58, 0.12);
+      }
+      .rite-register[hidden] { display: none; }
+      .rite-register:hover,
+      .rite-register:focus-visible {
+        color: var(--gold-burnished);
+        border-color: var(--gold-burnished);
+        box-shadow: 0 0 34px rgba(232, 147, 58, 0.42), inset 0 0 14px rgba(232, 147, 58, 0.18);
+      }
     </style>
   </head>
   <body>
@@ -325,6 +344,8 @@
           <button id="rite-action" class="rite-btn" type="button">
             Declare Yourself<span class="sub">connect wallet</span>
           </button>
+          <!-- S-DECL-2 — the register door made prominent; revealed only in the connected-no-mark sorting state. -->
+          <a id="rite-register" class="rite-btn rite-register" href="register.html" hidden>REGISTER FOR THE PRESALE</a>
           <div id="rite-line" class="state-line" aria-live="polite"></div>
           <!-- S-CONSOLE-DYC-1: bearer-only DYC balance (hidden until isHolder); coin is CSS-circle-clipped -->
           <div id="rite-dyc" class="rite-dyc" hidden>
@@ -414,6 +435,7 @@
         var msg = document.getElementById("rite-msg");
         var btn = document.getElementById("rite-action");
         var line = document.getElementById("rite-line");
+        var reg = document.getElementById("rite-register");
         var npTop = document.getElementById("nameplate-top");
         var addrTop = document.getElementById("addr-top");
 
@@ -525,6 +547,7 @@
           // S-CONSOLE-DYC-1: the DYC balance lives INSIDE the bearer state only — hide + reset the read guard whenever
           // this is not a confirmed bearer, so a fresh bearer session re-reads and non-holders see nothing new.
           if (dycEl && s.isHolder !== true) { dycEl.hidden = true; dycRead = false; }
+          if (reg) reg.hidden = true; // S-DECL-2 — register door defaults hidden; only the no-mark state reveals it
 
           if (!s.hasProvider) {
             msg.textContent = "The rite is spoken with a wallet. You carry none yet.";
@@ -585,6 +608,7 @@
             // S-DECL-1 (R1) — connected-no-mark: the rite sorts. Route the unregistered to the register,
             // reassure the declared-pending. Both lines show (the rite can't tell which — the visitor self-selects).
             setBtn("The Rite Opens Soon", "the free claim is not yet open", { sleeping: true });
+            if (reg) reg.hidden = false; // S-DECL-2 — reveal the prominent register door (honesty lines stay verbatim)
             msg.innerHTML =
               'No mark on this wallet yet. If you haven\'t declared, <a href="register.html">begin at the register</a>.';
             line.textContent = "Already declared? Your pass is being prepared — watch your inbox.";
