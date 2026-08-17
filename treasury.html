@@ -15,7 +15,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="css/threshold.css?v=s1f" />
+    <link rel="stylesheet" href="css/threshold.css?v=s1g" />
     <link rel="stylesheet" href="css/pages.css?v=s1h" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="stylesheet" href="css/store.css?v=s1" />
@@ -86,6 +86,18 @@
           <div id="nav-decl">
             <a id="nameplate-top" class="nameplate hidden" href="dashboard.html"><span class="flame-dot"></span><span id="addr-top"></span></a>
           </div>
+          <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu">
+            <span></span><span></span><span></span>
+          </button>
+          <nav id="nav-menu" class="nav-menu" aria-label="Primary menu">
+            <a href="index.html">The Gate</a>
+            <a href="rite.html">The Rite</a>
+            <a href="explore.html">The Cards</a>
+            <a href="mint.html">The Mint</a>
+            <a href="store.html">The Store</a>
+            <a href="treasury.html" aria-current="page">The Treasury</a>
+            <a href="game/index.html?v=33d0757">The Game</a>
+          </nav>
         </div>
       </nav>
     </header>
@@ -185,6 +197,25 @@
         });
         window.DYTreasury.mount();
         window.DYWallet.init();
+      })();
+    </script>
+    <script>
+      /* S-NAV-1 — mobile nav dropdown: toggle open/close, close on selection, outside tap, Escape. */
+      (function () {
+        var t = document.querySelector(".nav-toggle");
+        var m = document.getElementById("nav-menu");
+        if (!t || !m) return;
+        function closeMenu() { m.classList.remove("open"); t.setAttribute("aria-expanded", "false"); }
+        t.addEventListener("click", function (e) {
+          e.stopPropagation();
+          if (m.classList.contains("open")) { closeMenu(); }
+          else { m.classList.add("open"); t.setAttribute("aria-expanded", "true"); }
+        });
+        m.addEventListener("click", function (e) { if (e.target.closest("a")) closeMenu(); });
+        document.addEventListener("click", function (e) {
+          if (m.classList.contains("open") && !m.contains(e.target) && !t.contains(e.target)) closeMenu();
+        });
+        document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMenu(); });
       })();
     </script>
   </body>
