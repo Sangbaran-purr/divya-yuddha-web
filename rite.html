@@ -283,6 +283,9 @@
         box-shadow: 0 0 26px rgba(232, 147, 58, 0.28), inset 0 0 12px rgba(232, 147, 58, 0.12);
       }
       .rite-register[hidden] { display: none; }
+      /* S-RITE-4 — the action box is a bare .rite-btn (display:inline-block), which overrides the UA [hidden] rule; this
+         id+[hidden] selector (id beats class) lets the voucher branch actually hide the sleeping "Rite Opens Soon" box. */
+      #rite-action[hidden] { display: none; }
       .rite-register:hover,
       .rite-register:focus-visible {
         color: var(--gold-burnished);
@@ -518,12 +521,15 @@
             'No mark on this wallet yet. If you haven\'t declared, <a href="register.html">begin at the register</a>.';
           line.textContent = "Already declared? Your pass is being prepared — watch your inbox.";
         }
-        // the voucher is live: route to the buy surface; hide the register door + inbox line (their words are now false).
+        // the voucher is live: route to the buy surface. The dominant read must be "Your pass is live → BUY YOUR COIN",
+        // so (S-RITE-4) the sleeping "Rite Opens Soon" box is HIDDEN here and the free-claim note drops to one quiet
+        // line BELOW the buy door. The register door + its inbox line stay hidden (their words are false now).
         function showBuyRoad() {
+          if (btn) btn.hidden = true;
           if (reg) reg.hidden = true;
           if (buy) buy.hidden = false;
           msg.textContent = "Your pass is live.";
-          line.textContent = "";
+          line.textContent = "The free card claim opens later — this page will announce it.";
         }
 
         // S2 — the door opens: a holder's ENTER carries the session pass into the
@@ -599,6 +605,7 @@
           if (dycEl && s.isHolder !== true) { dycEl.hidden = true; dycRead = false; }
           if (reg) reg.hidden = true; // S-DECL-2 — register door defaults hidden; only the no-mark state reveals it
           if (buy) buy.hidden = true; // S-RITE-3 — buy door defaults hidden; only a live-voucher no-mark state reveals it
+          if (btn) btn.hidden = false; // S-RITE-4 — the action box is visible in EVERY state except the voucher branch (which hides it)
 
           if (!s.hasProvider) {
             msg.textContent = "The rite is spoken with a wallet. You carry none yet.";
