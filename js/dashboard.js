@@ -441,7 +441,9 @@ window.DYDash = (function () {
 
   function renderRunway() {
     if (!cfg().holderStaking || data.runwayDays == null) { $("runway-days").textContent = "—"; return; }
-    $("runway-days").textContent = data.runwayDays + " Days";
+    // S-LIVE-FIX-1 (D1): cap the DISPLAY at 720+ (computation untouched). A huge early-stage runway (little staked yet)
+    // otherwise reads as an implausible number; below 720 the real figure stands.
+    $("runway-days").textContent = data.runwayDays > 720 ? "720+ Days" : data.runwayDays + " Days";
   }
 
   // =========================================================================
@@ -642,7 +644,12 @@ window.DYDash = (function () {
               return opts.sendFn(c, ovr).then(function (tx) {
                 return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
                   pending(false);
-                  if (rc && rc.status === 1) { refresh(); }
+                  if (rc && rc.status === 1) {
+                    // S-LIVE-FIX-1: A2 optimistic feed row + A1 linked success toast (polygonscan tx link).
+                    if (opts.feedRow) { var row = opts.feedRow(rc); if (row) { row.hash = tx.hash; if (!row.block) row.block = rc ? Number(rc.blockNumber) : 0; pushOptimistic(row); } }
+                    toast(opts.successMsg || "Transaction confirmed.", tx.hash);
+                    refresh();
+                  }
                   else failBox("The transaction reverted on-chain. Nothing was changed.");
                 }).catch(function () {
                   pending(false);
@@ -678,6 +685,8 @@ window.DYDash = (function () {
       sendFn: function (k, o) { return k.registerVested(o); },
       title: "Activate vested earning",
       body: "Activate your vested DYC so it earns 0.40%/day toward the 2X cap.",
+      successMsg: "Vesting activated — now earning 0.40%/day.",
+      feedRow: function () { return { type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: "—" }; },
     });
   }
   // M-F4 defect 2: Top Up is now the SAME narrated multi-step flow as Buy — approve DYC (only if
@@ -696,6 +705,7 @@ window.DYDash = (function () {
       "raw: " + amtWei.toString() + " wei"
     ).then(function (go) {
       if (!go) return;
+      var topUpTx = null; // S-LIVE-FIX-1 (A1): the stake tx hash for the success toast + optimistic feed row
       withEthers().then(function () {
         var provider = new ethersRef.BrowserProvider(window.ethereum);
         return provider.getSigner().then(function (signer) {
@@ -723,10 +733,16 @@ window.DYDash = (function () {
                 step++; pending(true, "Step " + step + " of " + nSteps + " — Stake DYC");
                 $("ov-pending-msg").textContent = "Your wallet will ask to stake " + fmt(amtWei) + " DYC. It starts earning 0.40%/day right away.";
                 return hs.stake.staticCall(amtWei).then(function () {
-                  return hs.stake(amtWei, gasOv(fo, GAS.stake)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                  return hs.stake(amtWei, gasOv(fo, GAS.stake)).then(function (tx) {
+                    return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
+                      topUpTx = tx.hash;
+                      pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Staked", ic: "staked", details: "Staked to earn", amt: fmt(amtWei) + " DYC", hash: tx.hash });
+                      return rc;
+                    });
+                  });
                 });
               });
-              return chain.then(function () { pending(false); refresh(); toast("Top up complete — " + fmt(amtWei) + " DYC now earning."); });
+              return chain.then(function () { pending(false); refresh(); toast("Top up complete — " + fmt(amtWei) + " DYC now earning.", topUpTx); });
             });
           });
         });
@@ -760,8 +776,10 @@ window.DYDash = (function () {
   //  TRANSACTION FEED (chunked getLogs, S5a pattern)
   // =========================================================================
   function LOG_CHUNK_() { return cfg().logChunk || 3000; } // M-F4 defect 3 — sized to the public RPC's getLogs limit
+  var feedScanned = [], optimisticFeed = []; // S-LIVE-FIX-1 (A2): scanned events + locally-appended just-done txs
   function loadFeed() {
     var c = cfg(), addr = W.state.address, body = $("tx-body"), status = $("tx-status");
+    feedIncomplete = false;
     if (!c.holderStaking && !c.vestingVault && !c.roiRedemption) {
       body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>Your activity appears here once the platform contracts are live.</td></tr>";
       return;
@@ -798,22 +816,51 @@ window.DYDash = (function () {
       }
       return Promise.all(jobs).then(function () { return attachTimes(provider, evs); });
     }).then(function (evs) {
-      evs.sort(function (a, b) { return b.block - a.block; });
-      renderFeed(evs);
-      status.textContent = evs.length ? "Showing " + evs.length + " recent event(s)." : "";
+      feedScanned = evs;
+      var merged = renderFeedMerged();
+      // honest copy: if a chunk was throttled the newest events are still shown; only older history may lag.
+      status.textContent = feedIncomplete
+        ? (merged.length ? "Showing " + merged.length + " recent event(s) — older history may still be loading." : "Recent activity is still loading…")
+        : (merged.length ? "Showing " + merged.length + " recent event(s)." : "");
     }).catch(function () {
-      body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>" + netMsg() + "</td></tr>"; wireReadRetry();
+      // only the initial getBlockNumber (the whole line down) reaches here now — per-chunk failures no longer do.
+      var merged = renderFeedMerged();
+      if (!merged.length) { body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>" + netMsg() + "</td></tr>"; wireReadRetry(); }
       status.textContent = "";
     });
   }
+  // Merge locally-known just-done txs (optimisticFeed) with the on-chain scan (feedScanned), dedup by tx hash
+  // (a scanned row supersedes its optimistic twin), newest first. Returns the merged list it rendered.
+  function renderFeedMerged() {
+    var seen = {}, merged = [];
+    feedScanned.concat(optimisticFeed).forEach(function (e) {
+      if (e.hash) { if (seen[e.hash]) return; seen[e.hash] = 1; }
+      merged.push(e);
+    });
+    merged.sort(function (a, b) { return (b.block || 0) - (a.block || 0) || (b.ts || 0) - (a.ts || 0); });
+    renderFeed(merged);
+    return merged;
+  }
+  // S-LIVE-FIX-1 (A2): append a just-completed tx to the feed immediately from the receipt in hand — no rescan wait.
+  function pushOptimistic(row) {
+    if (!row || !row.hash) return;
+    row.ts = row.ts || Math.floor(Date.now() / 1000);
+    optimisticFeed.unshift(row);
+    if ($("tx-body")) renderFeedMerged();
+  }
+  // S-LIVE-FIX-1 (A2): the ~66-chunk × 5-filter scan from deployBlock over a single free RPC gets throttled on-device;
+  // one rejected getLogs used to collapse the whole feed into "Network connection trouble". Two changes fix it:
+  //   (1) scan NEWEST→oldest, so a mid-scan throttle keeps the most RECENT events (the user's just-done actions);
+  //   (2) a failed/throttled chunk yields the partial result and flags feedIncomplete — it never rejects the batch.
+  var feedIncomplete = false;
   function scan(contract, filter, from, latest, push) {
-    var start = from, out = [], chunk = LOG_CHUNK_();
+    var end = latest, out = [], chunk = LOG_CHUNK_();
     function step() {
-      if (start > latest) return Promise.resolve(out);
-      var end = Math.min(start + chunk - 1, latest);
+      if (end < from) return Promise.resolve(out);
+      var start = Math.max(from, end - chunk + 1);
       return contract.queryFilter(filter, start, end).then(function (r) {
-        r.forEach(push); start = end + 1; return step();
-      });
+        r.forEach(push); end = start - 1; return step();
+      }).catch(function () { feedIncomplete = true; return out; });
     }
     return step();
   }
@@ -885,7 +932,10 @@ window.DYDash = (function () {
   }
 
   function loadAllowlist() {
-    return fetch("allowlist.json?nb=" + (buyState._nb || (buyState._nb = 1)))
+    // S-LIVE-FIX-1 (C1): a per-fetch unique buster + no-store defeats the BROWSER cache (the ?nb session-counter
+    // repeated across loads and served a stale []). The Fastly edge still caps freshness at its ~10-min TTL (query
+    // ignored there), which the C2 auto-poll rides out.
+    return fetch("allowlist.json?cb=" + Date.now(), { cache: "no-store" })
       .then(function (r) { return r.json(); })
       .then(function (a) { allowlist = Array.isArray(a) ? a : []; return allowlist; })
       .catch(function () { allowlist = []; return allowlist; });
@@ -899,9 +949,12 @@ window.DYDash = (function () {
     return null;
   }
 
+  var buyPoll = null; // S-LIVE-FIX-1 (C2): auto re-check while registered-but-unapproved
+  function stopBuyPoll() { if (buyPoll) { clearInterval(buyPoll); buyPoll = null; } }
   function renderBuy() {
     var b = $("buy-body"), chip = $("buy-round-chip");
     if (!b) return;
+    stopBuyPoll(); // cleared each render; only the register branch below restarts it
     chip.innerHTML = "";
     if (!isConnected()) { b.innerHTML = "<div class='notlive'>Connect your wallet to buy DYC.</div>"; return; }
     var c = cfg();
@@ -923,7 +976,7 @@ window.DYDash = (function () {
             var isPresale = round === 1;
             buyState.price = isPresale ? r[1] : r[2];
             chip.innerHTML = "<span class='buy-round " + (isPresale ? "presale" : "public") + "'>" + (isPresale ? "PRESALE @ $0.008" : "PUBLIC @ $0.010") + "</span>";
-            if (isPresale && !v) { renderRegister(b); return; }
+            if (isPresale && !v) { renderRegister(b); buyPoll = setInterval(renderBuy, 45000); return; } // C2 auto re-check
             renderCalculator(b, isPresale);
           });
         });
@@ -934,12 +987,13 @@ window.DYDash = (function () {
     b.innerHTML =
       "<div class='buy-reg'>" +
       "<div class='buy-reg-title'>Register to buy</div>" +
-      "<p>Presale is allowlist-gated. Register once with the form below — then the owner approves your wallet <b>manually</b>, which can take a few hours. You do not need to do anything else after registering.</p>" +
+      "<p>Presale is allowlist-gated. Register once with the form below — then the owner approves your wallet <b>manually</b>. You do not need to do anything else after registering.</p>" +
       "<a class='btn-g btn-p' href='https://forms.gle/37pgo2ebYrDpME2w7' target='_blank' rel='noopener'>Open the registration form →</a>" +
       "<button class='btn-g' id='buy-recheck'>Check my status</button>" +
-      "<div class='note'>Already registered? Approval is manual — check back in a few hours.</div>" +
+      "<div class='note'>Already registered? Approval appears here within ~10 minutes — this page checks for you.</div>" +
       "</div>";
-    $("buy-recheck").onclick = function () { allowlist = null; buyState._nb = (buyState._nb || 1) + 1; renderBuy(); };
+    // S-LIVE-FIX-1 (C1): drop the stale ?nb counter — loadAllowlist now cache-busts per fetch; recheck just re-reads.
+    $("buy-recheck").onclick = function () { allowlist = null; renderBuy(); };
   }
 
   function renderCalculator(b, isPresale) {
@@ -1030,7 +1084,14 @@ window.DYDash = (function () {
               step++; pending(true, "Step " + step + " of " + nSteps + " — Buy DYC");
               $("ov-pending-msg").textContent = "Your wallet will ask to buy. You pay " + fmt(amt, 6) + " USDT and receive DYC — 15% to your wallet now, 85% into vesting.";
               return sale.buyWithStable.staticCall(c.usdt, amt, sig, "").then(function () {
-                return sale.buyWithStable(c.usdt, amt, sig, "", gasOv(fo, GAS.buy)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                return sale.buyWithStable(c.usdt, amt, sig, "", gasOv(fo, GAS.buy)).then(function (tx) {
+                  return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
+                    buyState.lastTx = tx.hash; // A1: surfaced in the success toast
+                    // A2: the buy is a DYCoinSale tx (never a feed-scanned event) — append it optimistically so it shows now.
+                    pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Purchased", ic: "liquid", details: "Bought DYC", amt: fmt(amt, 6) + " USDT", hash: tx.hash });
+                    return rc;
+                  });
+                });
               });
             });
             if (hs && !skip) {
@@ -1043,11 +1104,16 @@ window.DYDash = (function () {
                   ? "Your wallet will ask to sync — it adds the DYC you just bought to your earning balance (0.40%/day)."
                   : "Your wallet will ask to activate — it starts your vested DYC earning 0.40%/day toward the 2X cap.";
                 return hs[fn].staticCall().then(function () {
-                  return hs[fn](gasOv(fo, GAS.activate)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                  return hs[fn](gasOv(fo, GAS.activate)).then(function (tx) {
+                    return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
+                      pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: "—", hash: tx.hash });
+                      return rc;
+                    });
+                  });
                 }).catch(function () { return null; }); // the BUY already succeeded — never fail the flow on a benign activate revert
               });
             }
-            return chain.then(function () { pending(false); refresh(); toast("Purchase complete — DYC bought" + (hs && !skip ? " and activated" : "") + "."); });
+            return chain.then(function () { pending(false); refresh(); toast("Purchase complete — DYC bought" + (hs && !skip ? " and activated" : "") + ".", buyState.lastTx); });
           });
         });
       });
@@ -1059,11 +1125,15 @@ window.DYDash = (function () {
     W.connect().then(function (st) { if (!st.chainOk) return W.ensureChain(); }).then(refresh).catch(function () {});
   }
 
-  function toast(msg) {
-    var t = el("div", null, msg);
-    t.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#171309;border:1px solid var(--gold-hairline);color:var(--parchment);padding:10px 16px;border-radius:10px;z-index:300;font-size:.9rem";
+  // S-LIVE-FIX-1 (A1): an optional tx hash appends a shortened link to polygonscan.com/tx/<hash> (verified sources),
+  // and the toast lingers longer so the link is clickable. el() sets innerHTML, so the anchor renders.
+  function toast(msg, txHash) {
+    var html = msg;
+    if (txHash) html += " <a href='" + txUrl(txHash) + "' target='_blank' rel='noopener' style='color:var(--gold-burnished);text-decoration:underline'>" + txHash.slice(0, 8) + "…↗</a>";
+    var t = el("div", null, html);
+    t.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#171309;border:1px solid var(--gold-hairline);color:var(--parchment);padding:10px 16px;border-radius:10px;z-index:300;font-size:.9rem;max-width:92vw";
     document.body.appendChild(t);
-    setTimeout(function () { t.remove(); }, 2600);
+    setTimeout(function () { t.remove(); }, txHash ? 9000 : 2600);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
