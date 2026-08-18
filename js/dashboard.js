@@ -953,9 +953,13 @@ window.DYDash = (function () {
       "</div>" +
       "<div class='buy-min' id='buy-min'></div>" +
       "<button class='btn-g btn-p btn-block' id='buy-go'>⚡ Buy DYC &amp; Activate Staking</button>" +
-      "<div class='buy-narrate'>One tap runs the whole flow with clear wallet prompts: approve USDT (only if needed) → buy (15% lands in your wallet, 85% into vesting) → activate that vesting so it starts earning 0.40%/day.</div>";
+      "<div class='buy-narrate'>One tap runs the whole flow with clear wallet prompts: approve USDT (only if needed) → buy (15% lands in your wallet, 85% into vesting) → activate that vesting so it starts earning 0.40%/day.</div>" +
+      // S-BUY-CHOICE — quiet secondary path (link-weight, not a rival CTA): the same buy chain MINUS the activate leg.
+      // The standalone Activate button (below) is the road in afterwards. Only shown when staking is configured.
+      (cfg().holderStaking ? "<a href='#' id='buy-noact' style='display:block;text-align:center;margin-top:12px;font-size:.82rem;color:var(--gold-aged);text-decoration:underline;cursor:pointer'>Buy without activating staking</a>" : "");
     $("buy-amt").oninput = updateCalc;
     $("buy-go").onclick = buyFlow;
+    if ($("buy-noact")) $("buy-noact").onclick = function (e) { e.preventDefault(); buyFlow(true); };
     updateCalc();
   }
   function updateCalc() {
@@ -985,7 +989,10 @@ window.DYDash = (function () {
     return ov;
   }
 
-  function buyFlow() {
+  function buyFlow(skipActivate) {
+    // S-BUY-CHOICE — the secondary "buy without activating" path passes an explicit true; the main button's onclick
+    // passes a click Event (which is NOT === true), so the default flow stays byte-identical.
+    var skip = skipActivate === true;
     var c = cfg(), amt;
     try { amt = ethersRef.parseUnits(($("buy-amt").value || "").trim().replace(/,/g, ""), 6); if (amt <= 0n) throw 0; }
     catch (e) { failBox("Enter a positive USDT amount."); return; }
@@ -1007,7 +1014,7 @@ window.DYDash = (function () {
           var needApprove = allow < amt;
           return Promise.all([feeOverrides(provider), hs ? hs.vestedRegistered(me) : Promise.resolve(true)]).then(function (pre) {
             var fo = pre[0], alreadyReg = pre[1];
-            var nSteps = (needApprove ? 1 : 0) + 1 + (hs ? 1 : 0);
+            var nSteps = (needApprove ? 1 : 0) + 1 + (hs && !skip ? 1 : 0);
             var step = 0;
             var chain = Promise.resolve();
             if (needApprove) {
@@ -1026,7 +1033,7 @@ window.DYDash = (function () {
                 return sale.buyWithStable(c.usdt, amt, sig, "", gasOv(fo, GAS.buy)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
               });
             });
-            if (hs) {
+            if (hs && !skip) {
               chain = chain.then(function () {
                 step++;
                 var fn = alreadyReg ? "syncVested" : "registerVested";
@@ -1040,7 +1047,7 @@ window.DYDash = (function () {
                 }).catch(function () { return null; }); // the BUY already succeeded — never fail the flow on a benign activate revert
               });
             }
-            return chain.then(function () { pending(false); refresh(); toast("Purchase complete — DYC bought" + (hs ? " and activated" : "") + "."); });
+            return chain.then(function () { pending(false); refresh(); toast("Purchase complete — DYC bought" + (hs && !skip ? " and activated" : "") + "."); });
           });
         });
       });
