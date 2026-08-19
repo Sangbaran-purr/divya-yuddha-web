@@ -523,7 +523,16 @@
             'No mark on this wallet yet. If you haven\'t declared, <a href="register.html">begin at the register</a>.';
           // S-LIVE-FIX-1 (C3): honest expectation — approval publishes to the allowlist and can take a few minutes to
           // reach this page. The C2 poll makes the buy door appear on its own once it lands.
-          line.textContent = "Already declared? Approval appears here within ~10 minutes — this page checks for you.";
+          // S-FEED-5 (LANE B): make the wait FELT — a live countdown to the next auto-check, the honest ~10-min line
+          // prominent, and the explicit "no need to refresh" reassurance. The 45s re-check underneath is unchanged.
+          line.innerHTML =
+            "<span style='display:inline-flex;align-items:center;gap:7px'>" +
+              "<span style='width:7px;height:7px;border-radius:50%;background:var(--gold-burnished,#caa14a);display:inline-block'></span>" +
+              "<b>Checking for your approval…</b> " +
+              "<span id='rite-countdown' style='color:var(--gold-aged,#9a8a5a);font-variant-numeric:tabular-nums'>next check in 45s</span>" +
+            "</span>" +
+            "<br>Approval usually appears within <b>~10 minutes</b>." +
+            "<br><span style='opacity:.75'>No need to refresh — this page checks for you.</span>";
         }
         // the voucher is live: route to the buy surface. The dominant read must be "Your pass is live → BUY YOUR COIN",
         // so (S-RITE-4) the sleeping "Rite Opens Soon" box is HIDDEN here and the free-claim note drops to one quiet
@@ -687,9 +696,18 @@
             showRegisterRoad();
             var who = s.address;
             sortNoMark(who); // immediate check (race/staleness-guarded inside)
-            // C2: keep checking every 45s so the buy door appears without a manual refresh once approval lands.
+            // C2 / S-FEED-5 (LANE B): a 1s ticker shows a live countdown; every 45s it fires the real allowlist
+            // re-check (same cadence). Stops on state change (guarded here + inside sortNoMark).
             stopVoucherPoll();
-            voucherPoll = setInterval(function () { sortNoMark(who); }, 45000);
+            var reSecs = 45;
+            voucherPoll = setInterval(function () {
+              var cur = window.DYWallet.state;
+              if (!cur.connected || cur.isHolder === true || (cur.address || "").toLowerCase() !== (who || "").toLowerCase()) { stopVoucherPoll(); return; }
+              var cd = document.getElementById("rite-countdown");
+              reSecs--;
+              if (reSecs <= 0) { if (cd) cd.textContent = "checking now…"; reSecs = 45; sortNoMark(who); return; }
+              if (cd) cd.textContent = "next check in " + reSecs + "s";
+            }, 1000);
           }
         });
 

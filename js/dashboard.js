@@ -794,10 +794,20 @@ window.DYDash = (function () {
   //  TRANSACTION FEED (chunked getLogs, S5a pattern)
   // =========================================================================
   function LOG_CHUNK_() { return cfg().logChunk || 3000; } // M-F4 defect 3 — sized to the public RPC's getLogs limit
-  var feedScanned = [], optimisticFeed = []; // S-LIVE-FIX-1 (A2): scanned events + locally-appended just-done txs
+  // S-FEED-5: on-chain event logs are append-only & immutable — a scan returning FEWER rows is ALWAYS a provider gap
+  // (cap/throttle/partial/deadline), never a real removal. So we ACCUMULATE scanned rows by hash across the whole
+  // session (union, newest write wins) instead of REPLACING each scan, and keep optimistic (just-done) rows in their
+  // own durable store. Both are the permanent on-screen record — never dropped because a scan returned less. They
+  // reset ONLY when the wallet address changes (rows are per-wallet; guards the multi-wallet funnel walk).
+  var feedSeen = {}, optimisticFeed = [], feedAddr = null;
+  function feedResetIfAddr(addr) {
+    var a = (addr || "").toLowerCase();
+    if (feedAddr !== a) { feedSeen = {}; optimisticFeed = []; feedAddr = a; }
+  }
   var feedScanSettled = false; // S-FEED-2: true once the scan resolves — gates "No activity yet" vs "…loading"
   function loadFeed() {
     var c = cfg(), addr = W.state.address, body = $("tx-body"), status = $("tx-status");
+    feedResetIfAddr(addr); // S-FEED-5: a wallet switch clears the durable stores (no cross-wallet rows)
     feedIncomplete = false;
     feedScanSettled = false;
     feedSpan = 0; // S-FEED-4: re-converge the getLogs span per scan (provider may have changed)
@@ -845,7 +855,7 @@ window.DYDash = (function () {
       }
       return Promise.all(jobs).then(function () { return attachTimes(provider, evs); });
     }).then(function (evs) {
-      feedScanned = evs;
+      evs.forEach(function (e) { if (e.hash) feedSeen[e.hash] = e; }); // S-FEED-5: accumulate (union), never replace
       feedScanSettled = true;
       var merged = renderFeedMerged();
       // S-FEED-2: the empty/loading message lives ONLY in the body (renderFeed) — the status line never duplicates it.
@@ -861,11 +871,13 @@ window.DYDash = (function () {
       status.textContent = "";
     });
   }
-  // Merge locally-known just-done txs (optimisticFeed) with the on-chain scan (feedScanned), dedup by tx hash
-  // (a scanned row supersedes its optimistic twin), newest first. Returns the merged list it rendered.
+  // Merge the accumulated on-chain scan (feedSeen, union-by-hash across the session) with locally-known just-done txs
+  // (optimisticFeed), dedup by tx hash (a scanned row supersedes its optimistic twin), newest first. Returns the merged
+  // list it rendered. S-FEED-5: feedSeen is never trimmed by a thin re-scan, so the feed can only grow, never shrink.
   function renderFeedMerged() {
-    var seen = {}, merged = [];
-    feedScanned.concat(optimisticFeed).forEach(function (e) {
+    var seen = {}, merged = [], scanned = [];
+    for (var k in feedSeen) { if (Object.prototype.hasOwnProperty.call(feedSeen, k)) scanned.push(feedSeen[k]); }
+    scanned.concat(optimisticFeed).forEach(function (e) {
       if (e.hash) { if (seen[e.hash]) return; seen[e.hash] = 1; }
       merged.push(e);
     });
@@ -876,6 +888,7 @@ window.DYDash = (function () {
   // S-LIVE-FIX-1 (A2): append a just-completed tx to the feed immediately from the receipt in hand — no rescan wait.
   function pushOptimistic(row) {
     if (!row || !row.hash) return;
+    feedResetIfAddr(W.state.address); // S-FEED-5: bind this row to the current wallet's durable store
     row.ts = row.ts || Math.floor(Date.now() / 1000);
     optimisticFeed.unshift(row);
     if ($("tx-body")) renderFeedMerged();
@@ -1045,7 +1058,7 @@ window.DYDash = (function () {
             var isPresale = round === 1;
             buyState.price = isPresale ? r[1] : r[2];
             chip.innerHTML = "<span class='buy-round " + (isPresale ? "presale" : "public") + "'>" + (isPresale ? "PRESALE @ $0.008" : "PUBLIC @ $0.010") + "</span>";
-            if (isPresale && !v) { renderRegister(b); buyPoll = setInterval(renderBuy, 45000); return; } // C2 auto re-check
+            if (isPresale && !v) { renderRegister(b); startBuyApprovalPoll(); return; } // C2 auto re-check (visible countdown)
             renderCalculator(b, isPresale);
           });
         });
@@ -1058,11 +1071,35 @@ window.DYDash = (function () {
       "<div class='buy-reg-title'>Register to buy</div>" +
       "<p>Presale is allowlist-gated. Register once with the form below — then the owner approves your wallet <b>manually</b>. You do not need to do anything else after registering.</p>" +
       "<a class='btn-g btn-p' href='https://forms.gle/37pgo2ebYrDpME2w7' target='_blank' rel='noopener'>Open the registration form →</a>" +
-      "<button class='btn-g' id='buy-recheck'>Check my status</button>" +
-      "<div class='note'>Already registered? Approval appears here within ~10 minutes — this page checks for you.</div>" +
+      "<button class='btn-g' id='buy-recheck'>Check my status now</button>" +
+      // S-FEED-5 (LANE B): make the auto-poll FELT — a live countdown, a visible re-check, the honest ~10-min line
+      // prominent, and the explicit "no need to refresh" reassurance. Inline-styled (no CSS-stamp change).
+      "<div style='margin-top:14px;padding:12px 14px;border:1px solid var(--gold-hairline);border-radius:10px;background:rgba(20,16,8,.5)'>" +
+        "<div style='display:flex;align-items:center;gap:8px;font-size:.92rem'>" +
+          "<span style='width:8px;height:8px;border-radius:50%;background:var(--gold-burnished);display:inline-block;flex:none'></span>" +
+          "<b>Checking for your approval…</b>" +
+          "<span id='buy-countdown' style='margin-left:auto;color:var(--gold-aged);font-variant-numeric:tabular-nums;white-space:nowrap'>next check in 45s</span>" +
+        "</div>" +
+        "<div style='margin-top:8px;font-size:.9rem'>Approval usually appears within <b>~10 minutes</b> of the owner approving your wallet.</div>" +
+        "<div style='margin-top:4px;font-size:.84rem;color:var(--gold-aged)'>No need to refresh — this page checks for you.</div>" +
+      "</div>" +
       "</div>";
     // S-LIVE-FIX-1 (C1): drop the stale ?nb counter — loadAllowlist now cache-busts per fetch; recheck just re-reads.
     $("buy-recheck").onclick = function () { allowlist = null; renderBuy(); };
+  }
+  // S-FEED-5 (LANE B): a 1s ticker drives the visible countdown; every 45s it fires the real allowlist re-check.
+  // renderBuy() re-runs the whole flow — still-unapproved re-renders this panel and restarts the poll (fresh 45s);
+  // approved flips to the calculator and stopBuyPoll (called at renderBuy's top) ends the ticker. Same 45s cadence.
+  function startBuyApprovalPoll() {
+    stopBuyPoll();
+    var secs = 45;
+    buyPoll = setInterval(function () {
+      var cd = $("buy-countdown");
+      if (!cd || !isConnected()) { stopBuyPoll(); return; } // panel gone / disconnected → stop
+      secs--;
+      if (secs <= 0) { cd.textContent = "checking now…"; allowlist = null; renderBuy(); return; }
+      cd.textContent = "next check in " + secs + "s";
+    }, 1000);
   }
 
   function renderCalculator(b, isPresale) {
@@ -1198,13 +1235,21 @@ window.DYDash = (function () {
 
   // S-LIVE-FIX-1 (A1): an optional tx hash appends a shortened link to polygonscan.com/tx/<hash> (verified sources),
   // and the toast lingers longer so the link is clickable. el() sets innerHTML, so the anchor renders.
+  // S-FEED-5: hash toasts now linger 20s (was 9s — too short to read + click + copy the hash) and carry a dismiss ×.
   function toast(msg, txHash) {
     var html = msg;
     if (txHash) html += " <a href='" + txUrl(txHash) + "' target='_blank' rel='noopener' style='color:var(--gold-burnished);text-decoration:underline'>" + txHash.slice(0, 8) + "…↗</a>";
     var t = el("div", null, html);
     t.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#171309;border:1px solid var(--gold-hairline);color:var(--parchment);padding:10px 16px;border-radius:10px;z-index:300;font-size:.9rem;max-width:92vw";
+    if (txHash) {
+      var x = el("span", null, "×");
+      x.style.cssText = "margin-left:12px;cursor:pointer;color:var(--gold-aged);font-weight:700";
+      x.setAttribute("aria-label", "Dismiss");
+      x.onclick = function () { t.remove(); };
+      t.appendChild(x);
+    }
     document.body.appendChild(t);
-    setTimeout(function () { t.remove(); }, txHash ? 9000 : 2600);
+    setTimeout(function () { t.remove(); }, txHash ? 20000 : 2600);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
