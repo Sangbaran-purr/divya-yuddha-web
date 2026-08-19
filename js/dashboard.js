@@ -226,9 +226,9 @@ window.DYDash = (function () {
   // Resilient reads (M-F4/b/c). Two chains from ONE builder:
   //   • readProvider() — eth_call (the card reads): SITE KEY (domain-locked Alchemy) primary → free
   //     endpoints → connected wallet. batchMaxCount:1 (M-F4b) since public endpoints reject batches.
-  //   • logProvider()  — eth_getLogs (feed / report event-counts): FREE endpoints only → wallet. The
-  //     site key's free tier caps getLogs at 10 blocks (useless for multi-thousand-block scans), so
-  //     logs deliberately skip it. The wallet stays the last-resort rescue for both.
+  //   • logProvider()  — eth_getLogs (feed): S-FEED-3 — owner's archive Read RPC first (admin key), then drpc-first
+  //     archive-capable fallbacks, then publicnode, then the wallet. The site Alchemy key caps getLogs at 10 blocks so
+  //     it is never used for logs; the archive URL is what reaches deep history (publicnode prunes it).
   var _provCache = {};
   function walletInChain() { return !!(window.ethereum && isConnected() && W.state.chainOk); }
   function buildProvider(tag, urls, connected) {
@@ -250,9 +250,25 @@ window.DYDash = (function () {
     return prov;
   }
   function readProvider() { var c = cfg(); return buildProvider("read", [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []), walletInChain()); }
+  // S-FEED-3: the owner sets an archive-capable Read RPC in the ADMIN Configuration panel — but that panel writes to a
+  // DISTINCT localStorage namespace ("dyadmin::config") from this dashboard's ("dymf::config"), same origin. That mismatch
+  // is why the archive key never unstuck the feed. So the feed reads the admin key DIRECTLY — the owner's one paste extends
+  // deep-history reach here too, with NO RPC field shown on the buyer dashboard (buyers don't see plumbing). READ-ONLY: this
+  // URL only serves getLogs; it never signs. Falls back to the current road (drpc-first, then publicnode) when absent.
+  function archiveReadRpc() {
+    var keys = ["dyadmin::config", LS_KEY]; // admin panel first, then this dashboard's own override
+    for (var i = 0; i < keys.length; i++) {
+      try { var o = JSON.parse(localStorage.getItem(keys[i])) || {}; var u = o.readRpcUrl && String(o.readRpcUrl).trim(); if (u) return u; } catch (e) {}
+    }
+    return null;
+  }
   function logProvider() {
-    var c = cfg(), free = (c.readRpcUrlFallbacks || []).filter(Boolean);
-    return buildProvider("log", free.length ? free : [c.readRpcUrl], walletInChain());
+    var c = cfg(), urls = [], arch = archiveReadRpc();
+    if (arch) urls.push(arch); // archive Read RPC first — extends getLogs to deep history (publicnode prunes, some free caps range)
+    // drpc-first archive-capable fallbacks (the proven admin/s18 pattern), then any config free endpoints
+    ["https://polygon.drpc.org", "https://polygon-bor-rpc.publicnode.com"].forEach(function (u) { if (urls.indexOf(u) < 0) urls.push(u); });
+    (c.readRpcUrlFallbacks || []).forEach(function (u) { if (u && urls.indexOf(u) < 0) urls.push(u); });
+    return buildProvider("log", urls, walletInChain());
   }
   function resetReadProvider() { _provCache = {}; }
 
