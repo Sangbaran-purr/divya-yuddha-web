@@ -190,6 +190,12 @@ window.DYDash = (function () {
   ];
   var buyState = {}; // { round, price, voucher }
   var allowlist = null; // cached [{wallet, sig}]
+  // S-ALLOWLIST-LIVE: the robot's no-store live mirror (approval surfaces within one poll). CROSS-ORIGIN on Render
+  // (owner-confirmed 2026-08-19 — no /approval proxy exists); the robot answers with Access-Control-Allow-Origin:
+  // https://divyayuddha.games. A down/misconfigured endpoint simply fails the fetch and falls back to the published
+  // Pages file (today's behavior) — never a regression.
+  var ALLOWLIST_LIVE_URL = "https://approval-bot-cxa2.onrender.com/allowlist";
+  var allowlistLive = false; // did the last load ride the live endpoint? (softens the waiting copy)
   var WAIT_CONFIRMS = 1, WAIT_TIMEOUT_MS = 75000, FEE_HEADROOM = 2n;
 
   var ethersRef = null;
@@ -1017,10 +1023,19 @@ window.DYDash = (function () {
     // S-LIVE-FIX-1 (C1): a per-fetch unique buster + no-store defeats the BROWSER cache (the ?nb session-counter
     // repeated across loads and served a stale []). The Fastly edge still caps freshness at its ~10-min TTL (query
     // ignored there), which the C2 auto-poll rides out.
-    return fetch("allowlist.json?cb=" + Date.now(), { cache: "no-store" })
-      .then(function (r) { return r.json(); })
-      .then(function (a) { allowlist = Array.isArray(a) ? a : []; return allowlist; })
-      .catch(function () { allowlist = []; return allowlist; });
+    // S-ALLOWLIST-LIVE: try the robot's live, no-store endpoint FIRST (approval surfaces within one poll); on ANY
+    // failure fall back to the published Pages file EXACTLY as before. Two doors, one truth — the Pages file remains
+    // the permanent record + safety net, so a down/misconfigured endpoint is a silent no-op, never a regression.
+    return fetch(ALLOWLIST_LIVE_URL, { cache: "no-store", mode: "cors" })
+      .then(function (r) { if (!r.ok) throw new Error("live " + r.status); return r.json(); })
+      .then(function (a) { if (!Array.isArray(a)) throw new Error("live shape"); allowlist = a; allowlistLive = true; return allowlist; })
+      .catch(function () {
+        allowlistLive = false;
+        return fetch("allowlist.json?cb=" + Date.now(), { cache: "no-store" })
+          .then(function (r) { return r.json(); })
+          .then(function (a) { allowlist = Array.isArray(a) ? a : []; return allowlist; })
+          .catch(function () { allowlist = []; return allowlist; });
+      });
   }
   function voucherFor(addr) {
     if (!allowlist || !addr) return null;
@@ -1080,7 +1095,8 @@ window.DYDash = (function () {
           "<b>Checking for your approval…</b>" +
           "<span id='buy-countdown' style='margin-left:auto;color:var(--gold-aged);font-variant-numeric:tabular-nums;white-space:nowrap'>next check in 45s</span>" +
         "</div>" +
-        "<div style='margin-top:8px;font-size:.9rem'>Approval usually appears within <b>~10 minutes</b> of the owner approving your wallet.</div>" +
+        // S-ALLOWLIST-LIVE: soften ONLY when this load rode the live endpoint; the Pages-fallback path keeps the honest ~10-min line.
+        "<div style='margin-top:8px;font-size:.9rem'>Approval usually appears " + (allowlistLive ? "<b>within a minute</b>" : "within <b>~10 minutes</b>") + " of the owner approving your wallet.</div>" +
         "<div style='margin-top:4px;font-size:.84rem;color:var(--gold-aged)'>No need to refresh — this page checks for you.</div>" +
       "</div>" +
       "</div>";
