@@ -35,6 +35,16 @@
       }
       .reg-foot { text-align: center; color: #8a7a52; font-size: 0.78rem; margin-top: 2rem; }
       .reg-foot a { color: #b7a878; }
+      /* S-REG-AUTOFILL — optional "use connected wallet" prefill row above the form */
+      .reg-autofill { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin: 0.2rem 0 1rem; }
+      .reg-usewallet {
+        font-family: "Cinzel", Georgia, serif; font-size: 0.85rem; letter-spacing: 0.04em;
+        color: var(--gold, #e8c874); background: rgba(232, 200, 116, 0.1); border: 1px solid rgba(232, 200, 116, 0.5);
+        padding: 0.5rem 0.95rem; border-radius: 8px; cursor: pointer;
+      }
+      .reg-usewallet:hover { background: rgba(232, 200, 116, 0.18); }
+      .reg-usewallet.filled, .reg-usewallet:disabled { color: #b7a878; border-color: rgba(232, 200, 116, 0.3); background: rgba(232, 200, 116, 0.05); cursor: default; }
+      .reg-autofill-note { color: #b7a878; font-size: 0.84rem; line-height: 1.5; }
       /* owner sets FORM_EMBED_URL below; until then this notice shows instead of a blank iframe */
       #reg-unset { display: none; text-align: center; color: #cdbb8f; padding: 2rem 1rem; line-height: 1.7; }
     </style>
@@ -52,8 +62,15 @@
         <ol class="reg-steps">
           <li>Fill in the form below (your <b>email</b> and <b>wallet address</b> are required).</li>
           <li>Check your inbox for a confirmation email and click the link (it's valid for <b>48 hours</b>).</li>
-          <li>That's it — your wallet is added to the allowlist automatically. No wallet connection, no signing here.</li>
+          <li>That's it — your wallet is added to the allowlist automatically. No signing and no gas here.</li>
         </ol>
+
+        <!-- S-REG-AUTOFILL — optional convenience: connect a wallet to prefill the Wallet Address field. Entirely
+             optional; the form is fully usable by hand without a wallet (no regression). -->
+        <div id="reg-autofill" class="reg-autofill">
+          <button id="reg-usewallet" class="reg-usewallet" type="button">Use connected wallet</button>
+          <span id="reg-autofill-note" class="reg-autofill-note">Your wallet address fills in automatically when connected.</span>
+        </div>
 
         <!-- Google Form embed. The form URL is PUBLIC (registrants use it); it is NOT a secret. The owner sets
              FORM_EMBED_URL once — the linked Sheet + its credentials stay host secrets, never in this repo. -->
@@ -75,6 +92,10 @@
       <p class="reg-foot">Divya Yuddha · <a href="index.html">divyayuddha.games</a> · The gate remains open for those who dare.</p>
     </div>
 
+    <!-- S-REG-AUTOFILL — the road to the connected address: config.js (DY_CONFIG) then wallet.js (patient detection +
+         connect). Loading these does NOT prompt or require a wallet — the form stays fully usable by hand without one. -->
+    <script src="config.js?v=s11"></script>
+    <script src="js/wallet.js?v=s1k"></script>
     <script>
       // ── FORM LINKS (PUBLIC by nature — not secrets) ───────────────────────────
       // Canonical presale form (owner-ruled, 2026-08-07): https://forms.gle/H15nEv2wrdSgRj486
@@ -82,19 +103,64 @@
       // Fallback "open form directly" = the canonical short responder link.
       var FORM_EMBED_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfJSVwRuvgBBmr07gJtQlKC--2oCRg8lco4Az98tlOqCt2FRQ/viewform?embedded=true";
       var FORM_RESPONDER_URL = "https://forms.gle/H15nEv2wrdSgRj486";
+      // S-REG-AUTOFILL — the Google-Forms prefill param for the "Wallet Address" question, read verbatim from the live
+      // form's FB_PUBLIC_LOAD_DATA_ (owner-confirmed 2026-08-19). (Email is a Forms-native field with no entry id; Name
+      // = entry.2005620554 but a wallet carries no name, so only the wallet address is prefilled.)
+      var WALLET_ENTRY = "entry.839337160";
       // ──────────────────────────────────────────────────────────────────────────
       (function () {
         var frame = document.getElementById("reg-frame");
         var unset = document.getElementById("reg-unset");
         var open = document.getElementById("reg-open");
-        if (FORM_EMBED_URL && /^https:\/\/docs\.google\.com\//.test(FORM_EMBED_URL)) {
-          frame.src = FORM_EMBED_URL;
-          open.href = FORM_RESPONDER_URL || FORM_EMBED_URL;
-        } else {
+        var btn = document.getElementById("reg-usewallet");
+        var note = document.getElementById("reg-autofill-note");
+        var af = document.getElementById("reg-autofill");
+
+        // FORM UNSET → the "opens shortly" notice; no autofill row (existing behavior, unchanged).
+        if (!(FORM_EMBED_URL && /^https:\/\/docs\.google\.com\//.test(FORM_EMBED_URL))) {
           frame.style.display = "none";
           document.querySelector(".reg-fallback").style.display = "none";
+          if (af) af.style.display = "none";
           unset.style.display = "block";
+          return;
         }
+        open.href = FORM_RESPONDER_URL || FORM_EMBED_URL;
+
+        // Build the embed src, optionally PRE-FILLED with the connected wallet address. The address travels VERBATIM
+        // from the provider (checksummed as given) — encodeURIComponent preserves case; it is never re-cased.
+        function frameSrc(addr) { return addr ? FORM_EMBED_URL + "&" + WALLET_ENTRY + "=" + encodeURIComponent(addr) : FORM_EMBED_URL; }
+        function short(a) { return a ? a.slice(0, 6) + "…" + a.slice(-4) : ""; }
+        function markFilled(addr) {
+          if (note) note.textContent = "Wallet address filled from your connected wallet.";
+          if (btn) { btn.textContent = "✓ " + short(addr); btn.disabled = true; btn.classList.add("filled"); }
+        }
+        var built = false;
+        function build(addr) { if (built) return; built = true; frame.src = frameSrc(addr); if (addr) markFilled(addr); }
+
+        var W = window.DYWallet;
+        if (!W) { build(null); if (af) af.style.display = "none"; return; } // wallet.js absent → manual form, no autofill
+
+        // "Use connected wallet": connect (prompts if needed), then reload the iframe PRE-FILLED. Declining or having no
+        // wallet leaves the manual form untouched — no regression.
+        if (btn) btn.onclick = function () {
+          if (W.state.address) { frame.src = frameSrc(W.state.address); markFilled(W.state.address); return; }
+          note.textContent = "Opening your wallet…";
+          W.connect().then(function (st) {
+            if (st && st.address) { frame.src = frameSrc(st.address); markFilled(st.address); }
+            else note.textContent = "Your wallet address fills in automatically when connected.";
+          }).catch(function () {
+            note.textContent = W.state.hasProvider
+              ? "Connection cancelled — you can fill the form manually."
+              : "No wallet detected — just fill your address in the form below.";
+          });
+        };
+
+        // SILENT path: if a wallet is ALREADY authorized, prefill from the FIRST load (no reload, no wiping input).
+        // Give the patient detection a brief, capped moment; otherwise load the manual form promptly. A wallet that
+        // connects LATE (after the cap) never auto-reloads — the button handles it, so typed input is never lost.
+        W.onChange(function (s) { if (!built && s.connected && s.address) build(s.address); });
+        W.init();
+        setTimeout(function () { if (!built) build(W.state.connected ? W.state.address : null); }, 1500);
       })();
     </script>
   </body>
