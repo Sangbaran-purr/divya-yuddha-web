@@ -800,6 +800,8 @@ window.DYDash = (function () {
     var c = cfg(), addr = W.state.address, body = $("tx-body"), status = $("tx-status");
     feedIncomplete = false;
     feedScanSettled = false;
+    feedSpan = 0; // S-FEED-4: re-converge the getLogs span per scan (provider may have changed)
+    scanDeadline = Date.now() + FEED_DEADLINE_MS; // bound the scan; newest-first ensures recent lands before it hits
     if (!c.holderStaking && !c.vestingVault && !c.roiRedemption && !c.dycoinSale) {
       body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>Your activity appears here once the platform contracts are live.</td></tr>";
       return;
@@ -883,14 +885,47 @@ window.DYDash = (function () {
   //   (1) scan NEWEST→oldest, so a mid-scan throttle keeps the most RECENT events (the user's just-done actions);
   //   (2) a failed/throttled chunk yields the partial result and flags feedIncomplete — it never rejects the batch.
   var feedIncomplete = false;
+  // S-FEED-4: some archive providers cap eth_getLogs span (Alchemy FREE = 10 blocks on Polygon → every 3000-block chunk
+  // 400s; others cap at 2k/10k). Adapt to ANY cap, keyed off the ERROR (never the provider name): on a range-too-wide
+  // response, HALVE the working span and retry the SAME window, down to a floor. The span is remembered for the whole scan
+  // SESSION (shared across all filters) so it converges ONCE, not per-chunk. A scan deadline + the newest-first order keep
+  // the total bounded, so recent history always lands first even when a small span makes deep history slow.
+  var feedSpan = 0, scanDeadline = 0;
+  var FEED_SPAN_FLOOR = 500, FEED_DEADLINE_MS = 25000;
+  function isRangeError(e) {
+    var msg = (((e && e.error && e.error.message) || (e && e.shortMessage) || (e && e.message) || "") + "").toLowerCase();
+    if (/pruned|not available on|state.{0,20}unavailable|missing trie/.test(msg)) return false; // pruning ≠ range — halving won't help
+    var info = e && e.info, rs = info && info.responseStatus;
+    var status = (e && e.status) || (rs && parseInt(rs, 10)) || 0;
+    var code = (e && e.code) || (e && e.error && e.error.code);
+    if (status === 400 || status === 413) return true;           // a getLogs 400/413 is a range-too-wide rejection
+    if (code === -32602) return true;                            // invalid params — commonly the range on capped providers
+    return /block range|range is too|too many blocks|up to \d+ blocks?|logs are limited|log.{0,12}limit|exceed|10000 blocks?|response size|returned more than/.test(msg);
+  }
   function scan(contract, filter, from, latest, push) {
-    var end = latest, out = [], chunk = LOG_CHUNK_();
+    var end = latest, out = [];
+    if (!feedSpan) feedSpan = LOG_CHUNK_();
     function step() {
       if (end < from) return Promise.resolve(out);
-      var start = Math.max(from, end - chunk + 1);
+      if (scanDeadline && Date.now() > scanDeadline) { feedIncomplete = true; return Promise.resolve(out); } // bounded; newest already landed
+      var start = Math.max(from, end - feedSpan + 1);
       return contract.queryFilter(filter, start, end).then(function (r) {
         r.forEach(push); end = start - 1; return step();
-      }).catch(function () { feedIncomplete = true; return out; });
+      }).catch(function (e) {
+        if (isRangeError(e)) {
+          var triedSpan = end - start + 1;                      // the span that just 400'd
+          // Shrink the SESSION-shared span until a chunk STRICTLY SMALLER than the one that failed is
+          // reachable (or the floor is hit). The loop (not a single halve) is what makes this robust to
+          // CONCURRENT filters: they all 400 on their first chunk and share feedSpan, so by the time a
+          // later filter's catch runs feedSpan may already sit at the floor — this filter must still retry
+          // its own too-wide window at the smaller span instead of giving up (the S-FEED-4 concurrency bug).
+          while (feedSpan > FEED_SPAN_FLOOR && Math.min(feedSpan, end - from + 1) >= triedSpan) {
+            feedSpan = Math.max(FEED_SPAN_FLOOR, feedSpan >> 1);
+          }
+          if (Math.min(feedSpan, end - from + 1) < triedSpan) return step(); // a smaller retry is possible → take it
+        }
+        feedIncomplete = true; return out;                      // provider caps below our floor, or a non-range failure (throttle/prune) → partial
+      });
     }
     return step();
   }
