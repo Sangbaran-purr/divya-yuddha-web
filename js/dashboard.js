@@ -63,6 +63,8 @@ window.DYDash = (function () {
     "function publicMinUsdE18() view returns (uint256)",
     "function allowlistSigner() view returns (address)",
     "function buyWithStable(address,uint256,bytes,string)",
+    // S-FEED-2: the purchase event (verified DYCoinSale.sol) so the feed can scan buys. buyer indexed; dycOut = DYC received.
+    "event Purchased(address indexed buyer, uint8 round, address asset, uint256 paid, uint256 usdE18, uint256 dycOut, uint256 liquid)",
   ];
   var ERC20_ABI = ["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)"];
 
@@ -777,10 +779,12 @@ window.DYDash = (function () {
   // =========================================================================
   function LOG_CHUNK_() { return cfg().logChunk || 3000; } // M-F4 defect 3 — sized to the public RPC's getLogs limit
   var feedScanned = [], optimisticFeed = []; // S-LIVE-FIX-1 (A2): scanned events + locally-appended just-done txs
+  var feedScanSettled = false; // S-FEED-2: true once the scan resolves — gates "No activity yet" vs "…loading"
   function loadFeed() {
     var c = cfg(), addr = W.state.address, body = $("tx-body"), status = $("tx-status");
     feedIncomplete = false;
-    if (!c.holderStaking && !c.vestingVault && !c.roiRedemption) {
+    feedScanSettled = false;
+    if (!c.holderStaking && !c.vestingVault && !c.roiRedemption && !c.dycoinSale) {
       body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>Your activity appears here once the platform contracts are live.</td></tr>";
       return;
     }
@@ -814,16 +818,26 @@ window.DYDash = (function () {
           evs.push({ block: e.blockNumber, type: "Cashed Out", ic: "rewards", details: "Cash out to USDT", amt: fmt(e.args.dycAmount) + " DYC → " + fmt(e.args.usdtOut, 6) + " USDT", hash: e.transactionHash });
         }));
       }
+      // S-FEED-2: DYCoinSale purchases — the buy that lands DYC (85% into vesting, 15% liquid). dycOut = total DYC received.
+      if (c.dycoinSale) {
+        var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, provider);
+        jobs.push(scan(sale, sale.filters.Purchased(addr), from, latest, function (e) {
+          evs.push({ block: e.blockNumber, type: "Purchase", ic: "liquid", details: "Bought DYC", amt: fmt(e.args.dycOut) + " DYC", hash: e.transactionHash });
+        }));
+      }
       return Promise.all(jobs).then(function () { return attachTimes(provider, evs); });
     }).then(function (evs) {
       feedScanned = evs;
+      feedScanSettled = true;
       var merged = renderFeedMerged();
-      // honest copy: if a chunk was throttled the newest events are still shown; only older history may lag.
-      status.textContent = feedIncomplete
-        ? (merged.length ? "Showing " + merged.length + " recent event(s) — older history may still be loading." : "Recent activity is still loading…")
-        : (merged.length ? "Showing " + merged.length + " recent event(s)." : "");
+      // S-FEED-2: the empty/loading message lives ONLY in the body (renderFeed) — the status line never duplicates it.
+      // Status is the count summary (or, on a partial scan, that older history may still be loading), else quiet.
+      status.textContent = merged.length
+        ? (feedIncomplete ? "Showing " + merged.length + " recent event(s) — older history may still be loading." : "Showing " + merged.length + " recent event(s).")
+        : "";
     }).catch(function () {
       // only the initial getBlockNumber (the whole line down) reaches here now — per-chunk failures no longer do.
+      feedScanSettled = true;
       var merged = renderFeedMerged();
       if (!merged.length) { body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>" + netMsg() + "</td></tr>"; wireReadRetry(); }
       status.textContent = "";
@@ -876,7 +890,11 @@ window.DYDash = (function () {
   }
   function renderFeed(evs) {
     var body = $("tx-body");
-    if (!evs.length) { body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>No activity yet.</td></tr>"; return; }
+    if (!evs.length) {
+      // S-FEED-2: "No activity yet" ONLY after a full, complete scan; otherwise it's still loading — never both at once.
+      var msg = (feedScanSettled && !feedIncomplete) ? "No activity yet." : "Recent activity is still loading…";
+      body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>" + msg + "</td></tr>"; return;
+    }
     body.innerHTML = "";
     evs.forEach(function (e) {
       var tr = el("tr");
@@ -1088,7 +1106,9 @@ window.DYDash = (function () {
                   return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
                     buyState.lastTx = tx.hash; // A1: surfaced in the success toast
                     // A2: the buy is a DYCoinSale tx (never a feed-scanned event) — append it optimistically so it shows now.
-                    pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Purchased", ic: "liquid", details: "Bought DYC", amt: fmt(amt, 6) + " USDT", hash: tx.hash });
+                    // S-FEED-2: match the scanned Purchase row (type + DYC amount) so the optimistic twin dedups cleanly.
+                    var dycOut = buyState.price > 0n ? (amt * 1000000000000n * 1000000000000000000n) / buyState.price : 0n;
+                    pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Purchase", ic: "liquid", details: "Bought DYC", amt: fmt(dycOut) + " DYC", hash: tx.hash });
                     return rc;
                   });
                 });
