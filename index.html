@@ -278,7 +278,7 @@
     </footer>
 
     <script src="js/light.js?v=s1e"></script>
-    <script src="js/wallet.js?v=s1j"></script>
+    <script src="js/wallet.js?v=s1k"></script>
     <script>
       (function () {
         // Two CTAs, one flow (S1e / owner ruling B): the ceremonial hero PLATE and
@@ -293,11 +293,25 @@
         var addrTop = document.getElementById("addr-top");
 
         function doConnect() {
-          if (!window.DYWallet.state.hasProvider) {
-            window.open("https://metamask.io/download/", "_blank", "noopener");
+          var s = window.DYWallet.state;
+          if (s.hasProvider) { window.DYWallet.connect().catch(function () {}); return; }
+          // S-WALLET-DETECT: patient + honest. A mobile in-app wallet injects window.ethereum a beat late — never
+          // send anyone to a download page on the first instant. While still detecting, re-run detection; act only
+          // on a CONCLUDED absence, per context (in-app → refresh, mobile → deep link, desktop → install).
+          if (!s.absenceConcluded) {
+            if (doorwaySub) doorwaySub.textContent = "looking for your wallet…";
+            window.DYWallet.retry();
             return;
           }
-          window.DYWallet.connect().catch(function () {});
+          if (s.inApp) {
+            if (doorwaySub) doorwaySub.textContent = "wallet not responding — pull to refresh this tab";
+            return;
+          }
+          if (s.isMobile) {
+            window.location.href = window.DYWallet.mmDeepLink("index.html"); // open this page in MetaMask's browser
+            return;
+          }
+          window.open("https://metamask.io/download/", "_blank", "noopener"); // desktop: install (unchanged substance)
         }
         declTop.addEventListener("click", doConnect);
         if (heroDecl) heroDecl.addEventListener("click", doConnect);

@@ -17,6 +17,12 @@ window.DYWallet = (function () {
     chainOk: false,
     isHolder: null, // null = unknown/unchecked
     ethersReady: false,
+    // S-WALLET-DETECT — patient-detection context. A provider (esp. a mobile in-app wallet browser) can inject
+    // window.ethereum a beat AFTER our scripts run, so surfaces must NOT render a "no wallet" message until
+    // absenceConcluded flips true (grace window expired with nothing found).
+    inApp: false, // mobile in-app wallet browser (MetaMask/Trust/Coinbase)
+    isMobile: false, // coarse UA
+    absenceConcluded: false, // true only once detection finishes with no provider
   };
   var listeners = [];
   function emit() {
@@ -61,14 +67,49 @@ window.DYWallet = (function () {
     return ethersPromise;
   }
 
-  // --- init: detect provider, read already-authorized accounts WITHOUT a popup ---
-  function init() {
-    var eth = window.ethereum;
-    state.hasProvider = !!eth;
-    if (!eth) {
-      emit();
-      return;
-    }
+  // --- S-WALLET-DETECT: PATIENT provider detection ---
+  //     Root cause of the owner's phone walk: init() sampled window.ethereum ONCE, synchronously, and concluded
+  //     absence on that instant check — but a mobile in-app wallet browser (MetaMask et al.) injects the provider a
+  //     beat AFTER our scripts run. Now we listen for the EIP-6963 announce AND the legacy 'ethereum#initialized'
+  //     signal AND poll window.ethereum over a grace window; FIRST success wins, and absence is concluded only when
+  //     the grace expires with nothing found (state.absenceConcluded). Surfaces render "no wallet" only after that.
+  var DETECT_GRACE_MS = 3000, DETECT_STEP_MS = 250;
+  var wired = false; // wire the provider's event listeners exactly once (retry-safe)
+  function isMobileUA() { return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || ""); }
+  function detectContext(eth) {
+    var ua = navigator.userAgent || "";
+    state.isMobile = isMobileUA();
+    // in-app wallet browser = a MOBILE context whose UA marks a wallet, or whose injected provider self-IDs as one.
+    // (A desktop MetaMask extension is NOT an in-app browser → inApp stays false there.)
+    state.inApp = state.isMobile && (/MetaMask|Trust|Coinbase/i.test(ua) || !!(eth && (eth.isMetaMask || eth.isTrust || eth.isCoinbaseWallet)));
+  }
+  function waitForProvider() {
+    return new Promise(function (resolve) {
+      if (window.ethereum) { resolve(window.ethereum); return; }
+      var done = false, timer = null;
+      function finish(eth) { if (done) return; done = true; cleanup(); resolve(eth || null); }
+      function on6963(ev) { try { var p = ev && ev.detail && ev.detail.provider; if (p) { if (!window.ethereum) window.ethereum = p; finish(p); } } catch (e) {} }
+      function onInit() { if (window.ethereum) finish(window.ethereum); }
+      function cleanup() {
+        if (timer) clearInterval(timer);
+        window.removeEventListener("eip6963:announceProvider", on6963);
+        window.removeEventListener("ethereum#initialized", onInit);
+      }
+      window.addEventListener("eip6963:announceProvider", on6963);
+      try { window.dispatchEvent(new Event("eip6963:requestProvider")); } catch (e) {}
+      window.addEventListener("ethereum#initialized", onInit);
+      var elapsed = 0;
+      timer = setInterval(function () {
+        if (window.ethereum) { finish(window.ethereum); return; }
+        elapsed += DETECT_STEP_MS;
+        if (elapsed >= DETECT_GRACE_MS) finish(null);
+      }, DETECT_STEP_MS);
+    });
+  }
+  function onProviderReady(eth) {
+    state.hasProvider = true;
+    state.absenceConcluded = false;
+    detectContext(eth);
     // eth_accounts does NOT prompt — it returns [] unless already authorized.
     eth
       .request({ method: "eth_accounts" })
@@ -82,24 +123,44 @@ window.DYWallet = (function () {
       .catch(function () {})
       .finally(emit);
 
-    eth.on &&
-      eth.on("accountsChanged", function (accts) {
-        if (!accts || !accts.length) {
-          state.connected = false;
-          state.address = null;
-          state.isHolder = null;
-        } else {
-          state.address = accts[0];
-          state.isHolder = null;
-          afterConnect();
-        }
-        emit();
-      });
-    eth.on &&
-      eth.on("chainChanged", function () {
-        refreshChain().then(emit);
-      });
+    if (!wired) {
+      wired = true;
+      eth.on &&
+        eth.on("accountsChanged", function (accts) {
+          if (!accts || !accts.length) {
+            state.connected = false;
+            state.address = null;
+            state.isHolder = null;
+          } else {
+            state.address = accts[0];
+            state.isHolder = null;
+            afterConnect();
+          }
+          emit();
+        });
+      eth.on &&
+        eth.on("chainChanged", function () {
+          refreshChain().then(emit);
+        });
+    }
   }
+  function concludeAbsence() {
+    state.hasProvider = false;
+    state.absenceConcluded = true;
+    detectContext(null);
+    emit();
+  }
+  function init() {
+    if (window.ethereum) { onProviderReady(window.ethereum); return; }
+    // not present YET — set the UA context for any interim render, but do NOT conclude absence until the grace ends.
+    detectContext(null);
+    state.absenceConcluded = false;
+    waitForProvider().then(function (eth) { if (eth) onProviderReady(eth); else concludeAbsence(); });
+  }
+  // S-WALLET-DETECT: the Retry button re-runs detection. Idempotent — listeners wire once (the `wired` guard).
+  function retry() { init(); }
+  // S-WALLET-DETECT: mobile deep link into MetaMask's in-app browser for a given page (no-wallet, non-in-app path).
+  function mmDeepLink(pagePath) { return "https://metamask.app.link/dapp/divyayuddha.games/" + String(pagePath || "").replace(/^\/+/, ""); }
 
   function refreshChain() {
     return window.ethereum
@@ -323,6 +384,8 @@ window.DYWallet = (function () {
     state: state,
     onChange: onChange,
     init: init,
+    retry: retry, // S-WALLET-DETECT — re-run patient detection (the Retry button)
+    mmDeepLink: mmDeepLink, // S-WALLET-DETECT — mobile "Open in MetaMask" deep link for a page path
     connect: connect,
     ensureChain: ensureChain,
     checkHolder: checkHolder,

@@ -1228,9 +1228,30 @@ window.DYDash = (function () {
     }).catch(function (e) { if (e === "stop") return; pending(false); failBox(decodeErr(e)); });
   }
 
+  // S-WALLET-DETECT: an honest no-wallet note (+ optional Retry) rendered into the wallet bar's state slot.
+  function walletNote(html, showRetry) {
+    var st = $("wb-state"); if (!st) return;
+    st.innerHTML = "<span style='font-size:.9rem;color:var(--gold-aged)'>" + html + "</span>";
+    if (showRetry) {
+      var b = el("button", "btn-g", "Retry");
+      b.style.cssText = "margin-left:10px;padding:4px 12px;font-size:.82rem";
+      b.onclick = function () { walletNote("Looking for your wallet…", false); W.retry(); };
+      st.appendChild(b);
+    }
+  }
   function doConnect() {
     disconnected = false;
-    W.connect().then(function (st) { if (!st.chainOk) return W.ensureChain(); }).then(refresh).catch(function () {});
+    var s = W.state;
+    if (s.hasProvider) {
+      W.connect().then(function (st) { if (!st.chainOk) return W.ensureChain(); }).then(refresh).catch(function () {});
+      return;
+    }
+    // S-WALLET-DETECT: patient + honest. A mobile in-app wallet injects window.ethereum a beat late — never a bare
+    // "install" on the first instant. While detecting, re-run detection; act only on a CONCLUDED absence, per context.
+    if (!s.absenceConcluded) { walletNote("Looking for your wallet…", false); W.retry(); return; }
+    if (s.inApp) { walletNote("Wallet not responding — pull down to refresh this tab.", true); return; }
+    if (s.isMobile) { walletNote('No wallet in this browser — <a href="' + W.mmDeepLink("dashboard.html") + '" style="color:var(--gold-burnished);text-decoration:underline">Open in MetaMask →</a>', true); return; }
+    walletNote('No wallet found — <a href="https://metamask.io/download/" target="_blank" rel="noopener" style="color:var(--gold-burnished);text-decoration:underline">install a wallet</a>, then Retry.', true);
   }
 
   // S-LIVE-FIX-1 (A1): an optional tx hash appends a shortened link to polygonscan.com/tx/<hash> (verified sources),

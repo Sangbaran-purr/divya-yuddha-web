@@ -442,7 +442,7 @@
     </footer>
 
     <script src="js/light.js?v=s1e"></script>
-    <script src="js/wallet.js?v=s1j"></script>
+    <script src="js/wallet.js?v=s1k"></script>
     <script>
       (function () {
         var CFG = window.DY_CONFIG;
@@ -616,9 +616,20 @@
         }
         window.__celebrateClaim = celebrateClaim; // reachable only by a future claim module
 
+        // S-WALLET-DETECT: honest no-wallet guidance by context. NEVER "download" inside a wallet's own in-app
+        // browser (the provider exists — it's just slow); a mobile browser gets a deep link into MetaMask; desktop
+        // keeps the install guidance. Called only after detection has CONCLUDED absence (state.absenceConcluded).
         function noWallet() {
-          line.innerHTML =
-            'You carry no key. <a href="https://metamask.io/download/" target="_blank" rel="noopener">Forge one</a> — install a wallet, then return to the rite.';
+          var w = window.DYWallet.state;
+          if (w.inApp) {
+            line.textContent = "Wallet not responding — pull down to refresh this tab, then Retry.";
+          } else if (w.isMobile) {
+            line.innerHTML =
+              'No wallet in this browser. <a href="' + window.DYWallet.mmDeepLink("rite.html") + '">Open in MetaMask →</a>';
+          } else {
+            line.innerHTML =
+              'You carry no key. <a href="https://metamask.io/download/" target="_blank" rel="noopener">Forge one</a> — install a wallet, then Retry.';
+          }
         }
 
         window.DYWallet.onChange(function (s) {
@@ -634,8 +645,21 @@
           stopVoucherPoll(); // S-LIVE-FIX-1 (C2) — every state change stops the poll; the no-mark branch restarts it if still unapproved
 
           if (!s.hasProvider) {
-            msg.textContent = "The rite is spoken with a wallet. You carry none yet.";
-            setBtn("Declare Yourself", "connect wallet", { onClick: noWallet });
+            if (!s.absenceConcluded) {
+              // S-WALLET-DETECT: still detecting — a mobile in-app wallet can inject the provider a beat late. Never
+              // conclude "no wallet" on the first instant; show a patient state (a tap just re-runs detection).
+              msg.textContent = "Looking for your wallet…";
+              setBtn("Declare Yourself", "connect wallet", {
+                onClick: function () { line.textContent = "Looking…"; window.DYWallet.retry(); },
+              });
+              return;
+            }
+            // absence CONCLUDED — render honest guidance now, and a Retry that re-runs detection.
+            msg.textContent = s.inApp ? "Your wallet isn't responding." : "The rite is spoken with a wallet. You carry none yet.";
+            noWallet();
+            setBtn("Retry", "check for your wallet again", {
+              onClick: function () { msg.textContent = "Looking for your wallet…"; line.textContent = ""; window.DYWallet.retry(); },
+            });
             return;
           }
           if (!s.connected) {
