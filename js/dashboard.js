@@ -477,6 +477,7 @@ window.DYDash = (function () {
     renderWalletBar();
     if (!isConnected()) { dimCards(true); preConnectCards(); return; }
     dimCards(false);
+    resumePendingTx(); // S-BUY-RESUME: on every connected load/cycle, reconcile any tx persisted before a drop/refresh
     withEthers().then(function () {
       var c = cfg(), addr = W.state.address, provider = readProvider();
       data = {};
@@ -666,17 +667,20 @@ window.DYDash = (function () {
               var ovr = { gasLimit: opts.gas };
               if (fo.maxFeePerGas != null) { ovr.maxFeePerGas = fo.maxFeePerGas; ovr.maxPriorityFeePerGas = fo.maxPriorityFeePerGas; }
               return opts.sendFn(c, ovr).then(function (tx) {
+                if (opts.pendingType) persistPending(tx.hash, opts.pendingType, W.state.address); // S-BUY-RESUME: durable BEFORE .wait()
                 return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
                   pending(false);
                   if (rc && rc.status === 1) {
+                    clearPending(tx.hash); // S-BUY-RESUME: resolved in-session — no resume needed
                     // S-LIVE-FIX-1: A2 optimistic feed row + A1 linked success toast (polygonscan tx link).
                     if (opts.feedRow) { var row = opts.feedRow(rc); if (row) { row.hash = tx.hash; if (!row.block) row.block = rc ? Number(rc.blockNumber) : 0; pushOptimistic(row); } }
                     toast(opts.successMsg || "Transaction confirmed.", tx.hash);
                     refresh();
                   }
-                  else failBox("The transaction reverted on-chain. Nothing was changed.");
+                  else { clearPending(tx.hash); failBox("The transaction reverted on-chain. Nothing was changed."); } // S-BUY-RESUME: confirmed revert → drop
                 }).catch(function () {
                   pending(false);
+                  // S-BUY-RESUME: a TIMEOUT is NOT cleared — the tx may still confirm; the persisted entry lets resume finish it on the next load.
                   failBox("Your transaction was submitted but not confirmed in time. Check your wallet — it may still complete.");
                 });
               });
@@ -711,6 +715,7 @@ window.DYDash = (function () {
       body: "Activate your vested DYC so it earns 0.40%/day toward the 2X cap.",
       successMsg: "Vesting activated — now earning 0.40%/day.",
       feedRow: function () { return { type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: "—" }; },
+      pendingType: "Activated", // S-BUY-RESUME: persist the standalone activate for resume
     });
   }
   // M-F4 defect 2: Top Up is now the SAME narrated multi-step flow as Buy — approve DYC (only if
@@ -758,9 +763,11 @@ window.DYDash = (function () {
                 $("ov-pending-msg").textContent = "Your wallet will ask to stake " + fmt(amtWei) + " DYC. It starts earning 0.40%/day right away.";
                 return hs.stake.staticCall(amtWei).then(function () {
                   return hs.stake(amtWei, gasOv(fo, GAS.stake)).then(function (tx) {
+                    persistPending(tx.hash, "Staked", W.state.address); // S-BUY-RESUME: durable BEFORE .wait()
                     return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
                       topUpTx = tx.hash;
                       pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Staked", ic: "staked", details: "Staked to earn", amt: fmt(amtWei) + " DYC", hash: tx.hash });
+                      clearPending(tx.hash); // S-BUY-RESUME: resolved in-session
                       return rc;
                     });
                   });
@@ -883,7 +890,8 @@ window.DYDash = (function () {
   function renderFeedMerged() {
     var seen = {}, merged = [], scanned = [];
     for (var k in feedSeen) { if (Object.prototype.hasOwnProperty.call(feedSeen, k)) scanned.push(feedSeen[k]); }
-    scanned.concat(optimisticFeed).forEach(function (e) {
+    // S-BUY-RESUME: pendingTxRows are merged LAST so a confirmed (scanned/optimistic) row supersedes its Pending twin.
+    scanned.concat(optimisticFeed).concat(pendingTxRows || []).forEach(function (e) {
       if (e.hash) { if (seen[e.hash]) return; seen[e.hash] = 1; }
       merged.push(e);
     });
@@ -899,6 +907,86 @@ window.DYDash = (function () {
     optimisticFeed.unshift(row);
     if ($("tx-body")) renderFeedMerged();
   }
+
+  // ═══ S-BUY-RESUME — durable pending-tx receipts survive disconnect / refresh / app-kill ══════════════════════════
+  // The instant the wallet returns a tx (BEFORE .wait()), we persist {hash,type,wallet,ts}. A net drop or refresh
+  // mid-confirmation used to lose the hash + toast + feed row forever, even though the tx already landed on-chain. On
+  // every connected load we re-check each stored hash against the chain (ONE getTransactionReceipt — cheap, any free
+  // RPC, no scan): success → grow-only feed row + a quiet one-time "went through" toast; on-chain revert → an honest
+  // toast; still-pending → a Pending row rechecked next cycle; >24h with no receipt → dropped silently. The store holds
+  // ONLY {hash,type,wallet,ts} — no amounts, no emails, nothing sensitive.
+  var PENDING_TX_KEY = "dymf::pendingtx";
+  var PENDING_TX_MAX_AGE = 24 * 3600 * 1000;
+  var pendingTxRows = []; // transient Pending rows (rebuilt each resume cycle; NOT the durable optimistic store)
+  var resumeInFlight = false, resumeTimer = null;
+  var RESUME_META = {
+    Purchase: { ic: "liquid", details: "Bought DYC" },
+    Activated: { ic: "staked", details: "Vesting activated to staked" },
+    Staked: { ic: "staked", details: "Staked to earn" },
+    Claimed: { ic: "rewards", details: "Reward claimed" },
+  };
+  function readPendingTx() { try { var v = JSON.parse(localStorage.getItem(PENDING_TX_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+  function writePendingTx(arr) { try { localStorage.setItem(PENDING_TX_KEY, JSON.stringify(arr || [])); } catch (e) {} }
+  function sameWallet(a, b) { return String(a || "").toLowerCase() === String(b || "").toLowerCase(); }
+  // persist the MOMENT the wallet returns a tx (before confirmation). {hash,type,wallet,ts} only.
+  function persistPending(hash, type, addr) {
+    if (!hash || !addr) return;
+    var arr = readPendingTx();
+    if (arr.some(function (e) { return e.hash === hash; })) return; // dedup
+    arr.push({ hash: hash, type: type, wallet: String(addr).toLowerCase(), ts: Date.now() });
+    writePendingTx(arr);
+  }
+  // clear a hash once it RESOLVES in-session (success OR on-chain revert) so resume never double-toasts the happy path.
+  // A TIMEOUT/drop is NOT cleared — that is exactly what resume is for.
+  function clearPending(hash) { if (!hash) return; writePendingTx(readPendingTx().filter(function (e) { return e.hash !== hash; })); }
+  function resumeRow(e, rc) {
+    var m = RESUME_META[e.type] || { ic: "liquid", details: e.type };
+    return { block: rc ? Number(rc.blockNumber) : 0, type: e.type, ic: m.ic, details: m.details, amt: "—", hash: e.hash, ts: Math.floor((e.ts || Date.now()) / 1000) };
+  }
+  function pendingRow(e) {
+    var m = RESUME_META[e.type] || { ic: "liquid", details: e.type };
+    return { block: 9e15, type: e.type, ic: m.ic, details: m.details, amt: "—", status: "Pending", hash: e.hash, ts: Math.floor((e.ts || Date.now()) / 1000) };
+  }
+  function resumePendingTx() {
+    if (resumeInFlight) return;
+    var addr = W.state.address;
+    if (!addr) return;
+    var mine = readPendingTx().filter(function (e) { return sameWallet(e.wallet, addr); });
+    if (!mine.length) { if (pendingTxRows.length) { pendingTxRows = []; if ($("tx-body")) renderFeedMerged(); } return; }
+    resumeInFlight = true;
+    withEthers().then(function () {
+      var provider = readProvider(); // single getTransactionReceipt per hash — cheap, any free RPC, no scan
+      var keep = readPendingTx().filter(function (e) { return !sameWallet(e.wallet, addr); }); // other wallets untouched
+      var pendingNow = [];
+      return Promise.all(mine.map(function (e) {
+        return provider.getTransactionReceipt(e.hash).then(function (rc) {
+          if (rc) {
+            if (Number(rc.status) === 1) {
+              pushOptimistic(resumeRow(e, rc)); // grow-only, deduped by hash; the next scan supersedes with the amount
+              toast(e.type === "Purchase" ? "Your earlier purchase went through ✓" : "Your earlier transaction went through ✓", e.hash);
+            } else {
+              toast("That transaction didn't go through", e.hash);
+            }
+            // resolved either way → drop from the store (one-time: the entry is gone, so it never re-toasts)
+          } else if (Date.now() - (e.ts || 0) > PENDING_TX_MAX_AGE) {
+            // >24h, still no receipt → drop silently (never nag)
+          } else {
+            keep.push(e); pendingNow.push(pendingRow(e)); // still pending → keep + show a Pending row
+          }
+        }).catch(function () {
+          // receipt read failed → treat as still pending within 24h (recheck next cycle), else let it age out
+          if (Date.now() - (e.ts || 0) <= PENDING_TX_MAX_AGE) { keep.push(e); pendingNow.push(pendingRow(e)); }
+        });
+      })).then(function () {
+        writePendingTx(keep);
+        pendingTxRows = pendingNow;
+        if ($("tx-body")) renderFeedMerged();
+        if (resumeTimer) { clearTimeout(resumeTimer); resumeTimer = null; }
+        if (pendingNow.length) resumeTimer = setTimeout(resumePendingTx, 15000); // recheck loop while any remain pending
+      });
+    }).catch(function () {}).then(function () { resumeInFlight = false; });
+  }
+
   // S-LIVE-FIX-1 (A2): the ~66-chunk × 5-filter scan from deployBlock over a single free RPC gets throttled on-device;
   // one rejected getLogs used to collapse the whole feed into "Network connection trouble". Two changes fix it:
   //   (1) scan NEWEST→oldest, so a mid-scan throttle keeps the most RECENT events (the user's just-done actions);
@@ -971,7 +1059,7 @@ window.DYDash = (function () {
       tr.innerHTML =
         "<td><div class='type'>" + feedIcon(e.ic) + e.type + "</div></td>" +
         "<td>" + e.details + "</td><td>" + e.amt + "</td>" +
-        "<td class='tx-status'>Success</td>" +
+        "<td class='tx-status'" + (e.status === "Pending" ? " style='color:var(--gold-aged)'" : "") + ">" + (e.status || "Success") + "</td>" +
         "<td style='white-space:nowrap'>" + (e.ts ? new Date(e.ts * 1000).toLocaleString("en-US", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—") + "</td>" +
         "<td><a class='txlink' target='_blank' rel='noopener' href='" + txUrl(e.hash) + "'>" + e.hash.slice(0, 8) + "…↗</a></td>";
       body.appendChild(tr);
@@ -1207,12 +1295,14 @@ window.DYDash = (function () {
               $("ov-pending-msg").textContent = "Your wallet will ask to buy. You pay " + fmt(amt, 6) + " USDT and receive DYC — 15% to your wallet now, 85% into vesting.";
               return sale.buyWithStable.staticCall(c.usdt, amt, sig, "").then(function () {
                 return sale.buyWithStable(c.usdt, amt, sig, "", gasOv(fo, GAS.buy)).then(function (tx) {
+                  persistPending(tx.hash, "Purchase", W.state.address); // S-BUY-RESUME: durable BEFORE .wait()
                   return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
                     buyState.lastTx = tx.hash; // A1: surfaced in the success toast
                     // A2: the buy is a DYCoinSale tx (never a feed-scanned event) — append it optimistically so it shows now.
                     // S-FEED-2: match the scanned Purchase row (type + DYC amount) so the optimistic twin dedups cleanly.
                     var dycOut = buyState.price > 0n ? (amt * 1000000000000n * 1000000000000000000n) / buyState.price : 0n;
                     pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Purchase", ic: "liquid", details: "Bought DYC", amt: fmt(dycOut) + " DYC", hash: tx.hash });
+                    clearPending(tx.hash); // S-BUY-RESUME: resolved in-session
                     return rc;
                   });
                 });
@@ -1229,8 +1319,10 @@ window.DYDash = (function () {
                   : "Your wallet will ask to activate — it starts your vested DYC earning 0.40%/day toward the 2X cap.";
                 return hs[fn].staticCall().then(function () {
                   return hs[fn](gasOv(fo, GAS.activate)).then(function (tx) {
+                    persistPending(tx.hash, "Activated", W.state.address); // S-BUY-RESUME: durable BEFORE .wait()
                     return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
                       pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: "—", hash: tx.hash });
+                      clearPending(tx.hash); // S-BUY-RESUME: resolved in-session
                       return rc;
                     });
                   });
