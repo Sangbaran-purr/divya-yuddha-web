@@ -448,7 +448,7 @@ window.DYDash = (function () {
         ? "<button class='btn-g btn-block' id='act-cashout' style='margin-top:10px'" + (roiCol > 0n && deskFunded ? "" : " disabled") + ">Cash Out (USDT)<br><span style='font-size:.8rem;opacity:.85'>" +
           fmt(roiCol) + " DYC → " + (data.cashoutUsdt != null ? fmt(data.cashoutUsdt, 6) : "—") + " USDT</span></button>" +
           "<div class='desk-status " + (deskFunded ? "funded" : "empty") + "'><span class='dot'></span>" +
-          (deskFunded ? "Desk Funded <span style='opacity:.7'>(sufficient USDT reserve)</span>" : "Desk Empty <span style='opacity:.7'>(cash-out paused; ROI stays fully in-game)</span>") + "</div>"
+          (deskFunded ? "Desk Funded <span style='opacity:.7'>(sufficient USDT reserve)</span>" : "ROI cash-out moved to the affiliate program for this region.") + "</div>"
         : "<div class='note'>Cash-out desk not yet live.</div>");
     if ($("act-rclaim")) $("act-rclaim").onclick = actClaimRewards;
     if ($("act-cashout")) $("act-cashout").onclick = actCashOut;
