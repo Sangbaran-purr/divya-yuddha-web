@@ -163,11 +163,13 @@ window.DYDash = (function () {
     return null;
   }
 
-  // ── S-CLAIM-2B (owner ruling 2026-08-07): self-claim UI OFF; rewards are admin-granted on request. One-flip
-  //    restore (set CLAIM_UI_ON = true to bring the Claim button back — the Deva-hero-entry pattern; no deletion).
+  // ── S-CLAIM-2B (owner ruling 2026-08-07): self-claim UI was OFF; rewards were admin-granted on request.
+  //    S-COLLECT-RENAME (owner ruling 2026-08-21): self-COLLECT is back ON. The button moves rewards from the growing
+  //    (pendingRoi) column to the collected (roi / cash-out) column ON-CHAIN. It pays NO cash — cash payouts run through
+  //    the external affiliate platform — so the button reads "Collect Rewards", never "Claim" (no cash expectation).
   //    The rewards FIGURE + history keep rendering regardless. Support contact is the live email; the community/social
   //    contact is DEFERRED until an invite exists (S-CONTACTS-1, owner-ruled) — no public page points at it until then.
-  var CLAIM_UI_ON = false;
+  var CLAIM_UI_ON = true;
   var CLAIM_CONTACTS = { email: "divyayuddha@gmail.com" };
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -434,12 +436,14 @@ window.DYDash = (function () {
     var hasDesk = !!cfg().roiRedemption;
     var deskFunded = data.deskReserve != null && data.deskReserve > 0n;
     b.innerHTML =
-      "<div class='stat-label'>Claimable Amount</div>" +
+      "<div class='stat-label'>Collectable Rewards</div>" +
       "<div class='big-num' style='font-size:1.9rem'>" + fmt(claimable) + "<span class='u'>DYC</span></div>" +
       // S-CLAIM-2B: self-claim button only when CLAIM_UI_ON; otherwise the two ruled policy lines in its place.
       (CLAIM_UI_ON
-        ? "<div class='card-actions'><button class='btn-g btn-purple btn-block' id='act-rclaim'" + (claimable > 0n ? "" : " disabled") + ">Claim</button></div>"
-        : "<div class='note' style='margin-top:10px;line-height:1.5'>Rewards are credited by DY Animation on request — reach us by email at <a href='mailto:" + CLAIM_CONTACTS.email + "'>" + esc(CLAIM_CONTACTS.email) + "</a>.<br>Claims are processed in multiples of 1,000 DYC.</div>") +
+        ? "<div class='card-actions'><button class='btn-g btn-purple btn-block' id='act-rclaim'" + (claimable > 0n ? "" : " disabled") + ">Collect Rewards</button></div>" +
+          // S-COLLECT-RENAME: kill the cash expectation at the source — collecting is an on-chain column move, not a payout.
+          "<div class='note' style='margin-top:10px;line-height:1.5'>Collecting moves your earned rewards to your cash-out balance. Cash payouts are made through the affiliate platform.</div>"
+        : "<div class='note' style='margin-top:10px;line-height:1.5'>Rewards are credited by DY Animation on request — reach us by email at <a href='mailto:" + CLAIM_CONTACTS.email + "'>" + esc(CLAIM_CONTACTS.email) + "</a>.<br>Collections are processed in multiples of 1,000 DYC.</div>") +
       (hasDesk
         ? "<button class='btn-g btn-block' id='act-cashout' style='margin-top:10px'" + (roiCol > 0n && deskFunded ? "" : " disabled") + ">Cash Out (USDT)<br><span style='font-size:.8rem;opacity:.85'>" +
           fmt(roiCol) + " DYC → " + (data.cashoutUsdt != null ? fmt(data.cashoutUsdt, 6) : "—") + " USDT</span></button>" +
@@ -786,8 +790,9 @@ window.DYDash = (function () {
       contractAddr: c.holderStaking, abi: STAKE_ABI, gas: GAS.claimRoi,
       simFn: function (k) { return k.claim.staticCall(); },
       sendFn: function (k, o) { return k.claim(o); },
-      title: "Claim rewards",
-      body: "Move <b>" + fmt(amt) + " DYC</b> of accrued rewards into your claimable ROI balance.",
+      title: "Collect rewards",
+      body: "Move <b>" + fmt(amt) + " DYC</b> of earned rewards into your cash-out balance.",
+      successMsg: "Rewards collected. They now show in your cash-out balance.",
       raw: "raw: " + amt.toString() + " wei",
     });
   }
