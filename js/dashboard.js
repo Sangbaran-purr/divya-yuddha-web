@@ -198,6 +198,11 @@ window.DYDash = (function () {
   // Pages file (today's behavior) — never a regression.
   var ALLOWLIST_LIVE_URL = "https://approval-bot-cxa2.onrender.com/allowlist";
   var allowlistLive = false; // did the last load ride the live endpoint? (softens the waiting copy)
+  // S-COLLECT-NOTICE: the published awaiting-collection list (Bucket 2 of the debit runbook) — wallets already paid out
+  // through the affiliate program whose on-chain roi column is still empty (never collected). NOTICE ONLY: it renders a
+  // banner telling the user to tap Collect Rewards; it NEVER substitutes or adjusts a reward figure (those stay pure
+  // chain reads). Same-repo Pages file, same cache-busting road as the allowlist. Empty [] is the normal state.
+  var awaitingList = []; // cached [{ wallet, dyc }] — dyc is a whole-DYC string
   var WAIT_CONFIRMS = 1, WAIT_TIMEOUT_MS = 75000, FEE_HEADROOM = 2n;
 
   var ethersRef = null;
@@ -435,7 +440,16 @@ window.DYDash = (function () {
     var claimable = data.stake.pending, roiCol = data.stake.roi;
     var hasDesk = !!cfg().roiRedemption;
     var deskFunded = data.deskReserve != null && data.deskReserve > 0n;
+    // S-COLLECT-NOTICE: guidance banner (Bucket 2) above the Collectable Rewards stat — shown ONLY when the connected
+    // wallet is on the published awaiting-collection list. NOTICE ONLY: it adjusts no figure; the reads below stay pure.
+    var awaiting = awaitingFor(W.state.address);
+    var awaitingBanner = awaiting
+      ? "<div class='note' style='margin:0 0 12px;padding:10px 12px;border-left:3px solid rgba(232,200,116,.4);background:rgba(232,200,116,.06);line-height:1.55'>" +
+        fmtWholeDyc(awaiting.dyc) + " DYC of your rewards has already been paid out through the affiliate program. Tap Collect Rewards below to sync your ledger." +
+        "</div>"
+      : "";
     b.innerHTML =
+      awaitingBanner +
       "<div class='stat-label'>Collectable Rewards</div>" +
       "<div class='big-num' style='font-size:1.9rem'>" + fmt(claimable) + "<span class='u'>DYC</span></div>" +
       // S-CLAIM-2B: self-claim button only when CLAIM_UI_ON; otherwise the two ruled policy lines in its place.
@@ -488,6 +502,8 @@ window.DYDash = (function () {
       return provider.getBlock("latest").then(function (blk) {
         data.now = blk ? Number(blk.timestamp) : Math.floor(Date.now() / 1000);
         var jobs = [];
+        // S-COLLECT-NOTICE: fetch the awaiting-collection list alongside the reads so renderRewards has it (never rejects).
+        jobs.push(loadAwaiting());
         // POL balance → fee banner
         jobs.push(provider.getBalance(addr).then(function (p) { data.pol = p; }).catch(function () {}));
         // LIQUID
@@ -1137,6 +1153,30 @@ window.DYDash = (function () {
       if ((allowlist[i].wallet || "").toLowerCase() === a) return allowlist[i];
     }
     return null;
+  }
+
+  // S-COLLECT-NOTICE: fetch the awaiting-collection list — same cache-busting road as the Pages allowlist (unique
+  // ?cb= buster + no-store). A fetch failure or non-array is treated as [] SILENTLY (console.warn only) — the banner
+  // is an enhancement, never a blocker.
+  function loadAwaiting() {
+    return fetch("data/awaiting-collection.json?cb=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("awaiting " + r.status); return r.json(); })
+      .then(function (a) { awaitingList = Array.isArray(a) ? a : []; return awaitingList; })
+      .catch(function (e) { console.warn("awaiting-collection list unavailable — banner suppressed:", e && e.message ? e.message : e); awaitingList = []; return awaitingList; });
+  }
+  // case-insensitive lookup, matching the allowlist convention (voucherFor): the file's checksummed wallet vs the
+  // connected address, both lowercased.
+  function awaitingFor(addr) {
+    if (!awaitingList || !addr) return null;
+    var a = addr.toLowerCase();
+    for (var i = 0; i < awaitingList.length; i++) {
+      if ((awaitingList[i].wallet || "").toLowerCase() === a) return awaitingList[i];
+    }
+    return null;
+  }
+  // format a WHOLE-DYC string ("12345") like the card's other DYC figures (fmt over wei); malformed → raw string.
+  function fmtWholeDyc(s) {
+    try { return fmt(BigInt(String(s).trim()) * (10n ** 18n)); } catch (e) { return String(s); }
   }
 
   var buyPoll = null; // S-LIVE-FIX-1 (C2): auto re-check while registered-but-unapproved
