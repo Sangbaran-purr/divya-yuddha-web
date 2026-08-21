@@ -15,8 +15,9 @@
     <style>
       /* register-only dress — leans on threshold.css tokens (--gold, --ink, fonts) */
       .reg-wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1.1rem 3rem; }
-      .reg-crest { text-align: center; padding: 1.4rem 0 0.6rem; }
-      .reg-crest img { width: 220px; max-width: 62%; height: auto; }
+      /* S-REG-NAV — the standalone .reg-crest logo is retired; the crest now lives in the shared gate-nav header. */
+      .reg-nextstep { text-align: center; margin: 1rem 0 0; color: #cdbb8f; font-size: 0.92rem; line-height: 1.6; }
+      .reg-nextstep a { color: var(--gold, #e8c874); font-weight: 600; }
       .reg-card {
         background: rgba(14, 11, 7, 0.72); border: 1px solid rgba(232, 200, 116, 0.28);
         border-radius: 12px; padding: 1.4rem 1.3rem 1.6rem; margin-top: 1rem;
@@ -50,9 +51,41 @@
     </style>
   </head>
   <body class="gate">
-    <div class="reg-crest">
-      <a href="index.html"><img src="assets/brand/logo.webp" alt="Divya Yuddha — Battle of the Celestials" /></a>
-    </div>
+    <!-- S-REG-NAV — the shared house header/nav (S-NAV-1), reused verbatim: seven doors, mobile dropdown, and the
+         wallet chip OUTSIDE the menu (the chip is the person). register.html is a leaf page, so no door is current. -->
+    <header>
+      <nav class="gate-nav wrap" aria-label="Primary">
+        <a class="crest" href="index.html">
+          <img class="brand-logo" src="assets/brand/logo.webp" width="460" height="298" alt="Divya Yuddha — Battle of the Celestials" />
+        </a>
+        <div class="nav-right">
+          <div class="links">
+            <a href="index.html">The Gate</a>
+            <a href="rite.html">The Rite</a>
+            <a href="explore.html">The Cards</a>
+            <a href="mint.html">The Mint</a>
+            <a href="store.html">The Store</a>
+            <a href="treasury.html">The Treasury</a>
+            <a href="game/index.html?v=33d0757">The Game</a>
+          </div>
+          <div id="nav-decl">
+            <a id="nameplate-top" class="nameplate hidden" href="dashboard.html"><span class="flame-dot"></span><span id="addr-top"></span></a>
+          </div>
+          <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu">
+            <span></span><span></span><span></span>
+          </button>
+          <nav id="nav-menu" class="nav-menu" aria-label="Primary menu">
+            <a href="index.html">The Gate</a>
+            <a href="rite.html">The Rite</a>
+            <a href="explore.html">The Cards</a>
+            <a href="mint.html">The Mint</a>
+            <a href="store.html">The Store</a>
+            <a href="treasury.html">The Treasury</a>
+            <a href="game/index.html?v=33d0757">The Game</a>
+          </nav>
+        </div>
+      </nav>
+    </header>
 
     <div class="reg-wrap">
       <div class="reg-card">
@@ -80,6 +113,9 @@
         <iframe id="reg-frame" class="reg-frame" title="Divya Yuddha presale registration form" loading="lazy"
           src="about:blank" referrerpolicy="no-referrer">Loading…</iframe>
         <p class="reg-fallback">Form not loading? <a id="reg-open" href="#" target="_blank" rel="noopener">Open it in a new tab →</a></p>
+
+        <!-- S-REG-NAV — post-confirmation orientation: the natural next door from here is The Rite (voucher status + BUY COIN). -->
+        <p class="reg-nextstep">Submitted? Once your email is confirmed, your pass appears at <a href="rite.html">The Rite →</a></p>
 
         <div class="reg-privacy">
           <b>Your privacy.</b> We collect only what the form asks, and we use it only to run the presale allowlist and
@@ -161,6 +197,36 @@
         W.onChange(function (s) { if (!built && s.connected && s.address) build(s.address); });
         W.init();
         setTimeout(function () { if (!built) build(W.state.connected ? W.state.address : null); }, 1500);
+      })();
+    </script>
+    <script>
+      /* S-NAV-1 — mobile nav dropdown: toggle open/close, close on selection, outside tap, Escape. (verbatim house pattern) */
+      (function () {
+        var t = document.querySelector(".nav-toggle");
+        var m = document.getElementById("nav-menu");
+        if (!t || !m) return;
+        function closeMenu() { m.classList.remove("open"); t.setAttribute("aria-expanded", "false"); }
+        t.addEventListener("click", function (e) {
+          e.stopPropagation();
+          if (m.classList.contains("open")) { closeMenu(); }
+          else { m.classList.add("open"); t.setAttribute("aria-expanded", "true"); }
+        });
+        m.addEventListener("click", function (e) { if (e.target.closest("a")) closeMenu(); });
+        document.addEventListener("click", function (e) {
+          if (m.classList.contains("open") && !m.contains(e.target) && !t.contains(e.target)) closeMenu();
+        });
+        document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMenu(); });
+      })();
+      /* S-REG-NAV — the wallet chip (the person) stays OUTSIDE the menu and shows when connected, exactly as the other
+         pages: register.html already loads wallet.js, so the same nameplate lights up and links to the dashboard. */
+      (function () {
+        if (!window.DYWallet) return;
+        var np = document.getElementById("nameplate-top"), at = document.getElementById("addr-top");
+        if (!np || !at) return;
+        window.DYWallet.onChange(function (s) {
+          if (s.connected && s.address) { at.textContent = window.DYWallet.shortAddr(s.address); np.classList.remove("hidden"); }
+          else np.classList.add("hidden");
+        });
       })();
     </script>
   </body>
