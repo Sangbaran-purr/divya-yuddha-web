@@ -184,6 +184,11 @@ window.DYDash = (function () {
   // GAS floors (house law: explicit gas limit for every state-touching call). redeem cold-state floor: measured max
   // 140,296 (cold nonce SSTORE + cold recipient + funding reconcile) → 160,000 with margin.
   var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000, buy: 380000, redeem: 160000, send: 90000 };
+  // S-STAKE-GATE-1 (owner ruling 2026-08-22): staking LIQUID DYC from the dashboard requires a 10,000 DYC floor
+  // (the $100 line at 100 DYC/USD). Pure balanceOf threshold — SOURCE-BLIND (ICO liquid and P2P-received liquid
+  // qualify equally). wei-DYC bigint, compared against the raw balanceOf — never a float on a formatted string. The
+  // contract stays open-access (immutable); this is the dashboard's law, not the chain's. Vested activation is NOT gated.
+  var STAKE_FLOOR = 10000n * (10n ** 18n);
   // DropDesk read/write ABI (M-F6)
   var DROP_ABI = [
     "function redeem(address wallet, uint256 amount, uint256 deadline, uint256 nonce, bytes sig)",
@@ -204,6 +209,7 @@ window.DYDash = (function () {
   // banner telling the user to tap Collect Rewards; it NEVER substitutes or adjusts a reward figure (those stay pure
   // chain reads). Same-repo Pages file, same cache-busting road as the allowlist. Empty [] is the normal state.
   var awaitingList = []; // cached [{ wallet, dyc }] — dyc is a whole-DYC string
+  var sendRevealed = false; // S-P2P-1b: Send-panel reveal state — collapsed toggle vs revealed form are mutually exclusive
   var WAIT_CONFIRMS = 1, WAIT_TIMEOUT_MS = 75000, FEE_HEADROOM = 2n;
 
   var ethersRef = null;
@@ -389,19 +395,28 @@ window.DYDash = (function () {
     // send rides the proven runAction road (staticCall sim → transfer → persist-before-wait). Received DYC needs no
     // build — Liquid is a pure balanceOf read, so P2P-in and admin drops already surface here.
     var canSend = !!cfg().dycoin && data.liquid != null && data.liquid > 0n;
-    $("liq-note").innerHTML = canSend
-      ? "<div class='card-actions'><button class='btn-g btn-block' id='act-send'>Send DYC</button></div>" +
-        "<div id='send-form' style='display:none;margin-top:10px'>" +
-          "<input class='txt' id='send-to' placeholder='Recipient address (0x…)' autocomplete='off' autocapitalize='off' spellcheck='false' style='width:100%;margin-bottom:8px' />" +
-          "<div style='display:flex;gap:8px;align-items:center'>" +
-            "<input class='txt' id='send-amt' inputmode='decimal' placeholder='Amount (DYC)' style='flex:1' />" +
-            "<button class='btn-g' id='send-max' type='button' style='padding:8px 14px;white-space:nowrap'>MAX</button>" +
-          "</div>" +
-          "<div id='send-err' style='font-size:.84rem;line-height:1.4;margin-top:6px;min-height:1.1em'></div>" +
-          "<div class='card-actions' style='margin-top:8px'><button class='btn-g btn-p btn-block' id='send-go'>Send</button></div>" +
-        "</div>"
-      : "";
-    if ($("act-send")) $("act-send").onclick = function () { var f = $("send-form"); f.style.display = (f.style.display === "none" ? "block" : "none"); if (f.style.display === "block" && $("send-to")) $("send-to").focus(); };
+    // S-P2P-1b: collapsed and revealed are MUTUALLY EXCLUSIVE. Collapsed = the "Send DYC" toggle alone. Revealed = the
+    // form (recipient, amount+MAX) with ONE action row beneath: Send (primary) + Cancel (quiet — collapses + clears via
+    // the fresh re-render). The reveal state (sendRevealed) persists across re-renders so the toggle truly disappears.
+    if (!canSend) { sendRevealed = false; }
+    $("liq-note").innerHTML = !canSend
+      ? ""
+      : (!sendRevealed
+          ? "<div class='card-actions'><button class='btn-g btn-block' id='act-send'>Send DYC</button></div>"
+          : "<div id='send-form'>" +
+              "<input class='txt' id='send-to' placeholder='Recipient address (0x…)' autocomplete='off' autocapitalize='off' spellcheck='false' style='width:100%;margin-bottom:8px' />" +
+              "<div style='display:flex;gap:8px;align-items:center'>" +
+                "<input class='txt' id='send-amt' inputmode='decimal' placeholder='Amount (DYC)' style='flex:1' />" +
+                "<button class='btn-g' id='send-max' type='button' style='padding:8px 14px;white-space:nowrap'>MAX</button>" +
+              "</div>" +
+              "<div id='send-err' style='font-size:.84rem;line-height:1.4;margin-top:6px;min-height:1.1em'></div>" +
+              "<div style='display:flex;gap:8px;align-items:center;margin-top:8px'>" +
+                "<button class='btn-g btn-p' id='send-go' style='flex:1;white-space:nowrap'>Send</button>" +
+                "<button class='btn-g' id='send-cancel' type='button' style='flex:0 0 auto;white-space:nowrap'>Cancel</button>" +
+              "</div>" +
+            "</div>");
+    if ($("act-send")) $("act-send").onclick = function () { sendRevealed = true; renderLiquid(); if ($("send-to")) $("send-to").focus(); };
+    if ($("send-cancel")) $("send-cancel").onclick = function () { sendRevealed = false; renderLiquid(); }; // collapse + clear (fresh re-render rebuilds empty fields)
     if ($("send-max")) $("send-max").onclick = function () { if ($("send-amt")) $("send-amt").value = ethersRef.formatUnits(data.liquid, data.dycDec); }; // exact full balance (round-trips via parseUnits)
     if ($("send-go")) $("send-go").onclick = actSendDyc;
   }
@@ -463,6 +478,7 @@ window.DYDash = (function () {
     if (!cfg().holderStaking) { b.innerHTML = notLive(" Your staked DYC, daily earnings and progress to 2X"); return; }
     if (data.stakeErr) { b.innerHTML = "<div class='notlive'>" + netMsg() + "</div>"; return; }
     var st = data.stake;
+    var meetsStakeFloor = data.liquid != null && data.liquid >= STAKE_FLOOR; // S-STAKE-GATE-1: source-blind balanceOf floor
     var mult = st.principal > 0n ? Number(((st.rewardTotal) * 10000n) / st.principal) / 10000 : 0;
     var cap = Number(st.cap);
     var pct = cap > 0 ? Math.min(100, (mult / cap) * 100) : 0;
@@ -474,9 +490,13 @@ window.DYDash = (function () {
       "<div class='bar-row' style='margin:8px 0'><span class='addr-chip' style='padding:5px 10px'>0.40% / day</span><span style='opacity:.7;font-size:.78rem'>Daily Rate</span></div>" +
       "<div class='bar'><i style='width:" + pct.toFixed(0) + "%'></i></div>" +
       "<div class='bar-row'><span style='opacity:.7'>Days " + daysEl + " / " + daysCap + "</span><span>" + mult.toFixed(2) + "X / " + cap + "X</span></div>" +
+      // S-STAKE-GATE-1: the Top Up door (staking LIQUID DYC) is offered ONLY at/above the 10,000 DYC floor. Below it,
+      // a quiet line states the floor + the live balance in its place. Activate (vested-activation) is NOT gated.
       "<div class='card-actions'>" +
       "<button class='btn-g btn-green' id='act-activate'" + (st.canActivate ? "" : " disabled") + ">Activate</button>" +
-      "<button class='btn-g' id='act-topup'>Top Up</button></div>" +
+      (meetsStakeFloor ? "<button class='btn-g' id='act-topup'>Top Up</button>" : "") +
+      "</div>" +
+      (meetsStakeFloor ? "" : "<div class='note' style='margin-top:8px;line-height:1.5'>Staking opens at 10,000 DYC (about $100). Your balance: " + fmt(data.liquid, data.dycDec) + " DYC.</div>") +
       "<div class='note'>ⓘ You've earned " + mult.toFixed(2) + "X of the " + cap + "X lifetime cap</div>";
     if ($("act-activate")) $("act-activate").onclick = actActivate;
     if ($("act-topup")) $("act-topup").onclick = actTopUp;
