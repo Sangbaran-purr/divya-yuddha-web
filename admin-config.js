@@ -30,14 +30,14 @@ window.DY_ADMIN_CONFIG = {
   // W3-MAINNET-1 — Polygon mainnet full-stack deployment (2026-08). Chain 137. Addresses verbatim from the crossing.
   contracts: {
     accessNFT: "0xcADBA9d1f8B33567AcB7c0120c59Df306f92dd9d", // master-owned AccessNFT (TORANA slot; arms dark→lit)
-    waveCardNFT: "0x029D047A30127f73b85a083B462b94A4a12C99bb", // master-owned WaveCardNFT
+    waveCardNFT: "0xfadAA859eE1d4e0c0eB2B5aBa9FC5E15dd37537A", // W3-REDEPLOY-WAVE — reborn master-owned WaveCardNFT (IPFS baseURI)
     dycoin: "0x10c29BC02A2c3587D0085B0d60E4D6024D25B611", // money-stack DYC (ERC1967 proxy)
     dycoinSale: "0x088233d79BD0Df395E364C180F790C2E655F648B", // DYCoinSale — Approve Buyers + Registry gate (allowlistSigner = robot)
     vestingVault: "0x4C5c5B3fd72618f2d53E4f131b24e58D65Bcd540", // VESTED column
     holderStaking: "0xbA73Fd021263b46F68eCe7aa0C7Bb9817701C21f", // STAKED + REWARDS
     dropDesk: "0x28813f882E3DaefC6329Adf85005Fbfd31CaB8fa", // Drop Desk (coupon sign/publish/cancel/figures; owner=timelock, signer=PROD_OWNER)
-    waveCardSale: "0x64038319d254C04743D308bD002C87C1Ad0cB268", // WaveCardSale (Price Desk gate owner()==connected + setPrice/setSupplyCap/setSalesOpen target)
-    waveCardMarket: "0x1D1a2430d3990Df45eCc43569647C3F94bb7c3DD", // WaveCardMarket (Price Desk marketsOpen switch target)
+    waveCardSale: "0x89f477BEa193956a724f3222fF4DF0f5267F6E92", // W3-REDEPLOY-WAVE — reborn WaveCardSale (Price Desk gate owner()==connected + setPrice/setSupplyCap/setSalesOpen target)
+    waveCardMarket: "0x5Ab2F48Eae60169A4028e7ba8bA3cA664Bea5Fe1", // W3-REDEPLOY-WAVE — reborn WaveCardMarket (Price Desk marketsOpen switch target)
   },
 
   // The block the contracts were deployed at — the mint-history scan starts here

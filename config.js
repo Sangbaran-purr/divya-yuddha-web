@@ -36,22 +36,22 @@ window.DY_CONFIG = {
   // marketplace may need its OWN coin field then. Left untouched pending an owner ruling.
   contracts: {
     accessNFT: "0xcADBA9d1f8B33567AcB7c0120c59Df306f92dd9d", // W3-MAINNET-1 — master-owned AccessNFT (mainnet)
-    waveCardNFT: "0x029D047A30127f73b85a083B462b94A4a12C99bb", // W3-MAINNET-1 — master-owned WaveCardNFT (mainnet)
+    waveCardNFT: "0xfadAA859eE1d4e0c0eB2B5aBa9FC5E15dd37537A", // W3-REDEPLOY-WAVE — reborn WaveCardNFT (IPFS baseURI, mainnet); block 92465169
     dycoin: "0x10c29BC02A2c3587D0085B0d60E4D6024D25B611", // W3-MAINNET-1 — CANONICAL money-stack DYC (ERC1967 proxy, mainnet)
     marketplace: null, // no mainnet deploy — the frozen Phase-A Marketplace was Amoy-only (NOT LIVE, zero site reads)
 
     // W3-MAINNET-1 — the player commerce contracts (WaveCardSale = the primary storefront;
     // WaveCardMarket = the secondary escrow marketplace). LIVE on mainnet, both shipped CLOSED
     // (seeds deferred to W3-MAINNET-SEED). Prices are DYC-native (the `dycoin` money-stack coin above), W-PRICE-1.
-    waveCardSale: "0x64038319d254C04743D308bD002C87C1Ad0cB268", // W3-MAINNET-1 — WaveCardSale (priceOf/remainingOf/buy); deploy block 92050734
-    waveCardMarket: "0x1D1a2430d3990Df45eCc43569647C3F94bb7c3DD", // W3-MAINNET-1 — WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 92050734
+    waveCardSale: "0x89f477BEa193956a724f3222fF4DF0f5267F6E92", // W3-REDEPLOY-WAVE — reborn WaveCardSale (priceOf/remainingOf/buy); deploy block 92465315
+    waveCardMarket: "0x5Ab2F48Eae60169A4028e7ba8bA3cA664Bea5Fe1", // W3-REDEPLOY-WAVE — reborn WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 92465315
   },
 
   // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;
   // the full stack landed 44701099–44701101). Bounds the "Your Holdings" Transfer(*, owner) getLogs scan (from here
   // to latest) so public RPCs don't reject a full-chain range. UNSET/0 → the loader falls back to fromBlock 0 (a
   // full scan; if the RPC rejects it, the busy-sentinel renders "unavailable", never a silent empty shelf).
-  deployBlock: 92050659,
+  deployBlock: 92465169, // W3-REDEPLOY-WAVE — reborn WaveCardNFT birth block (bounds the treasury holdings getLogs scan)
 
   // LEG5/RUNG-4 — the WaveCardMarket deploy block. The Your Listings event-scan
   // (js/store.js scanMyListings) queries Listed(*, owner) from HERE, not the NFT's
@@ -59,7 +59,7 @@ window.DY_CONFIG = {
   // the NFT block would waste ~98k blocks. store.js reads marketDeployBlock, falling
   // back to deployBlock, then 0 (full scan). Sale landed 44799211, market 44799212;
   // this is the batch's first block (a safe 1-block floor below the market's events).
-  marketDeployBlock: 92050734,
+  marketDeployBlock: 92465315, // W3-REDEPLOY-WAVE — reborn Sale/Market birth block (bounds the store Listed getLogs scan)
 
   // ethers.js — pinned. UMD build, verified to expose BrowserProvider /
   // Contract / queryFilter (see S1 STEP-0 report). Loaded via CDN with SRI off
