@@ -19,6 +19,7 @@ window.DYDash = (function () {
     "function symbol() view returns (string)",
     "function allowance(address,address) view returns (uint256)",
     "function approve(address,uint256) returns (bool)",
+    "function transfer(address,uint256) returns (bool)",
   ];
   var VEST_ABI = [
     "function grantedTo(address) view returns (uint256)",
@@ -182,7 +183,7 @@ window.DYDash = (function () {
   var MIN_BUY_USDT = 100000000n; // M-F4 defect 1: page-side minimum purchase = 100 USDT (6-dec). Ruled 2026-08-06.
   // GAS floors (house law: explicit gas limit for every state-touching call). redeem cold-state floor: measured max
   // 140,296 (cold nonce SSTORE + cold recipient + funding reconcile) → 160,000 with margin.
-  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000, buy: 380000, redeem: 160000 };
+  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000, buy: 380000, redeem: 160000, send: 90000 };
   // DropDesk read/write ABI (M-F6)
   var DROP_ABI = [
     "function redeem(address wallet, uint256 amount, uint256 deadline, uint256 nonce, bytes sig)",
@@ -384,7 +385,55 @@ window.DYDash = (function () {
   function renderLiquid() {
     if (data.liqErr) { $("liq-amt").textContent = "—"; $("liq-note").innerHTML = "<span>" + netMsg() + "</span>"; return; }
     $("liq-amt").textContent = fmt(data.liquid, data.dycDec);
-    $("liq-note").innerHTML = "";
+    // S-P2P-1: the Liquid card is the home surface for peer-to-peer DYC sends. Button reveals a compact form; the
+    // send rides the proven runAction road (staticCall sim → transfer → persist-before-wait). Received DYC needs no
+    // build — Liquid is a pure balanceOf read, so P2P-in and admin drops already surface here.
+    var canSend = !!cfg().dycoin && data.liquid != null && data.liquid > 0n;
+    $("liq-note").innerHTML = canSend
+      ? "<div class='card-actions'><button class='btn-g btn-block' id='act-send'>Send DYC</button></div>" +
+        "<div id='send-form' style='display:none;margin-top:10px'>" +
+          "<input class='txt' id='send-to' placeholder='Recipient address (0x…)' autocomplete='off' autocapitalize='off' spellcheck='false' style='width:100%;margin-bottom:8px' />" +
+          "<div style='display:flex;gap:8px;align-items:center'>" +
+            "<input class='txt' id='send-amt' inputmode='decimal' placeholder='Amount (DYC)' style='flex:1' />" +
+            "<button class='btn-g' id='send-max' type='button' style='padding:8px 14px;white-space:nowrap'>MAX</button>" +
+          "</div>" +
+          "<div id='send-err' style='font-size:.84rem;line-height:1.4;margin-top:6px;min-height:1.1em'></div>" +
+          "<div class='card-actions' style='margin-top:8px'><button class='btn-g btn-p btn-block' id='send-go'>Send</button></div>" +
+        "</div>"
+      : "";
+    if ($("act-send")) $("act-send").onclick = function () { var f = $("send-form"); f.style.display = (f.style.display === "none" ? "block" : "none"); if (f.style.display === "block" && $("send-to")) $("send-to").focus(); };
+    if ($("send-max")) $("send-max").onclick = function () { if ($("send-amt")) $("send-amt").value = ethersRef.formatUnits(data.liquid, data.dycDec); }; // exact full balance (round-trips via parseUnits)
+    if ($("send-go")) $("send-go").onclick = actSendDyc;
+  }
+
+  // S-P2P-1: validate then send liquid DYC peer-to-peer. Address checksum-normalized via getAddress; amount parsed to
+  // wei and bounded by the LIVE balanceOf; self-send warned (allowed, pointless). Then the house runAction road.
+  function actSendDyc() {
+    var err = $("send-err");
+    function fail(msg) { err.style.color = "#c0563a"; err.textContent = msg; }
+    err.textContent = "";
+    var toRaw = ($("send-to").value || "").trim();
+    var amtRaw = ($("send-amt").value || "").trim();
+    var to;
+    try { to = ethersRef.getAddress(toRaw); } catch (e) { return fail("That doesn't look like a valid wallet address."); }
+    var amtWei;
+    try { amtWei = ethersRef.parseUnits(amtRaw, data.dycDec == null ? 18 : data.dycDec); } catch (e) { return fail("Enter a valid DYC amount."); }
+    if (amtWei <= 0n) { return fail("Amount must be greater than 0."); }
+    if (data.liquid == null || amtWei > data.liquid) { return fail("You only have " + fmt(data.liquid, data.dycDec) + " DYC to send."); }
+    var isSelf = to.toLowerCase() === (W.state.address || "").toLowerCase();
+    if (isSelf) { err.style.color = "var(--gold-aged,#9a8a5a)"; err.textContent = "Heads up: that's your own address — the send is allowed but pointless."; }
+    else { err.textContent = ""; }
+    var c = cfg();
+    runAction({
+      contractAddr: c.dycoin, abi: DYCOIN_ABI, gas: GAS.send,
+      simFn: function (dy) { return dy.transfer.staticCall(to, amtWei); },
+      sendFn: function (dy, o) { return dy.transfer(to, amtWei, o); },
+      title: "Send DYC",
+      body: "Send <b>" + fmt(amtWei, data.dycDec) + " DYC</b> to <b>" + to + "</b>? This transfers real tokens on Polygon and cannot be undone.",
+      raw: "raw: transfer(" + to + ", " + amtWei.toString() + ")",
+      successMsg: "DYC sent.",
+      pendingType: "Sent", // persist BEFORE .wait — a mid-send page death still reconciles on reload
+    });
   }
 
   function renderVesting() {
@@ -945,6 +994,7 @@ window.DYDash = (function () {
     Activated: { ic: "staked", details: "Vesting activated to staked" },
     Staked: { ic: "staked", details: "Staked to earn" },
     Claimed: { ic: "rewards", details: "Reward claimed" },
+    Sent: { ic: "liquid", details: "Sent DYC" }, // S-P2P-1: a P2P send that survived a mid-wait drop resumes cleanly
   };
   function readPendingTx() { try { var v = JSON.parse(localStorage.getItem(PENDING_TX_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
   function writePendingTx(arr) { try { localStorage.setItem(PENDING_TX_KEY, JSON.stringify(arr || [])); } catch (e) {} }
