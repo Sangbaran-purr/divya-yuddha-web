@@ -63,6 +63,7 @@ window.DYDash = (function () {
     "function presaleMinUsdE18() view returns (uint256)",
     "function publicMinUsdE18() view returns (uint256)",
     "function allowlistSigner() view returns (address)",
+    "function attributionLocked(address) view returns (bool)",
     "function buyWithStable(address,uint256,bytes,string)",
     // S-FEED-2: the purchase event (verified DYCoinSale.sol) so the feed can scan buys. buyer indexed; dycOut = DYC received.
     "event Purchased(address indexed buyer, uint8 round, address asset, uint256 paid, uint256 usdE18, uint256 dycOut, uint256 liquid)",
@@ -479,6 +480,11 @@ window.DYDash = (function () {
     if (data.stakeErr) { b.innerHTML = "<div class='notlive'>" + netMsg() + "</div>"; return; }
     var st = data.stake;
     var meetsStakeFloor = data.liquid != null && data.liquid >= STAKE_FLOOR; // S-STAKE-GATE-1: source-blind balanceOf floor
+    // S-STAKE-GATE-2: an ICO buyer stakes his liquid at ANY amount (his right to restake his slice); a P2P-only wallet
+    // must hold the floor. isIcoBuyer is TRUE only on a confirmed purchase read — a null (read failed) is NOT a buyer,
+    // so the gate falls back to the floor rule alone (busy-sentinel: never a silent grant; a below-floor buyer self-heals
+    // next refresh once the read lands).
+    var stakeGateOpen = (data.isIcoBuyer === true) || meetsStakeFloor;
     var mult = st.principal > 0n ? Number(((st.rewardTotal) * 10000n) / st.principal) / 10000 : 0;
     var cap = Number(st.cap);
     var pct = cap > 0 ? Math.min(100, (mult / cap) * 100) : 0;
@@ -494,9 +500,9 @@ window.DYDash = (function () {
       // a quiet line states the floor + the live balance in its place. Activate (vested-activation) is NOT gated.
       "<div class='card-actions'>" +
       "<button class='btn-g btn-green' id='act-activate'" + (st.canActivate ? "" : " disabled") + ">Activate</button>" +
-      (meetsStakeFloor ? "<button class='btn-g' id='act-topup'>Top Up</button>" : "") +
+      (stakeGateOpen ? "<button class='btn-g' id='act-topup'>Top Up</button>" : "") +
       "</div>" +
-      (meetsStakeFloor ? "" : "<div class='note' style='margin-top:8px;line-height:1.5'>Staking opens at 10,000 DYC (about $100). Your balance: " + fmt(data.liquid, data.dycDec) + " DYC.</div>") +
+      (stakeGateOpen ? "" : "<div class='note' style='margin-top:8px;line-height:1.5'>Staking opens at 10,000 DYC (about $100) for DYC acquired by transfer. ICO purchases stake at any amount. Your balance: " + fmt(data.liquid, data.dycDec) + " DYC.</div>") +
       "<div class='note'>ⓘ You've earned " + mult.toFixed(2) + "X of the " + cap + "X lifetime cap</div>";
     if ($("act-activate")) $("act-activate").onclick = actActivate;
     if ($("act-topup")) $("act-topup").onclick = actTopUp;
@@ -618,6 +624,14 @@ window.DYDash = (function () {
           }).catch(function () { data.stakeErr = true; data.rewardErr = true; }));
         }
         // DESK reserve + cash-out quote
+        // S-STAKE-GATE-2: ICO-buyer provenance for the staking floor bypass. attributionLocked(addr) is the sale
+        // contract's per-wallet "has ever purchased" flag (set true on the first purchase, forever, unconditionally).
+        // BUSY-SENTINEL: a FAILED read is NOT boughtOf=0 — never demote a buyer on an RPC hiccup. On failure → null, so
+        // the gate falls back to the floor rule alone this cycle (self-heals next refresh); never a silent grant.
+        if (c.dycoinSale) {
+          var saleC = new ethersRef.Contract(c.dycoinSale, SALE_ABI, provider);
+          jobs.push(saleC.attributionLocked(addr).then(function (v) { data.isIcoBuyer = !!v; }).catch(function () { data.isIcoBuyer = null; console.warn("ICO-buyer provenance read failed — staking gate follows the 10,000 DYC floor rule this cycle"); }));
+        }
         if (c.roiRedemption) {
           var rd = new ethersRef.Contract(c.roiRedemption, DESK_ABI, provider);
           jobs.push(rd.reserve().then(function (res) { data.deskReserve = res; }).catch(function () {}));
