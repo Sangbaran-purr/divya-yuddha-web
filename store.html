@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="css/threshold.css?v=s1g" />
     <link rel="stylesheet" href="css/pages.css?v=s1h" />
     <link rel="stylesheet" href="css/explore.css?v=2" />
-    <link rel="stylesheet" href="css/store.css?v=s1" />
+    <link rel="stylesheet" href="css/store.css?v=s2" />
     <script src="config.js?v=s12"></script>
   </head>
   <body class="treasury">
@@ -81,6 +81,9 @@
           <button type="button" id="st-tab-market" class="st-tab" role="tab" aria-selected="false" aria-controls="st-market">Market</button>
         </div>
 
+        <!-- S-STORE-UX-1 — faction filter (All + four chips); shared by Buy + Market, built by store.js -->
+        <div id="st-filter" class="st-filter" role="group" aria-label="Filter by faction"></div>
+
         <!-- BUY — primary sale (WaveCardSale). Dark on null waveCardSale. -->
         <div id="st-buy" class="st-panel" role="tabpanel" aria-labelledby="st-tab-buy">
           <p id="st-buy-status" class="state-line" style="text-align:center" aria-live="polite"></p>
@@ -94,6 +97,22 @@
         </div>
       </section>
     </main>
+
+    <!-- S-STORE-UX-1 — card ZOOM (lightbox): large 720 art carries the powers; name/rarity/price/supply + the SAME buy flow -->
+    <div id="st-zoom" class="st-zoom" hidden aria-hidden="true">
+      <div class="st-zoom-inner" role="dialog" aria-modal="true" aria-label="Card detail">
+        <button type="button" id="st-zoom-close" class="st-zoom-close" aria-label="Close">×</button>
+        <div id="st-zoom-art" class="st-zoom-art"></div>
+        <div class="st-zoom-info">
+          <div id="st-zoom-name" class="st-zoom-name"></div>
+          <div id="st-zoom-sub" class="st-zoom-sub"></div>
+          <div id="st-zoom-price" class="st-zoom-price"></div>
+          <div id="st-zoom-supply" class="st-zoom-supply"></div>
+          <div id="st-zoom-actions" class="st-card-actions"></div>
+          <div id="st-zoom-msg" class="st-msg"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- ===================== THE FOOTER ===================== -->
     <footer class="site-foot">
@@ -141,7 +160,7 @@
     <script src="js/wallet.js?v=s1k"></script>
     <script src="js/cards.js?v=s1e"></script>
     <script src="js/wave-registry.js?v=w2"></script>
-    <script src="js/store.js?v=s7"></script>
+    <script src="js/store.js?v=s8"></script>
     <script>
       (function () {
         var npTop = document.getElementById("nameplate-top");

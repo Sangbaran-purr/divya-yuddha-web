@@ -121,6 +121,15 @@ window.DYStore = (function () {
     var fac = stem.split("_")[0].toLowerCase();
     return "assets/cards/" + fac + "/" + stem + "_320.jpg";
   }
+  // S-STORE-UX-1 — the ZOOM art: the 720 display JPG (the same size the card page uses;
+  // NOT the masters — deploy-weight law). The frame carries the power roundel + text, so
+  // the large art IS the card's powers.
+  function artDisplay(frame) {
+    if (!frame) return null;
+    var stem = frame.replace(/\.png$/i, "");
+    var fac = stem.split("_")[0].toLowerCase();
+    return "assets/cards/" + fac + "/" + stem + "_720.jpg";
+  }
   // a card figure with art (or the explore-style placeholder), reused by Buy + Market
   function cardFigure(card) {
     var fig = el("figure", "ex-card");
@@ -160,6 +169,93 @@ window.DYStore = (function () {
     r.appendChild(txt("b", null, title));
     r.appendChild(txt("div", null, body));
     host.appendChild(r);
+  }
+
+  // =========================================================================
+  // S-STORE-UX-1 — faction filter + card ZOOM (buy-in-zoom). The buy wire is
+  // UNCHANGED — the zoom reuses buildBuyAction / buildMarketBuy via a wireAction
+  // closure; it is a second door onto the same flow, not a reimplementation.
+  // =========================================================================
+  var FILTER_FACS = ["all", "devas", "asuras", "vanaras", "nagas"];
+  var FILTER_LABEL = { all: "All", devas: "Devas", asuras: "Asuras", vanaras: "Vanaras", nagas: "Nagas" };
+  var storeFilter = "all"; // survives tab switches; resets to All on reload (module default)
+  var buyCache = null, mktCache = null; // last render args → filter clicks repaint without re-reading chain
+  var _reRender = null;
+
+  function passesFilter(card) { return storeFilter === "all" || (card && card.faction || "").toLowerCase() === storeFilter; }
+
+  function renderFilter(host, reRender) {
+    _reRender = reRender;
+    host.innerHTML = "";
+    FILTER_FACS.forEach(function (f) {
+      var b = el("button", "st-filter-chip" + (f === storeFilter ? " on" : ""), FILTER_LABEL[f]);
+      b.setAttribute("aria-pressed", f === storeFilter ? "true" : "false");
+      b.onclick = function () {
+        if (storeFilter === f) return;
+        storeFilter = f;
+        renderFilter(host, reRender); // repaint chip state
+        reRender();
+      };
+      host.appendChild(b);
+    });
+  }
+
+  // ---- the zoom: large 720 art (the powers) + name/rarity/price/supply + BUY ----
+  var _zoomWired = false;
+  function zoomEls() {
+    return {
+      ov: document.getElementById("st-zoom"), art: document.getElementById("st-zoom-art"),
+      name: document.getElementById("st-zoom-name"), sub: document.getElementById("st-zoom-sub"),
+      price: document.getElementById("st-zoom-price"), supply: document.getElementById("st-zoom-supply"),
+      actions: document.getElementById("st-zoom-actions"), msg: document.getElementById("st-zoom-msg"),
+    };
+  }
+  function closeZoom() {
+    var z = zoomEls(); if (!z.ov) return;
+    z.ov.hidden = true; z.ov.setAttribute("aria-hidden", "true"); z.ov.classList.remove("show");
+    document.body.style.overflow = "";
+  }
+  function wireZoomOnce() {
+    if (_zoomWired) return; _zoomWired = true;
+    var z = zoomEls(); if (!z.ov) return;
+    var closeBtn = document.getElementById("st-zoom-close");
+    if (closeBtn) closeBtn.onclick = closeZoom;
+    z.ov.addEventListener("click", function (e) { if (e.target === z.ov) closeZoom(); }); // backdrop
+    document.addEventListener("keydown", function (e) { if (!z.ov.hidden && e.key === "Escape") closeZoom(); }); // Escape
+  }
+  // opts: { card, priceText, supplyText, wireAction(actionsEl,msgEl) }
+  function openZoom(opts) {
+    wireZoomOnce();
+    var z = zoomEls(); if (!z.ov) return;
+    var card = opts.card;
+    z.art.innerHTML = "";
+    var url = artDisplay(card.frame);
+    if (url) {
+      var img = new Image();
+      img.className = "st-zoom-img"; img.alt = card.name; img.decoding = "async";
+      img.onerror = function () { z.art.innerHTML = ""; z.art.appendChild(placeholder(card)); };
+      img.src = url;
+      z.art.appendChild(img);
+    } else { z.art.appendChild(placeholder(card)); }
+    z.name.textContent = card.name || "";
+    z.sub.textContent = (card.type || "") + (card.rarity && card.rarity !== card.type ? " · " + card.rarity : "");
+    z.price.innerHTML = opts.priceText || "";
+    z.supply.textContent = opts.supplyText || "";
+    z.actions.innerHTML = ""; z.msg.className = "st-msg"; z.msg.textContent = "";
+    if (opts.wireAction) opts.wireAction(z.actions, z.msg);
+    z.ov.hidden = false; z.ov.setAttribute("aria-hidden", "false"); z.ov.classList.add("show");
+    document.body.style.overflow = "hidden";
+  }
+  // make a card's art the zoom trigger (keyboard-accessible), leaving grid buttons untouched
+  function makeZoomTrigger(frameWrap, opts) {
+    frameWrap.classList.add("st-zoomable");
+    frameWrap.setAttribute("role", "button");
+    frameWrap.setAttribute("tabindex", "0");
+    frameWrap.setAttribute("aria-label", "Zoom " + (opts.card.name || "card"));
+    frameWrap.addEventListener("click", function () { openZoom(opts); });
+    frameWrap.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openZoom(opts); }
+    });
   }
 
   // =========================================================================
@@ -217,31 +313,36 @@ window.DYStore = (function () {
   }
 
   function renderBuy(ethers, statusEl, grid, open, rows) {
+    buyCache = { ethers: ethers, statusEl: statusEl, grid: grid, open: open, rows: rows }; // for filter re-render
     grid.className = "ex-grid";
     grid.innerHTML = "";
     var openState = open === null ? "busy" : (open ? "open" : "closed");
+    // faction filter (S-STORE-UX-1): render only the selected faction; All shows every live card
+    var shown = rows.filter(function (row) { return passesFilter(resolveCard(row.card.cardId)); });
+    var facWord = storeFilter === "all" ? "" : " " + FILTER_LABEL[storeFilter];
     statusEl.innerHTML = openState === "open"
-      ? rows.length + " cards for sale."
+      ? shown.length + facWord + " cards for sale."
       : (openState === "closed"
-        ? "The Store is configured but <b>not yet open</b> — prices show; buying wakes when the owner opens sales."
+        ? shown.length + facWord + " cards — the Store is configured but <b>not yet open</b> — prices show; buying wakes when the owner opens sales."
         : "<span class='bad'>The Store is busy — refresh to retry.</span>");
-    rows.forEach(function (row) {
+    shown.forEach(function (row) {
       var card = resolveCard(row.card.cardId);
       var cf = cardFigure(card);
       var priceBusy = row.price === null;
       var remBusy = row.remaining === null;
       // price chip
-      var chip = el("span", "st-chip" + (priceBusy ? " bad" : ""));
-      chip.textContent = priceBusy ? "busy" : (row.price === 0n ? "unpriced" : fmtPrice(ethers, row.price) + " DYC");
-      if (!priceBusy && row.price === 0n) chip.className = "st-chip muted";
+      var priceText = priceBusy ? "busy" : (row.price === 0n ? "unpriced" : fmtPrice(ethers, row.price) + " DYC");
+      var chip = el("span", "st-chip" + (priceBusy ? " bad" : "") + (!priceBusy && row.price === 0n ? " muted" : ""));
+      chip.textContent = priceText;
       cf.frameWrap.appendChild(chip);
       // remaining
+      var supplyText;
       var rem = el("div", "st-remaining");
-      if (remBusy) { rem.textContent = "supply: busy"; }
-      else if (row.remaining === 0n) { rem.className = "st-remaining soldout"; rem.textContent = "sold out"; }
-      else { rem.textContent = row.remaining.toString() + " of " + row.card.supply + " left"; }
+      if (remBusy) { supplyText = "supply: busy"; rem.textContent = supplyText; }
+      else if (row.remaining === 0n) { supplyText = "sold out"; rem.className = "st-remaining soldout"; rem.textContent = supplyText; }
+      else { supplyText = row.remaining.toString() + " of " + row.card.supply + " left"; rem.textContent = supplyText; }
       cf.fig.appendChild(rem);
-      // action
+      // action (grid door)
       var actions = el("div", "st-card-actions");
       var msg = el("div", "st-msg");
       var soldOut = row.remaining === 0n;
@@ -249,6 +350,15 @@ window.DYStore = (function () {
       buildBuyAction(ethers, actions, msg, row, card, openState, soldOut, priced, function () { loadBuy(statusEl, grid); });
       cf.fig.appendChild(actions);
       cf.fig.appendChild(msg);
+      // ZOOM (second door): the art opens the lightbox; the SAME buy flow is wired inside it
+      makeZoomTrigger(cf.frameWrap, {
+        card: card,
+        priceText: priceBusy ? "<span class='bad'>price busy</span>" : (row.price === 0n ? "unpriced" : "<b>" + fmtPrice(ethers, row.price) + " DYC</b>"),
+        supplyText: supplyText,
+        wireAction: function (aEl, mEl) {
+          buildBuyAction(ethers, aEl, mEl, row, card, openState, soldOut, priced, function () { closeZoom(); loadBuy(statusEl, grid); });
+        },
+      });
       grid.appendChild(cf.fig);
     });
   }
@@ -354,15 +464,18 @@ window.DYStore = (function () {
   }
 
   function renderMarket(ethers, statusEl, grid, open, rows) {
+    mktCache = { ethers: ethers, statusEl: statusEl, grid: grid, open: open, rows: rows }; // for filter re-render
     grid.className = "ex-grid";
     grid.innerHTML = "";
     var me = window.DYWallet.state.address;
     var openState = open === null ? "busy" : (open ? "open" : "closed");
-    var active = rows.filter(function (r) { return r.listing && r.listing[2]; });
+    var active = rows.filter(function (r) { return r.listing && r.listing[2]; })
+      .filter(function (r) { return passesFilter(resolveCard(r.cardId)); }); // S-STORE-UX-1 faction filter
     if (!active.length) {
-      register(grid, "No listings yet", openState === "closed"
+      var facWord = storeFilter === "all" ? "" : FILTER_LABEL[storeFilter] + " ";
+      register(grid, "No " + facWord + "listings yet", openState === "closed"
         ? "The market is open for viewing but trading is paused by the owner. Listed cards will appear here."
-        : "No cards are listed right now. List one from your Treasury to be the first.");
+        : (storeFilter === "all" ? "No cards are listed right now. List one from your Treasury to be the first." : "No " + FILTER_LABEL[storeFilter] + " cards are listed right now."));
       statusEl.textContent = "";
       return;
     }
@@ -371,35 +484,45 @@ window.DYStore = (function () {
       : (openState === "closed"
         ? "Trading is <b>paused</b> — listings show; buying wakes when the owner reopens the market."
         : "<span class='bad'>The market is busy — refresh to retry.</span>");
+    // one action-builder reused by the grid door AND the zoom door (identical market flow)
+    function wireMarketAction(r, price, seller, mine, actionsEl, msgEl, refresh) {
+      if (mine) {
+        var d = el("button", "st-btn danger"); d.textContent = "Delist";
+        if (!connectedOk()) { d.disabled = true; msgEl.textContent = "Connect your wallet."; }
+        else d.onclick = function () { doDelist(r.tokenId, d, msgEl, refresh); };
+        actionsEl.appendChild(d);
+      } else {
+        var b = el("button", "st-btn"); b.textContent = "Buy";
+        if (openState !== "open") { b.disabled = true; }
+        else if (!connectedOk()) { b.disabled = true; msgEl.textContent = "Connect your wallet to buy."; }
+        else buildMarketBuy(ethers, b, msgEl, r.tokenId, price, seller, refresh);
+        actionsEl.appendChild(b);
+      }
+    }
     active.forEach(function (r) {
       var card = resolveCard(r.cardId);
       var cf = cardFigure(card);
       var price = r.listing[1];
       var seller = r.listing[0];
+      var mine = eqAddr(seller, me);
       var chip = el("span", "st-chip");
       chip.textContent = fmtPrice(ethers, price) + " DYC";
       cf.frameWrap.appendChild(chip);
       cf.fig.appendChild(txt("div", "st-seller", "listed by " + window.DYWallet.shortAddr(seller)));
       var actions = el("div", "st-card-actions");
       var msg = el("div", "st-msg");
-      var mine = eqAddr(seller, me);
-      if (mine) {
-        // DELIST — never gated by marketsOpen; enabled whenever connected
-        var d = el("button", "st-btn danger");
-        d.textContent = "Delist";
-        if (!connectedOk()) { d.disabled = true; msg.textContent = "Connect your wallet."; }
-        else d.onclick = function () { doDelist(r.tokenId, d, msg, function () { loadMarket(statusEl, grid); }); };
-        actions.appendChild(d);
-      } else {
-        var b = el("button", "st-btn");
-        b.textContent = "Buy";
-        if (openState !== "open") { b.disabled = true; }
-        else if (!connectedOk()) { b.disabled = true; msg.textContent = "Connect your wallet to buy."; }
-        else buildMarketBuy(ethers, b, msg, r.tokenId, price, seller, function () { loadMarket(statusEl, grid); });
-        actions.appendChild(b);
-      }
+      wireMarketAction(r, price, seller, mine, actions, msg, function () { loadMarket(statusEl, grid); });
       cf.fig.appendChild(actions);
       cf.fig.appendChild(msg);
+      // ZOOM (second door) — same listing price + buy/delist road inside the lightbox
+      makeZoomTrigger(cf.frameWrap, {
+        card: card,
+        priceText: "<b>" + fmtPrice(ethers, price) + " DYC</b>",
+        supplyText: "listed by " + window.DYWallet.shortAddr(seller),
+        wireAction: function (aEl, mEl) {
+          wireMarketAction(r, price, seller, mine, aEl, mEl, function () { closeZoom(); loadMarket(statusEl, grid); });
+        },
+      });
       grid.appendChild(cf.fig);
     });
   }
@@ -634,6 +757,16 @@ window.DYStore = (function () {
     var buyGrid = document.getElementById("st-buy-grid");
     var mktStatus = document.getElementById("st-market-status");
     var mktGrid = document.getElementById("st-market-grid");
+    var filterHost = document.getElementById("st-filter");
+
+    // S-STORE-UX-1 — a filter chip click repaints the ACTIVE tab from its cache (no chain re-read);
+    // falls back to a load if nothing is cached yet.
+    function reRenderActive() {
+      var mkt = tabMkt.getAttribute("aria-selected") === "true";
+      if (mkt) { if (mktCache) renderMarket(mktCache.ethers, mktCache.statusEl, mktCache.grid, mktCache.open, mktCache.rows); else loadMarket(mktStatus, mktGrid); }
+      else { if (buyCache) renderBuy(buyCache.ethers, buyCache.statusEl, buyCache.grid, buyCache.open, buyCache.rows); else loadBuy(buyStatus, buyGrid); }
+    }
+    if (filterHost) renderFilter(filterHost, reRenderActive);
 
     function selectTab(which) {
       var buy = which === "buy";

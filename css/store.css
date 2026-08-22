@@ -113,3 +113,54 @@
 .st-fee .st-fee-note { display: block; margin-top: 6px; font-size: 0.72rem; color: var(--gold-aged, #6b5426); }
 .st-dialog-actions { display: flex; gap: 10px; margin-top: 16px; }
 .st-dialog-actions .st-btn { padding: 9px 12px; font-size: 0.8rem; }
+
+/* ============ S-STORE-UX-1: faction filter + card zoom ============ */
+.st-filter { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 0 auto 2.2vh; }
+.st-filter-chip {
+  font-family: var(--display, "Cinzel", serif); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+  background: transparent; color: var(--gold-aged, #6b5426); cursor: pointer; padding: 6px 14px; border-radius: 999px;
+  border: 1px solid var(--gold-aged, #6b5426);
+}
+.st-filter-chip.on { color: var(--flame-core, #ffc96b); border-color: var(--gold-hairline, #8a6f3a); background: rgba(232, 200, 116, 0.1); }
+.st-filter-chip:hover:not(.on) { color: var(--gold-burnished, #d9a84e); }
+
+/* the card art is the zoom trigger */
+.st-zoomable { cursor: zoom-in; }
+.st-zoomable:focus-visible { outline: 2px solid var(--gold-hairline, #8a6f3a); outline-offset: 2px; }
+
+/* the ZOOM lightbox: large 720 art (the powers) + name/rarity/price/supply + the same buy flow */
+.st-zoom {
+  position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 4, 2, 0.86); padding: 3vh 3vw; opacity: 0; transition: opacity 0.18s ease;
+}
+.st-zoom.show { opacity: 1; }
+.st-zoom[hidden] { display: none; }
+.st-zoom-inner { position: relative; display: flex; gap: 22px; align-items: center; max-width: 900px; width: 100%; max-height: 94vh; }
+.st-zoom-close {
+  position: absolute; top: -6px; right: -6px; z-index: 2; width: 40px; height: 40px; line-height: 1;
+  font-size: 1.6rem; background: rgba(6, 4, 2, 0.7); color: var(--gold-burnished, #d9a84e);
+  border: 1px solid var(--gold-aged, #6b5426); border-radius: 999px; cursor: pointer;
+}
+.st-zoom-close:hover { color: var(--flame-core, #ffc96b); border-color: var(--gold-hairline, #8a6f3a); }
+.st-zoom-art { flex: 1 1 58%; display: flex; align-items: center; justify-content: center; min-width: 0; }
+.st-zoom-img { max-width: 100%; max-height: 90vh; width: auto; height: auto; border-radius: 8px; display: block; }
+.st-zoom-info {
+  flex: 1 1 42%; min-width: 0; display: flex; flex-direction: column; gap: 8px;
+  font-family: var(--text, "EB Garamond", serif); color: var(--gold-aged, #6b5426);
+}
+.st-zoom-name { font-family: var(--display, "Cinzel", serif); font-size: 1.4rem; color: var(--flame-core, #ffc96b); letter-spacing: 0.04em; }
+.st-zoom-sub { font-size: 0.9rem; color: var(--gold-burnished, #d9a84e); }
+.st-zoom-price { font-size: 1.1rem; color: var(--gold-burnished, #d9a84e); margin-top: 4px; }
+.st-zoom-price b { color: var(--flame-core, #ffc96b); }
+.st-zoom-supply { font-size: 0.8rem; color: var(--gold-aged, #6b5426); }
+.st-zoom-info .st-card-actions { margin-top: 8px; }
+
+/* phone: stack art over info; art fits the viewport, no page overflow */
+@media (max-width: 640px) {
+  .st-zoom { padding: 2vh 3vw; }
+  .st-zoom-inner { flex-direction: column; gap: 12px; align-items: stretch; max-height: 96vh; overflow-y: auto; }
+  .st-zoom-art { flex: 0 0 auto; }
+  .st-zoom-img { max-height: 62vh; }
+  .st-zoom-info { flex: 0 0 auto; align-items: center; text-align: center; }
+  .st-zoom-close { top: 2px; right: 2px; }
+}
