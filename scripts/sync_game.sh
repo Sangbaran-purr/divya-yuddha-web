@@ -141,7 +141,7 @@ cat > "$PRE" <<'PREAMBLE'
     a.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 2.6l2.7 5.9 6.4.7-4.8 4.3 1.3 6.3L12 16.9 6.4 19.7l1.3-6.3L2.9 9.2l6.4-.7z" fill="none" stroke="#d9a84e" stroke-width="1.3"/></svg>';
     var s = a.style;
     s.position = "fixed"; s.zIndex = "2147483000";
-    s.top = "calc(env(safe-area-inset-top, 0px) + 10px)";
+    s.bottom = "calc(env(safe-area-inset-bottom, 0px) + 10px)";   /* S-STAR-POS-1: bottom-left (was top-left) — clear of the game's top-left back buttons + top-right gear */
     s.left = "calc(env(safe-area-inset-left, 0px) + 10px)";
     s.width = "34px"; s.height = "34px"; s.display = "flex";
     s.alignItems = "center"; s.justifyContent = "center";
