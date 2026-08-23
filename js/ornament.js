@@ -43,6 +43,8 @@
     '<symbol id="dy-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>' +
     '<symbol id="dy-telegram" viewBox="0 0 24 24"><path d="M21 5L2.8 12.1l5.7 1.9 2 5.4 2.9-3.7 4.2 3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8.5 14l8.2-6.2" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></symbol>' +
     '<symbol id="dy-youtube" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.6 9.8l4 2.2-4 2.2z" fill="currentColor"/></symbol>' +
+    '<symbol id="dy-instagram" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="17" cy="7" r="1" fill="currentColor"/></symbol>' +
+    '<symbol id="dy-facebook" viewBox="0 0 24 24"><path d="M14.5 5.5h-1.8A2.7 2.7 0 0 0 10 8.2V19M7.5 11.5h6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>' +
     "</defs></svg>";
   if (document.body) {
     document.body.insertAdjacentHTML("afterbegin", SPRITE);

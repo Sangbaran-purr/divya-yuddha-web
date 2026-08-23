@@ -643,6 +643,17 @@ body[data-chamber="nagas"] #tre-hall {
   width: 16px;
   height: 16px;
 }
+/* live circle marks: subtle wake on hover/focus, matching the footer link palette */
+.foot-icons a.soc {
+  transition: color var(--wake) ease, border-color var(--wake) ease,
+    box-shadow var(--wake) ease;
+}
+.foot-icons a.soc:hover,
+.foot-icons a.soc:focus-visible {
+  color: var(--flame-core);
+  border-color: var(--flame-core);
+  box-shadow: 0 0 10px rgba(232, 147, 58, 0.4);
+}
 .foot-col h4 {
   font-family: var(--display);
   letter-spacing: 0.16em;
