@@ -24,8 +24,15 @@ window.DYTreasury = (function () {
     "function balanceOf(address) view returns (uint256)",
     "function ownerOf(uint256) view returns (address)",
     "function cardOf(uint256) view returns (uint256)",
+    "function totalMinted() view returns (uint256)", // S-TREASURY-SCAN-FIX-3 — bounds the sequential-id enumeration road
     "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
   ];
+  // S-TREASURY-SCAN-FIX-3 — direct sequential-id enumeration (Road A′). The reborn WaveCardNFT is NOT ERC721Enumerable,
+  // but token ids are sequential (1..totalMinted, minted by _nextId++ and never burned), so the shelf can enumerate by
+  // ownerOf(1..totalMinted) — O(supply) direct eth_calls, NO getLogs / chunks / checkpoints → mobile-proof. Used while
+  // supply ≤ ENUM_MAX (comfortably finishes on a mobile budget); above it, fall back to the checkpointed log scan.
+  var ENUM_MAX = 400; // supply ceiling for the direct-read road (~O(N) ownerOf at ENUM_CONCURRENCY fits the 18s budget)
+  var ENUM_CONCURRENCY = 10; // bounded parallel ownerOf reads — gentle on mobile RPC, still fast
 
   var activeFilter = null; // faction key or null
   // read-once cache (per connected address): reset on address change / manual refresh
@@ -168,8 +175,56 @@ window.DYTreasury = (function () {
             throw incomplete();
           });
       }
-      // 18000ms run-start budget (single-flight queue gives each scan a fresh budget); onProgress → busy-face register.
-      return scanAndGate();
+      // ROAD A′ (S-TREASURY-SCAN-FIX-3) — direct sequential-id enumeration: ownerOf over ids 1..totalMinted, bounded
+      // concurrency, early-exit once we have all `bal` held tokens. No getLogs / chunks / checkpoints → mobile-proof.
+      function enumerate(bal, N) {
+        return new Promise(function (resolve) {
+          var held = [], nextId = 1, inflight = 0, settled = false;
+          function finish(complete) { if (!settled) { settled = true; resolve({ held: held, complete: complete }); } }
+          function pump() {
+            if (settled) return;
+            if (held.length >= bal) return finish(true); // found ALL held tokens — authoritative
+            if (Date.now() > deadlineAt) { if (inflight === 0) finish(false); return; } // budget spent mid-enum → incomplete
+            if (nextId > N && inflight === 0) return finish(true); // scanned every id (a lossy read leaves held < bal)
+            while (inflight < ENUM_CONCURRENCY && nextId <= N && held.length < bal) {
+              (function (tid) {
+                inflight++;
+                c.ownerOf(BigInt(tid))
+                  .then(function (o) {
+                    if (o && o.toLowerCase() === ownerLc) {
+                      return c.cardOf(BigInt(tid)).then(function (cardId) { held.push({ tokenId: BigInt(tid), cardId: cardId }); });
+                    }
+                  })
+                  .catch(function () {}) // a per-token read failure drops THAT id; the completeness gate below catches a shortfall
+                  .then(function () { inflight--; pump(); });
+              })(nextId++);
+            }
+          }
+          pump();
+        });
+      }
+
+      // Enumeration is the primary shelf road while supply is small; the checkpointed log scan is the fallback for a
+      // large catalog or if the count/supply reads fail. balanceOf is the truth: 0 → the hall is genuinely empty (instant).
+      return c.balanceOf(owner).then(
+        function (balBn) {
+          var bal = Number(balBn);
+          if (!(bal > 0)) return []; // non-holder — render "none" immediately, zero further reads
+          return c.totalMinted().then(
+            function (nBn) {
+              var N = Number(nBn);
+              if (!(N > 0)) return []; // nothing minted yet
+              if (N > ENUM_MAX) return scanAndGate(); // large supply — Road B fallback (checkpointed log scan)
+              return enumerate(bal, N).then(function (r) {
+                if (r.held.length >= bal) return r.held; // found all — authoritative, no checkpoint
+                throw incomplete(); // transient ownerOf loss or budget spent — BUSY; a re-load re-enumerates (cheap)
+              });
+            },
+            function () { return scanAndGate(); } // totalMinted read failed — fall back to the log-scan road
+          );
+        },
+        function () { return scanAndGate(); } // balanceOf read failed — fall back to the log-scan road (its own gate handles count-fail)
+      );
     });
   }
 
