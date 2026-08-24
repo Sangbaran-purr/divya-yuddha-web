@@ -285,7 +285,18 @@ window.DYWallet = (function () {
   //     FAILOVER — publicnode primary, drpc (chain.rpcUrls[1], archive-capable) on a chunk failure (admin
   //     historyProvider precedent). (4) the deadline is a DURATION computed at RUN-start, so a scan queued behind
   //     another gets a fresh budget, not a clock that ran down while it waited.
-  var LOG_CHUNK = 9999; // < 10000 — the archive-RPC cap (admin.js LOG_CHUNK precedent)
+  // S-TREASURY-SCAN-FIX-1 (owner-folded fix): a chunk spans start..start+LOG_CHUNK INCLUSIVE, so 9999 → 10000 blocks.
+  // publicnode accepts a 10000-block range, but the drpc free-plan ARCHIVE FAILOVER rejects it (-32701 "ranges over
+  // 10000 blocks are not supported on free plan"), which left the failover effectively dead for full chunks. 9998 → a
+  // 9999-block span, under BOTH caps, so the archive failover actually works when publicnode drops a chunk.
+  var LOG_CHUNK = 9998; // 9999-block inclusive span — under publicnode's 10000 cap AND drpc free-plan's <10000 cap
+  // S-TREASURY-SCAN-FIX-1 FIX 2 — HEAD BUFFER: the freshest window is never PERSISTED as scanned, so it is re-scanned
+  // every visit. Replica lag on load-balanced public RPCs lives in the most recent blocks; a successful-but-empty
+  // getLogs there previously advanced scannedTo past a just-landed mint (candidates empty) and bookmarked it away
+  // forever. 128 blocks ≈ 4–5 min on Polygon (~2.1–2.3s/block) — comfortably beyond typical replica lag and shallow
+  // reorg depth, while keeping the re-scanned delta tiny. Candidates found INSIDE the buffer still render immediately;
+  // the buffer caps only what is PERSISTED as scanned, never the scan extent (which still reaches latest).
+  var HEAD_BUFFER = 128;
   var scanQueue = Promise.resolve(); // single-flight: one getLogs scan at a time (shelf then listings)
   function ckptGet(key) {
     try { var v = window.localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; }
@@ -324,7 +335,11 @@ window.DYWallet = (function () {
           var end = Math.min(start + LOG_CHUNK, latest);
           return readChunk(start, end).then(function (evs) {
             evs.forEach(function (ev) { candSet[ev.args.tokenId.toString()] = true; });
-            ckptSet(ckptKey, { scannedTo: end, candidates: Object.keys(candSet) }); // persist progress per chunk
+            // FIX 2 — persist scannedTo no higher than latest-HEAD_BUFFER (never bookmark the freshest window). A chunk
+            // whose whole extent sits inside the buffer (contract younger than HEAD_BUFFER) writes nothing → full
+            // re-scan next visit, which is correct for a brand-new contract. Candidates already captured above.
+            var persistTo = Math.min(end, latest - HEAD_BUFFER);
+            if (persistTo >= deployBlock) ckptSet(ckptKey, { scannedTo: persistTo, candidates: Object.keys(candSet) }); // persist progress per chunk
             if (onProgress) { try { onProgress(end, deployBlock, latest); } catch (e) {} }
             if (Date.now() > deadlineAt) return false; // incomplete — but the checkpoint advanced
             return scanFrom(end + 1);

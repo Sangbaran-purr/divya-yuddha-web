@@ -34,6 +34,10 @@ window.DYTreasury = (function () {
   var cacheRows = null; // array | null (unread)
   var readGen = 0; // generation token: a stale in-flight read never clobbers a newer one (rapid refresh)
   var listGen = 0; // LEG5 — Your Listings read-generation guard (independent of the holdings read)
+  // S-TREASURY-SCAN-FIX-1 FIX 1 — one forced checkpoint reset per page load, per owner (loop-thrash guard). balanceOf
+  // is the truth: a scan that "completes" with held < balanceOf is wrong by definition (a poisoned checkpoint), so we
+  // reset it and rescan ONCE inline; a second shortfall on the same load renders what we have rather than thrashing.
+  var shelfResetOnce = {}; // owner(lowercased) -> true once its checkpoint was force-reset this page load
   var pageRefresh = function () {}; // set in mount(): re-read holdings + listings after a list/delist
 
   function el(tag, cls, html) {
@@ -94,12 +98,16 @@ window.DYTreasury = (function () {
       var provider = window.DYWallet.readProvider(); // RUNG4-FIX-3 — tamed publicnode read road, not the wallet's dead RPC
       var c = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
       var fromBlock = CFG.deployBlock || 0; // bounded scan; 0 -> full scan (S-LEDGER-FIX-4 law)
+      var ownerLc = owner.toLowerCase();
       // RUNG4-FIX-7B — RESUMABLE checkpointed scan (dyw:: per-wallet), O(delta) on repeat visits. Candidates are the
       // tokenIds ever transferred TO owner (mints: Transfer(0, owner, id); + any incoming). We re-verify CURRENT
       // ownership each load (a token may have been sent away), so candidates only ever grow — held is a re-check.
-      var key = "dyw::shelf::" + CFG.chain.id + "::" + owner.toLowerCase();
-      // 18000ms run-start budget (single-flight queue gives each scan a fresh budget); onProgress → busy-face register.
-      return window.DYWallet.scanLogsResumable(c, c.filters.Transfer(null, owner), fromBlock, 18000, key, onProgress).then(function (scan) {
+      // FIX 3 — the checkpoint key is namespaced by the waveCardNFT ADDRESS, so a contract swap can never resume from a
+      // prior contract's scan state. The old un-namespaced key is dead; delete it once for this owner (idempotent).
+      var key = "dyw::shelf::" + CFG.chain.id + "::" + CFG.contracts.waveCardNFT.toLowerCase() + "::" + ownerLc;
+      try { window.localStorage.removeItem("dyw::shelf::" + CFG.chain.id + "::" + ownerLc); } catch (e) {}
+
+      function verify(scan) {
         // verify CURRENT ownership + resolve cardId, in parallel. A per-token read failure drops THAT token.
         return Promise.all(
           scan.candidates.map(function (tidStr) {
@@ -107,7 +115,7 @@ window.DYTreasury = (function () {
             return c
               .ownerOf(tid)
               .then(function (cur) {
-                if (cur.toLowerCase() !== owner.toLowerCase()) return null; // transferred away since received
+                if (cur.toLowerCase() !== ownerLc) return null; // transferred away since received
                 return c.cardOf(tid).then(function (cardId) {
                   return { tokenId: tid, cardId: cardId };
                 });
@@ -117,20 +125,46 @@ window.DYTreasury = (function () {
               });
           })
         ).then(function (rows) {
-          var held = rows.filter(Boolean);
-          // COMPLETENESS GATE — balanceOf is the truth. Render as soon as we've found ALL held tokens (even before
-          // the scan reaches latest); else if the scan is incomplete, render BUSY — the checkpoint advanced, the
-          // next refresh continues behind the busy face (owner ruling). balanceOf failure falls back to scan.complete.
-          return c.balanceOf(owner).then(function (bal) {
-            if (held.length >= Number(bal) || scan.complete) return held;
-            var e = new Error("shelf-incomplete"); e.__incomplete = true; throw e;
-          }).catch(function (e) {
-            if (e && e.__incomplete) throw e;
-            if (scan.complete) return held;
-            var e2 = new Error("shelf-incomplete"); e2.__incomplete = true; throw e2;
-          });
+          return { held: rows.filter(Boolean), complete: scan.complete };
         });
-      });
+      }
+      function incomplete() { var e = new Error("shelf-incomplete"); e.__incomplete = true; return e; }
+
+      function scanAndGate() {
+        return window.DYWallet
+          .scanLogsResumable(c, c.filters.Transfer(null, owner), fromBlock, 18000, key, onProgress)
+          .then(verify)
+          .then(function (r) {
+            // COMPLETENESS GATE — balanceOf is the TRUTH (FIX 1). Read the count; a SUCCESSFUL read that exceeds what we
+            // found means the scan is wrong REGARDLESS of scan.complete (a checkpoint poisoned by an empty-success
+            // getLogs near head). Reset the checkpoint and rescan ONCE inline so it self-heals within a single load.
+            return c.balanceOf(owner).then(
+              function (bal) { return { r: r, bal: Number(bal), balOk: true }; },
+              function () { return { r: r, bal: null, balOk: false }; } // count read FAILED — never nuke a good checkpoint on an RPC hiccup
+            );
+          })
+          .then(function (g) {
+            var held = g.r.held, complete = g.r.complete;
+            if (g.balOk) {
+              if (held.length >= g.bal) return held; // found ALL held tokens — render (even mid-scan)
+              // held < balanceOf (a SUCCESSFUL count): the scan is wrong by definition. Force ONE reset+rescan per page
+              // load to heal a poisoned checkpoint; a healthy RPC then returns the true holdings on this same load.
+              if (!shelfResetOnce[ownerLc]) {
+                shelfResetOnce[ownerLc] = true;
+                try { window.localStorage.removeItem(key); } catch (e) {} // scannedTo → deployBlock, candidates cleared
+                return scanAndGate(); // inline full rescan → self-heals to the true holdings on this same load
+              }
+              // Still short after the one reset (the RPC is glitching NOW): render BUSY, never present a list shorter
+              // than a successfully-read balanceOf as the final "none". A refresh / recovered RPC heals it next load.
+              throw incomplete();
+            }
+            // balanceOf read FAILED — today's behavior: trust scan.complete, never let a count hiccup nuke a checkpoint.
+            if (complete) return held;
+            throw incomplete();
+          });
+      }
+      // 18000ms run-start budget (single-flight queue gives each scan a fresh budget); onProgress → busy-face register.
+      return scanAndGate();
     });
   }
 
@@ -382,9 +416,13 @@ window.DYTreasury = (function () {
     statusEl.textContent = "Reading your holdings…";
     var deadlineAt = Date.now() + 20000; // overall deadline for the read
 
-    // The mark and the cards are INDEPENDENT reads — each renders its own state (held/none/busy),
-    // so one failing never blanks the other, and neither failure looks like a real zero.
-    readMark(addr, deadlineAt)
+    // The mark and the cards are INDEPENDENT reads — each renders its own state (held/none/busy), so one failing never
+    // blanks the other, and neither failure looks like a real zero. ADDENDUM (S-TREASURY-SCAN-FIX-1) — the Access mark
+    // reads its OWN accessNFT.balanceOf FIRST, on an UNCONTENDED read road; the wave shelf/listings scans (which burst
+    // getLogs and can saturate the shared public RPC — a poisoned checkpoint makes that a full 12-chunk scan every
+    // load) start only AFTER the mark's balanceOf has had a clean head start. So a poisoned/BUSY/slow scan can never
+    // starve or blank the mark. The mark still renders from its own chain — scan state never touches this branch.
+    var markSettled = readMark(addr, deadlineAt)
       .then(function (held) {
         if (gen !== readGen) return; // superseded by a newer read — do not clobber
         cacheMark = held;
@@ -401,19 +439,24 @@ window.DYTreasury = (function () {
       var walked = Math.max(0, scannedTo - from), total = Math.max(1, latest - from);
       statusEl.textContent = "Reading your hall — walked " + Math.min(walked, total).toLocaleString() + " of " + total.toLocaleString() + " blocks…";
     }
-    discover(addr, deadlineAt, shelfProgress)
-      .then(function (rows) {
-        if (gen !== readGen) return; // superseded — a stale card read never clobbers a newer state
-        cacheRows = rows;
-        writeWaveOwned(addr, rows); // S-BRIDGE-1 — reached ONLY on a completeness-gated full result
-        statusEl.textContent = rows.length ? statusLine(rows.length) : "";
-        renderHall(hall, "cards", filtered(rows));
-      })
-      .catch(function () {
-        if (gen !== readGen) return;
-        statusEl.textContent = ""; // the hall carries the busy message
-        renderHall(hall, "busy"); // busy-sentinel, NOT the empty shelf
-      });
+    function scanHall() {
+      discover(addr, deadlineAt, shelfProgress)
+        .then(function (rows) {
+          if (gen !== readGen) return; // superseded — a stale card read never clobbers a newer state
+          cacheRows = rows;
+          writeWaveOwned(addr, rows); // S-BRIDGE-1 — reached ONLY on a completeness-gated full result
+          statusEl.textContent = rows.length ? statusLine(rows.length) : "";
+          renderHall(hall, "cards", filtered(rows));
+        })
+        .catch(function () {
+          if (gen !== readGen) return;
+          statusEl.textContent = ""; // the hall carries the busy message
+          renderHall(hall, "busy"); // busy-sentinel, NOT the empty shelf
+        });
+    }
+    // Start the hall scan only after the mark has settled — bounded by a 2s grace so a slow/failing mark read (its own
+    // withRetry budget can run long) never stalls the hall. The mark's balanceOf thus gets the read road first.
+    Promise.race([markSettled, new Promise(function (r) { setTimeout(r, 2000); })]).then(scanHall);
   }
 
   function statusLine(n) {

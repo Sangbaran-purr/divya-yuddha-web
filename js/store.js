@@ -690,7 +690,11 @@ window.DYStore = (function () {
       var market = new ethers.Contract(marketAddr(), MARKET_ABI, provider);
       var nft = new ethers.Contract(CFG.contracts.waveCardNFT, WAVE_ABI, provider);
       var fromBlock = CFG.marketDeployBlock || CFG.deployBlock || 0; // market events cannot predate the market's own deploy
-      var key = "dyw::listings::" + CFG.chain.id + "::" + owner.toLowerCase();
+      // S-TREASURY-SCAN-FIX-1 FIX 3 — namespace the listings checkpoint by the MARKET address (the scanned contract), so
+      // a market swap can never resume from a prior market's scan state. Old un-namespaced key is dead; delete it once.
+      var ownerLc = owner.toLowerCase();
+      var key = "dyw::listings::" + CFG.chain.id + "::" + marketAddr().toLowerCase() + "::" + ownerLc;
+      try { window.localStorage.removeItem("dyw::listings::" + CFG.chain.id + "::" + ownerLc); } catch (e) {}
       return dycDecimals(ethers, provider).then(function () {
         // RUNG4-FIX-7B — RESUMABLE checkpointed scan (dyw:: per-wallet), O(delta) on repeat visits. Candidates are the
         // tokenIds owner has ever Listed; re-verify each via listingOf (active && seller==owner) to drop delisted/sold.
