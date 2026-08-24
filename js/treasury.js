@@ -135,9 +135,9 @@ window.DYTreasury = (function () {
           .scanLogsResumable(c, c.filters.Transfer(null, owner), fromBlock, 18000, key, onProgress)
           .then(verify)
           .then(function (r) {
-            // COMPLETENESS GATE — balanceOf is the TRUTH (FIX 1). Read the count; a SUCCESSFUL read that exceeds what we
-            // found means the scan is wrong REGARDLESS of scan.complete (a checkpoint poisoned by an empty-success
-            // getLogs near head). Reset the checkpoint and rescan ONCE inline so it self-heals within a single load.
+            // COMPLETENESS GATE — balanceOf is the TRUTH (FIX 1). Read the count; if it exceeds what we found, the scan
+            // fell short. A COMPLETE-but-short scan is genuinely poisoned → reset+rescan once (self-heal). An INCOMPLETE
+            // short scan is merely still climbing → keep the bookmark and render BUSY (FIX-2). See the branch below.
             return c.balanceOf(owner).then(
               function (bal) { return { r: r, bal: Number(bal), balOk: true }; },
               function () { return { r: r, bal: null, balOk: false }; } // count read FAILED — never nuke a good checkpoint on an RPC hiccup
@@ -147,15 +147,20 @@ window.DYTreasury = (function () {
             var held = g.r.held, complete = g.r.complete;
             if (g.balOk) {
               if (held.length >= g.bal) return held; // found ALL held tokens — render (even mid-scan)
-              // held < balanceOf (a SUCCESSFUL count): the scan is wrong by definition. Force ONE reset+rescan per page
-              // load to heal a poisoned checkpoint; a healthy RPC then returns the true holdings on this same load.
-              if (!shelfResetOnce[ownerLc]) {
+              // held < balanceOf (a SUCCESSFUL count). The response turns on scan.complete (S-TREASURY-SCAN-FIX-2):
+              //   • complete === true  → the scan FINISHED and still missed tokens = genuinely poisoned (an empty-success
+              //     getLogs bookmarked scannedTo past a mint). Reset the checkpoint and rescan ONCE inline to self-heal.
+              //   • complete === false → the scan is still climbing (a mobile/slow-budget deadline cut it short mid-range).
+              //     DO NOT reset — the accumulated scannedTo MUST stand so progress persists across loads; resetting here
+              //     would wipe it every load and loop BUSY forever on a slow connection (the FIX-1 design flaw). Render
+              //     BUSY; the next load resumes from the bookmark and the scan advances monotonically toward the mint.
+              if (complete && !shelfResetOnce[ownerLc]) {
                 shelfResetOnce[ownerLc] = true;
                 try { window.localStorage.removeItem(key); } catch (e) {} // scannedTo → deployBlock, candidates cleared
-                return scanAndGate(); // inline full rescan → self-heals to the true holdings on this same load
+                return scanAndGate(); // inline full rescan → self-heals a complete-but-short (poisoned) checkpoint
               }
-              // Still short after the one reset (the RPC is glitching NOW): render BUSY, never present a list shorter
-              // than a successfully-read balanceOf as the final "none". A refresh / recovered RPC heals it next load.
+              // Incomplete (keep the bookmark — progress accumulates) OR already reset once this load (RPC glitching now):
+              // render BUSY, never present a list shorter than a successfully-read balanceOf as a final "none".
               throw incomplete();
             }
             // balanceOf read FAILED — today's behavior: trust scan.complete, never let a count hiccup nuke a checkpoint.
