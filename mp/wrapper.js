@@ -22,6 +22,7 @@
   // ---- the PUBLIC-API router: turn a normalized move into an engine call. Free actions (leap/shield) do NOT end the
   //      turn; play/pass DO (they call the engine's internal afterAction, so the wrapper never needs afterAction). ----
   function applyMove(E, g, pi, mv) {
+    if (mv.type === "mulligan") { E.mulligan(g, pi, mv.uids || []); return { applied: "mulligan", ended: false }; } // M-P3 — relayed mulligan (pre-Round-1)
     if (mv.type === "leap") {
       var pl = g.players[pi];
       var leaper = pl.units.find(function (u) { return u.uid === mv.leaper; });

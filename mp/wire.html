@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>DY Wire Match — M-P3 dark test</title>
+  <style>
+    :root { --bg:#0e0b07; --panel:#161109; --gold:#e8c874; --gold-dim:#cdbb8f; --gold-aged:#8a7a52;
+      --line:rgba(232,200,116,.18); --green:#8fb98a; --red:#c0703f; --blue:#7ba6c9; }
+    * { box-sizing:border-box; }
+    body { font-family:system-ui,Arial,sans-serif; background:var(--bg); color:var(--gold-dim); margin:0; padding:18px; line-height:1.45; font-size:14px; }
+    .wrap { max-width:760px; margin:0 auto; }
+    h1 { color:var(--gold); font-weight:600; font-size:1.15rem; margin:0 0 2px; }
+    .sub { color:var(--gold-aged); font-size:.78rem; margin:0 0 14px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; margin:0 0 14px; }
+    .card h2 { color:var(--gold); font-size:.72rem; letter-spacing:.13em; text-transform:uppercase; margin:0 0 10px; }
+    button { font-family:inherit; font-size:.82rem; color:var(--gold); background:rgba(232,200,116,.06); border:1px solid var(--gold-aged); border-radius:5px; padding:6px 12px; margin:0 6px 6px 0; cursor:pointer; }
+    button:hover:not(:disabled) { color:#ffd98a; border-color:var(--gold); }
+    button:disabled { opacity:.35; cursor:default; }
+    button.on { border-color:var(--gold); color:#ffd98a; background:rgba(232,200,116,.16); }
+    button.play { border-color:var(--green); color:var(--green); }
+    button.tgt { border-color:var(--red); color:var(--red); }
+    input { font-family:inherit; font-size:.82rem; color:var(--gold-dim); background:#0b0906; border:1px solid var(--gold-aged); border-radius:5px; padding:6px 8px; }
+    .mono { font-family:ui-monospace,Menlo,monospace; font-size:.78rem; }
+    .muted { color:var(--gold-aged); } .me { color:var(--green); } .warn { color:var(--red); } .turn { color:var(--gold); font-weight:600; }
+    table { width:100%; border-collapse:collapse; } td { padding:3px 6px; border-bottom:1px solid var(--line); }
+    .board { display:flex; gap:12px; } .board .side { flex:1; }
+    .unit { display:inline-block; border:1px solid var(--line); border-radius:5px; padding:3px 8px; margin:2px; font-size:.76rem; }
+    .unit b { color:var(--gold); }
+    #log { font-family:ui-monospace,Menlo,monospace; font-size:.7rem; color:var(--gold-aged); white-space:pre-wrap; max-height:150px; overflow:auto; background:#0b0906; border:1px solid var(--line); border-radius:6px; padding:8px; }
+    .pill { display:inline-block; font-size:.68rem; padding:1px 7px; border-radius:9px; border:1px solid var(--gold-aged); color:var(--gold-aged); margin-left:6px; }
+    .pill.win { border-color:var(--green); color:var(--green); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Divya Yuddha — Wire Match</h1>
+    <p class="sub">M-P3 dark test · server-dealt · every move validated server-side · <span id="conn" class="muted">disconnected</span> <span id="ver" class="muted"></span></p>
+
+    <div class="card" id="connect-card">
+      <h2>Connect</h2>
+      <input id="server" value="ws://localhost:8090" size="24">
+      <button id="connect">Connect</button>
+      <div id="auth-actions" style="margin-top:8px; display:none">
+        <button id="wallet">Sign in (throwaway wallet)</button>
+        <span id="devbox" style="display:none">
+          <input id="devaddr" placeholder="0x… dev address" size="30" spellcheck="false">
+          <button id="devsignin">Dev sign in</button>
+        </span>
+      </div>
+      <div id="who" class="muted" style="margin-top:6px">not signed in</div>
+    </div>
+
+    <div id="screen"></div>
+
+    <div class="card"><h2>Log</h2><div id="log"></div></div>
+  </div>
+
+  <script src="../game/src/engine.js?v=33d0757"></script>
+  <script src="wrapper.js?v=mp3"></script>
+  <script src="matchclient.js?v=mp3"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var logEl = $("log");
+    function log(m) { var t = new Date().toISOString().slice(11, 19); logEl.textContent = ("[" + t + "] " + m + "\n") + logEl.textContent; }
+    var E = {};
+    ["newGame","playCard","pass","mulligan","doLeap","canLeap","bestLeap","designateShield","playableIndices","targetSpec","adjacentUnits","effPower"].forEach(function (k) { E[k] = window[k]; });
+    var ready = typeof E.newGame === "function" && window.DYWrapper && window.DYMatchClient;
+    $("ver").textContent = ready ? "engine+wrapper loaded ✓" : "NOT LOADED (run sync_game.sh)";
+    if (!ready) { $("ver").className = "warn"; return; }
+
+    var chosenOpenFaction = "devas", chosenTier = 10, chosenJoinFaction = "devas", pendingPlay = null;
+    var C = window.DYMatchClient.createClient({ E: E, W: window.DYWrapper, ethers: window.ethers, log: log, onUpdate: render });
+
+    function factionPicker(current, cb) {
+      return ["devas","asuras","vanaras","nagas"].map(function (f) {
+        return '<button class="fac ' + (f === current ? "on" : "") + '" data-f="' + f + '">' + f + '</button>';
+      }).join("");
+    }
+
+    function render(v) {
+      $("conn").textContent = v.connected ? "connected" : "disconnected";
+      $("conn").className = v.connected ? "me" : "muted";
+      if (v.me) { $("who").innerHTML = 'signed in as <span class="mono me">' + v.me + '</span>'; $("auth-actions").style.display = "none"; }
+      var sc = $("screen");
+      if (v.screen === "lobby") { sc.innerHTML = lobbyHTML(v); wireLobby(); return; }
+      sc.innerHTML = matchHTML(v); wireMatch(v);
+    }
+
+    function lobbyHTML(v) {
+      if (!v.me) return '<div class="card"><h2>Lobby</h2><div class="muted">sign in to see tables</div></div>';
+      var rows = v.tables.length ? v.tables.map(function (t) {
+        var mine = t.opener === v.me;
+        return '<tr><td><b>' + t.tier + ' DYC</b> <span class="muted mono">' + t.id + '</span></td>'
+          + '<td class="muted">' + (t.faction || "?") + ' · ' + t.opener.slice(0,6) + "…" + '</td>'
+          + '<td>' + (mine ? '<span class="muted">yours</span>' : '<button class="join" data-id="' + t.id + '">Join as ' + chosenJoinFaction + '</button>') + '</td></tr>';
+      }).join("") : '<tr><td class="muted" colspan="3">no open tables</td></tr>';
+      return '<div class="card"><h2>Open a table</h2>'
+        + '<div>faction: ' + factionPicker(chosenOpenFaction) + '</div>'
+        + '<div style="margin-top:6px">tier: ' + [10,50,200,1000].map(function (x) { return '<button class="tier ' + (x === chosenTier ? "on" : "") + '" data-t="' + x + '">' + x + '</button>'; }).join("") + '</div>'
+        + '<div style="margin-top:8px"><button id="open">Open ' + chosenTier + ' DYC (' + chosenOpenFaction + ')</button></div></div>'
+        + '<div class="card"><h2>Join a table <span class="muted">(join faction: ' + factionPickerJoin() + ')</span></h2><table>' + rows + '</table></div>'
+        + (v.lastReject ? '<div class="card warn">✗ ' + v.lastReject + '</div>' : '');
+    }
+    function factionPickerJoin() { return ["devas","asuras","vanaras","nagas"].map(function (f) { return '<button class="jfac ' + (f === chosenJoinFaction ? "on" : "") + '" data-f="' + f + '">' + f + '</button>'; }).join(""); }
+
+    function matchHTML(v) {
+      var h = '<div class="card"><h2>Match ' + v.matchId + '</h2>'
+        + '<div>You are <b>seat ' + v.seat + '</b> — <span class="me">' + v.myName + ' (' + v.myFaction + ')</span> vs ' + v.oppName + ' (' + v.oppFaction + ')'
+        + '<span class="pill">round ' + v.round + '</span><span class="pill' + (v.roundWins[v.seat] > v.roundWins[1-v.seat] ? " win" : "") + '">wins ' + v.roundWins[0] + '–' + v.roundWins[1] + ' (to ' + v.winTarget + ')</span></div>'
+        + '<div style="margin-top:6px">' + phaseLine(v) + '</div>';
+      if (v.outcome) {
+        h += '<div class="card" style="margin-top:10px">' + (v.outcome.kind === "result"
+          ? '<span class="turn">Result: ' + (v.outcome.winner == null ? "draw" : ("seat " + v.outcome.winner + " wins")) + '</span> · roundWins ' + v.outcome.roundWins.join("–")
+          : '<span class="warn">Match abandoned — ' + v.outcome.reason + '</span>') + '</div>';
+      }
+      h += '</div>';
+      // boards
+      h += '<div class="card"><h2>Board</h2><div class="board">'
+        + '<div class="side"><div class="muted">' + v.oppName + ' · hand ' + v.oppHandCount + '</div>' + v.oppUnits.map(unitHTML).join("") + '</div>'
+        + '<div class="side"><div class="me">' + v.myName + ' (you)</div>' + v.myUnits.map(unitHTML).join("") + '</div>'
+        + '</div></div>';
+      // controls
+      if (v.phase === "mulligan" && !v.myMulliganed) {
+        h += '<div class="card"><h2>Mulligan — pick cards to toss, then confirm</h2>'
+          + v.myHand.map(function (c) { return '<button class="mull" data-i="' + c.i + '">' + c.n + '</button>'; }).join("")
+          + '<div style="margin-top:8px"><button id="mullconfirm" class="on">Confirm mulligan</button> <span class="muted">(toss nothing = keep)</span></div></div>';
+      } else if (v.phase === "mulligan") {
+        h += '<div class="card muted">waiting for the opponent to mulligan…</div>';
+      } else if (v.phase === "play") {
+        h += '<div class="card"><h2>Your hand ' + (v.myTurn ? '<span class="turn">— your turn</span>' : '<span class="muted">— opponent\'s turn</span>') + '</h2>';
+        if (pendingPlay) {
+          h += '<div>targets for <b>' + pendingPlay.name + '</b>: ' + pendingPlay.options.map(function (o) { return '<button class="tgt" data-idx="' + o.idx + '">' + o.n + '</button>'; }).join("") + ' <button id="cancelplay">cancel</button></div>';
+        } else {
+          h += v.myHand.map(function (c) { return '<button class="hand ' + (c.playable ? "play" : "") + '" data-i="' + c.i + '"' + (c.playable ? "" : " disabled") + '>' + c.n + ' <span class="muted">' + (c.p || "") + '</span></button>'; }).join("");
+          h += '<div style="margin-top:8px"><button id="pass"' + (v.myTurn ? "" : " disabled") + '>Pass round</button> <button id="concede"' + (v.myTurn ? "" : " disabled") + '>Concede</button></div>';
+        }
+        h += '</div>';
+      }
+      if (v.lastReject) h += '<div class="card warn">✗ ' + v.lastReject + '</div>';
+      return h;
+    }
+    function phaseLine(v) {
+      if (v.phase === "over") return '<span class="turn">match over</span>';
+      if (v.phase === "mulligan") return '<span class="muted">mulligan phase</span>';
+      return v.myTurn ? '<span class="turn">▶ your turn</span>' : '<span class="muted">opponent\'s turn</span>';
+    }
+    function unitHTML(u) { return '<span class="unit"><b>' + u.power + '</b> ' + u.n + '</span>'; }
+
+    // ---- wiring ----
+    function wireLobby() {
+      Array.prototype.forEach.call(document.querySelectorAll(".fac"), function (b) { b.onclick = function () { chosenOpenFaction = b.dataset.f; render(C.view()); }; });
+      Array.prototype.forEach.call(document.querySelectorAll(".jfac"), function (b) { b.onclick = function () { chosenJoinFaction = b.dataset.f; render(C.view()); }; });
+      Array.prototype.forEach.call(document.querySelectorAll(".tier"), function (b) { b.onclick = function () { chosenTier = Number(b.dataset.t); render(C.view()); }; });
+      var op = $("open"); if (op) op.onclick = function () { C.open(chosenTier, chosenOpenFaction); };
+      Array.prototype.forEach.call(document.querySelectorAll(".join"), function (b) { b.onclick = function () { C.join(b.dataset.id, chosenJoinFaction); }; });
+    }
+    var mullPick = {};
+    function wireMatch(v) {
+      Array.prototype.forEach.call(document.querySelectorAll(".mull"), function (b) { b.onclick = function () { var i = b.dataset.i; if (mullPick[i]) { delete mullPick[i]; b.classList.remove("on"); } else { mullPick[i] = 1; b.classList.add("on"); } }; });
+      var mc = $("mullconfirm"); if (mc) mc.onclick = function () { var indices = Object.keys(mullPick).map(function (x) { return Number(x); }); mullPick = {}; C.mulligan(indices); };
+      Array.prototype.forEach.call(document.querySelectorAll(".hand"), function (b) {
+        b.onclick = function () {
+          var i = Number(b.dataset.i);
+          var spec = C.targetSpecFor(i);
+          if (spec && spec.options && spec.options.length) { pendingPlay = { i: i, name: v.myHand[i].n, options: spec.options.map(function (o, idx) { return { idx: idx, n: o.n }; }) }; render(C.view()); }
+          else { C.play(i, null); }
+        };
+      });
+      Array.prototype.forEach.call(document.querySelectorAll(".tgt"), function (b) { b.onclick = function () { var i = pendingPlay.i; var idx = Number(b.dataset.idx); pendingPlay = null; C.play(i, idx); }; });
+      var cp = $("cancelplay"); if (cp) cp.onclick = function () { pendingPlay = null; render(C.view()); };
+      var ps = $("pass"); if (ps) ps.onclick = function () { C.pass(); };
+      var cc = $("concede"); if (cc) cc.onclick = function () { C.concede(); };
+    }
+
+    // connect + auth wiring
+    $("connect").onclick = function () { C.connect($("server").value.trim()); $("auth-actions").style.display = "block"; setTimeout(function () { $("devbox").style.display = C.isDevMode() ? "inline" : "none"; }, 300); };
+    $("wallet").onclick = function () { if (!window.ethers) { alert("ethers not loaded — use dev mode"); return; } C.authWallet(); };
+    $("devsignin").onclick = function () { C.authDev($("devaddr").value.trim()); };
+  })();
+  </script>
+</body>
+</html>
