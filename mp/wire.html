@@ -52,6 +52,26 @@
       <div id="who" class="muted" style="margin-top:6px">not signed in</div>
     </div>
 
+    <div class="card" id="stake-card">
+      <h2>Stakes (M-P4 · DYC on chain)</h2>
+      <label style="font-size:.8rem"><input type="checkbox" id="stakeon"> stake this table (else free)</label>
+      <div id="chainbox" style="display:none;margin-top:8px">
+        <div class="muted" style="font-size:.75rem;margin-bottom:6px">Local rehearsal: paste an anvil RPC + the deployed StakeEscrow/MockDYC + a funded key. You cast approve/open/join from your OWN wallet — the server only READS the chain to gate the match.</div>
+        <input id="rpc" value="http://127.0.0.1:8545" size="26" placeholder="rpc">
+        <input id="escaddr" size="30" placeholder="StakeEscrow address"><br>
+        <input id="dycaddr" size="30" placeholder="DYC address" style="margin-top:4px">
+        <input id="pk" size="30" placeholder="private key (anvil dev)" style="margin-top:4px">
+        <div style="margin-top:6px"><button id="setchain">Set chain</button> <span id="chainwho" class="muted"></span></div>
+        <div style="margin-top:10px;border-top:1px solid #333;padding-top:8px">
+          <div class="muted" style="font-size:.75rem;margin-bottom:6px">Friend challenge (negotiated stake, 10–10,000 DYC, locked to one opponent):</div>
+          <input id="friendaddr" size="30" placeholder="expected opponent address">
+          <input id="friendamt" size="8" placeholder="DYC" style="margin-left:4px">
+          <button id="friendopen" style="margin-left:4px">Challenge</button>
+        </div>
+      </div>
+      <p class="muted" style="font-size:.74rem;margin:10px 0 0;line-height:1.5">Escrow honesty: your stake locks on chain before the match begins. The winner takes the pot minus a 5% rake; a draw refunds both in full, no rake. You can cancel and get a full refund any time before someone joins. If the referee never settles, anyone can abort after 24 hours and both stakes refund — funds can never strand.</p>
+    </div>
+
     <div id="screen"></div>
 
     <div class="card"><h2>Log</h2><div id="log"></div></div>
@@ -60,6 +80,8 @@
   <script src="../game/src/engine.js?v=33d0757"></script>
   <script src="wrapper.js?v=mp3"></script>
   <script src="matchclient.js?v=mp3"></script>
+  <!-- ethers 6.17.0 UMD — pinned to CFG.ethers.cdn (the site-wide pin); needed for the M-P4 stake casts (setChain/openStaked/joinStaked). Blocking + before the inline IIFE so window.ethers exists at createClient. -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.17.0/dist/ethers.umd.min.js"></script>
   <script>
   (function () {
     var $ = function (id) { return document.getElementById(id); };
@@ -72,6 +94,8 @@
     if (!ready) { $("ver").className = "warn"; return; }
 
     var chosenOpenFaction = "devas", chosenTier = 10, chosenJoinFaction = "devas", pendingPlay = null;
+    var TIER_STAKES = { 10: "10000000000000000000", 50: "50000000000000000000", 200: "200000000000000000000", 1000: "1000000000000000000000" };
+    var staked = false, chainSet = false;
     var C = window.DYMatchClient.createClient({ E: E, W: window.DYWrapper, ethers: window.ethers, log: log, onUpdate: render });
 
     function factionPicker(current, cb) {
@@ -95,7 +119,7 @@
         var mine = t.opener === v.me;
         return '<tr><td><b>' + t.tier + ' DYC</b> <span class="muted mono">' + t.id + '</span></td>'
           + '<td class="muted">' + (t.faction || "?") + ' · ' + t.opener.slice(0,6) + "…" + '</td>'
-          + '<td>' + (mine ? '<span class="muted">yours</span>' : '<button class="join" data-id="' + t.id + '">Join as ' + chosenJoinFaction + '</button>') + '</td></tr>';
+          + '<td>' + (t.staked ? '<span class="me">' + (BigInt(t.stake) / 1000000000000000000n).toString() + ' DYC</span> ' : '') + (mine ? '<span class="muted">yours</span>' : '<button class="join" data-id="' + t.id + '" data-staked="' + (t.staked ? 1 : 0) + '" data-stake="' + (t.stake || '') + '" data-escrow="' + (t.escrowMatchId || '') + '">Join as ' + chosenJoinFaction + '</button>') + '</td></tr>';
       }).join("") : '<tr><td class="muted" colspan="3">no open tables</td></tr>';
       return '<div class="card"><h2>Open a table</h2>'
         + '<div>faction: ' + factionPicker(chosenOpenFaction) + '</div>'
@@ -154,8 +178,20 @@
       Array.prototype.forEach.call(document.querySelectorAll(".fac"), function (b) { b.onclick = function () { chosenOpenFaction = b.dataset.f; render(C.view()); }; });
       Array.prototype.forEach.call(document.querySelectorAll(".jfac"), function (b) { b.onclick = function () { chosenJoinFaction = b.dataset.f; render(C.view()); }; });
       Array.prototype.forEach.call(document.querySelectorAll(".tier"), function (b) { b.onclick = function () { chosenTier = Number(b.dataset.t); render(C.view()); }; });
-      var op = $("open"); if (op) op.onclick = function () { C.open(chosenTier, chosenOpenFaction); };
-      Array.prototype.forEach.call(document.querySelectorAll(".join"), function (b) { b.onclick = function () { C.join(b.dataset.id, chosenJoinFaction); }; });
+      var op = $("open"); if (op) op.onclick = function () {
+        if (staked) {
+          if (!chainSet) { alert("Set chain first (Stakes card)"); return; }
+          C.openStaked(chosenTier, chosenOpenFaction, TIER_STAKES[chosenTier]).catch(function (e) { log("openStaked failed: " + e.message); });
+        } else { C.open(chosenTier, chosenOpenFaction); }
+      };
+      Array.prototype.forEach.call(document.querySelectorAll(".join"), function (b) {
+        b.onclick = function () {
+          if (b.dataset.staked === "1") {
+            if (!chainSet) { alert("Set chain first (Stakes card)"); return; }
+            C.joinStaked(b.dataset.id, chosenJoinFaction, b.dataset.escrow, b.dataset.stake).catch(function (e) { log("joinStaked failed: " + e.message); });
+          } else { C.join(b.dataset.id, chosenJoinFaction); }
+        };
+      });
     }
     var mullPick = {};
     function wireMatch(v) {
@@ -179,6 +215,18 @@
     $("connect").onclick = function () { C.connect($("server").value.trim()); $("auth-actions").style.display = "block"; setTimeout(function () { $("devbox").style.display = C.isDevMode() ? "inline" : "none"; }, 300); };
     $("wallet").onclick = function () { if (!window.ethers) { alert("ethers not loaded — use dev mode"); return; } C.authWallet(); };
     $("devsignin").onclick = function () { C.authDev($("devaddr").value.trim()); };
+    $("stakeon").onchange = function () { staked = this.checked; $("chainbox").style.display = staked ? "block" : "none"; };
+    $("setchain").onclick = function () {
+      try { var a = C.setChain({ rpcUrl: $("rpc").value.trim(), escrowAddr: $("escaddr").value.trim(), dycAddr: $("dycaddr").value.trim(), privateKey: $("pk").value.trim() }); chainSet = true; $("chainwho").innerHTML = '<span class="me">wallet ' + a.slice(0, 10) + '…</span>'; log("chain set — wallet " + a); }
+      catch (e) { log("setChain failed: " + e.message); alert("setChain: " + e.message); }
+    };
+    $("friendopen").onclick = function () {
+      if (!chainSet) { alert("Set chain first"); return; }
+      var addr = $("friendaddr").value.trim(), amt = $("friendamt").value.trim();
+      if (!addr || !amt) { alert("expected opponent + DYC amount required"); return; }
+      var wei = (BigInt(amt) * 1000000000000000000n).toString(); // negotiated stake → server validates 10–10,000
+      C.openStaked(0, chosenOpenFaction, wei, addr).catch(function (e) { log("friend challenge failed: " + e.message); });
+    };
   })();
   </script>
 </body>

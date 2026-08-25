@@ -24,7 +24,7 @@
   function createClient(deps) {
     var E = deps.E, W = deps.W, ethers = deps.ethers, log = deps.log || function () {};
     var onUpdate = deps.onUpdate || function () {};
-    var ws = null, nonce = null, devMode = false;
+    var ws = null, nonce = null, devMode = false, chain = null;
     var me = null;                 // my address
     var tables = [];
     var match = null;              // { matchId, seat, opponent, seed, factions, winTarget }
@@ -116,9 +116,39 @@
       },
       authDev: function (addr) { send({ type: "auth-dev", address: addr }); },
       isDevMode: function () { return devMode; },
-      open: function (tier, faction) { lastReject = null; send({ type: "open", tier: tier, faction: faction }); },
+      open: function (tier, faction) { lastReject = null; send({ type: "open", tier: tier, faction: faction }); }, // FREE
       close: function (tableId) { send({ type: "close", tableId: tableId }); },
-      join: function (tableId, faction) { lastReject = null; send({ type: "join", tableId: tableId, faction: faction }); },
+      join: function (tableId, faction) { lastReject = null; send({ type: "join", tableId: tableId, faction: faction }); }, // FREE
+      // ---- M-P4 STAKED: users cast approve/open/join from THEIR OWN wallet (chain-first), then open/join the lobby
+      //      table carrying the escrow matchId. The store buy flow is the precedent. LIQUID source only this rung. ----
+      setChain: function (o) {
+        var provider = new deps.ethers.JsonRpcProvider(o.rpcUrl);
+        var wallet = new deps.ethers.Wallet(o.privateKey, provider);
+        var ERC20 = ["function approve(address,uint256) returns (bool)", "function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)"];
+        var ESC = ["function openMatch(uint256,address,uint8) returns (uint256)", "function joinMatch(uint256,uint8)", "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)"];
+        chain = { wallet: wallet, escrowAddr: o.escrowAddr, dycAddr: o.dycAddr, dyc: new deps.ethers.Contract(o.dycAddr, ERC20, wallet), escrow: new deps.ethers.Contract(o.escrowAddr, ESC, wallet), ZERO: deps.ethers.ZeroAddress };
+        return wallet.address;
+      },
+      // openStaked(tier, faction, stakeWei[, friendAddr]) — approve → openMatch → open the lobby table with the escrow id
+      openStaked: function (tier, faction, stakeWei, friendAddr) {
+        lastReject = null; if (!chain) return Promise.reject(new Error("setChain first"));
+        var stake = BigInt(stakeWei);
+        return chain.dyc.approve(chain.escrowAddr, stake).then(function (t) { return t.wait(); }).then(function () {
+          return chain.escrow.openMatch(stake, friendAddr || chain.ZERO, 0).then(function (t) { return t.wait(); });
+        }).then(function (rc) {
+          var id = null; rc.logs.forEach(function (l) { try { var p = chain.escrow.interface.parseLog(l); if (p && p.name === "MatchOpened") id = p.args.id; } catch (e) {} });
+          send({ type: "open", tier: friendAddr ? 0 : tier, faction: faction, escrowMatchId: id.toString(), friend: !!friendAddr, stake: friendAddr ? stake.toString() : undefined });
+          return id.toString();
+        });
+      },
+      // joinStaked(tableId, faction, escrowMatchId, stakeWei) — approve → joinMatch → join the lobby table
+      joinStaked: function (tableId, faction, escrowMatchId, stakeWei) {
+        lastReject = null; if (!chain) return Promise.reject(new Error("setChain first"));
+        var stake = BigInt(stakeWei);
+        return chain.dyc.approve(chain.escrowAddr, stake).then(function (t) { return t.wait(); }).then(function () {
+          return chain.escrow.joinMatch(BigInt(escrowMatchId), 0).then(function (t) { return t.wait(); });
+        }).then(function () { send({ type: "join", tableId: tableId, faction: faction }); });
+      },
       mulligan: function (indices) { send({ type: "move", matchId: match && match.matchId, action: { type: "mulligan", indices: indices || [] } }); },
       play: function (handIndex, targetIndex) { send({ type: "move", matchId: match && match.matchId, action: { type: "play", handIndex: handIndex, targetIndex: targetIndex != null ? targetIndex : null } }); },
       pass: function () { send({ type: "move", matchId: match && match.matchId, action: { type: "pass" } }); },
