@@ -25,7 +25,10 @@ NS_PREFIX="dyw::"
 # copies pushed the Pages artifact to 262MB and timed the deploy out at ~11min. Same proven pattern as video (47MB)
 # + vfx (285MB): each heavy dir's base path is cross-linked to the free game's live Pages origin (they stream
 # same-origin from there). ONLY assets/vendor (the ~780KB pixi runtime) is still copied. See the cross-link block.
-ARCHIVE_PATHS="index.html src/chapters.js assets/vendor"
+# M-P2 (owner-ruled D1): src/engine.js is archived as a STANDALONE byte-identical copy (game/src/engine.js) — the
+# multiplayer wrapper in mp/ (which lives OUTSIDE game/ and survives this sync) loads it. Same archive commit as the
+# inlined engine in index.html, so the two are byte-identical; refreshed every sync; guarded below (never silently skip).
+ARCHIVE_PATHS="index.html src/chapters.js src/engine.js assets/vendor"
 
 if [ ! -f "$GAME_REPO/index.html" ] || [ ! -d "$GAME_REPO/assets/cards" ]; then
   echo "error: GAME_REPO does not look like the game ($GAME_REPO)" >&2
@@ -46,6 +49,11 @@ git -C "$GAME_REPO" archive --format=tar "$SRC_COMMIT" $ARCHIVE_PATHS | tar -x -
 
 if [ ! -f "$DEST/index.html" ]; then
   echo "error: archive did not produce index.html" >&2
+  exit 1
+fi
+# M-P2 (owner-ruled D1) — the standalone engine copy for the mp/ wrapper MUST be present. Fail loudly, never skip.
+if [ ! -f "$DEST/src/engine.js" ]; then
+  echo "error: archive did not produce src/engine.js (the M-P2 wrapper engine copy) — aborting" >&2
   exit 1
 fi
 
@@ -219,6 +227,7 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 ## Copied from the commit
 - index.html (+ gate preamble AND the S3 economy-suppression block, injected between the DYW-GATE markers)
 - src/chapters.js (Story Mode data)
+- src/engine.js (M-P2 D1 — STANDALONE byte-identical engine copy for the mp/ multiplayer wrapper; same commit as the inlined engine, so byte-identical; guarded — the sync aborts if the archive did not carry it)
 - assets/vendor (pixi runtime, ~780KB — the only heavy dir still copied)
 
 ## Excluded / transformed

@@ -8,6 +8,7 @@
 ## Copied from the commit
 - index.html (+ gate preamble AND the S3 economy-suppression block, injected between the DYW-GATE markers)
 - src/chapters.js (Story Mode data)
+- src/engine.js (M-P2 D1 — STANDALONE byte-identical engine copy for the mp/ multiplayer wrapper; same commit as the inlined engine, so byte-identical; guarded — the sync aborts if the archive did not carry it)
 - assets/vendor (pixi runtime, ~780KB — the only heavy dir still copied)
 
 ## Excluded / transformed
@@ -28,7 +29,7 @@
 
 ## Notes at sync time
 - Source working tree dirty files: 1 (ignored by the archive method).
-- game/ in-repo size: 1760 KB.
+- game/ in-repo size: 1992 KB.
 
 ## Entry-link stamps (S8 flag-1)
 - The ten site->game links (rite.html x3, index.html x2, treasury.html x1, demo/index.html x1, store.html x1, explore.html x1, mint.html x1) are stamped game/index.html?v=33d0757 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 10.
