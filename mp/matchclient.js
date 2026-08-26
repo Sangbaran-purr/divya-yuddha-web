@@ -31,6 +31,11 @@
     var g = null;                  // the local mirror
     var phase = null, turn = null, lastSeq = 0, outcome = null, lastReject = null;
     var settlement = null;         // M-P5 — the signed slip + settle state (persisted, resume-able)
+    var clock = null;              // M-P6 — { kind, seat, deadline, thinkMs, warnMs } (server-broadcast; client draws only)
+    var vanish = null;             // M-P6 — { deadline } while the opponent is in the 90s grace
+    var lossLimit = null;          // M-P6 — { cap, netLossToday, remaining }
+    var authMode = null, authAddr = null; // for auto-reconnect: replay the same auth on a dropped socket
+    var reconnecting = false;
 
     // M-P5 slip persistence (persist-before-wait, resume): a received slip is saved locally so a dropped socket or a
     // reload never loses the winner's ability to cast settle. Keyed by escrowMatchId.
@@ -52,7 +57,7 @@
     function send(o) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); } catch (e) {} }
 
     function view() {
-      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement };
+      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, lossLimit: lossLimit, reconnecting: reconnecting };
       var seat = match.seat, mine = g.players[seat], opp = g.players[1 - seat];
       var legal = (phase === "play" && turn === seat) ? E.playableIndices(g, seat) : [];
       return {
@@ -65,6 +70,7 @@
         oppHandCount: opp.hand.length, // COUNT only in the UI (peekable in memory — the free-era cost, Q1)
         myMulliganed: mine.mulliganed, oppMulliganed: opp.mulliganed,
         outcome: outcome, lastReject: lastReject, settlement: settlement,
+        clock: clock, vanish: vanish, lossLimit: lossLimit, reconnecting: reconnecting,
       };
     }
     function push() { try { onUpdate(view()); } catch (e) {} }
@@ -90,7 +96,7 @@
     }
 
     function handle(m) {
-      if (m.type === "challenge") { nonce = m.nonce; devMode = !!m.devMode; log("challenge"); push(); return; }
+      if (m.type === "challenge") { nonce = m.nonce; devMode = !!m.devMode; log("challenge"); if (reconnecting && authMode) doAuth(); push(); return; }
       if (m.type === "authed") { me = m.address; log("authed " + (m.dev ? "(dev) " : "") + m.address); push(); return; }
       if (m.type === "auth-error") { lastReject = "auth: " + m.error; log("AUTH REJECTED " + m.error); push(); return; }
       if (m.type === "tables") { tables = m.tables; push(); return; }
@@ -100,12 +106,21 @@
         match = { matchId: m.matchId, seat: m.seat, opponent: m.opponent, seed: m.seed, winTarget: m.winTarget };
         // build the MIRROR — identical newGame args on both clients + the server → identical deterministic deal
         g = E.newGame({ p0: m.p0, p1: m.p1, p0Faction: m.p0Faction, p1Faction: m.p1Faction, rng: seeded(m.seed) });
-        phase = "mulligan"; turn = g.turn; lastSeq = 0; outcome = null; lastReject = null;
+        phase = "mulligan"; turn = g.turn; lastSeq = 0; outcome = null; lastReject = null; clock = null; vanish = null; reconnecting = false;
         log("match " + m.matchId + " — you are seat " + m.seat + " (" + (m.seat === 0 ? m.p0Faction : m.p1Faction) + ")");
         push(); return;
       }
       if (m.type === "phase") { phase = m.phase; push(); return; }
       if (m.type === "turn") { turn = m.seat; phase = m.phase || phase; push(); return; }
+      if (m.type === "resync") {
+        // M-P6 reconnect: the fresh {match} already rebuilt the mirror; replay the authoritative move log to catch up.
+        lastSeq = 0; (m.moves || []).forEach(function (mv) { try { applyRelayed(mv); lastSeq++; } catch (e) { log("resync apply error: " + e.message); } });
+        phase = m.phase; turn = (m.turn != null ? m.turn : g.turn); vanish = null; reconnecting = false;
+        log("resynced " + (m.moves ? m.moves.length : 0) + " moves — back in the match"); push(); return;
+      }
+      if (m.type === "clock") { clock = { kind: m.kind, seat: m.seat, deadline: m.deadline, thinkMs: m.thinkMs, warnMs: m.warnMs }; push(); return; }
+      if (m.type === "opponent-vanished") { vanish = { deadline: m.deadline, graceMs: m.graceMs }; clock = null; log("opponent disconnected — " + Math.round((m.graceMs || 90000) / 1000) + "s to reconnect"); push(); return; }
+      if (m.type === "opponent-returned") { vanish = null; log("opponent reconnected — play resumes"); push(); return; }
       if (m.type === "apply") {
         // the server VALIDATED this move; replay it on the mirror in seq order (lockstep). INDEX-BASED — the mirror
         // re-resolves each index to ITS OWN uid (engine uids are a per-instance global counter — never relayed).
@@ -116,32 +131,50 @@
         push(); return;
       }
       if (m.type === "reject") { lastReject = m.reason; log("REJECTED: " + m.reason); push(); return; }
-      if (m.type === "result") { outcome = { kind: "result", winner: m.winner, roundWins: m.roundWins }; phase = "over"; log("RESULT winner=" + m.winner + " " + m.roundWins.join("-")); push(); return; }
-      if (m.type === "abandoned") { outcome = { kind: "abandoned", reason: m.reason }; phase = "over"; log("ABANDONED: " + m.reason); push(); return; }
+      if (m.type === "result") { outcome = { kind: "result", winner: m.winner, roundWins: m.roundWins, forfeit: !!m.forfeit, reason: m.reason }; phase = "over"; clock = null; vanish = null; log("RESULT winner=" + m.winner + " " + m.roundWins.join("-") + (m.forfeit ? " (forfeit)" : "")); push(); return; }
+      if (m.type === "abandoned") { outcome = { kind: "abandoned", reason: m.reason }; phase = "over"; clock = null; vanish = null; log("ABANDONED: " + m.reason); push(); return; }
       if (m.type === "settlement") {
         // the referee-signed slip. The WINNER casts settle from their own wallet (Q3); the loser gets it for
         // transparency; a draw lets either cast. Persist immediately (resume) BEFORE any wait.
-        settlement = { escrowMatchId: m.escrowMatchId, stake: m.stake, result: m.result, resultName: m.resultName, youWon: !!m.youWon, winnerSeat: m.winnerSeat, slip: m.slip, refereeAddress: m.refereeAddress, settled: false, at: Date.now() };
+        settlement = { escrowMatchId: m.escrowMatchId, stake: m.stake, result: m.result, resultName: m.resultName, youWon: !!m.youWon, winnerSeat: m.winnerSeat, slip: m.slip, refereeAddress: m.refereeAddress, forfeit: !!m.forfeit, settled: false, at: Date.now() };
+        clock = null; vanish = null;
         persistSlip(settlement);
         log("settlement slip: " + m.resultName + (m.youWon ? " — you WON, cast settle to collect" : (m.result === 2 ? " — draw, cast to refund both" : " — opponent settles")));
         push(); return;
       }
-      if (m.type === "settlement-error") { settlement = { error: m.error, at: Date.now() }; log("settlement error: " + m.error); push(); return; }
+      if (m.type === "settlement-error") { settlement = { error: m.error, at: Date.now() }; clock = null; vanish = null; log("settlement error: " + m.error); push(); return; }
+      if (m.type === "loss-limit") { lossLimit = { cap: m.cap, netLossToday: m.netLossToday, remaining: m.remaining }; log("loss limit: " + (m.cap == null ? "none" : (BigInt(m.cap) / 1000000000000000000n) + " DYC/day, " + (BigInt(m.remaining) / 1000000000000000000n) + " left")); push(); return; }
+    }
+
+    // M-P6 — a STABLE session wallet (reused across auto-reconnects, so the server re-seats the SAME address). Replays
+    // the stored auth on a fresh challenge.
+    var sessionWallet = null, connectUrl = null;
+    function doAuth() {
+      if (authMode === "dev") { send({ type: "auth-dev", address: authAddr }); }
+      else if (authMode === "wallet" && sessionWallet && nonce) { sessionWallet.signMessage(LOGIN + nonce).then(function (sig) { send({ type: "auth", signature: sig }); }); }
+    }
+    function openSocket() {
+      ws = new WebSocket(connectUrl);
+      ws.onopen = function () { log(reconnecting ? "ws reopened (resuming)" : ("ws open " + connectUrl)); push(); };
+      ws.onclose = function () {
+        // M-P6 — if a live match dropped, auto-reconnect once to land inside the vanish grace and resync.
+        if (match && phase !== "over" && authMode && !reconnecting) { reconnecting = true; log("ws dropped — reconnecting to resume…"); push(); setTimeout(openSocket, 800); }
+        else { log("ws closed"); push(); }
+      };
+      ws.onerror = function () { log("ws error"); };
+      ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
     }
 
     return {
-      connect: function (url) {
-        ws = new WebSocket(url);
-        ws.onopen = function () { log("ws open " + url); push(); };
-        ws.onclose = function () { log("ws closed"); push(); };
-        ws.onerror = function () { log("ws error"); };
-        ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
-      },
+      connect: function (url) { connectUrl = url; reconnecting = false; openSocket(); },
       authWallet: function () {
-        if (!nonce) return; var w = ethers.Wallet.createRandom();
-        w.signMessage(LOGIN + nonce).then(function (sig) { send({ type: "auth", signature: sig }); });
+        if (!nonce) return; if (!sessionWallet) sessionWallet = ethers.Wallet.createRandom(); authMode = "wallet"; doAuth();
       },
-      authDev: function (addr) { send({ type: "auth-dev", address: addr }); },
+      authDev: function (addr) { authMode = "dev"; authAddr = addr; send({ type: "auth-dev", address: addr }); },
+      // M-P6 loss limits + slip re-request over the wire
+      setLossLimit: function (amountWei) { send({ type: "set-loss-limit", amount: String(amountWei) }); },
+      clearLossLimit: function () { send({ type: "clear-loss-limit" }); },
+      getLossLimit: function () { send({ type: "get-loss-limit" }); },
       isDevMode: function () { return devMode; },
       open: function (tier, faction) { lastReject = null; send({ type: "open", tier: tier, faction: faction }); }, // FREE
       close: function (tableId) { send({ type: "close", tableId: tableId }); },
@@ -160,6 +193,8 @@
       openStaked: function (tier, faction, stakeWei, friendAddr) {
         lastReject = null; if (!chain) return Promise.reject(new Error("setChain first"));
         var stake = BigInt(stakeWei);
+        // M-P6 client-side pre-cast loss gate (the real UX guard; the server backstops after the cast).
+        if (lossLimit && lossLimit.cap != null && BigInt(lossLimit.remaining) < stake) return Promise.reject(new Error("daily loss limit — this stake exceeds your remaining headroom (" + (BigInt(lossLimit.remaining) / 1000000000000000000n) + " DYC). Raise or clear the limit first."));
         return chain.dyc.approve(chain.escrowAddr, stake).then(function (t) { return t.wait(); }).then(function () {
           return chain.escrow.openMatch(stake, friendAddr || chain.ZERO, 0).then(function (t) { return t.wait(); });
         }).then(function (rc) {
@@ -172,6 +207,7 @@
       joinStaked: function (tableId, faction, escrowMatchId, stakeWei) {
         lastReject = null; if (!chain) return Promise.reject(new Error("setChain first"));
         var stake = BigInt(stakeWei);
+        if (lossLimit && lossLimit.cap != null && BigInt(lossLimit.remaining) < stake) return Promise.reject(new Error("daily loss limit — this stake exceeds your remaining headroom (" + (BigInt(lossLimit.remaining) / 1000000000000000000n) + " DYC)."));
         return chain.dyc.approve(chain.escrowAddr, stake).then(function (t) { return t.wait(); }).then(function () {
           return chain.escrow.joinMatch(BigInt(escrowMatchId), 0).then(function (t) { return t.wait(); });
         }).then(function () { send({ type: "join", tableId: tableId, faction: faction }); });

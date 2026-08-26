@@ -68,8 +68,16 @@
           <input id="friendamt" size="8" placeholder="DYC" style="margin-left:4px">
           <button id="friendopen" style="margin-left:4px">Challenge</button>
         </div>
+        <div style="margin-top:10px;border-top:1px solid #333;padding-top:8px">
+          <div class="muted" style="font-size:.75rem;margin-bottom:6px">Daily loss limit (responsible play): <span id="lossnow">—</span></div>
+          <input id="losscap" size="8" placeholder="DYC/day">
+          <button id="setloss" style="margin-left:4px">Set</button>
+          <button id="clearloss" style="margin-left:4px">Clear</button>
+          <button id="getloss" style="margin-left:4px">Refresh</button>
+        </div>
       </div>
       <p class="muted" style="font-size:.74rem;margin:10px 0 0;line-height:1.5">Escrow honesty: your stake locks on chain before the match begins. The winner takes the pot minus a 5% rake; a draw refunds both in full, no rake. You can cancel and get a full refund any time before someone joins. If the referee never settles, anyone can abort after 24 hours and both stakes refund — funds can never strand.</p>
+      <p class="muted" style="font-size:.74rem;margin:8px 0 0;line-height:1.5">Two clocks keep the match fair: <b>120 seconds per move</b> (at zero the server passes for you), and a <b>90-second grace</b> to reconnect if your connection drops — after that the match is forfeit to your opponent, who collects the pot.</p>
     </div>
 
     <div id="screen"></div>
@@ -79,7 +87,7 @@
 
   <script src="../game/src/engine.js?v=33d0757"></script>
   <script src="wrapper.js?v=mp3"></script>
-  <script src="matchclient.js?v=mp5"></script>
+  <script src="matchclient.js?v=mp6"></script>
   <!-- ethers 6.17.0 UMD — pinned to CFG.ethers.cdn (the site-wide pin); needed for the M-P4 stake casts (setChain/openStaked/joinStaked). Blocking + before the inline IIFE so window.ethers exists at createClient. -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.17.0/dist/ethers.umd.min.js"></script>
   <script>
@@ -95,7 +103,7 @@
 
     var chosenOpenFaction = "devas", chosenTier = 10, chosenJoinFaction = "devas", pendingPlay = null;
     var TIER_STAKES = { 10: "10000000000000000000", 50: "50000000000000000000", 200: "200000000000000000000", 1000: "1000000000000000000000" };
-    var staked = false, chainSet = false;
+    var staked = false, chainSet = false, lastView = null;
     var C = window.DYMatchClient.createClient({ E: E, W: window.DYWrapper, ethers: window.ethers, log: log, onUpdate: render });
 
     function factionPicker(current, cb) {
@@ -108,10 +116,23 @@
       $("conn").textContent = v.connected ? "connected" : "disconnected";
       $("conn").className = v.connected ? "me" : "muted";
       if (v.me) { $("who").innerHTML = 'signed in as <span class="mono me">' + v.me + '</span>'; $("auth-actions").style.display = "none"; }
+      lastView = v;
+      if (v.lossLimit) { var ln = $("lossnow"); if (ln) ln.innerHTML = v.lossLimit.cap == null ? "none set" : ('<span class="me">' + (BigInt(v.lossLimit.cap) / 1000000000000000000n) + ' DYC/day</span> · ' + (BigInt(v.lossLimit.remaining) / 1000000000000000000n) + ' left today'); }
       var sc = $("screen");
-      var extra = settlementHTML(v);
+      var extra = statusHTML(v) + settlementHTML(v);
       if (v.screen === "lobby") { sc.innerHTML = extra + lobbyHTML(v); wireLobby(); wireSettle(v); return; }
       sc.innerHTML = extra + matchHTML(v); wireMatch(v); wireSettle(v);
+    }
+    // M-P6 — the live clock / vanish grace / reconnect banners. The tick loop (below) updates the countdown numbers.
+    function statusHTML(v) {
+      var h = "";
+      if (v.reconnecting) h += '<div class="card warn">⟳ connection dropped — reconnecting to resume your match…</div>';
+      if (v.vanish) h += '<div class="card warn">opponent disconnected — <b id="vanishcd">…</b> left to reconnect, else the match is forfeit to you</div>';
+      if (v.clock && v.phase && v.phase !== "over" && !v.vanish) {
+        var label = v.clock.kind === "mulligan" ? "mulligan clock" : (v.clock.seat === v.seat ? "your move" : "opponent's move");
+        h += '<div class="card"><span class="muted">' + label + ':</span> <b id="clockcd">…</b>s</div>';
+      }
+      return h;
     }
 
     // M-P5 settlement strip — shown whenever a signed slip is in hand (match view OR lobby, incl. resume-after-reload).
@@ -259,6 +280,19 @@
     };
     // M-P5 — resume: if a prior match left an un-settled slip in localStorage, surface the settlement strip on load.
     if (C.resumeSettlement()) log("resumed an un-settled slip — set chain + cast settle to collect");
+
+    // M-P6 — the clock/vanish countdown tick (draw only; the server decides). Updates the numbers in place.
+    setInterval(function () {
+      if (!lastView) return;
+      var cc = $("clockcd");
+      if (cc && lastView.clock) { var rem = Math.max(0, lastView.clock.deadline - Date.now()); cc.textContent = Math.ceil(rem / 1000); cc.style.color = (rem <= (lastView.clock.thinkMs - lastView.clock.warnMs)) ? "var(--crimson, #d9534f)" : ""; }
+      var vc = $("vanishcd");
+      if (vc && lastView.vanish) { vc.textContent = Math.max(0, Math.ceil((lastView.vanish.deadline - Date.now()) / 1000)) + "s"; }
+    }, 250);
+    // M-P6 loss-limit controls
+    var sl = $("setloss"); if (sl) sl.onclick = function () { var v = $("losscap").value.trim(); if (!v) return; C.setLossLimit((BigInt(v) * 1000000000000000000n).toString()); };
+    var cl = $("clearloss"); if (cl) cl.onclick = function () { C.clearLossLimit(); };
+    var gl = $("getloss"); if (gl) gl.onclick = function () { C.getLossLimit(); };
   })();
   </script>
 </body>
