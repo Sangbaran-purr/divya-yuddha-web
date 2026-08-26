@@ -36,6 +36,7 @@
     var lossLimit = null;          // M-P6 — { cap, netLossToday, remaining }
     var authMode = null, authAddr = null; // for auto-reconnect: replay the same auth on a dropped socket
     var reconnecting = false;
+    var redacted = false, serverView = null; // M-A3 — staked road: pure view renderer (no mirror `g`)
 
     // M-P5 slip persistence (persist-before-wait, resume): a received slip is saved locally so a dropped socket or a
     // reload never loses the winner's ability to cast settle. Keyed by escrowMatchId.
@@ -56,7 +57,25 @@
 
     function send(o) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); } catch (e) {} }
 
+    // M-A3 — normalize a server {view} to the same render shape the mirror `view()` produces (so wire.html renders both).
+    function normalizeServerView(v) {
+      return {
+        screen: "match", me: me, matchId: v.matchId, seat: v.seat, phase: v.phase, turn: v.turn, myTurn: v.myTurn,
+        opponent: match ? match.opponent : v.oppName, round: v.round, roundWins: v.roundWins, winTarget: v.winTarget,
+        myName: v.myName, myFaction: v.myFaction, oppName: v.oppName, oppFaction: v.oppFaction,
+        myHand: v.myHand.map(function (c) { return { i: c.i, n: c.n, t: c.t, p: c.p, playable: c.playable }; }),
+        // board DISPLAY folds heroes in (targeting uses the server legal block, so conflation is display-only)
+        myUnits: v.myUnits.concat(v.myHeroes || []).map(function (u) { return { uid: u.uid, n: u.n, power: u.power }; }),
+        oppUnits: v.oppUnits.concat(v.oppHeroes || []).map(function (u) { return { uid: u.uid, n: u.n, power: u.power }; }),
+        oppHandCount: v.oppHand.count, oppHandRevealed: !!v.oppHand.revealed, oppHandCards: v.oppHand.cards || null,
+        myMulliganed: v.myMulliganed, oppMulliganed: v.oppMulliganed,
+        outcome: outcome, lastReject: lastReject, settlement: settlement,
+        clock: clock, vanish: vanish, lossLimit: lossLimit, reconnecting: reconnecting,
+        redacted: true, legal: v.legal, lastMove: v.lastMove, deckCounts: v.deckCounts,
+      };
+    }
     function view() {
+      if (redacted && serverView && match) return normalizeServerView(serverView);
       if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, lossLimit: lossLimit, reconnecting: reconnecting };
       var seat = match.seat, mine = g.players[seat], opp = g.players[1 - seat];
       var legal = (phase === "play" && turn === seat) ? E.playableIndices(g, seat) : [];
@@ -76,6 +95,13 @@
     function push() { try { onUpdate(view()); } catch (e) {} }
 
     function targetSpecFor(handIndex) {
+      if (redacted) {
+        // M-A3 — targets come FROM THE SERVER view (the client has no engine). Shape like E.targetSpec's return.
+        if (!serverView || !serverView.legal) return null;
+        var entry = serverView.legal.playable.find(function (p) { return p.i === handIndex; });
+        if (!entry || !entry.needsTarget || !entry.targets) return null;
+        return { kind: "server", options: entry.targets.map(function (t) { return { idx: t.idx, uid: t.uid, n: t.label }; }) };
+      }
       if (!g || !match) return null;
       var card = g.players[match.seat].hand[handIndex];
       return E.targetSpec ? E.targetSpec(g, match.seat, card) : null;
@@ -106,10 +132,18 @@
         match = { matchId: m.matchId, seat: m.seat, opponent: m.opponent, seed: m.seed, winTarget: m.winTarget };
         // build the MIRROR — identical newGame args on both clients + the server → identical deterministic deal
         g = E.newGame({ p0: m.p0, p1: m.p1, p0Faction: m.p0Faction, p1Faction: m.p1Faction, rng: seeded(m.seed) });
-        phase = "mulligan"; turn = g.turn; lastSeq = 0; outcome = null; lastReject = null; clock = null; vanish = null; reconnecting = false;
+        phase = "mulligan"; turn = g.turn; lastSeq = 0; outcome = null; lastReject = null; clock = null; vanish = null; reconnecting = false; redacted = false; serverView = null;
         log("match " + m.matchId + " — you are seat " + m.seat + " (" + (m.seat === 0 ? m.p0Faction : m.p1Faction) + ")");
         push(); return;
       }
+      if (m.type === "match-redacted") {
+        // M-A3 STAKED road — NO seed, NO mirror. The client is a pure view renderer; state arrives as {view}s.
+        match = { matchId: m.matchId, seat: m.seat, opponent: m.opponent, winTarget: m.winTarget };
+        redacted = true; g = null; serverView = null; outcome = null; lastReject = null; clock = null; vanish = null; reconnecting = false;
+        log("staked match " + m.matchId + " (redacted) — you are seat " + m.seat + " (" + (m.seat === 0 ? m.p0Faction : m.p1Faction) + ")");
+        push(); return;
+      }
+      if (m.type === "view") { serverView = m; redacted = true; reconnecting = false; if (m.over && !outcome) { /* {result} carries the canonical outcome */ } push(); return; }
       if (m.type === "phase") { phase = m.phase; push(); return; }
       if (m.type === "turn") { turn = m.seat; phase = m.phase || phase; push(); return; }
       if (m.type === "resync") {

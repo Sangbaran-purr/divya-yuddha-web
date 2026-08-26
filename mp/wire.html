@@ -87,7 +87,7 @@
 
   <script src="../game/src/engine.js?v=33d0757"></script>
   <script src="wrapper.js?v=mp3"></script>
-  <script src="matchclient.js?v=mp6"></script>
+  <script src="matchclient.js?v=mpa3"></script>
   <!-- ethers 6.17.0 UMD — pinned to CFG.ethers.cdn (the site-wide pin); needed for the M-P4 stake casts (setChain/openStaked/joinStaked). Blocking + before the inline IIFE so window.ethers exists at createClient. -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.17.0/dist/ethers.umd.min.js"></script>
   <script>
@@ -126,6 +126,7 @@
     // M-P6 — the live clock / vanish grace / reconnect banners. The tick loop (below) updates the countdown numbers.
     function statusHTML(v) {
       var h = "";
+      if (v.redacted && v.phase && v.phase !== "over") h += '<div class="card"><span class="me">🔒 redacted road</span> <span class="muted">— staked match: your opponent\'s hand is hidden (server-authoritative; no mirror). You see only a count' + (v.oppHandRevealed ? ", but a sight card has revealed it this round" : "") + '.</span></div>';
       if (v.reconnecting) h += '<div class="card warn">⟳ connection dropped — reconnecting to resume your match…</div>';
       if (v.vanish) h += '<div class="card warn">opponent disconnected — <b id="vanishcd">…</b> left to reconnect, else the match is forfeit to you</div>';
       if (v.clock && v.phase && v.phase !== "over" && !v.vanish) {
