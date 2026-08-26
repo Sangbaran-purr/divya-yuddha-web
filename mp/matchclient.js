@@ -30,11 +30,29 @@
     var match = null;              // { matchId, seat, opponent, seed, factions, winTarget }
     var g = null;                  // the local mirror
     var phase = null, turn = null, lastSeq = 0, outcome = null, lastReject = null;
+    var settlement = null;         // M-P5 — the signed slip + settle state (persisted, resume-able)
+
+    // M-P5 slip persistence (persist-before-wait, resume): a received slip is saved locally so a dropped socket or a
+    // reload never loses the winner's ability to cast settle. Keyed by escrowMatchId.
+    function slipKey(eid) { return "dy_mp_slip_" + eid; }
+    function persistSlip(s) { try { if (typeof localStorage !== "undefined" && s && s.escrowMatchId) localStorage.setItem(slipKey(s.escrowMatchId), JSON.stringify(s)); } catch (e) {} }
+    function loadLatestUnsettledSlip() {
+      try {
+        if (typeof localStorage === "undefined") return null;
+        var best = null;
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i); if (k.indexOf("dy_mp_slip_") !== 0) continue;
+          var s = JSON.parse(localStorage.getItem(k) || "null");
+          if (s && !s.settled && (!best || (s.at || 0) > (best.at || 0))) best = s;
+        }
+        return best;
+      } catch (e) { return null; }
+    }
 
     function send(o) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); } catch (e) {} }
 
     function view() {
-      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1) };
+      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement };
       var seat = match.seat, mine = g.players[seat], opp = g.players[1 - seat];
       var legal = (phase === "play" && turn === seat) ? E.playableIndices(g, seat) : [];
       return {
@@ -46,7 +64,7 @@
         oppUnits: opp.units.filter(function (u) { return !u.ghost; }).map(function (u) { return { uid: u.uid, n: u.n, power: E.effPower ? E.effPower(g, 1 - seat, u) : u.power }; }),
         oppHandCount: opp.hand.length, // COUNT only in the UI (peekable in memory — the free-era cost, Q1)
         myMulliganed: mine.mulliganed, oppMulliganed: opp.mulliganed,
-        outcome: outcome, lastReject: lastReject,
+        outcome: outcome, lastReject: lastReject, settlement: settlement,
       };
     }
     function push() { try { onUpdate(view()); } catch (e) {} }
@@ -100,6 +118,15 @@
       if (m.type === "reject") { lastReject = m.reason; log("REJECTED: " + m.reason); push(); return; }
       if (m.type === "result") { outcome = { kind: "result", winner: m.winner, roundWins: m.roundWins }; phase = "over"; log("RESULT winner=" + m.winner + " " + m.roundWins.join("-")); push(); return; }
       if (m.type === "abandoned") { outcome = { kind: "abandoned", reason: m.reason }; phase = "over"; log("ABANDONED: " + m.reason); push(); return; }
+      if (m.type === "settlement") {
+        // the referee-signed slip. The WINNER casts settle from their own wallet (Q3); the loser gets it for
+        // transparency; a draw lets either cast. Persist immediately (resume) BEFORE any wait.
+        settlement = { escrowMatchId: m.escrowMatchId, stake: m.stake, result: m.result, resultName: m.resultName, youWon: !!m.youWon, winnerSeat: m.winnerSeat, slip: m.slip, refereeAddress: m.refereeAddress, settled: false, at: Date.now() };
+        persistSlip(settlement);
+        log("settlement slip: " + m.resultName + (m.youWon ? " — you WON, cast settle to collect" : (m.result === 2 ? " — draw, cast to refund both" : " — opponent settles")));
+        push(); return;
+      }
+      if (m.type === "settlement-error") { settlement = { error: m.error, at: Date.now() }; log("settlement error: " + m.error); push(); return; }
     }
 
     return {
@@ -125,7 +152,7 @@
         var provider = new deps.ethers.JsonRpcProvider(o.rpcUrl);
         var wallet = new deps.ethers.Wallet(o.privateKey, provider);
         var ERC20 = ["function approve(address,uint256) returns (bool)", "function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)"];
-        var ESC = ["function openMatch(uint256,address,uint8) returns (uint256)", "function joinMatch(uint256,uint8)", "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)"];
+        var ESC = ["function openMatch(uint256,address,uint8) returns (uint256)", "function joinMatch(uint256,uint8)", "function settle(uint256,uint8,bytes)", "function matches(uint256) view returns (address playerA, address playerB, uint256 stake, uint8 srcA, uint8 srcB, address expectedOpponent, uint64 matchedAt, uint8 state)", "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)"];
         chain = { wallet: wallet, escrowAddr: o.escrowAddr, dycAddr: o.dycAddr, dyc: new deps.ethers.Contract(o.dycAddr, ERC20, wallet), escrow: new deps.ethers.Contract(o.escrowAddr, ESC, wallet), ZERO: deps.ethers.ZeroAddress };
         return wallet.address;
       },
@@ -149,6 +176,25 @@
           return chain.escrow.joinMatch(BigInt(escrowMatchId), 0).then(function (t) { return t.wait(); });
         }).then(function () { send({ type: "join", tableId: tableId, faction: faction }); });
       },
+      // ---- M-P5 SETTLEMENT: the winner casts settle() from their OWN wallet with the referee-signed slip. The server
+      //      never casts. Reads the escrow terminal state after, so the UI can show the money line. Persist-before-wait.
+      settle: function () {
+        if (!chain) return Promise.reject(new Error("setChain first"));
+        if (!settlement || !settlement.slip) return Promise.reject(new Error("no settlement slip"));
+        var sl = settlement.slip;
+        settlement.casting = true; push();
+        return chain.escrow.settle(BigInt(sl.escrowMatchId), sl.result, sl.signature).then(function (t) { return t.wait(); }).then(function (rc) {
+          return chain.escrow.matches(BigInt(sl.escrowMatchId)).then(function (mm) {
+            settlement.casting = false; settlement.settled = true; settlement.terminalState = Number(mm.state); settlement.txHash = rc && rc.hash;
+            persistSlip(settlement);
+            log("settle cast — escrow match " + sl.escrowMatchId + " state=" + settlement.terminalState + " (3=SETTLED)");
+            push();
+            return settlement;
+          });
+        }).catch(function (e) { settlement.casting = false; settlement.castError = e.message; push(); throw e; });
+      },
+      requestSlip: function (escrowMatchId) { send({ type: "get-slip", escrowMatchId: escrowMatchId || (settlement && settlement.escrowMatchId) }); },
+      resumeSettlement: function () { var s = loadLatestUnsettledSlip(); if (s) { settlement = s; push(); } return s; },
       mulligan: function (indices) { send({ type: "move", matchId: match && match.matchId, action: { type: "mulligan", indices: indices || [] } }); },
       play: function (handIndex, targetIndex) { send({ type: "move", matchId: match && match.matchId, action: { type: "play", handIndex: handIndex, targetIndex: targetIndex != null ? targetIndex : null } }); },
       pass: function () { send({ type: "move", matchId: match && match.matchId, action: { type: "pass" } }); },

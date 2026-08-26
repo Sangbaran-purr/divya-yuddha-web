@@ -79,7 +79,7 @@
 
   <script src="../game/src/engine.js?v=33d0757"></script>
   <script src="wrapper.js?v=mp3"></script>
-  <script src="matchclient.js?v=mp3"></script>
+  <script src="matchclient.js?v=mp5"></script>
   <!-- ethers 6.17.0 UMD — pinned to CFG.ethers.cdn (the site-wide pin); needed for the M-P4 stake casts (setChain/openStaked/joinStaked). Blocking + before the inline IIFE so window.ethers exists at createClient. -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.17.0/dist/ethers.umd.min.js"></script>
   <script>
@@ -109,8 +109,38 @@
       $("conn").className = v.connected ? "me" : "muted";
       if (v.me) { $("who").innerHTML = 'signed in as <span class="mono me">' + v.me + '</span>'; $("auth-actions").style.display = "none"; }
       var sc = $("screen");
-      if (v.screen === "lobby") { sc.innerHTML = lobbyHTML(v); wireLobby(); return; }
-      sc.innerHTML = matchHTML(v); wireMatch(v);
+      var extra = settlementHTML(v);
+      if (v.screen === "lobby") { sc.innerHTML = extra + lobbyHTML(v); wireLobby(); wireSettle(v); return; }
+      sc.innerHTML = extra + matchHTML(v); wireMatch(v); wireSettle(v);
+    }
+
+    // M-P5 settlement strip — shown whenever a signed slip is in hand (match view OR lobby, incl. resume-after-reload).
+    function dycOf(wei) { return (BigInt(wei) / 1000000000000000000n).toString(); }
+    function settlementHTML(v) {
+      var s = v.settlement; if (!s) return "";
+      if (s.error) return '<div class="card warn"><h2>Settlement</h2>' + s.error + '</div>';
+      var stakeDYC = dycOf(s.stake);
+      var rake = BigInt(s.stake) * 2n * 500n / 10000n;   // 5% of pot (2·stake)
+      var winnings = BigInt(s.stake) - rake;             // winner net gain
+      var total = BigInt(s.stake) + winnings;            // winner total collected
+      var line, showBtn = false;
+      if (s.settled) {
+        line = (s.terminalState === 3) ? '<span class="me">✓ settled on chain — the pot has paid out.</span>' : '<span class="me">✓ settled (state ' + s.terminalState + ').</span>';
+      } else if (s.result === 2) {
+        line = 'Draw — both stakes refund in full, no rake. Either player casts.'; showBtn = true;
+      } else if (s.youWon) {
+        line = 'You WON — collect <b>' + dycOf(total) + ' DYC</b> (your ' + stakeDYC + ' back + ' + dycOf(winnings) + ' winnings, after 5% rake). Cast settle from your own wallet.'; showBtn = true;
+      } else {
+        line = 'You lost this match — the winner collects the pot. Nothing to claim here.';
+      }
+      var btn = showBtn ? '<div style="margin-top:8px"><button id="settle"' + (s.casting ? ' disabled' : '') + '>' + (s.casting ? 'casting…' : 'Cast settle') + '</button>' + (chainSet ? '' : ' <span class="muted">(set chain in the Stakes card first)</span>') + '</div>' : '';
+      var err = s.castError ? '<div class="warn" style="margin-top:6px">✗ ' + s.castError + '</div>' : '';
+      return '<div class="card"><h2>Settlement <span class="muted">' + (s.resultName || '') + ' · escrow #' + s.escrowMatchId + '</span></h2><div>' + line + '</div>'
+        + '<div class="muted" style="font-size:.72rem;margin-top:6px">The referee signed this result; it never casts. If no one settles, either player may abort after 24 hours for a full refund — funds can never strand.</div>'
+        + btn + err + '</div>';
+    }
+    function wireSettle(v) {
+      var b = $("settle"); if (b) b.onclick = function () { if (!chainSet) { alert("Set chain first (Stakes card)"); return; } C.settle().catch(function (e) { log("settle failed: " + e.message); }); };
     }
 
     function lobbyHTML(v) {
@@ -227,6 +257,8 @@
       var wei = (BigInt(amt) * 1000000000000000000n).toString(); // negotiated stake → server validates 10–10,000
       C.openStaked(0, chosenOpenFaction, wei, addr).catch(function (e) { log("friend challenge failed: " + e.message); });
     };
+    // M-P5 — resume: if a prior match left an un-settled slip in localStorage, surface the settlement strip on load.
+    if (C.resumeSettlement()) log("resumed an un-settled slip — set chain + cast settle to collect");
   })();
   </script>
 </body>
