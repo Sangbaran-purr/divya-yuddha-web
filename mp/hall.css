@@ -1,0 +1,94 @@
+/* S-HALL-L1 THE BONES — MINIMAL NEUTRAL layout only. No dress: no ornament, no color language beyond legibility,
+   system-safe type. Every hook class here is a stable reskin target; L1b (the game's chrome) REPLACES this file whole.
+   Both widths are LAYOUT (phone-first stacking; wide = the rail as a fixed row + the floor as a grid). */
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #101010; color: #e6e6e6; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+.hall-glyph { width: 20px; height: 20px; display: inline-block; vertical-align: middle; }
+button, a.hall-act { font: inherit; }
+
+/* nav */
+.hall-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #2a2a2a; flex-wrap: wrap; }
+.hall-nav-brand { color: #e6e6e6; text-decoration: none; font-weight: 700; letter-spacing: 1px; }
+.hall-nav-links { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.hall-nav-links a { color: #b9b9b9; text-decoration: none; }
+.hall-nav-here { color: #fff; font-weight: 600; }
+
+/* wrap */
+.hall-wrap { max-width: 560px; margin: 0 auto; padding: 14px; }
+.hall-title { font-size: 18px; letter-spacing: 3px; text-align: center; margin: 6px 0 14px; }
+.hall-root { min-height: 200px; }
+
+/* state / quiet lines */
+.state-line { color: #a9a9a9; font-size: 13px; text-align: center; }
+.hall-busy { padding: 22px 12px; text-align: center; color: #9a9a9a; }
+.hall-retry { background: none; border: 1px solid #555; color: #ddd; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+
+/* gate + connect */
+.hall-gate { border: 1px solid #333; border-radius: 8px; padding: 18px; text-align: center; }
+.hall-gate-line { line-height: 1.6; color: #cfcfcf; }
+.hall-connect p { color: #bbb; }
+
+/* header strip */
+.hall-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #2f2f2f; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+.hall-liquid-label { color: #9a9a9a; font-size: 12px; }
+.hall-liquid b { font-weight: 700; }
+.hall-limit-invite { background: none; border: none; color: #bcbcbc; text-decoration: underline; cursor: pointer; padding: 0; }
+.hall-limit-set { color: #cfcfcf; font-size: 13px; }
+
+/* covenant line */
+.hall-covenant { letter-spacing: 2px; font-variant: small-caps; text-transform: uppercase; margin: 10px 0 14px; color: #cbcbcb; }
+
+/* tier rail — phone: horizontal scroll (L-N1 proposed; the 2x3 grid alt is one class away). */
+.hall-rail { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 8px; -webkit-overflow-scrolling: touch; }
+.hall-rail-chip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 74px; padding: 8px 10px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #ddd; cursor: pointer; }
+.hall-rail-chip.on { border-color: #888; background: #232323; }
+.hall-chip-label { font-size: 11px; letter-spacing: 1px; }
+.hall-chip-usd { font-size: 10px; color: #8f8f8f; }
+.hall-chip-count { font-size: 12px; font-weight: 700; }
+.hall-chip-count.blank { color: #666; }
+.hall-medallion { width: 22px; height: 22px; }
+
+/* standing doors */
+.hall-doors { display: flex; gap: 10px; margin: 12px 0; }
+.hall-door { flex: 1; padding: 11px; border-radius: 8px; cursor: pointer; letter-spacing: 1px; }
+.hall-door-open { background: #2a2a2a; border: 1px solid #6a6a6a; color: #fff; }
+.hall-door-friend { background: none; border: 1px solid #4a4a4a; color: #ddd; }
+
+/* floor + plaques */
+.hall-floor { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.hall-plaque { border: 1px solid #333; border-radius: 8px; padding: 12px; background: #171717; }
+.hall-plaque-you { border-color: #8a7434; background: #1c1a12; }
+.hall-plaque-head { display: flex; align-items: center; gap: 8px; }
+.hall-plaque-stake { font-weight: 700; }
+.hall-you-tag { margin-left: auto; color: #d8c98a; font-size: 12px; }
+.hall-lock { width: 16px; height: 16px; opacity: .8; }
+.hall-plaque-opener { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: #bcbcbc; font-size: 13px; }
+.hall-sigil { width: 18px; height: 18px; }
+.hall-sigil-empty { width: 18px; height: 18px; display: inline-block; } /* reserved slot when the record has no faction */
+.hall-plaque-wait { text-align: left; margin-top: 8px; }
+.hall-plaque-acts { display: flex; gap: 8px; margin-top: 10px; }
+.hall-empty-tier { padding: 16px; }
+
+/* empty room (screen 3) */
+.hall-empty { text-align: center; padding: 14px 6px; }
+.hall-empty-board img { max-width: 220px; width: 60%; border-radius: 8px; opacity: .85; }
+.hall-empty-line { margin: 14px auto; max-width: 420px; }
+.hall-empty-doors { display: flex; flex-direction: column; gap: 10px; max-width: 340px; margin: 0 auto; }
+
+/* acts */
+.hall-act { display: inline-block; padding: 11px 14px; border-radius: 8px; background: #2a2a2a; border: 1px solid #6a6a6a; color: #fff; text-decoration: none; text-align: center; cursor: pointer; }
+.hall-act-inert, button.hall-inert { padding: 10px 12px; border-radius: 7px; background: #1d1d1d; border: 1px solid #3a3a3a; color: #8f8f8f; cursor: not-allowed; }
+
+/* the one inert line */
+.hall-inert-note { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #000; border: 1px solid #444; border-radius: 8px; padding: 8px 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; }
+.hall-inert-note.show { opacity: 1; }
+
+/* WIDE: the rail a fixed row, the floor a grid, doors right-aligned in the header region */
+@media (min-width: 900px) {
+  .hall-wrap { max-width: 1120px; }
+  .hall-rail { flex-wrap: wrap; overflow: visible; }
+  .hall-floor { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .hall-plaque-you { grid-column: 1 / -1; }
+  .hall-doors { max-width: 420px; margin-left: auto; }
+}

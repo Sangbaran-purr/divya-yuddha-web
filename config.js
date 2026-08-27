@@ -47,6 +47,14 @@ window.DY_CONFIG = {
     waveCardMarket: "0x5Ab2F48Eae60169A4028e7ba8bA3cA664Bea5Fe1", // W3-REDEPLOY-WAVE — reborn WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 92465315
   },
 
+  // S-HALL-L1 (D3) — the DY Match Server (M-P1 lobby / M-P4–M-P6 staked matches). The Hall reads live tables over this
+  // WS URL. `url` is the deployed always-on Render endpoint (A8 gate). For the LOCAL gate proof, a browser-local override
+  // localStorage["dyhall::matchServerUrl"] wins (the same anvil-vs-mainnet override idiom the store proof uses); the rig
+  // (wire.html) keeps its own hardcoded :8090 and is never touched.
+  matchServer: {
+    url: "wss://dy-match-server.onrender.com", // deployed M-P1 server (Render); overridable per-browser for local proof
+  },
+
   // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;
   // the full stack landed 44701099–44701101). Bounds the "Your Holdings" Transfer(*, owner) getLogs scan (from here
   // to latest) so public RPCs don't reject a full-chain range. UNSET/0 → the loader falls back to fromBlock 0 (a

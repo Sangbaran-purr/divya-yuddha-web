@@ -45,6 +45,15 @@
     '<symbol id="dy-youtube" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.6 9.8l4 2.2-4 2.2z" fill="currentColor"/></symbol>' +
     '<symbol id="dy-instagram" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="17" cy="7" r="1" fill="currentColor"/></symbol>' +
     '<symbol id="dy-facebook" viewBox="0 0 24 24"><path d="M14.5 5.5h-1.8A2.7 2.7 0 0 0 10 8.2V19M7.5 11.5h6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>' +
+    // S-HALL-L1 (LOBBY_DESIGN section 10) — the six tier medallions. currentColor only; color rides CSS .tier-* classes,
+    // never the glyph. dy-tier-free = open lotus bud; bronze/silver/gold/diamond = ONE laurel medallion (two arcs) that
+    // differ only by I-IV central notches; dy-lock-escrow = the small stake lock. Social-glyph weight.
+    '<symbol id="dy-tier-free" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M12 3c2 5 2 10 0 18-2-8-2-13 0-18z"/><path d="M12 21c-4-1-6.5-5-6.5-9 2.4 1 4.4 3.2 6.5 9z"/><path d="M12 21c4-1 6.5-5 6.5-9-2.4 1-4.4 3.2-6.5 9z"/></g></symbol>' +
+    '<symbol id="dy-tier-bronze" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 22C6.5 20 3.6 15 3.6 9"/><path d="M12 22C17.5 20 20.4 15 20.4 9"/><path d="M9.5 12.5h5"/></g></symbol>' +
+    '<symbol id="dy-tier-silver" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 22C6.5 20 3.6 15 3.6 9"/><path d="M12 22C17.5 20 20.4 15 20.4 9"/><path d="M9.5 11h5M9.5 14h5"/></g></symbol>' +
+    '<symbol id="dy-tier-gold" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 22C6.5 20 3.6 15 3.6 9"/><path d="M12 22C17.5 20 20.4 15 20.4 9"/><path d="M9.5 9.5h5M9.5 12.5h5M9.5 15.5h5"/></g></symbol>' +
+    '<symbol id="dy-tier-diamond" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 22C6.5 20 3.6 15 3.6 9"/><path d="M12 22C17.5 20 20.4 15 20.4 9"/><path d="M9.5 8h5M9.5 11h5M9.5 14h5M9.5 17h5"/></g></symbol>' +
+    '<symbol id="dy-lock-escrow" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="10.5" width="13" height="9.5" rx="1.6"/><path d="M8.5 10.5V8.2a3.5 3.5 0 017 0v2.3"/><path d="M12 14v3" stroke-linecap="round"/></g></symbol>' +
     "</defs></svg>";
   if (document.body) {
     document.body.insertAdjacentHTML("afterbegin", SPRITE);

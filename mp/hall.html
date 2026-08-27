@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex" />
+  <title>Divya Yuddha — The Hall</title>
+  <!-- S-HALL-L1 THE BONES: function only. Neutral layout css (hall.css); the game's dress lands in L1b (reskin-in-place).
+       Gated-game-side room in mp/ (sync-surviving). Loads the site config (matchServer URL), the ornament sprite (the
+       six tier medallions), and matchclient.js (the M-P1 handshake — the same client the rig uses, never a second one). -->
+  <link rel="stylesheet" href="hall.css?v=h1" />
+  <script src="../config.js?v=s13"></script>
+  <script src="../js/ornament.js?v=s1j"></script>
+</head>
+<body>
+  <nav class="hall-nav" aria-label="Primary">
+    <a class="hall-nav-brand" href="../game/index.html?v=33d0757">Divya Yuddha</a>
+    <div class="hall-nav-links">
+      <a href="../game/index.html?v=33d0757">The Game</a>
+      <a href="../dashboard.html">Dashboard</a>
+      <a href="../store.html">Store</a>
+      <span class="hall-nav-here" aria-current="page">The Hall</span>
+    </div>
+  </nav>
+
+  <main class="hall-wrap">
+    <h1 class="hall-title">THE HALL</h1>
+    <div id="hall-root" class="hall-root" aria-live="polite">
+      <div class="hall-busy">loading…</div>
+    </div>
+  </main>
+
+  <!-- the M-P1 client (lobby read only in L1) + the Hall bones -->
+  <script src="matchclient.js?v=mpa3"></script>
+  <script src="../js/wallet.js?v=s1l"></script>
+  <script src="hall.js?v=h7"></script>
+</body>
+</html>
