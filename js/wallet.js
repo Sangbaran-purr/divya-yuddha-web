@@ -15,7 +15,8 @@ window.DYWallet = (function () {
     address: null,
     chainId: null,
     chainOk: false,
-    isHolder: null, // null = unknown/unchecked
+    isHolder: null, // null = unknown/unchecked OR read failed (see holderReadFailed)
+    holderReadFailed: false, // S-GATE-1 (P5): true when a checkHolder READ threw (dead/throttled RPC) — distinct from a real zero; the gate shows "busy - refresh to retry", never the non-holder door
     ethersReady: false,
     // S-WALLET-DETECT — patient-detection context. A provider (esp. a mobile in-app wallet browser) can inject
     // window.ethereum a beat AFTER our scripts run, so surfaces must NOT render a "no wallet" message until
@@ -369,6 +370,7 @@ window.DYWallet = (function () {
   function checkHolder() {
     if (!state.connected || !state.chainOk) {
       state.isHolder = null;
+      state.holderReadFailed = false;
       return Promise.resolve(null);
     }
     return loadEthers()
@@ -378,14 +380,19 @@ window.DYWallet = (function () {
       })
       .then(function (bal) {
         state.isHolder = bal > 0n;
+        state.holderReadFailed = false; // a clean read
         emit();
         return state.isHolder;
       })
       .catch(function () {
-        // no live contract at the placeholder address -> honestly "not yet a holder"
-        state.isHolder = false;
+        // S-GATE-1 (P5): the AccessNFT is LIVE on mainnet, so a throw here is a READ
+        // FAILURE (dead/throttled RPC), NOT a real zero. Keep it distinct — isHolder=null
+        // + holderReadFailed — so the gate shows "busy - refresh to retry", never the
+        // non-holder door and never a silent 0. (Was isHolder=false in the rehearsal era.)
+        state.isHolder = null;
+        state.holderReadFailed = true;
         emit();
-        return false;
+        return null;
       });
   }
 

@@ -214,6 +214,17 @@
         line-height: 1.65;
         margin: 0;
       }
+      /* S-GATE-1 — the ruled door line at the threshold (non-holder). Readable, quiet, its own space. */
+      .rite-doorline {
+        font-family: var(--text);
+        color: var(--parchment);
+        font-size: 0.95rem;
+        line-height: 1.65;
+        max-width: 30rem;
+        margin: 0.9rem auto 0;
+        padding: 0.7rem 0.9rem 0;
+        border-top: 1px solid rgba(138, 111, 58, 0.4);
+      }
       @media (prefers-reduced-motion: reduce) {
         .torana-frame {
           box-shadow:
@@ -364,6 +375,8 @@
           <!-- S-RITE-3 (Option A) — the buy door; revealed only when a LIVE voucher (allowlist.json) is found for this wallet. Same lit-gold CTA chrome. -->
           <a id="rite-buy" class="rite-btn rite-register" href="dashboard.html" hidden>BUY YOUR COIN</a>
           <div id="rite-line" class="state-line" aria-live="polite"></div>
+          <!-- S-GATE-1 (G4/P1) — the ruled door line; shown ONLY to a connected non-holder (isHolder === false). Verbatim, never reworded (docs/RULINGS_2026-08-27.md rule 3). -->
+          <p id="rite-doorline" class="rite-doorline" hidden>The Torana opens this door. It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage.</p>
           <!-- S-CONSOLE-DYC-1: bearer-only DYC balance (hidden until isHolder); coin is CSS-circle-clipped -->
           <div id="rite-dyc" class="rite-dyc" hidden>
             <img class="rite-dyc-coin" src="assets/dyc_coin_96.png" width="44" height="44" alt="" aria-hidden="true" />
@@ -447,7 +460,7 @@
     </footer>
 
     <script src="js/light.js?v=s1e"></script>
-    <script src="js/wallet.js?v=s1l"></script>
+    <script src="js/wallet.js?v=s1m"></script>
     <script>
       (function () {
         var CFG = window.DY_CONFIG;
@@ -459,6 +472,7 @@
         var line = document.getElementById("rite-line");
         var reg = document.getElementById("rite-register");
         var buy = document.getElementById("rite-buy");
+        var door = document.getElementById("rite-doorline"); // S-GATE-1 — the ruled door line (non-holder only)
         var npTop = document.getElementById("nameplate-top");
         var addrTop = document.getElementById("addr-top");
 
@@ -665,6 +679,7 @@
           if (dycEl && s.isHolder !== true) { dycEl.hidden = true; dycRead = false; }
           if (reg) reg.hidden = true; // S-DECL-2 — register door defaults hidden; only the no-mark state reveals it
           if (buy) buy.hidden = true; // S-RITE-3 — buy door defaults hidden; only a live-voucher no-mark state reveals it
+          if (door) door.hidden = true; // S-GATE-1 — door line defaults hidden; only the connected non-holder state reveals it
           if (btn) btn.hidden = false; // S-RITE-4 — the action box is visible in EVERY state except the voucher branch (which hides it)
           stopVoucherPoll(); // S-LIVE-FIX-1 (C2) — every state change stops the poll; the no-mark branch restarts it if still unapproved
 
@@ -711,6 +726,15 @@
             return;
           }
           // connected + on Amoy -> is this hand already a bearer?
+          if (s.isHolder === null && s.holderReadFailed) {
+            // S-GATE-1 (P5) — the seal could not be READ (dead/throttled RPC). Busy, not a verdict:
+            // no pass, no door line, no game. A manual re-read only (no auto-loop).
+            msg.textContent = "The gate could not read your seal.";
+            setBtn("Refresh", "busy — try the read again", {
+              onClick: function () { line.textContent = "Reading your seal…"; window.DYWallet.checkHolder(); },
+            });
+            return;
+          }
           if (s.isHolder === null) {
             msg.textContent = "Reading your seal…";
             setBtn("…", "", { sleeping: true });
@@ -726,7 +750,9 @@
             if (dycEl) { dycEl.hidden = false; if (!dycRead) { dycRead = true; readDyc(); } }
             return;
           }
-          // not a bearer yet — the claim is honest-dormant in Phase A
+          // not a bearer yet — a connected wallet with no Torana. S-GATE-1 (G4/P1): the ruled door
+          // line stands here, alongside the presale/register road (the honest way in). No pass, no Enter.
+          if (door) door.hidden = false;
           if (CFG.claimOpen) {
             // (future) a real authorized-minter/sale module wires here; on its
             // success it calls window.__celebrateClaim(). Not present in S1.

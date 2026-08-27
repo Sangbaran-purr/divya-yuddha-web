@@ -70,7 +70,10 @@
       return new ethers.Contract(acc, ACCESS_ABI, readProvider(ethers)).balanceOf(me).then(function (bal) {
         if (gen !== gateGen) return;                          // read-generation guard
         accessState = (bal && bal > 0n) ? "pass" : "gateless";
-        if (accessState === "pass") { readLiquid(ethers); startFeed(); }
+        if (accessState === "pass") {
+          try { sessionStorage.setItem("dyw_pass", "1"); } catch (e) {} // G5 — a Hall holder carries the same site pass, so PRACTICE into the game copy isn't bounced to the rite
+          readLiquid(ethers); startFeed();
+        }
         render();
       });
     }).catch(function () {
@@ -161,10 +164,10 @@
       '<button class="hall-act" id="hall-connect">Connect wallet</button></div>';
   }
   function gateScreen() {
-    // D1: the rite's own gate language, quoted from index.html:136 exactly as it stands.
+    // S-GATE-1 (G4): the ruled door line, verbatim (docs/RULINGS_2026-08-27.md rule 3). The line ONLY; the rite door is the way in.
     return '<div class="hall-gate">' +
-      '<p class="hall-gate-line"><strong>The door is free.</strong> The Access token is claimed once at launch, one per hand, bound to you alone — never sold, yours to burn. It admits you; it buys no advantage.</p>' +
-      '<a class="hall-act hall-gate-door" href="../rite.html">Claim access — take the rite</a></div>';
+      '<p class="hall-gate-line">The Torana opens this door. It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage.</p>' +
+      '<a class="hall-act hall-gate-door" href="../rite.html">To the presale — the Torana follows</a></div>';
   }
 
   function header() {

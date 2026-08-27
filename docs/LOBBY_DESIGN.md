@@ -53,6 +53,7 @@ House idioms this spec composes (the palette of parts):
 - The Access gate: no TORANA, no Hall. The gate screen reuses the
   rite's existing language ("the door is free; what lies beyond
   is earned") with a door to the claim rite.
+  [the "door is free" language is retired by S-GATE-1; the ruled line lives in docs/RULINGS_2026-08-27.md rule 3]
 - Wallet: the Hall inherits the site's patient provider detection
   (3s, EIP-6963) and the connected-wallet identity. No wallet =
   a quiet connect card, same idiom as treasury/store.
