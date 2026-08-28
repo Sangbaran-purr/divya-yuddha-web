@@ -122,7 +122,7 @@
     }
 
     function handle(m) {
-      if (m.type === "challenge") { nonce = m.nonce; devMode = !!m.devMode; log("challenge"); if (reconnecting && authMode) doAuth(); push(); return; }
+      if (m.type === "challenge") { nonce = m.nonce; devMode = !!m.devMode; log("challenge"); if (authMode) doAuth(); push(); return; } // S-HALL-L3: if an auth mode is already chosen (e.g. authConnected called before the challenge), sign this challenge now — robust to either ordering. On a first connect authMode is null (unchanged), so the client's own authWallet/authDev/authConnected drives it; on reconnect authMode is set (as before).
       if (m.type === "authed") { me = m.address; log("authed " + (m.dev ? "(dev) " : "") + m.address); push(); return; }
       if (m.type === "auth-error") { lastReject = "auth: " + m.error; log("AUTH REJECTED " + m.error); push(); return; }
       if (m.type === "tables") { tables = m.tables; push(); return; }
@@ -186,6 +186,16 @@
     function doAuth() {
       if (authMode === "dev") { send({ type: "auth-dev", address: authAddr }); }
       else if (authMode === "wallet" && sessionWallet && nonce) { sessionWallet.signMessage(LOGIN + nonce).then(function (sig) { send({ type: "auth", signature: sig }); }); }
+      // S-HALL-L3 (B1) — sign in as the CONNECTED browser wallet (personal_sign): the server recovers this address, so the
+      //   session identity equals the escrow player. Re-signs on every (re)auth (reconnect re-seats the same address).
+      else if (authMode === "connected" && nonce) {
+        try {
+          new ethers.BrowserProvider(window.ethereum).getSigner()
+            .then(function (sg) { return sg.signMessage(LOGIN + nonce); })
+            .then(function (sig) { send({ type: "auth", signature: sig }); })
+            .catch(function (e) { log("connected sign-in failed: " + (e && e.message ? e.message : e)); });
+        } catch (e) { log("connected sign-in failed: " + (e && e.message ? e.message : e)); }
+      }
     }
     function openSocket() {
       ws = new WebSocket(connectUrl);
@@ -204,6 +214,8 @@
       authWallet: function () {
         if (!nonce) return; if (!sessionWallet) sessionWallet = ethers.Wallet.createRandom(); authMode = "wallet"; doAuth();
       },
+      // S-HALL-L3 (B1) — sign in as the connected browser wallet. Additive; the rig's authWallet (random) road is untouched.
+      authConnected: function () { if (!nonce) return; authMode = "connected"; doAuth(); },
       authDev: function (addr) { authMode = "dev"; authAddr = addr; send({ type: "auth-dev", address: addr }); },
       // M-P6 loss limits + slip re-request over the wire
       setLossLimit: function (amountWei) { send({ type: "set-loss-limit", amount: String(amountWei) }); },

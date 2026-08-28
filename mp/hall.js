@@ -91,20 +91,35 @@
   // ── THE LIVE FEED (M-P1) — matchclient's existing handshake; whole-list {tables} reconcile; three faces. ──
   function startFeed() {
     if (client) return;
+    // S-HALL-L3 — ethers MUST be loaded before the client is created: matchclient captures deps.ethers, and the connected
+    //   sign-in (authConnected → BrowserProvider) needs it. startFeed runs synchronously in the gate, so load ethers first.
+    if (!window.ethers) { loadEthers().then(function () { startFeed(); }).catch(function () { feedState = "dead"; render(); }); return; }
     var url = matchServerUrl();
     if (!url) { feedState = "dead"; return render(); }
     var gen = ++feedGen;
-    // the Hall only READS the lobby — E/W are unused on the lobby view; stub them (no match is entered in L1).
+    // the Hall READS the lobby AND plays the staked redacted match (server-authoritative; E/W stay stubbed — no client engine).
     client = window.DYMatchClient.createClient({
-      E: {}, W: {}, ethers: window.ethers || {}, log: function () {},
+      E: {}, W: {}, ethers: window.ethers, log: function () {},
       onUpdate: function (v) {
         if (gen !== feedGen) return;                          // read-generation guard on the feed
+        lastView = v || null;
+        // L3 — the MATCH view (staked redacted road): render the battle in the browser. The matched-moment beat plays
+        //   once per matchId, then the battle; the settlement strip rides the over state. A dismissed match falls to lobby.
+        if (v && v.screen === "match" && v.matchId && !dismissedMatch[v.matchId]) {
+          if (matchView == null || matchView.matchId !== v.matchId) { settleState = null; pendingPlay = null; mullPick = {}; }
+          matchView = v; sheet = null; renderSheet(); startL3Tick();
+          if (!dealtMatches[v.matchId]) { render(); setTimeout(function () { dealtMatches[v.matchId] = true; if (matchView && matchView.matchId === v.matchId) renderMatchScreen(); }, 2000); return; } // B2 matched moment
+          renderMatchScreen(); return;
+        }
+        // LOBBY view (or a dismissed match)
+        matchView = null;
+        if (v && v.screen === "match" && v.settlement) settlementView = v.settlement; // keep the slip visible in the lobby after leaving
         // busy-sentinel honesty: a dropped/refused socket is DEAD (busy face), never a false empty room.
         if (v && v.connected === false) { feedState = "dead"; scheduleReconnect(); return render(); }
-        // B7 — the room started (free {match} or staked {match-redacted}); render the interim state from the real signal.
-        if (v && v.screen === "match" && v.matchId) { startedMatch = { matchId: v.matchId, seat: v.seat, opponent: v.opponent }; sheet = null; renderSheet(); render(); return; }
         if (v && Array.isArray(v.tables)) { tables = v.tables.slice(); feedState = "live"; reconnectTries = 0; } // whole-list reconcile
         if (v && v.lossLimit) lossLimit = v.lossLimit;
+        if (v && v.settlement) settlementView = v.settlement; // a pending slip surfaced in the lobby (resume-after-reload)
+        if (v && v.me && !signedInAs) signedInAs = v.me;      // B1 — the recovered connected-wallet identity
         // surface a server refusal honestly (FREE tier-0, join-not-locked, loss backstop) — de-duped so it shows once.
         if (v && v.lastReject && v.lastReject !== seenReject) { seenReject = v.lastReject; lastServerError = v.lastReject; if (sheet) renderSheet(); }
         // a friend "made" sheet shows the code once the new table arrives in the feed; refresh just that sheet.
@@ -116,8 +131,10 @@
       client.connect(url);
       // auth AS the connected identity so YOUR table pins (dev-address mode on the local proof server; L2 wires
       // connected-wallet-signature auth for the deployed server so it knows your address — the acts are inert in L1).
-      var poll = setInterval(function () { if (client && me) { clearInterval(poll); client.authDev(me); client.getLossLimit && setTimeout(function () { try { client.getLossLimit(); } catch (e) {} }, 400); setTimeout(function () { try { resumePendingTx(); } catch (e) {} }, 900); } }, 120);
-      setTimeout(function () { clearInterval(poll); }, 6000);
+      // S-HALL-L3 (B1) — sign in as the CONNECTED wallet (personal_sign; the server recovers this address = the escrow player).
+      //   Wait for the wallet to be present (production: injected at load; the staked road never uses a random session wallet).
+      var poll = setInterval(function () { if (client && me && window.ethereum) { clearInterval(poll); client.authConnected(); client.getLossLimit && setTimeout(function () { try { client.getLossLimit(); } catch (e) {} }, 600); setTimeout(function () { try { if (client.resumeSettlement) client.resumeSettlement(); } catch (e) {} try { resumePendingTx(); } catch (e) {} }, 1100); } }, 120);
+      setTimeout(function () { clearInterval(poll); }, 20000); // patient: a mobile in-app wallet can inject window.ethereum a beat late (DYWallet's 3s-detection reasoning)
     } catch (e) { feedState = "dead"; render(); }
     // bounded connect watchdog: no {tables} within 8s → dead face (never a false empty room)
     setTimeout(function () { if (gen === feedGen && feedState === "connecting") { feedState = "dead"; scheduleReconnect(); render(); } }, 8000);
@@ -166,8 +183,7 @@
   var selectedFaction = null;   // required before any open/join (the server demands it)
   var sheet = null;             // null | { kind, ctx }  — the active sheet overlay
   var ceremony = null;          // null | { kind, step, ctx, error } — the in-flight two-step cast
-  var startedMatch = null;      // set when the room starts (B7 interim state)
-  var lastActCtx = null;        // facts of the table we last acted on (for the interim state)
+  var lastActCtx = null;        // facts of the table we last acted on (kept for logging/telemetry)
   var lastServerError = null;   // a server refusal to surface honestly (FREE tier-0, join-not-locked, loss backstop)
   var seenReject = null;        // de-dupe the surfaced reject
 
@@ -190,6 +206,7 @@
     "function openMatch(uint256,address,uint8) returns (uint256)",
     "function joinMatch(uint256,uint8)",
     "function cancelMatch(uint256)",
+    "function settle(uint256,uint8,bytes)",
     "function matches(uint256) view returns (address playerA, address playerB, uint256 stake, uint8 srcA, uint8 srcB, address expectedOpponent, uint64 matchedAt, uint8 state)",
     "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)",
   ];
@@ -306,6 +323,7 @@
     signerRoad().then(function (r) {
       if (rec.kind === "open") return resumeOpen(r, rec);
       if (rec.kind === "join") return resumeJoin(r, rec);
+      if (rec.kind === "settle") return resumeSettle(r, rec); // L3 (P4) — a settle interrupted between cast and confirmation
       clearPending();
     }).catch(function () { /* no wallet/road — leave the record; the next visit retries. The stake (if locked) is refundable via cancel/abort. */ });
   }
@@ -497,19 +515,6 @@
       (ctx.err ? '<p class="state-line hall-sheet-err">' + ctx.err + '</p>' : ""), "hall-sheet-limit");
   }
 
-  // ── the interim match state (B7): the room started; L3 brings the battle screen. Escrow stays settleable/refundable. ──
-  function interimHTML() {
-    var sm = startedMatch || {};
-    var facts = lastActCtx || {};
-    var stakeTxt = facts.stake ? (dycOf(facts.stake) + " DYC staked") : "free table";
-    var opp = sm.opponent ? shortAddr(sm.opponent) : (facts.opponent ? shortAddr(facts.opponent) : "your opponent");
-    return '<div class="hall-interim" role="status">' +
-      '<div class="hall-interim-line">the match begins - the battle screen arrives with the next build</div>' +
-      '<div class="hall-interim-facts state-line">vs ' + opp + ' · ' + stakeTxt + (facts.faction ? ' · you: ' + facts.faction : "") + '</div>' +
-      '<div class="hall-interim-note state-line">Your stake is safe: a finished match always settles, and any match left unfinished refunds both players automatically after 24 hours.</div>' +
-      '<button class="hall-act hall-interim-back" data-interim-back="1">back to the Hall</button></div>';
-  }
-
   function renderSheet() {
     var existing = $("hall-sheet-overlay");
     if (!sheet) { if (existing) existing.parentNode.removeChild(existing); return; }
@@ -525,6 +530,177 @@
     wireSheet();
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  //  S-HALL-L3 — THE BRIDGES: the match played in the browser on the STAKED
+  //  REDACTED road (server-authoritative; no client engine). Rendering LOGIC
+  //  ported from the frozen rig (mp/wire.html) onto neutral bones (hall-* hooks);
+  //  the settlement copy is VERBATIM from docs/LOBBY_DESIGN.md section 8c (never
+  //  the rig's rig-era text). Moves ride matchclient; the winner's SETTLE casts
+  //  from the browser wallet (persistPending).
+  // ════════════════════════════════════════════════════════════════════════
+  var matchView = null;      // the latest {screen:"match"} view (null in the lobby)
+  var lastView = null;       // the latest view of any kind (for the clock/vanish tick)
+  var settleState = null;    // { casting } | { settled, terminalState } | { error } — the browser settle cast state
+  var settlementView = null; // a pending slip surfaced in the lobby (resume-after-reload)
+  var dealtMatches = {};      // matchId -> true once the "dealing…" beat has played
+  var dismissedMatch = {};    // matchId -> true once the player leaves the over screen back to the Hall
+  var signedInAs = null;      // the recovered connected-wallet identity (B1; shown in the header)
+  var pendingPlay = null;     // { i, name, options } — the target picker
+  var mullPick = {};          // mulligan toss selections
+
+  // ── the RULED settlement copy (docs/LOBBY_DESIGN.md section 11 → 8c, VERBATIM; only the [slots] filled) ──
+  var ABORT_LINE = "unclaimed pots refund both players automatically after 24 hours.";
+  function WON_LINE(total, fee) { return "You won. Collect " + total + " DYC - " + fee + " to the treasury."; }
+  function WON_SETTLED(total) { return "settled - " + total + " DYC in your wallet"; }
+  var DRAW_LINE = "A draw - both stakes return in full.";
+  function FORFEIT_LINE(total) { return "Your opponent left the table. The pot is yours - collect " + total + " DYC."; }
+  var FREE_LINE = "no stakes at this table";
+
+  // ── THE BROWSER SETTLE CAST (the winner casts from their OWN wallet; persistPending; resolves on the terminal read) ──
+  function ceremonySettle(slip) {
+    if (!slip || slip.escrowMatchId == null) return;
+    settleState = { casting: true }; renderCurrent();
+    persistPending({ kind: "settle", escrowMatchId: String(slip.escrowMatchId), result: slip.result, signature: slip.signature });
+    return signerRoad().then(function (r) {
+      var esc = escContract(r);
+      return feeOverrides().then(function (fee) {
+        return esc.settle.staticCall(BigInt(slip.escrowMatchId), slip.result, slip.signature).then(function () {
+          return esc.settle(BigInt(slip.escrowMatchId), slip.result, slip.signature, fee);
+        });
+      }).then(function (tx) { mergePending({ settleTxHash: tx.hash }); return tx.wait(); })
+        .then(function () { return esc.matches(BigInt(slip.escrowMatchId)); })
+        .then(function (mm) { settleState = { settled: true, terminalState: Number(mm.state) }; clearPending(); markSlipSettled(String(slip.escrowMatchId)); readLiquidAgain(); renderCurrent(); });
+    }).catch(function (e) { settleState = { casting: false, error: ceremonyMsg(e) }; renderCurrent(); });
+  }
+  // resume a settle interrupted between cast and confirmation (P4): if already SETTLED on chain, resolve; else re-offer.
+  function resumeSettle(r, rec) {
+    return escContract(r).matches(BigInt(rec.escrowMatchId)).then(function (mm) {
+      if (Number(mm.state) === 3) { settleState = { settled: true, terminalState: 3 }; clearPending(); markSlipSettled(String(rec.escrowMatchId)); renderCurrent(); return; } // SETTLED=3
+      // not settled — leave the slip's Cast button live (matchclient.resumeSettlement surfaced it); drop the stale pending
+      clearPending();
+    }).catch(function () { clearPending(); });
+  }
+
+  // ── THE MATCH SCREEN (ported from wire.html; neutral hall-* hooks) ──
+  function factionSigilSmall(f) { return f && FACTION_SIGIL[f] ? svgUse(FACTION_SIGIL[f], "hall-sigil") : ""; }
+  function mUnit(u) { return '<span class="hall-mini"><b>' + u.power + '</b> ' + u.n + '</span>'; }
+
+  function statusStrip(v) {
+    var h = "";
+    if (v.reconnecting) h += '<div class="hall-mstatus warn">connection dropped - reconnecting to resume your match…</div>';
+    if (v.vanish) h += '<div class="hall-mstatus warn">opponent reconnecting… <b id="hall-vanishcd">…</b></div>';
+    if (v.clock && v.phase && v.phase !== "over" && !v.vanish) {
+      var label = v.clock.kind === "mulligan" ? "mulligan clock" : (v.clock.seat === v.seat ? "your move" : "opponent's move");
+      h += '<div class="hall-mclock"><span class="state-line">' + label + ':</span> <b id="hall-clockcd">…</b>s</div>';
+    }
+    return h;
+  }
+
+  function settlementStrip(s) {
+    if (!s) return "";
+    if (s.error) return '<div class="hall-settle warn"><div class="hall-settle-line">' + s.error + '</div><div class="hall-settle-abort state-line">' + ABORT_LINE + '</div></div>';
+    if (s.stake == null) { // FREE (no stake) — result + the one ruled line
+      return '<div class="hall-settle"><div class="hall-settle-line state-line">' + FREE_LINE + '</div></div>';
+    }
+    var stake = BigInt(s.stake), pot = stake * 2n, rake = pot * 5n / 100n, total = pot - rake;
+    var settled = settleState && settleState.settled, casting = settleState && settleState.casting, castErr = settleState && settleState.error;
+    var line, showCast = false;
+    if (settled) {
+      line = (s.result === 2) ? DRAW_LINE : (s.youWon ? WON_SETTLED(dycOf(total)) : "This match is settled.");
+    } else if (s.result === 2) { line = DRAW_LINE; showCast = true; }
+    else if (s.youWon) { line = s.forfeit ? FORFEIT_LINE(dycOf(total)) : WON_LINE(dycOf(total), dycOf(rake)); showCast = true; }
+    else { line = "You lost this match - the winner collects the pot."; }
+    var cast = showCast ? '<div class="hall-settle-act"><button class="hall-act hall-settle-cast" data-settle="1"' + (casting ? " disabled" : "") + '>' + (casting ? "casting…" : "CAST SETTLE") + '</button></div>' : "";
+    var err = castErr ? '<div class="hall-settle-err state-line">' + castErr + '</div>' : "";
+    return '<div class="hall-settle"><div class="hall-settle-line">' + line + '</div>' +
+      '<div class="hall-settle-abort state-line">' + ABORT_LINE + '</div>' + cast + err + '</div>';
+  }
+
+  function matchScreenHTML(v) {
+    // B2 — the matched moment: one beat before the battle, on first entry to a match.
+    if (!dealtMatches[v.matchId]) {
+      return '<div class="hall-dealing" role="status">' +
+        '<div class="hall-dealing-opp">' + factionSigilSmall(v.oppFaction) + '<span class="hall-plaque-addr">' + shortAddr(v.opponent || v.oppName) + '</span></div>' +
+        '<div class="hall-dealing-line">the stakes are locked - dealing…</div></div>';
+    }
+    var h = statusStrip(v) + settlementStrip(v.settlement);
+    // header
+    h += '<div class="hall-mhead"><div class="hall-mhead-row">you (' + (v.myFaction || "?") + ') vs ' + factionSigilSmall(v.oppFaction) + shortAddr(v.opponent || v.oppName) +
+      '<span class="hall-mpill">round ' + v.round + '</span><span class="hall-mpill">wins ' + v.roundWins[0] + '-' + v.roundWins[1] + ' (to ' + v.winTarget + ')</span></div>';
+    if (v.outcome) {
+      h += '<div class="hall-mresult">' + (v.outcome.kind === "result"
+        ? (v.outcome.winner == null ? "the match is a draw" : (v.outcome.winner === v.seat ? "you win the match" : "you lose the match")) + " - rounds " + v.outcome.roundWins.join("-")
+        : "match abandoned - " + v.outcome.reason) + '</div>';
+    } else {
+      h += '<div class="hall-mphase state-line">' + (v.phase === "mulligan" ? "mulligan phase" : (v.myTurn ? "your turn" : "opponent's turn")) + '</div>';
+    }
+    h += '</div>';
+    // boards
+    h += '<div class="hall-board"><div class="hall-board-side"><div class="state-line">opponent · hand ' + v.oppHandCount + '</div>' + v.oppUnits.map(mUnit).join("") + '</div>' +
+      '<div class="hall-board-side hall-board-me"><div class="state-line">you</div>' + v.myUnits.map(mUnit).join("") + '</div></div>';
+    // controls
+    if (v.phase === "mulligan" && !v.myMulliganed) {
+      h += '<div class="hall-controls"><div class="state-line">Mulligan — tap cards to toss, then confirm</div>' +
+        v.myHand.map(function (c) { return '<button class="hall-mull" data-i="' + c.i + '">' + c.n + '</button>'; }).join("") +
+        '<div class="hall-controls-act"><button class="hall-act hall-mullconfirm" data-mullconfirm="1">Confirm mulligan</button> <span class="state-line">(toss nothing = keep)</span></div></div>';
+    } else if (v.phase === "mulligan") {
+      h += '<div class="hall-controls state-line">waiting for the opponent to mulligan…</div>';
+    } else if (v.phase === "play") {
+      h += '<div class="hall-controls">';
+      if (pendingPlay) {
+        h += '<div class="state-line">targets for <b>' + pendingPlay.name + '</b>:</div>' + pendingPlay.options.map(function (o) { return '<button class="hall-tgt" data-idx="' + o.idx + '">' + o.n + '</button>'; }).join("") + ' <button class="hall-cancelplay" data-cancelplay="1">cancel</button>';
+      } else {
+        h += v.myHand.map(function (c) { return '<button class="hall-hand' + (c.playable ? " playable" : "") + '" data-i="' + c.i + '"' + (c.playable ? "" : " disabled") + '>' + c.n + ' <span class="state-line">' + (c.p || "") + '</span></button>'; }).join("");
+        h += '<div class="hall-controls-act"><button class="hall-act hall-pass" data-pass="1"' + (v.myTurn ? "" : " disabled") + '>Pass round</button> <button class="hall-concede" data-concede="1"' + (v.myTurn ? "" : " disabled") + '>Concede</button></div>';
+      }
+      h += '</div>';
+    }
+    if (v.lastReject) h += '<div class="hall-mreject warn">' + v.lastReject + '</div>';
+    if (v.outcome) h += '<div class="hall-controls-act"><button class="hall-act hall-mleave" data-leave="1">back to the Hall</button></div>';
+    return '<div class="hall-match">' + h + '</div>';
+  }
+
+  function renderMatchScreen() {
+    var root = $("hall-root"); if (!root || !matchView) return;
+    root.innerHTML = matchScreenHTML(matchView);
+    wireMatchScreen(matchView);
+  }
+  function renderCurrent() { if (matchView) renderMatchScreen(); else render(); } // the settle strip lives in the match OR the lobby (resume)
+  // mark matchclient's persisted slip settled so resumeSettlement won't re-surface it on the next reload (the strip still shows this session).
+  function markSlipSettled(eid) { try { var k = "dy_mp_slip_" + eid; var s = JSON.parse(window.localStorage.getItem(k) || "null"); if (s) { s.settled = true; window.localStorage.setItem(k, JSON.stringify(s)); } } catch (e) {} }
+  function wireMatchScreen(v) {
+    Array.prototype.forEach.call(document.querySelectorAll(".hall-mull"), function (b) { b.onclick = function () { var i = b.getAttribute("data-i"); if (mullPick[i]) { delete mullPick[i]; b.classList.remove("on"); } else { mullPick[i] = 1; b.classList.add("on"); } }; });
+    var mc = document.querySelector("[data-mullconfirm]"); if (mc) mc.onclick = function () { var idxs = Object.keys(mullPick).map(Number); mullPick = {}; client.mulligan(idxs); };
+    Array.prototype.forEach.call(document.querySelectorAll(".hall-hand"), function (b) {
+      if (b.disabled) return;
+      b.onclick = function () {
+        var i = Number(b.getAttribute("data-i"));
+        var spec = client.targetSpecFor(i);
+        if (spec && spec.options && spec.options.length) { pendingPlay = { i: i, name: v.myHand.filter(function (c) { return c.i === i; })[0].n, options: spec.options.map(function (o, ix) { return { idx: ix, n: o.n }; }) }; renderMatchScreen(); }
+        else { client.play(i, null); }
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".hall-tgt"), function (b) { b.onclick = function () { var i = pendingPlay.i, idx = Number(b.getAttribute("data-idx")); pendingPlay = null; client.play(i, idx); }; });
+    var cp = document.querySelector("[data-cancelplay]"); if (cp) cp.onclick = function () { pendingPlay = null; renderMatchScreen(); };
+    var ps = document.querySelector("[data-pass]"); if (ps && !ps.disabled) ps.onclick = function () { client.pass(); };
+    var cc = document.querySelector("[data-concede]"); if (cc && !cc.disabled) cc.onclick = function () { client.concede(); };
+    var st = document.querySelector("[data-settle]"); if (st && !st.disabled) st.onclick = function () { var s = v.settlement || (settlementView); if (s && s.slip) ceremonySettle(s.slip); };
+    var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { dismissedMatch[v.matchId] = true; settlementView = v.settlement || settlementView; matchView = null; render(); };
+  }
+
+  // the live clock / vanish countdown tick (renders the numbers from the SERVER deadline; the client never decides).
+  var l3TickStarted = false;
+  function startL3Tick() {
+    if (l3TickStarted) return; l3TickStarted = true;
+    setInterval(function () {
+      if (!lastView) return;
+      var cc = $("hall-clockcd");
+      if (cc && lastView.clock) { var rem = Math.max(0, lastView.clock.deadline - Date.now()); cc.textContent = Math.ceil(rem / 1000); cc.classList.toggle("warn", rem <= (lastView.clock.thinkMs - lastView.clock.warnMs)); }
+      var vc = $("hall-vanishcd");
+      if (vc && lastView.vanish) { vc.textContent = Math.max(0, Math.ceil((lastView.vanish.deadline - Date.now()) / 1000)) + "s left to reconnect"; }
+    }, 250);
+  }
+
   // ── RENDER ───────────────────────────────────────────────────────────────
   function render() {
     var root = $("hall-root"); if (!root) return;
@@ -533,9 +709,13 @@
     if (accessState === "busy") { root.innerHTML = '<div class="hall-gate hall-busy" role="status">The gate is not answering right now — <button class="hall-retry" id="hall-retry">refresh to retry</button>.</div>'; wireRetry(); return; }
     if (accessState === "gateless") { root.innerHTML = gateScreen(); return; }
     // accessState === "pass"
-    if (startedMatch) { sheet = null; renderSheet(); root.innerHTML = interimHTML(); wireInterim(); return; } // B7 — the room started; L3 brings the battle
-    root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + rail() + doors() + floor();
+    if (matchView) { sheet = null; renderSheet(); renderMatchScreen(); return; } // L3 — a live match: the battle in the browser
+    // the Hall (lobby). A settlement slip (resume-after-reload, or after leaving the over screen) rides on top — pre-settle
+    //   (the Cast button) or resolved (the settled line).
+    var pendingSlip = settlementView ? '<div class="hall-lobby-settle">' + settlementStrip(settlementView) + '</div>' : "";
+    root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + pendingSlip + rail() + doors() + floor();
     wireHall();
+    var st = document.querySelector(".hall-lobby-settle [data-settle]"); if (st && !st.disabled) st.onclick = function () { if (settlementView && settlementView.slip) ceremonySettle(settlementView.slip); };
     // NOTE: the sheet lives in its OWN body element (#hall-sheet-host), independent of hall-root, so a floor re-render
     // never rebuilds it (which would wipe a half-typed input). renderSheet() is called only on sheet-state changes.
   }
@@ -560,8 +740,9 @@
     } else {
       lim = '<button class="hall-limit-invite" data-act="limit-sheet">set a daily limit</button>';
     }
+    var who = signedInAs ? '<div class="hall-signedin state-line">signed in as <span class="hall-signedin-addr">' + shortAddr(signedInAs) + '</span></div>' : '';
     return '<div class="hall-header">' +
-      '<div class="hall-liquid"><span class="hall-liquid-label">Liquid</span> <b>' + liq + '</b></div>' +
+      '<div class="hall-liquid"><span class="hall-liquid-label">Liquid</span> <b>' + liq + '</b>' + who + '</div>' +
       '<div class="hall-limit">' + lim + '</div></div>';
   }
 
@@ -666,7 +847,6 @@
     });
     var r = $("hall-retry"); if (r) r.onclick = function () { location.reload(); };
   }
-  function wireInterim() { var b = document.querySelector("[data-interim-back]"); if (b) b.onclick = function () { startedMatch = null; render(); }; }
   function shareCode(tid) {
     try { if (navigator.clipboard) navigator.clipboard.writeText(String(tid)); } catch (e) {}
     var n = $("hall-inert-note"); if (!n) { n = el("div", "hall-inert-note state-line"); n.id = "hall-inert-note"; document.body.appendChild(n); }
@@ -791,8 +971,11 @@
         accessState: accessState, feedState: feedState, selectedTier: selectedTier, tables: tables, me: me,
         selectedFaction: selectedFaction, sheet: sheet ? { kind: sheet.kind, ctx: sheet.ctx } : null,
         ceremony: ceremony ? { kind: ceremony.kind, step: ceremony.step, error: ceremony.error } : null,
-        startedMatch: startedMatch, lossLimit: lossLimit, liquid: liquid == null ? null : liquid.toString(),
+        matchView: matchView ? { matchId: matchView.matchId, seat: matchView.seat, phase: matchView.phase, myTurn: matchView.myTurn, over: !!matchView.outcome } : null,
+        signedInAs: signedInAs, settleState: settleState, settlement: settlementView || (matchView && matchView.settlement) || null,
+        lossLimit: lossLimit, liquid: liquid == null ? null : liquid.toString(),
         pending: readPending(), lastServerError: lastServerError, escrow: escrowAddr(),
+        matchReject: matchView ? matchView.lastReject : null,
       };
     },
   };

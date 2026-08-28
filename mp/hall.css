@@ -164,3 +164,56 @@ button, a.hall-act { font: inherit; }
 .hall-interim-facts { margin-bottom: 16px; }
 .hall-interim-note { line-height: 1.6; margin-bottom: 20px; }
 .hall-interim-back { display: inline-block; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   S-HALL-L3 — THE BRIDGES (the match in the browser; neutral, hall-* reskin
+   targets for L1b). Ported from wire.html's logic, none of its rig styling. */
+
+/* signed-in identity (B1) */
+.hall-signedin { font-size: 11px; margin-top: 2px; }
+.hall-signedin-addr { font-family: ui-monospace, Menlo, monospace; color: #cbbf94; }
+
+/* the matched moment (B2) */
+.hall-dealing { text-align: center; padding: 48px 16px; }
+.hall-dealing-opp { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
+.hall-dealing-line { color: #e8d9a8; font-size: 1.05rem; letter-spacing: .04em; }
+
+/* the match screen */
+.hall-match { max-width: 640px; margin: 0 auto; }
+.hall-mstatus { border: 1px solid #333; border-radius: 8px; padding: 9px 12px; margin: 0 0 10px; }
+.hall-mstatus.warn, .hall-mreject.warn { border-color: #7a4a2a; color: #d9a06a; }
+.hall-mclock { border: 1px solid #333; border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; }
+.hall-mclock #hall-clockcd.warn, #hall-clockcd.warn { color: #d9534f; font-weight: 700; }
+.hall-mhead { border: 1px solid #2f2f2f; border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; }
+.hall-mhead-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hall-mpill { font-size: 11px; border: 1px solid #3a3a3a; border-radius: 5px; padding: 2px 7px; color: #bcbcbc; }
+.hall-mresult { color: #e8d9a8; margin-top: 8px; }
+.hall-mphase { margin-top: 6px; }
+.hall-mreject { border: 1px solid #7a4a2a; border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
+
+/* boards */
+.hall-board { display: flex; gap: 12px; margin: 0 0 12px; }
+.hall-board-side { flex: 1; border: 1px solid #2a2a2a; border-radius: 8px; padding: 10px; min-height: 60px; }
+.hall-board-me { border-color: #4a4530; }
+.hall-mini { display: inline-block; border: 1px solid #3a3a3a; border-radius: 6px; padding: 4px 8px; margin: 3px 4px 0 0; font-size: 13px; }
+.hall-mini b { color: #e8d9a8; margin-right: 4px; }
+
+/* controls */
+.hall-controls { border: 1px solid #2f2f2f; border-radius: 8px; padding: 12px; }
+.hall-controls-act { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.hall-hand, .hall-mull, .hall-tgt { font: inherit; cursor: pointer; background: #1a1a1a; border: 1px solid #444; color: #999; border-radius: 6px; padding: 8px 10px; margin: 0 6px 6px 0; }
+.hall-hand.playable { color: #e6e6e6; border-color: #6a6a6a; background: #232323; }
+.hall-hand[disabled] { opacity: .45; cursor: default; }
+.hall-mull.on { border-color: #d9534f; color: #e6b3b0; }
+.hall-tgt { border-color: #8a7434; color: #e8d9a8; }
+.hall-pass, .hall-concede, .hall-cancelplay, .hall-mleave { background: #232323; border: 1px solid #5a5a5a; color: #ddd; }
+.hall-concede { color: #c0703f; }
+
+/* settlement strip (B5) — the ruled §8c copy */
+.hall-settle { border: 1px solid #4a4530; border-radius: 8px; padding: 12px 14px; margin: 0 0 12px; background: #16140c; }
+.hall-settle.warn { border-color: #7a4a2a; }
+.hall-settle-line { color: #e8d9a8; line-height: 1.55; }
+.hall-settle-abort { margin-top: 8px; font-size: 12px; }
+.hall-settle-act { margin-top: 10px; }
+.hall-settle-err { color: #c0703f; margin-top: 6px; }
+.hall-lobby-settle { margin: 0 0 12px; }
