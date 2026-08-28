@@ -76,7 +76,7 @@
     }
     function view() {
       if (redacted && serverView && match) return normalizeServerView(serverView);
-      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, lossLimit: lossLimit, reconnecting: reconnecting };
+      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, lossLimit: lossLimit, reconnecting: reconnecting, lastReject: lastReject }; // S-HALL-L2: lastReject surfaces server refusals (FREE tier-0, join-not-locked, loss backstop) to the Hall
       var seat = match.seat, mine = g.players[seat], opp = g.players[1 - seat];
       var legal = (phase === "play" && turn === seat) ? E.playableIndices(g, seat) : [];
       return {
@@ -212,7 +212,11 @@
       isDevMode: function () { return devMode; },
       open: function (tier, faction) { lastReject = null; send({ type: "open", tier: tier, faction: faction }); }, // FREE
       close: function (tableId) { send({ type: "close", tableId: tableId }); },
-      join: function (tableId, faction) { lastReject = null; send({ type: "join", tableId: tableId, faction: faction }); }, // FREE
+      join: function (tableId, faction) { lastReject = null; send({ type: "join", tableId: tableId, faction: faction }); }, // FREE (and STAKED — the server looks up the table's escrow itself and gates on verifyLocked)
+      // S-HALL-L2 — SEND-ONLY staked open. The Hall casts approve+openMatch from the player's BROWSER wallet (its own
+      //   persistPending road, not the private-key chain below), then hands the minted escrow matchId to the server here.
+      //   Mirrors openStaked's server message exactly; the private-key openStaked stays the rig's road, untouched.
+      stakedOpen: function (o) { lastReject = null; send({ type: "open", tier: o.friend ? 0 : o.tier, faction: o.faction, escrowMatchId: String(o.escrowMatchId), friend: !!o.friend, stake: o.friend ? String(o.stake) : undefined }); },
       // ---- M-P4 STAKED: users cast approve/open/join from THEIR OWN wallet (chain-first), then open/join the lobby
       //      table carrying the escrow matchId. The store buy flow is the precedent. LIQUID source only this rung. ----
       setChain: function (o) {

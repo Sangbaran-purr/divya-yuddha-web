@@ -92,3 +92,75 @@ button, a.hall-act { font: inherit; }
   .hall-plaque-you { grid-column: 1 / -1; }
   .hall-doors { max-width: 420px; margin-left: auto; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   S-HALL-L2 — THE ACTS (neutral styling only; every selector is a stable reskin
+   target for L1b. No dress: legibility + layout, nothing of the game's chrome). */
+
+/* the live acts replace the inert look — normal tappable buttons */
+.hall-door-open, .hall-door-friend { background: #232323; border: 1px solid #6a6a6a; color: #fff; }
+.hall-door-friend { background: none; }
+.hall-act-seat, .hall-act-cancel-open, .hall-share, .hall-act-close-free, .hall-open-one,
+.hall-limit-invite, .hall-limit-set { font: inherit; cursor: pointer; background: #232323; border: 1px solid #5a5a5a; color: #ddd; border-radius: 7px; padding: 8px 12px; }
+.hall-share, .hall-open-one, .hall-limit-invite, .hall-limit-set { background: none; text-decoration: underline; border: none; color: #bcbcbc; padding: 4px 2px; }
+
+/* faction picker */
+.hall-faction { display: flex; gap: 8px; flex-wrap: wrap; }
+.hall-faction-sigil { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 66px; padding: 8px 6px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #cfcfcf; cursor: pointer; font-size: 12px; }
+.hall-faction-sigil.on { border-color: #8a7434; background: #201d13; color: #e8d9a8; }
+.hall-faction-sigil .hall-sigil { width: 22px; height: 22px; }
+
+/* the sheet overlay + panel */
+#hall-sheet-host { position: fixed; inset: 0; z-index: 70; pointer-events: none; }
+.hall-sheet-overlay { position: fixed; inset: 0; background: rgba(4, 3, 1, .72); display: flex; align-items: flex-end; justify-content: center; pointer-events: auto; overflow-y: auto; }
+.hall-sheet { width: 100%; max-width: 560px; background: #141210; border: 1px solid #333; border-top-left-radius: 12px; border-top-right-radius: 12px; padding: 18px 16px 12px; margin-top: auto; }
+.hall-sheet-title { color: #e8d9a8; font-size: .82rem; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 12px; }
+.hall-sheet-sub { color: #9a9a9a; font-size: 12px; margin: 12px 0 5px; }
+.hall-sheet-act { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.hall-sheet-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
+.hall-sheet-close { background: none; border: none; color: #8f8f8f; text-decoration: underline; cursor: pointer; font: inherit; }
+.hall-sheet-err { color: #c0703f; }
+.hall-sheet-switch { display: block; width: 100%; margin-top: 12px; background: none; border: none; color: #bcbcbc; text-decoration: underline; cursor: pointer; font: inherit; text-align: center; }
+.hall-sheet input { width: 100%; box-sizing: border-box; background: #0b0906; border: 1px solid #5a5a5a; border-radius: 6px; color: #e6e6e6; font: inherit; padding: 9px 10px; }
+
+/* tier rows (open sheet) */
+.hall-tier-rows { display: flex; flex-direction: column; gap: 6px; }
+.hall-tier-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #ddd; cursor: pointer; font: inherit; text-align: left; }
+.hall-tier-row.on { border-color: #8a7434; background: #201d13; }
+.hall-tier-row.unaffordable { opacity: .5; cursor: not-allowed; }
+.hall-tier-label { font-weight: 600; letter-spacing: 1px; }
+.hall-tier-stake { margin-left: auto; }
+.hall-tier-usd, .hall-tier-note { color: #8f8f8f; font-size: 12px; }
+.hall-tier-note { color: #a98f5a; }
+
+/* commitment + money lines (the ruled copy) */
+.hall-commit-text { margin: 14px 0 0; line-height: 1.6; color: #cfcfcf; }
+.hall-limit-block { margin: 10px 0 0; color: #d8b46a; border: 1px solid rgba(138, 111, 58, .4); border-radius: 7px; padding: 9px 11px; }
+.hall-seat-rule { margin: 12px 0 0; color: #e8d9a8; }
+.hall-seat-opp { display: flex; align-items: center; gap: 8px; }
+.hall-pot-line { margin-top: 8px; }
+.hall-fee-line { color: #8f8f8f; }
+.hall-free-refusal, .hall-friend-note { margin-top: 10px; color: #a98f5a; }
+
+/* friend code chip */
+.hall-code-chip { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px dashed #8a7434; border-radius: 8px; background: #17140c; cursor: pointer; margin-bottom: 12px; }
+.hall-code-label { font-size: 11px; letter-spacing: .12em; color: #a98f5a; }
+.hall-code-value { font-family: ui-monospace, Menlo, monospace; font-size: 1.1rem; color: #e8d9a8; word-break: break-all; }
+.hall-code-copy { font-size: 11px; color: #8f8f8f; }
+.hall-friend-lock-line { line-height: 1.6; }
+
+/* ceremony strip */
+.hall-ceremony { margin-top: 14px; }
+.hall-ceremony-step { display: inline-block; padding: 3px 8px; border: 1px solid #3a3a3a; border-radius: 5px; margin-right: 6px; color: #9a9a9a; }
+.hall-ceremony-step.on { border-color: #8a7434; color: #e8d9a8; }
+.hall-ceremony-step.done { color: #6f6f6f; text-decoration: line-through; }
+.hall-ceremony-wait { color: #8f8f8f; font-size: 12px; margin-top: 6px; }
+.hall-ceremony-error { color: #c0703f; }
+.hall-act-limit-remove { background: none; border: 1px solid #5a5a5a; color: #c0703f; }
+
+/* interim state (B7) */
+.hall-interim { text-align: center; padding: 40px 16px; max-width: 480px; margin: 0 auto; }
+.hall-interim-line { color: #e8d9a8; font-size: 1.05rem; letter-spacing: .04em; margin-bottom: 12px; }
+.hall-interim-facts { margin-bottom: 16px; }
+.hall-interim-note { line-height: 1.6; margin-bottom: 20px; }
+.hall-interim-back { display: inline-block; }

@@ -55,6 +55,15 @@ window.DY_CONFIG = {
     url: "wss://dy-match-server.onrender.com", // deployed M-P1 server (Render); overridable per-browser for local proof
   },
 
+  // S-HALL-L2 — the StakeEscrow the Hall casts against (approve/openMatch/joinMatch/cancelMatch from the player's own
+  // wallet; the server only READS this escrow to gate). Address read from the web3 repo docs/MAINNET_STACK_2026-08-15.md
+  // (row 6, exact_match) and VERIFIED on-chain 2026-08-28: referee()==0x42FF116e0EecC431186D4fA2CA3964bC999b42e2 (the
+  // seated referee). For the LOCAL anvil proof, localStorage["dyhall::stakeEscrowAddress"] wins (mirrors the
+  // matchServerUrl override idiom). The rig (wire.html) casts with its own throwaway keys and is never touched.
+  stakeEscrow: {
+    address: "0x8e2645aB6bd2c13d57E3efBc3Edad19DfF181534", // W3-MAINNET StakeEscrow (mainnet); overridable per-browser for local proof
+  },
+
   // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;
   // the full stack landed 44701099–44701101). Bounds the "Your Holdings" Transfer(*, owner) getLogs scan (from here
   // to latest) so public RPCs don't reject a full-chain range. UNSET/0 → the loader falls back to fromBlock 0 (a
