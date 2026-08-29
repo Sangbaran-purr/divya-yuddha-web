@@ -38,5 +38,9 @@
   {
     "wallet": "0xB554DCD870EA0F5f015832970C716a765725cC93",
     "sig": "0x33c7f9fa7dbadac5732a5432cd3b43071dc74cafd2c094bae77819e13a3d5ab83e3e14a1f0092ee30bf1897d5a0c35c16ee83f208a86dcfa02c62be9a95f3ec01b"
+  },
+  {
+    "wallet": "0x63f6d9A7C0aad788C7674D297e4BDaa9ABf2e916",
+    "sig": "0x5712eb7aa05a44525cc8dc5cca78a20531baebaf04de27aaf90db039ec367d9c06ff04aa23784a0e2a95559e2edf4daf6a80cb9d7df5befcc525cea63cf041311b"
   }
 ]
