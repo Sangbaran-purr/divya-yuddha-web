@@ -917,14 +917,63 @@ window.DYDash = (function () {
   // own durable store. Both are the permanent on-screen record — never dropped because a scan returned less. They
   // reset ONLY when the wallet address changes (rows are per-wallet; guards the multi-wallet funnel walk).
   var feedSeen = {}, optimisticFeed = [], feedAddr = null;
+  // S-DASH-FEED-1: the PERMANENT grow-only ledger. feedSeen (the S-FEED-5 union) is now PERSISTED per-wallet, so a page
+  //   close never loses it. Watermarks: feedHi = highest block scanned; feedLo = lowest block backfilled. Everything in
+  //   [feedLo, feedHi] is scanned + cached, so a return visit only forward-scans (feedHi→latest) and continues the
+  //   backfill (deployBlock→feedLo), never a full rescan (R1/R2). Key: dymf::feed::<lowercased addr> (own namespace).
+  var feedHi = 0, feedLo = 0;
+  function feedCacheKey(addr) { return "dymf::feed::" + (addr || "").toLowerCase(); }
+  function readFeedCache(addr) {
+    try { var o = JSON.parse(localStorage.getItem(feedCacheKey(addr)) || "null"); if (o && o.rows && typeof o.rows === "object") return { rows: o.rows, hi: Number(o.hi) || 0, lo: Number(o.lo) || 0 }; } catch (e) {}
+    return { rows: {}, hi: 0, lo: 0 };
+  }
+  // atomic write (single setItem; a partial state is never observed). Only ever GROWS the row set.
+  function persistFeed() {
+    if (!feedAddr) return;
+    try { localStorage.setItem(feedCacheKey(feedAddr), JSON.stringify({ rows: feedSeen, hi: feedHi, lo: feedLo })); } catch (e) {}
+  }
   function feedResetIfAddr(addr) {
     var a = (addr || "").toLowerCase();
-    if (feedAddr !== a) { feedSeen = {}; optimisticFeed = []; feedAddr = a; }
+    if (feedAddr !== a) {
+      // S-DASH-FEED-1: LOAD this wallet's cached ledger (do not clear to {}). optimisticFeed is per-session (rebuilt from receipts).
+      var cache = readFeedCache(a);
+      feedSeen = cache.rows; feedHi = cache.hi; feedLo = cache.lo; optimisticFeed = []; feedAddr = a;
+    }
   }
   var feedScanSettled = false; // S-FEED-2: true once the scan resolves — gates "No activity yet" vs "…loading"
+  var GBN_TIMEOUT_MS = 12000;  // S-DASH-FEED-1 (R3): bound getBlockNumber so a hung RPC falls to the busy+retry face, never forever-loading
+  function withTimeout(p, ms) { return new Promise(function (res, rej) { var t = setTimeout(function () { rej(new Error("timeout")); }, ms); p.then(function (v) { clearTimeout(t); res(v); }, function (e) { clearTimeout(t); rej(e); }); }); }
+  // Run the 5 per-wallet event filters over [from, to] (newest-first), pushing rows into `evs`. Resolves to the
+  //   CONTIGUOUS low-watermark reached = the HIGHEST of the filters' reached-lows (the least-progressed filter bounds
+  //   the range that is FULLY scanned by every filter). No new shared mutable span — the retry-guarded feedSpan is reused.
+  function scanRange(provider, c, addr, from, to, evs) {
+    var jobs = [], lows = [];
+    function J(p) { jobs.push(p.then(function (low) { lows.push(low); })); }
+    if (c.vestingVault) { var vv = new ethersRef.Contract(c.vestingVault, VEST_ABI, provider);
+      J(scan(vv, vv.filters.Claimed(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Claimed", ic: "vesting", details: "Vesting claimed", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash }); })); }
+    if (c.holderStaking) { var hs = new ethersRef.Contract(c.holderStaking, STAKE_ABI, provider);
+      J(scan(hs, hs.filters.Staked(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Staked", ic: "staked", details: "Staked to earn", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash }); }));
+      J(scan(hs, hs.filters.VestedRegistered(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: fmt(e.args.principal) + " DYC", hash: e.transactionHash }); }));
+      J(scan(hs, hs.filters.RoiAccrued(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Claimed", ic: "rewards", details: "Reward claimed", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash }); })); }
+    if (c.roiRedemption) { var rd = new ethersRef.Contract(c.roiRedemption, DESK_ABI, provider);
+      J(scan(rd, rd.filters.Redeemed(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Cashed Out", ic: "rewards", details: "Cash out to USDT", amt: fmt(e.args.dycAmount) + " DYC → " + fmt(e.args.usdtOut, 6) + " USDT", hash: e.transactionHash }); })); }
+    // S-FEED-2: DYCoinSale purchases — the buy that lands DYC (85% into vesting, 15% liquid). dycOut = total DYC received.
+    if (c.dycoinSale) { var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, provider);
+      J(scan(sale, sale.filters.Purchased(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Purchase", ic: "liquid", details: "Bought DYC", amt: fmt(e.args.dycOut) + " DYC", hash: e.transactionHash }); })); }
+    return Promise.all(jobs).then(function () { return lows.length ? Math.max.apply(null, lows) : from; });
+  }
+  function feedStatus(status) {
+    var merged = renderFeedMerged();
+    status.textContent = merged.length
+      ? (feedLo > (cfg().deployBlock || 0) && feedLo > 0 ? "Showing " + merged.length + " event(s) — older history still loading." : "Showing " + merged.length + " event(s).")
+      : "";
+    return merged;
+  }
+  // S-DASH-FEED-1: render the CACHED ledger first, then forward-scan (feedHi→latest) + backfill (deployBlock→feedLo),
+  //   union-by-hash, persisting after each pass. The ledger is permanent; a scan can only GROW it, never blank it.
   function loadFeed() {
     var c = cfg(), addr = W.state.address, body = $("tx-body"), status = $("tx-status");
-    feedResetIfAddr(addr); // S-FEED-5: a wallet switch clears the durable stores (no cross-wallet rows)
+    feedResetIfAddr(addr); // loads this wallet's cached ledger into feedSeen + feedHi/feedLo
     feedIncomplete = false;
     feedScanSettled = false;
     feedSpan = 0; // S-FEED-4: re-converge the getLogs span per scan (provider may have changed)
@@ -933,59 +982,45 @@ window.DYDash = (function () {
       body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>Your activity appears here once the platform contracts are live.</td></tr>";
       return;
     }
-    status.textContent = "Scanning recent activity…";
+    // R1 — the cache renders INSTANTLY; a non-empty cache never shows a loading line.
+    var hadCache = false; for (var k in feedSeen) { if (Object.prototype.hasOwnProperty.call(feedSeen, k)) { hadCache = true; break; } }
+    if (hadCache) { renderFeedMerged(); status.textContent = ""; } else { status.textContent = "Scanning recent activity…"; }
     var provider = logProvider(); // M-F4c: getLogs uses the free endpoints (the site key caps ranges to 10 blocks)
-    provider.getBlockNumber().then(function (latest) {
-      var from = c.deployBlock || Math.max(0, latest - 45000);
+    withTimeout(provider.getBlockNumber(), GBN_TIMEOUT_MS).then(function (latest) {
+      var deploy = c.deployBlock || Math.max(0, latest - 45000);
+      // FORWARD pass — new events above the cached hi (the full [deploy, latest] on a first run, when feedHi is 0/below deploy)
+      var fwFrom = (feedHi > 0 && feedHi >= deploy) ? feedHi + 1 : deploy;
       var evs = [];
-      var jobs = [];
-      if (c.vestingVault) {
-        var vv = new ethersRef.Contract(c.vestingVault, VEST_ABI, provider);
-        jobs.push(scan(vv, vv.filters.Claimed(addr), from, latest, function (e) {
-          evs.push({ block: e.blockNumber, type: "Claimed", ic: "vesting", details: "Vesting claimed", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash });
-        }));
-      }
-      if (c.holderStaking) {
-        var hs = new ethersRef.Contract(c.holderStaking, STAKE_ABI, provider);
-        jobs.push(scan(hs, hs.filters.Staked(addr), from, latest, function (e) {
-          evs.push({ block: e.blockNumber, type: "Staked", ic: "staked", details: "Staked to earn", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash });
-        }));
-        jobs.push(scan(hs, hs.filters.VestedRegistered(addr), from, latest, function (e) {
-          evs.push({ block: e.blockNumber, type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: fmt(e.args.principal) + " DYC", hash: e.transactionHash });
-        }));
-        jobs.push(scan(hs, hs.filters.RoiAccrued(addr), from, latest, function (e) {
-          evs.push({ block: e.blockNumber, type: "Claimed", ic: "rewards", details: "Reward claimed", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash });
-        }));
-      }
-      if (c.roiRedemption) {
-        var rd = new ethersRef.Contract(c.roiRedemption, DESK_ABI, provider);
-        jobs.push(scan(rd, rd.filters.Redeemed(addr), from, latest, function (e) {
-          evs.push({ block: e.blockNumber, type: "Cashed Out", ic: "rewards", details: "Cash out to USDT", amt: fmt(e.args.dycAmount) + " DYC → " + fmt(e.args.usdtOut, 6) + " USDT", hash: e.transactionHash });
-        }));
-      }
-      // S-FEED-2: DYCoinSale purchases — the buy that lands DYC (85% into vesting, 15% liquid). dycOut = total DYC received.
-      if (c.dycoinSale) {
-        var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, provider);
-        jobs.push(scan(sale, sale.filters.Purchased(addr), from, latest, function (e) {
-          evs.push({ block: e.blockNumber, type: "Purchase", ic: "liquid", details: "Bought DYC", amt: fmt(e.args.dycOut) + " DYC", hash: e.transactionHash });
-        }));
-      }
-      return Promise.all(jobs).then(function () { return attachTimes(provider, evs); });
-    }).then(function (evs) {
-      evs.forEach(function (e) { if (e.hash) feedSeen[e.hash] = e; }); // S-FEED-5: accumulate (union), never replace
-      feedScanSettled = true;
-      var merged = renderFeedMerged();
-      // S-FEED-2: the empty/loading message lives ONLY in the body (renderFeed) — the status line never duplicates it.
-      // Status is the count summary (or, on a partial scan, that older history may still be loading), else quiet.
-      status.textContent = merged.length
-        ? (feedIncomplete ? "Showing " + merged.length + " recent event(s) — older history may still be loading." : "Showing " + merged.length + " recent event(s).")
-        : "";
+      var fwProm = (fwFrom <= latest) ? scanRange(provider, c, addr, fwFrom, latest, evs) : Promise.resolve(latest + 1);
+      return fwProm.then(function (fwLow) {
+        return attachTimes(provider, evs).then(function () {
+          evs.forEach(function (e) { if (e.hash) feedSeen[e.hash] = e; }); // S-FEED-5: union, never replace
+          feedHi = latest;
+          if (fwFrom === deploy) feedLo = (feedLo === 0) ? fwLow : Math.min(feedLo, fwLow); // first run: this pass IS the backfill
+          feedScanSettled = true;
+          persistFeed();   // atomic — the forward pass is durable
+          feedStatus(status);
+          // BACKFILL pass — continue below feedLo down to the deploy block, while time remains (resumable across visits, R2)
+          if (feedLo > deploy && (!scanDeadline || Date.now() < scanDeadline)) {
+            var evs2 = [];
+            return scanRange(provider, c, addr, deploy, feedLo - 1, evs2).then(function (bfLow) {
+              return attachTimes(provider, evs2).then(function () {
+                evs2.forEach(function (e) { if (e.hash) feedSeen[e.hash] = e; });
+                feedLo = Math.min(feedLo, bfLow);
+                persistFeed();   // atomic — backfill progress lands on every pass, so a mid-backfill exit resumes here
+                feedStatus(status);
+              });
+            });
+          }
+        });
+      });
     }).catch(function () {
-      // only the initial getBlockNumber (the whole line down) reaches here now — per-chunk failures no longer do.
+      // getBlockNumber timed out/failed (R3): show the CACHE + the busy face + retry — NEVER a bare forever-loading.
       feedScanSettled = true;
       var merged = renderFeedMerged();
       if (!merged.length) { body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>" + netMsg() + "</td></tr>"; wireReadRetry(); }
-      status.textContent = "";
+      else { status.textContent = ""; }
+      scheduleReadRetry(); // keep trying to grow the ledger; recovers when the RPC returns
     });
   }
   // Merge the accumulated on-chain scan (feedSeen, union-by-hash across the session) with locally-known just-done txs
@@ -1114,12 +1149,14 @@ window.DYDash = (function () {
     if (code === -32602) return true;                            // invalid params — commonly the range on capped providers
     return /block range|range is too|too many blocks|up to \d+ blocks?|logs are limited|log.{0,12}limit|exceed|10000 blocks?|response size|returned more than/.test(msg);
   }
+  // Scans [from, latest] newest-first, pushing rows. Resolves to the LOW-WATERMARK it reached (== from on a complete
+  //   scan; == the boundary block on a deadline/partial). S-DASH-FEED-1 uses that to persist backfill progress.
   function scan(contract, filter, from, latest, push) {
-    var end = latest, out = [];
+    var end = latest;
     if (!feedSpan) feedSpan = LOG_CHUNK_();
     function step() {
-      if (end < from) return Promise.resolve(out);
-      if (scanDeadline && Date.now() > scanDeadline) { feedIncomplete = true; return Promise.resolve(out); } // bounded; newest already landed
+      if (end < from) return Promise.resolve(from);           // fully scanned down to `from`
+      if (scanDeadline && Date.now() > scanDeadline) { feedIncomplete = true; return Promise.resolve(end + 1); } // stopped at end → low = end+1
       var start = Math.max(from, end - feedSpan + 1);
       return contract.queryFilter(filter, start, end).then(function (r) {
         r.forEach(push); end = start - 1; return step();
@@ -1136,7 +1173,7 @@ window.DYDash = (function () {
           }
           if (Math.min(feedSpan, end - from + 1) < triedSpan) return step(); // a smaller retry is possible → take it
         }
-        feedIncomplete = true; return out;                      // provider caps below our floor, or a non-range failure (throttle/prune) → partial
+        feedIncomplete = true; return end + 1;                  // provider caps below our floor, or a non-range failure → partial; low = end+1
       });
     }
     return step();
@@ -1154,9 +1191,17 @@ window.DYDash = (function () {
   function renderFeed(evs) {
     var body = $("tx-body");
     if (!evs.length) {
-      // S-FEED-2: "No activity yet" ONLY after a full, complete scan; otherwise it's still loading — never both at once.
-      var msg = (feedScanSettled && !feedIncomplete) ? "No activity yet." : "Recent activity is still loading…";
-      body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>" + msg + "</td></tr>"; return;
+      // S-DASH-FEED-1 (R3) — three HONEST empty states, never a bare forever "still loading":
+      //   • a scan is genuinely running        → "Recent activity is still loading…"
+      //   • settled but PARTIAL (deadline/RPC) → the busy face + a visible retry (never a forever-spinner)
+      //   • settled AND complete               → "No activity yet."
+      var msg, retry = false;
+      if (!feedScanSettled) msg = "Recent activity is still loading…";
+      else if (feedIncomplete) { msg = netMsg(); retry = true; }
+      else msg = "No activity yet.";
+      body.innerHTML = "<tr><td colspan='6' style='text-align:center;color:var(--gold-aged);padding:20px'>" + msg + "</td></tr>";
+      if (retry) wireReadRetry();
+      return;
     }
     body.innerHTML = "";
     evs.forEach(function (e) {
