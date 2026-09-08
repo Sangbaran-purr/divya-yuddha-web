@@ -263,7 +263,8 @@ copy-block law): the covenant line (2b), the commitment text (5),
 the both-stakes line (6), the friend-lock line (7), the three
 settlement variants + abort line (8c), the unopened-table line
 (8d, amended 2026-09-08), the moved-on cancel line (amended
-2026-09-08b), the limit texts (9). CC never paraphrases money
+2026-09-08b), the friend-code reachability line (amended
+2026-09-08c), the limit texts (9). CC never paraphrases money
 copy; changes are ruled amendments here.
 
 =====================================================
@@ -366,3 +367,27 @@ It is shown ONLY on that confirmation. A revert for any other
 reason keeps the generic message - the Hall never claims to know
 why when it does not. Decoding the escrow's custom errors is a
 separate polish item and is deliberately NOT done for this line.
+
+=====================================================
+## AMENDMENT 2026-09-08c (S-HALL-CODE-LOOKUP-1) - THE FRIEND CODE'S REACHABILITY LINE
+=====================================================
+RULED by the owner 2026-09-08. The friend code no longer reads the
+broadcast list; it asks the server ({lookup} -> {lookup-result},
+W3-LOBBY-DOORS-1). That introduces a third outcome the road never
+had: the server may not answer at all.
+
+The Hall must never report silence as "no such code" - that would
+tell a player their code is wrong when it is fine. When the lookup
+gets no answer (a dead socket, the ~5s bound, or a superseding
+lookup), the sheet carries this line, verbatim:
+
+  "could not reach the table server - your code is fine, try
+  again in a moment"
+
+It is a reassurance line on a money road, so it is enumerated in
+section 11 and machine-proven like the rest. Shown ONLY on no
+answer; a server that answers "no such code" keeps the existing
+unruled line ("no table found for that code - ask your friend to
+re-share it"), which is untouched by this amendment, as is "that
+code is not a staked table". The code entry survives every
+outcome so the player can retry without retyping.

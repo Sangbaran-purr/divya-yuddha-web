@@ -44,6 +44,7 @@ const LAW = [
   ["8c free",            "no stakes at this table"],
   ["8d unopened table",  "Your [10] DYC is locked in escrow, but the table has not opened yet."],
   ["cancel moved-on",    "this table is no longer cancellable - the match has moved on"],
+  ["friend reachability", "could not reach the table server - your code is fine, try again in a moment"],
   ["9 limit set",        "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this."],
   ["9 limit block",      "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: [X] DYC."],
 ];
@@ -66,6 +67,12 @@ ok("shown only on a confirmed non-OPEN escrow (state read, not a decode)",
    /readOpenState\(road, t\.escrowMatchId\)[^]*?st\.ok && st\.state !== 1[^]*?CANCEL_MOVED_ON/.test(HALL));
 
 // ── ADVISORY: every other quoted doc line. Never fails the run; surfaces drift for a human to rule on.
+console.log("\n── the friend-code reachability line ruled 2026-09-08c ──");
+ok("enumerated in the section 11 copy block", /friend-code reachability line \(amended\s+2026-09-08c\)/.test(norm(DOC)));
+ok("the 2026-09-08c amendment note is recorded", /AMENDMENT 2026-09-08c \(S-HALL-CODE-LOOKUP-1\)/.test(DOC));
+ok("shown only on NO ANSWER, never on a null result",
+   /if \(!r \|\| r\.unreachable\) \{ sheet\.ctx\.err = FRIEND_UNREACHABLE;/.test(HALL));
+
 console.log("\n── advisory · other quoted doc lines (not section-11 ruled copy) ──");
 const lawSet = new Set(LAW.map(([, l]) => norm(l)));
 const re = /"([^"]+)"/g; let m; const seen = new Set(); let lit = 0, diff = 0;

@@ -230,6 +230,10 @@
   // S-HALL-L3-FIX-1 (B4) — RULED 2026-09-08 as LOBBY_DESIGN.md section 8d (verbatim copy-block law). The bracket
   // slot is filled from the pending record, exactly as COMMITMENT fills its own. CC never paraphrases this line.
   function STRAND_LOCKED(stakeWei) { return "Your " + dycOf(stakeWei) + " DYC is locked in escrow, but the table has not opened yet."; }
+  // S-HALL-CODE-LOOKUP-1 (R1) — RULED 2026-09-08 (LOBBY_DESIGN amendment 2026-09-08c, §11 enumerated). Shown ONLY
+  // when the lookup got no answer at all — never when the server answered "no such code". It says whose fault it
+  // is, clears the player of a typo, and invites the retry the code entry survives for.
+  var FRIEND_UNREACHABLE = "could not reach the table server - your code is fine, try again in a moment";
   function FRIEND_LOCK(addr) { return "private table - visible only by this code, and only " + addr + " can take the seat."; }
   var LIMIT_SET_TEXT = "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this.";
   function LIMIT_BLOCK(headroomWei) { return "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: " + dycOf(headroomWei) + " DYC."; }
@@ -565,12 +569,10 @@
     return escContract(r).matches(BigInt(id)).then(function (mm) { return Number(mm.state) === 1 && String(mm.playerA).toLowerCase() === me; }).catch(function () { return false; });
   }
 
-  // ── friend code lookup (F3: ONE function so a later server-side switch is one edit). Today: read the broadcast list. ──
-  function lookupTableByCode(code) {
-    code = String(code || "").trim();
-    for (var i = 0; i < tables.length; i++) { if (String(tables[i].id) === code) return tables[i]; }
-    return null;
-  }
+  // ── friend code lookup — S-HALL-CODE-LOOKUP-1: RETIRED. The broadcast scan that used to live here is gone; the
+  //    code road now asks the SERVER ({lookup} → {lookup-result}, matchclient.lookup). That is what lets the server
+  //    withhold friend tables from the {tables} frame at all (W3-LOBBY-DOORS-1 FRIEND_TABLES_WITHHELD). No caller
+  //    may scan `tables` for a code. ──
 
   // ── the affordability + headroom judgments ──
   function affordable(stakeWei) { return liquid != null && BigInt(liquid) >= BigInt(stakeWei); }
@@ -1185,11 +1187,21 @@
   function doFriendFind() {
     var host = $("hall-sheet-host");
     var code = ((host.querySelector("#hall-friend-code") || {}).value || "").trim();
-    sheet.ctx = sheet.ctx || {}; sheet.ctx.codeInput = code; sheet.ctx.err = null;
-    var t = lookupTableByCode(code);
-    if (!t) { sheet.ctx.err = "no table found for that code - ask your friend to re-share it"; renderSheet(); return; }
-    if (!t.staked) { sheet.ctx.err = "that code is not a staked table"; renderSheet(); return; }
-    sheet.ctx.table = t; renderSheet();
+    sheet.ctx = sheet.ctx || {};
+    if (sheet.ctx.finding) return;                    // R3 — one lookup at a time; a double-tap must not supersede itself
+    sheet.ctx.codeInput = code; sheet.ctx.err = null; // the entry ALWAYS survives, whatever the outcome
+    if (!client || !client.lookup) { sheet.ctx.err = FRIEND_UNREACHABLE; renderSheet(); return; }
+    sheet.ctx.finding = true; renderSheet();
+    client.lookup(code).then(function (r) {
+      // the sheet may have been dismissed while we waited — never write into a sheet that moved on
+      if (!sheet || sheet.kind !== "friendjoin") return;
+      sheet.ctx.finding = false;
+      if (!r || r.unreachable) { sheet.ctx.err = FRIEND_UNREACHABLE; renderSheet(); return; }   // no answer ≠ "no"
+      var t = r.found;
+      if (!t) { sheet.ctx.err = "no table found for that code - ask your friend to re-share it"; renderSheet(); return; }
+      if (!t.staked) { sheet.ctx.err = "that code is not a staked table"; renderSheet(); return; }
+      sheet.ctx.table = t; renderSheet();
+    });
   }
   function doFriendJoin() {
     var t = sheet.ctx.table; if (!t || !selectedFaction) return;

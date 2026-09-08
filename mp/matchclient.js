@@ -36,6 +36,16 @@
     var lossLimit = null;          // M-P6 — { cap, netLossToday, remaining }
     var authMode = null, authAddr = null; // for auto-reconnect: replay the same auth on a dropped socket
     var lastOpened = null;         // S-HALL-L3-FIX-1 (B2) — the server's {opened} ack, surfaced to the view
+    // S-HALL-CODE-LOOKUP-1 (C1/R3) — ONE in-flight lookup. The server's {lookup-result} does not echo the code, so
+    // concurrent lookups would be indistinguishable on the wire; a new lookup therefore supersedes the old, which
+    // resolves UNREACHABLE. (Echoing the code is a future web3 rider, not built here.)
+    var pendingLookup = null, LOOKUP_MS = 5000;
+    function settleLookup(out) {
+      if (!pendingLookup) return;
+      var p = pendingLookup; pendingLookup = null;
+      if (p.timer) clearTimeout(p.timer);
+      try { p.resolve(out); } catch (e) {}
+    }
     var reconnecting = false;
     var redacted = false, serverView = null; // M-A3 — staked road: pure view renderer (no mirror `g`)
 
@@ -132,6 +142,9 @@
       // S-HALL-L3-FIX-1 (B2) — the ACK. Was log-only and did not push, so no caller could ever learn the server
       // accepted the open. Now recorded and pushed: the Hall clears its pending record ONLY on this (or on our
       // escrowMatchId appearing in {tables}), never on a fire-and-forget send.
+      // S-HALL-CODE-LOOKUP-1 (C1) — the answer to {lookup}. `table` is null when the code matches nothing; that is
+      // an ANSWER, distinct from UNREACHABLE (no answer at all).
+      if (m.type === "lookup-result") { settleLookup({ found: m.table || null }); return; }
       if (m.type === "opened") { lastOpened = { table: m.table, at: Date.now() }; log("opened table " + m.table.id); push(); return; }
       if (m.type === "error") { lastReject = m.error; log("ERROR " + m.error); push(); return; }
       if (m.type === "match") {
@@ -207,6 +220,7 @@
       ws = new WebSocket(connectUrl);
       ws.onopen = function () { log(reconnecting ? "ws reopened (resuming)" : ("ws open " + connectUrl)); push(); };
       ws.onclose = function () {
+        settleLookup({ unreachable: true });   // a lookup can never outlive its socket
         // M-P6 — if a live match dropped, auto-reconnect once to land inside the vanish grace and resync.
         if (match && phase !== "over" && authMode && !reconnecting) { reconnecting = true; log("ws dropped — reconnecting to resume…"); push(); setTimeout(openSocket, 800); }
         else { log("ws closed"); push(); }
@@ -234,6 +248,18 @@
       isDevMode: function () { return devMode; },
       open: function (tier, faction) { lastReject = null; return send({ type: "open", tier: tier, faction: faction }); }, // FREE (B1: reports delivery)
       close: function (tableId) { return send({ type: "close", tableId: tableId }); }, // B1: reports delivery
+      // S-HALL-CODE-LOOKUP-1 (C1) — ask the SERVER for a table by code. Resolves to exactly one of:
+      //   { found: table }  the code names a table (friend or not, withheld from the broadcast or not)
+      //   { found: null }   the server answered: no such code
+      //   { unreachable }   no answer — a dead socket (fail-fast on B1's send report), the ~5s bound, a superseding
+      //                     lookup, or a closed socket. NEVER null-as-answer: "we could not ask" is not "no".
+      lookup: function (code) {
+        settleLookup({ unreachable: true, superseded: true });          // R3 — one at a time
+        if (!send({ type: "lookup", code: String(code == null ? "" : code).trim() })) return Promise.resolve({ unreachable: true, notSent: true });
+        return new Promise(function (res) {
+          pendingLookup = { resolve: res, timer: setTimeout(function () { settleLookup({ unreachable: true, timedOut: true }); }, LOOKUP_MS) };
+        });
+      },
       join: function (tableId, faction) { lastReject = null; return send({ type: "join", tableId: tableId, faction: faction }); }, // FREE (and STAKED — the server looks up the table's escrow itself and gates on verifyLocked). B1: reports delivery
       // S-HALL-L2 — SEND-ONLY staked open. The Hall casts approve+openMatch from the player's BROWSER wallet (its own
       //   persistPending road, not the private-key chain below), then hands the minted escrow matchId to the server here.
