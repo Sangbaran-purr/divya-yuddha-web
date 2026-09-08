@@ -85,6 +85,10 @@
         outcome: outcome, lastReject: lastReject, settlement: settlement,
         clock: clock, vanish: vanish, lossLimit: lossLimit, reconnecting: reconnecting,
         redacted: true, legal: v.legal, lastMove: v.lastMove, deckCounts: v.deckCounts,
+        // S-HALL-CHROME-1 (M2) — the lobby list rides the MATCH view too. Without it the Hall's `tables` cannot be
+        // updated while a battle owns the screen (its onUpdate returns before the lobby reconcile), so the floor
+        // came back frozen at its pre-join frame. Additive: the rig ignores keys it does not read.
+        tables: tables,
       };
     }
     function view() {
@@ -103,6 +107,7 @@
         myMulliganed: mine.mulliganed, oppMulliganed: opp.mulliganed,
         outcome: outcome, lastReject: lastReject, settlement: settlement,
         clock: clock, vanish: vanish, lossLimit: lossLimit, reconnecting: reconnecting,
+        tables: tables,                     // S-HALL-CHROME-1 (M2) — see normalizeServerView
       };
     }
     function push() { try { onUpdate(view()); } catch (e) {} }

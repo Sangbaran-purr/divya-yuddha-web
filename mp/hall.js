@@ -85,7 +85,12 @@
   }
   function readLiquid(ethers) {
     var dyc = dycAddr(); if (!dyc || !me) return; // dycAddr honors the dyhall::dycAddress anvil override
-    new ethers.Contract(dyc, DYC_ABI, readProvider(ethers)).balanceOf(me).then(function (b) { liquid = b; render(); }).catch(function () {});
+    // S-HALL-CHROME-1 (M3) — the catch used to be EMPTY, so a dead RPC left `liquid` at its previous value and the
+    // header went on rendering a stale number. Busy-sentinel law: an unreadable balance is null, which the header
+    // already draws as "—". Never a stale number silently.
+    new ethers.Contract(dyc, DYC_ABI, readProvider(ethers)).balanceOf(me)
+      .then(function (b) { liquid = b; render(); })
+      .catch(function () { liquid = null; render(); });
   }
 
   // ── THE LIVE FEED (M-P1) — matchclient's existing handshake; whole-list {tables} reconcile; three faces. ──
@@ -107,6 +112,10 @@
         //   once per matchId, then the battle; the settlement strip rides the over state. A dismissed match falls to lobby.
         if (v && v.screen === "match" && v.matchId && !dismissedMatch[v.matchId]) {
           if (matchView == null || matchView.matchId !== v.matchId) { settleState = null; pendingPlay = null; mullPick = {}; }
+          // S-HALL-CHROME-1 (M2) — keep the lobby list CURRENT while the battle owns the screen. This branch
+          // returns before the lobby reconcile below, which is why the floor used to come back frozen at its
+          // pre-join frame (and re-expose a table the join had already consumed).
+          if (Array.isArray(v.tables)) { tables = v.tables.slice(); reconcilePendingAgainstTables(tables); }
           matchView = v; sheet = null; renderSheet(); startL3Tick();
           if (!dealtMatches[v.matchId]) { render(); setTimeout(function () { dealtMatches[v.matchId] = true; if (matchView && matchView.matchId === v.matchId) renderMatchScreen(); }, 2000); return; } // B2 matched moment
           renderMatchScreen(); return;
@@ -115,13 +124,24 @@
         matchView = null;
         if (v && v.screen === "match" && v.settlement) settlementView = v.settlement; // keep the slip visible in the lobby after leaving
         // busy-sentinel honesty: a dropped/refused socket is DEAD (busy face), never a false empty room.
-        if (v && v.connected === false) { feedState = "dead"; scheduleReconnect(); return render(); }
-        if (v && Array.isArray(v.tables)) { tables = v.tables.slice(); feedState = "live"; reconnectTries = 0; reconcilePendingAgainstTables(tables); } // whole-list reconcile (+ B2: our escrow appearing here is the server's own proof it learned the open)
+        // S-HALL-CHROME-1 (M4) — THE HALL NEVER PROMPTS THE WALLET WITHOUT A HUMAN ACT. The old road called
+        // scheduleReconnect() here, which rebuilt the client and fired authConnected() → personal_sign: a MetaMask
+        // popup in a tab nobody was looking at, every idle-timeout cycle. Now: a quiet state and a card; only the
+        // click reconnects. Mid-battle is NOT governed here — matchclient keeps its own auto-reconnect, because a
+        // silent forfeit is worse than a popup (owner ruling R3).
+        if (v && v.connected === false) { feedState = "dead"; connectionLost = true; return render(); }
+        if (v && Array.isArray(v.tables)) { tables = v.tables.slice(); feedState = "live"; reconnectTries = 0; connectionLost = false; reconcilePendingAgainstTables(tables); } // whole-list reconcile (+ B2: our escrow appearing here is the server's own proof it learned the open)
         if (v && v.lossLimit) lossLimit = v.lossLimit;
         if (v && v.settlement) settlementView = v.settlement; // a pending slip surfaced in the lobby (resume-after-reload)
         // S-HALL-L3-FIX-1 (B2) — the {opened} ACK. It used to be log-only; it now clears the record that was
         //   waiting for it. Nothing else in the Hall may clear an open record.
-        if (v && v.lastOpened && v.lastOpened.at !== seenOpenAck) { seenOpenAck = v.lastOpened.at; consumeOpenAck(); }
+        if (v && v.lastOpened && v.lastOpened.at !== seenOpenAck) {
+          seenOpenAck = v.lastOpened.at; consumeOpenAck();
+          // S-HALL-CHROME-1 (M1) — the FREE open is fire-and-forget, so only the server's ack can tell its sheet the
+          // work is done. (The staked open already self-dismisses at its own success; its 2026-09-07 overstay was
+          // the FIX-1 strand — a hung tx.wait() — and is healed there, not here.)
+          if (freeOpenPending) { freeOpenPending = false; if (sheet && sheet.kind === "open") { sheet = null; renderSheet(); } }
+        }
         // S-HALL-L3-FIX-1 (B3) — RESUME ON AUTHED. `v.me` is set only when the server accepted our signature, so
         //   a resume can no longer fire into a socket that would refuse it. Once per feed generation.
         if (v && v.me && resumedGen !== gen) {
@@ -133,6 +153,7 @@
         // surface a server refusal honestly (FREE tier-0, join-not-locked, loss backstop) — de-duped so it shows once.
         if (v && v.lastReject && v.lastReject !== seenReject) {
           seenReject = v.lastReject; lastServerError = v.lastReject;
+          freeOpenPending = false;              // M1 — a refusal ends the wait; the sheet HOLDS its error, as today
           // B2 — a refusal ({error}) arriving while an open record waits in step:"server" surfaces the ruled
           //   affordance. It NEVER clears the record: the stake is locked and still needs finishing or refunding.
           var awaiting = listPending().filter(function (e) { return e.rec && e.rec.kind === "open" && e.rec.step === "server"; });
@@ -159,21 +180,14 @@
       setTimeout(function () { clearInterval(poll); }, 20000); // patient: a mobile in-app wallet can inject window.ethereum a beat late (DYWallet's 3s-detection reasoning)
     } catch (e) { feedState = "dead"; render(); }
     // bounded connect watchdog: no {tables} within 8s → dead face (never a false empty room)
-    setTimeout(function () { if (gen === feedGen && feedState === "connecting") { feedState = "dead"; scheduleReconnect(); render(); } }, 8000);
+    setTimeout(function () { if (gen === feedGen && feedState === "connecting") { feedState = "dead"; connectionLost = true; render(); } }, 8000); // M4 — no auto-reconnect; the card asks
   }
-  // bounded auto-reconnect: on a dead feed, tear down and re-create the client on a backoff (recovers when the server
-  // returns). Every wait is bounded; a fresh feedGen invalidates any stale in-flight onUpdate.
-  var reconnectTimer = null, reconnectTries = 0;
+  // S-HALL-CHROME-1 (M4) — THE AUTO-RECONNECT IS GONE. `scheduleReconnect` used to rebuild the client on a
+  // backoff; because startFeed's poll calls authConnected(), every one of those rebuilds fired a personal_sign —
+  // a wallet popup in an idle tab. The road back is now the RECONNECT card's click and nothing else. The function
+  // is DELETED rather than left unused, so no future edit can quietly re-arm it.
+  var reconnectTries = 0;                   // kept: the click resets it; a live feed clears it
   var resumedGen = 0, seenOpenAck = null;   // B3: resume fires once per feed generation, on the authed signal
-  function scheduleReconnect() {
-    if (reconnectTimer || reconnectTries >= 8) return;
-    var delay = Math.min(1000 * Math.pow(1.7, reconnectTries), 10000);
-    reconnectTimer = setTimeout(function () {
-      reconnectTimer = null; reconnectTries++;
-      try { if (client && client.raw && client.raw.disconnect) client.raw.disconnect(); } catch (e) {}
-      client = null; feedState = "connecting"; render(); startFeed();
-    }, delay);
-  }
 
   // ── the tables the floor renders (friend filtered out, belt-and-braces; selected tier filter) ──
   function visibleTables() { return tables.filter(function (t) { return !t.friend; }); }
@@ -213,6 +227,9 @@
   var openStrand = null;        // { slot, escrowMatchId, stake } — lock CONFIRMED, table not opened (the 8d affordance)
   var openUnknown = null;       // { slot, txHash, stake } — bounded wait elapsed, receipt not yet seen (no 8d claim)
   var resumeNote = null;        // B3 — resume never fails in silence; this line is rendered in the lobby
+  // S-HALL-CHROME-1
+  var freeOpenPending = false;  // M1 — a FREE open awaiting OUR {opened} ack, which is what closes its sheet
+  var connectionLost = false;   // M4 — the lobby's quiet state: a dropped socket NEVER pokes the wallet
   var ackWatch = {};            // slot -> timer: a delivered send that never draws an ack raises the affordance
   var ACK_WAIT_MS = 8000;
 
@@ -374,6 +391,7 @@
         var id = parseMatchId(r, out.rc);
         var delivered = serverOpen(ctx, id, out.slot);
         ceremony = null;
+        readLiquidAgain();                                 // M3 — the open LOCK moved DYC; the header re-reads
         if (!delivered) { renderCurrent(); return id; }   // raiseStrand already opened the affordance
         if (!ctx.friendAddr) { sheet = null; render(); }
         return id;
@@ -400,6 +418,7 @@
         mergePendingSlot(jslot, { step: "server" });
         var delivered = !!(client && client.join(ctx.tableId, ctx.faction));
         ceremony = null;
+        readLiquidAgain();                                 // M3 — the join LOCK moved DYC; the header re-reads
         if (!delivered) { resumeNote = "your stake locked, but the table could not be told — reload to finish taking the seat."; renderCurrent(); return; }
         clearPendingSlot(jslot); sheet = null; render();
       });
@@ -1026,7 +1045,9 @@
 
   function floor() {
     if (feedState === "connecting") return '<div class="hall-floor"><div class="hall-busy state-line" role="status">reading the floor…</div></div>';
-    if (feedState === "dead") return '<div class="hall-floor"><div class="hall-busy state-line" role="status">the hall is not answering right now — <button class="hall-retry" id="hall-retry">retry</button></div></div>';
+    // S-HALL-CHROME-1 (M4) — the ruled card. It is the ONLY road back: nothing reconnects, and nothing touches the
+    // wallet, until this button is clicked. (Ordinary copy, not §11 — it makes no money claim.)
+    if (feedState === "dead") return '<div class="hall-floor hall-floor-lost"><div class="hall-lostcard state-line" role="status">connection lost - reconnect?<div class="hall-lostcard-act"><button class="hall-act hall-reconnect" data-reconnect="1">RECONNECT</button></div></div></div>';
     // LIVE
     var ft = floorTables();
     var totalOpen = visibleTables().length;
@@ -1036,7 +1057,11 @@
     ft.rest.forEach(function (t) { html += plaque(t, false); });
     // a SPECIFIC selected tier with no open seats in it renders its quiet empty state (YOUR pinned table above is a
     // different question — the selected tier is still seatless). "all" with zero tables is the empty room, handled above.
-    if (selectedTier !== "all" && ft.rest.length === 0) {
+    // S-HALL-CHROME-1 (M5) — if the only table at this tier is YOUR OWN, say nothing: the plaque above already
+    // says it, and inviting you to "open one" is inviting a second table the server will refuse (one per address).
+    // A genuinely seatless tier keeps its invitation.
+    var mineAtThisTier = ft.mine.some(function (t) { return tableDoorId(t) === selectedTier; });
+    if (selectedTier !== "all" && ft.rest.length === 0 && !mineAtThisTier) {
       html += '<div class="hall-empty-tier state-line">no open seats at this tier - <button class="hall-open-one" data-act="open-sheet">open one</button></div>';
     }
     return '<div class="hall-floor">' + html + '</div>';
@@ -1088,6 +1113,15 @@
     Array.prototype.forEach.call(document.querySelectorAll(".hall-rail-chip"), function (c) {
       c.onclick = function () { selectedTier = c.getAttribute("data-tier"); render(); };
     });
+    // S-HALL-CHROME-1 (M4) — the human act. This is the only place the lobby may rebuild the client (and so the
+    // only place a sign-in prompt can follow), and it is idempotent: a second drop before the click never stacks.
+    var rc = document.querySelector("[data-reconnect]");
+    if (rc) rc.onclick = function () {
+      if (!connectionLost) return;
+      connectionLost = false; reconnectTries = 0; feedState = "connecting"; render();
+      try { if (client && client.raw && client.raw.disconnect) client.raw.disconnect(); } catch (e) {}
+      client = null; startFeed();
+    };
     // S-HALL-L3-FIX-1 (B4) — reopen the ruled affordance from the standing lobby line.
     var sr = document.querySelector("[data-strand-reopen]"); if (sr) sr.onclick = function () { sheet = { kind: "strand" }; renderSheet(); };
     // the live acts: every control carries data-act; route it to a sheet or a cast.
@@ -1155,7 +1189,7 @@
   function doOpen() {
     var ctx = sheet.ctx || {}; var chosen = ctx.tierId ? TIERS.filter(function (x) { return x.id === ctx.tierId; })[0] : null;
     if (!chosen || !selectedFaction) return;
-    if (chosen.id === "free") { lastServerError = null; if (client) client.open(0, selectedFaction); return; } // server refuses tier 0 today (W3-LOBBY-DOORS-1); the refusal surfaces via lastReject
+    if (chosen.id === "free") { lastServerError = null; freeOpenPending = !!(client && client.open(0, selectedFaction)); renderSheet(); return; } // M1: the sheet closes on OUR {opened} ack, not on this send // server refuses tier 0 today (W3-LOBBY-DOORS-1); the refusal surfaces via lastReject
     ceremonyOpen({ tier: chosen.tier, faction: selectedFaction, stakeWei: chosen.stake });
   }
   function doSeat() {
