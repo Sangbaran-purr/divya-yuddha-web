@@ -63,7 +63,9 @@
     var dev = devIdentity();
     if (dev) me = String(dev).toLowerCase();
     if (!me) { accessState = "connect"; return render(); } // no wallet = quiet connect card, no floor
-    if (devAccessBypass()) { accessState = "pass"; startFeed(); loadEthers().then(function (e) { readLiquid(e); }).catch(function () {}); return render(); } // proof-only bypass (still reads liquid for affordability)
+    // R5 applies on BOTH pass roads — this bypass called startFeed() directly, which would have started (and so
+    // signed) B's session without a click. The guard belongs wherever the session can start.
+    if (devAccessBypass()) { accessState = "pass"; if (!signInNeeded) startFeed(); loadEthers().then(function (e) { readLiquid(e); }).catch(function () {}); return render(); } // proof-only bypass (still reads liquid for affordability)
     accessState = "init"; render();
     loadEthers().then(function (ethers) {
       var acc = CFG.contracts && CFG.contracts.accessNFT;
@@ -73,7 +75,13 @@
         accessState = (bal && bal > 0n) ? "pass" : "gateless";
         if (accessState === "pass") {
           try { sessionStorage.setItem("dyw_pass", "1"); } catch (e) {} // G5 — a Hall holder carries the same site pass, so PRACTICE into the game copy isn't bounced to the rite
-          readLiquid(ethers); startFeed();
+          readLiquid(ethers);
+          // S-HALL-ACCOUNT-1 (R5) — after an account switch the session waits for a click. accountsChanged is
+          // broadcast to EVERY connected site, so a switch made for another tab reaches the Hall too, and the Hall
+          // cannot tell a deliberate switch from a stray one. The CHROME-1 law therefore holds absolutely: no
+          // prompt without a human act ON THE HALL. (The gate and the liquid read are chain reads — they prompt
+          // nothing — so B's world is already true on screen while the pen stays untouched.)
+          if (!signInNeeded) startFeed();
         }
         render();
       });
@@ -122,6 +130,9 @@
         }
         // LOBBY view (or a dismissed match)
         matchView = null;
+        // S-HALL-ACCOUNT-1 (R1) — THE DEFERRED RE-KEY. The battle held the switch off so a wallet click could not
+        // cost a forfeit; the shield lifts the moment the battle clears, and the law resumes unprompted.
+        if (maybeReKey()) return;
         if (v && v.screen === "match" && v.settlement) settlementView = v.settlement; // keep the slip visible in the lobby after leaving
         // busy-sentinel honesty: a dropped/refused socket is DEAD (busy face), never a false empty room.
         // S-HALL-CHROME-1 (M4) — THE HALL NEVER PROMPTS THE WALLET WITHOUT A HUMAN ACT. The old road called
@@ -230,6 +241,11 @@
   // S-HALL-CHROME-1
   var freeOpenPending = false;  // M1 — a FREE open awaiting OUR {opened} ack, which is what closes its sheet
   var connectionLost = false;   // M4 — the lobby's quiet state: a dropped socket NEVER pokes the wallet
+  // S-HALL-ACCOUNT-1 — THE HALL FOLLOWS THE WALLET.
+  var walletSeen = null;        // the last address the WALLET itself reported (null until it reports one)
+  var accountNote = null;       // the ordinary "account changed" line, shown as the Hall re-becomes itself
+  var pendingReKey = null;      // R1 — a switch deferred because a battle is live; runs when matchView clears
+  var signInNeeded = false;     // R5 — the visual re-key is immediate; the SESSION waits for a human act ON THE HALL
   var ackWatch = {};            // slot -> timer: a delivered send that never draws an ack raises the affordance
   var ACK_WAIT_MS = 8000;
 
@@ -244,6 +260,12 @@
   // escrow is no longer OPEN must not report a raw revert string under a button that promised a refund. Shown ONLY
   // when the chain confirms the escrow has moved on; a genuinely unknown revert keeps the generic message.
   var CANCEL_MOVED_ON = "this table is no longer cancellable - the match has moved on";
+  // S-HALL-ACCOUNT-1 (R2) — RULED 2026-09-08 (LOBBY_DESIGN amendment 2026-09-08d).
+  //   ACCOUNT_CHANGED is ordinary copy: operational, no money claim, like the reconnect card.
+  //   CROSS_ACCOUNT is §11 ruled copy: it stands between a player and locked money and must never be paraphrased
+  //   into something that reads like a loss. The bracket slot is the address, filled the way every slot is.
+  function ACCOUNT_CHANGED(addr) { return "account changed - the Hall is now following " + shortAddr(addr); }
+  function CROSS_ACCOUNT(addr) { return "this was prepared for another account - switch back to " + shortAddr(addr) + " to finish it"; }
   // S-HALL-L3-FIX-1 (B4) — RULED 2026-09-08 as LOBBY_DESIGN.md section 8d (verbatim copy-block law). The bracket
   // slot is filled from the pending record, exactly as COMMITMENT fills its own. CC never paraphrases this line.
   function STRAND_LOCKED(stakeWei) { return "Your " + dycOf(stakeWei) + " DYC is locked in escrow, but the table has not opened yet."; }
@@ -267,11 +289,22 @@
     "function matches(uint256) view returns (address playerA, address playerB, uint256 stake, uint8 srcA, uint8 srcB, address expectedOpponent, uint64 matchedAt, uint8 state)",
     "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)",
   ];
+  //  S-HALL-ACCOUNT-1 (L2) — NO CROSS-SIGNING, STRUCTURALLY. getSigner() follows the LIVE wallet while `me` is the
+  //  identity everything else is keyed to (the gate, the session, the pending records, the escrow ownership reads).
+  //  If those two ever disagree, the pen belongs to another account and NOTHING may be signed: every ceremony in the
+  //  Hall — open, join, cancel, settle, the strand's finish — reaches the wallet through here and through nowhere
+  //  else, so one guard covers them all. This also refuses a settle mid-battle while the wallet has wandered (R1),
+  //  because `me` is still the seat's address until the deferred re-key runs.
   function signerRoad() {
     return loadEthers().then(function (ethers) {
       if (!window.ethereum) throw new Error("no wallet in this browser");
       var bp = new ethers.BrowserProvider(window.ethereum);
-      return bp.getSigner().then(function (sg) { return { ethers: ethers, provider: bp, signer: sg }; });
+      return bp.getSigner().then(function (sg) {
+        return sg.getAddress().then(function (a) {
+          if (me && String(a).toLowerCase() !== me) { var e = new Error(CROSS_ACCOUNT(me)); e.crossAccount = true; throw e; }
+          return { ethers: ethers, provider: bp, signer: sg };
+        });
+      });
     });
   }
   function feeOverrides() { try { return (window.DYWallet && window.DYWallet.feeOverrides) ? window.DYWallet.feeOverrides().catch(function () { return {}; }) : Promise.resolve({}); } catch (e) { return Promise.resolve({}); } }
@@ -497,6 +530,7 @@
   }
 
   function ceremonyMsg(e) {
+    if (e && e.crossAccount) return e.message;   // S-HALL-ACCOUNT-1 — the §11 line passes through verbatim
     var m = (e && (e.shortMessage || e.reason || e.message)) || "the cast failed";
     if (/user rejected|denied/i.test(m)) return "you declined the wallet prompt";
     if (/insufficient/i.test(m)) return "insufficient DYC for this stake";
@@ -957,7 +991,7 @@
     var ps = document.querySelector("[data-pass]"); if (ps && !ps.disabled) ps.onclick = function () { client.pass(); };
     var cc = document.querySelector("[data-concede]"); if (cc && !cc.disabled) cc.onclick = function () { client.concede(); };
     var st = document.querySelector("[data-settle]"); if (st && !st.disabled) st.onclick = function () { var s = v.settlement || (settlementView); if (s && s.slip) ceremonySettle(s.slip); };
-    var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { dismissedMatch[v.matchId] = true; settlementView = v.settlement || settlementView; matchView = null; render(); };
+    var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { dismissedMatch[v.matchId] = true; settlementView = v.settlement || settlementView; matchView = null; if (maybeReKey()) return; render(); };
   }
 
   // the live clock / vanish countdown tick (renders the numbers from the SERVER deadline; the client never decides).
@@ -1017,6 +1051,7 @@
     //   a standing line (the ruled 8d text) that reopens the affordance. B3 — and resume never fails in silence.
     if (openStrand) who += '<div class="hall-strand-banner state-line">' + STRAND_LOCKED(openStrand.stake) + ' <button class="hall-act hall-strand-reopen" data-strand-reopen="1">FINISH OPENING</button></div>';
     if (resumeNote) who += '<div class="hall-resume-note state-line">' + resumeNote + '</div>';
+    if (accountNote && !signInNeeded) who += '<div class="hall-account-note state-line">' + accountNote + '</div>';   // S-HALL-ACCOUNT-1 (R2; the card carries it while it is up)
     return '<div class="hall-header">' +
       '<div class="hall-liquid"><span class="hall-liquid-label">Liquid</span> <b>' + liq + '</b>' + who + '</div>' +
       '<div class="hall-limit">' + lim + '</div></div>';
@@ -1044,6 +1079,9 @@
   }
 
   function floor() {
+    // S-HALL-ACCOUNT-1 (R5) — the sign-in card. Same shape as the RECONNECT card; its words are the ruled account
+    // line, so no new copy ships. Nothing reaches the wallet until this is clicked.
+    if (signInNeeded) return '<div class="hall-floor hall-floor-lost"><div class="hall-lostcard state-line" role="status">' + (accountNote || "") + '<div class="hall-lostcard-act"><button class="hall-act hall-signin" data-signin="1">SIGN IN</button></div></div></div>';
     if (feedState === "connecting") return '<div class="hall-floor"><div class="hall-busy state-line" role="status">reading the floor…</div></div>';
     // S-HALL-CHROME-1 (M4) — the ruled card. It is the ONLY road back: nothing reconnects, and nothing touches the
     // wallet, until this button is clicked. (Ordinary copy, not §11 — it makes no money claim.)
@@ -1123,6 +1161,12 @@
       client = null; startFeed();
     };
     // S-HALL-L3-FIX-1 (B4) — reopen the ruled affordance from the standing lobby line.
+    // S-HALL-ACCOUNT-1 (R5) — the ONE human act that starts B's session (and so the only road to a signature).
+    var si = document.querySelector("[data-signin]");
+    if (si) si.onclick = function () {
+      if (!signInNeeded) return;
+      signInNeeded = false; feedState = "connecting"; render(); startFeed();
+    };
     var sr = document.querySelector("[data-strand-reopen]"); if (sr) sr.onclick = function () { sheet = { kind: "strand" }; renderSheet(); };
     // the live acts: every control carries data-act; route it to a sheet or a cast.
     Array.prototype.forEach.call(document.querySelectorAll("[data-act]"), function (b) {
@@ -1252,6 +1296,68 @@
   }
   function doLimitRemove() { if (client) client.clearLossLimit(); sheet = null; renderSheet(); }
 
+  // ════════════════════════════════════════════════════════════════════════
+  //  S-HALL-ACCOUNT-1 — THE HALL FOLLOWS THE WALLET
+  //  Identity (`me`) and the pen (getSigner) must never diverge on a money site. The Hall was structurally BLIND to
+  //  account switches: js/wallet.js has listened to accountsChanged since it shipped, but its listener is wired
+  //  inside onProviderReady, which only init()/retry() reach — and the Hall never called init(), while connect()
+  //  takes a different path. So we WAKE THE SITE'S OWN ROAD (R3) rather than add a second listener to one event.
+  // ════════════════════════════════════════════════════════════════════════
+  function wireWallet() {
+    if (!window.DYWallet || !window.DYWallet.onChange) return;
+    try { window.DYWallet.init(); } catch (e) {}          // detection + the listener; prompts NOTHING (eth_accounts/eth_chainId only)
+    window.DYWallet.onChange(function (st) {
+      var addr = (st && st.address) ? String(st.address).toLowerCase() : null;
+      if (addr === walletSeen) return;                    // no change (and onChange fires once immediately)
+      var prev = walletSeen; walletSeen = addr;
+      // NULL at boot is detection noise, not a disconnect — it must never bounce a working Hall to the connect
+      // card. Only a wallet that HAD reported an address can report losing one.
+      if (addr === null) { if (prev !== null) walletGone(); return; }
+      if (!me) { me = addr; runGate(); return; }          // the wallet arrived where we had no identity
+      if (addr !== me) switchAccount(addr);               // …and this is the switch
+    });
+  }
+
+  //  L1 — re-become ourselves for the new account. L3 — the pending records on disk are NOT touched: they stay
+  //  filed under A's key, invisible to B (pendWallet() follows `me`), and intact for A's return. A switch is not a
+  //  forfeiture of the record.
+  //  R1 — the deferral is consumed HERE, and this is called from both roads out of a battle: a lobby view arriving
+  //  (the match ended under us) and the player leaving the over-screen. Missing the second road would leave the
+  //  switch parked forever after a forfeit.
+  function maybeReKey() {
+    if (!pendingReKey || matchView) return false;
+    var next = pendingReKey; pendingReKey = null; switchAccount(next); return true;
+  }
+  function switchAccount(addr) {
+    if (matchView) { pendingReKey = addr; return; }       // R1 — a wallet click must never cost a forfeit
+    // shutdown, not disconnect: a plain close lets matchclient's battle auto-reconnect reopen and re-sign with the
+    // NEW wallet — a prompt nobody asked for, which is precisely what R5 forbids.
+    try { if (client && client.raw && client.raw.shutdown) client.raw.shutdown(); else if (client && client.raw) client.raw.disconnect(); } catch (e) {}
+    client = null; feedGen++; gateGen++;                  // invalidate every in-flight read of A's world
+    tables = []; feedState = "connecting"; connectionLost = false; reconnectTries = 0;
+    // A-keyed state leaves the screen (nothing here is persisted; the records are)
+    sheet = null; ceremony = null; openStrand = null; openUnknown = null; resumeNote = null;
+    settlementView = null; settleState = null; matchView = null; lossLimit = null; liquid = null;
+    signedInAs = null; seenReject = null; lastServerError = null; freeOpenPending = false;
+    resumedGen = 0; seenOpenAck = null; selectedFaction = null;
+    me = addr; accountNote = ACCOUNT_CHANGED(addr);
+    signInNeeded = true;                                  // R5 — visual re-key now; the sign-in waits for the click
+    renderSheet();                                        // A's overlay must actually LEAVE the screen
+    runGate();                                            // the gate runs for B; on a pass it starts B's session
+  }
+
+  //  L4 — the wallet is gone (accounts became []). Quietly back to the connect card: no wallet call, no dialog,
+  //  and NO WORDS (a quiet return must stay quiet — the connect card already says what it means).
+  function walletGone() {
+    try { if (client && client.raw && client.raw.shutdown) client.raw.shutdown(); else if (client && client.raw) client.raw.disconnect(); } catch (e) {}
+    client = null; feedGen++; gateGen++;
+    tables = []; feedState = "connecting"; connectionLost = false;
+    sheet = null; ceremony = null; openStrand = null; openUnknown = null; resumeNote = null;
+    settlementView = null; settleState = null; matchView = null; lossLimit = null; liquid = null;
+    signedInAs = null; accountNote = null; pendingReKey = null; signInNeeded = false;
+    me = null; accessState = "connect"; renderSheet(); render();
+  }
+
   function connectWallet() {
     if (window.DYWallet && window.DYWallet.connect) {
       window.DYWallet.connect().then(function (r) { me = String((r && (r.address || r)) || "").toLowerCase() || me; runGate(); }).catch(function () {});
@@ -1269,6 +1375,7 @@
     if (dev) { me = String(dev).toLowerCase(); }
     else if (window.ethereum && window.ethereum.selectedAddress) { me = String(window.ethereum.selectedAddress).toLowerCase(); }
     runGate();
+    wireWallet();   // S-HALL-ACCOUNT-1 — after the first gate, so the boot snapshot is in place when the road wakes
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
   window.DYHall = {
@@ -1282,6 +1389,7 @@
         signedInAs: signedInAs, settleState: settleState, settlement: settlementView || (matchView && matchView.settlement) || null,
         lossLimit: lossLimit, liquid: liquid == null ? null : liquid.toString(),
         pending: listPending(), strand: openStrand, unknownOpen: openUnknown, resumeNote: resumeNote,
+        accountNote: accountNote, pendingReKey: pendingReKey, walletSeen: walletSeen, signInNeeded: signInNeeded,
         lastServerError: lastServerError, escrow: escrowAddr(),
         matchReject: matchView ? matchView.lastReject : null,
       };

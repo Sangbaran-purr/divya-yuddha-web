@@ -264,8 +264,9 @@ the both-stakes line (6), the friend-lock line (7), the three
 settlement variants + abort line (8c), the unopened-table line
 (8d, amended 2026-09-08), the moved-on cancel line (amended
 2026-09-08b), the friend-code reachability line (amended
-2026-09-08c), the limit texts (9). CC never paraphrases money
-copy; changes are ruled amendments here.
+2026-09-08c), the cross-account line (amended 2026-09-08d), the
+limit texts (9). CC never paraphrases money copy; changes are
+ruled amendments here.
 
 =====================================================
 ## 12. WHAT THE HALL NEVER SHOWS
@@ -391,3 +392,40 @@ unruled line ("no table found for that code - ask your friend to
 re-share it"), which is untouched by this amendment, as is "that
 code is not a staked table". The code entry survives every
 outcome so the player can retry without retyping.
+
+=====================================================
+## AMENDMENT 2026-09-08d (S-HALL-ACCOUNT-1) - THE CROSS-ACCOUNT LINE
+=====================================================
+RULED by the owner 2026-09-08. The Hall now follows the wallet: a
+MetaMask account switch re-keys the Hall's identity to the new
+account. Identity and the pen must never diverge on a money site.
+
+One consequence needs ruled words. Anything prepared for account
+A - an open ceremony, a join, a cancel, a settle slip bound to
+A's seat - can no longer be signed once B holds the pen. The Hall
+refuses to sign it, and the refusal must never read like a loss:
+the stake is not gone, it is reachable from the other account.
+Verbatim:
+
+  "this was prepared for another account - switch back to
+  [0xA...] to finish it"
+
+The bracket slot is the address the work belongs to. Enumerated
+in section 11: it stands between a player and locked money.
+
+TWO COMPANION LINES, RULED HERE AS NOT SECTION 11:
+- "account changed - the Hall is now following [0xB...]" is
+  ORDINARY copy - operational, no money claim, the reconnect
+  card's register.
+- The disconnect-to-empty return has NO line at all. The connect
+  card already says what a disconnected wallet means; a quiet
+  return must stay quiet.
+
+MID-BATTLE (ruled with its reason): the battle SURVIVES a switch
+- the session is not torn down while a match is live, because a
+wallet click must never cost a forfeit - but the settle cast is
+refused with the line above. The reason is the asymmetry: an
+unsettled slip is not time-critical (the chain refunds both seats
+after 24 hours), while a forfeit is immediate and irreversible.
+The re-key is DEFERRED, not waived: the moment the battle ends,
+if the wallet no longer matches the session, the switch runs then.

@@ -45,6 +45,7 @@ const LAW = [
   ["8d unopened table",  "Your [10] DYC is locked in escrow, but the table has not opened yet."],
   ["cancel moved-on",    "this table is no longer cancellable - the match has moved on"],
   ["friend reachability", "could not reach the table server - your code is fine, try again in a moment"],
+  ["cross-account",      "this was prepared for another account - switch back to [0xA...] to finish it"],
   ["9 limit set",        "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this."],
   ["9 limit block",      "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: [X] DYC."],
 ];
@@ -72,6 +73,16 @@ ok("enumerated in the section 11 copy block", /friend-code reachability line \(a
 ok("the 2026-09-08c amendment note is recorded", /AMENDMENT 2026-09-08c \(S-HALL-CODE-LOOKUP-1\)/.test(DOC));
 ok("shown only on NO ANSWER, never on a null result",
    /if \(!r \|\| r\.unreachable\) \{ sheet\.ctx\.err = FRIEND_UNREACHABLE;/.test(HALL));
+
+console.log("\n── the cross-account line ruled 2026-09-08d ──");
+ok("enumerated in the section 11 copy block", /cross-account line \(amended 2026-09-08d\)/.test(norm(DOC)));
+ok("the 2026-09-08d amendment note is recorded", /AMENDMENT 2026-09-08d \(S-HALL-ACCOUNT-1\)/.test(DOC));
+ok("built from the address it belongs to (slot filled, not hardcoded)",
+   /function CROSS_ACCOUNT\(addr\)[^]*?shortAddr\(addr\)[^]*?to finish it/.test(HALL));
+ok("it passes through ceremonyMsg VERBATIM (never truncated or re-mapped)",
+   /if \(e && e\.crossAccount\) return e\.message;/.test(HALL));
+ok("the companion account-changed line is NOT enumerated in section 11",
+   !/account changed - the Hall is now following/.test(norm(DOC).split("HONESTY TEXT")[1].split("WHAT THE HALL NEVER SHOWS")[0] || ""));
 
 console.log("\n── advisory · other quoted doc lines (not section-11 ruled copy) ──");
 const lawSet = new Set(LAW.map(([, l]) => norm(l)));

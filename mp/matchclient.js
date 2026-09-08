@@ -328,7 +328,15 @@
       concede: function () { send({ type: "move", matchId: match && match.matchId, action: { type: "concede" } }); },
       targetSpecFor: targetSpecFor,
       view: view,
-      raw: { disconnect: function () { try { ws.close(); } catch (e) {} } },
+      raw: {
+        disconnect: function () { try { ws.close(); } catch (e) {} },
+        // S-HALL-ACCOUNT-1 (R5) — a teardown that actually tears down. `disconnect` closes the socket, but the
+        // M-P6 auto-reconnect (matchclient's own, kept by S-HALL-CHROME-1 R3 so a dropped battle is not a forfeit)
+        // sees `match && phase !== "over" && authMode` on close and reopens — re-signing with whatever wallet is
+        // now current. During an account switch that is a signature nobody asked for. Clearing the two conditions
+        // first makes the close final. Additive: the rig never calls this and its road is unchanged.
+        shutdown: function () { match = null; authMode = null; reconnecting = false; try { ws.close(); } catch (e) {} },
+      },
     };
   }
 
