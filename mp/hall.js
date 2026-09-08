@@ -223,6 +223,10 @@
     return "Your " + dycOf(stakeWei) + " DYC locks in escrow now. It returns in full if you cancel before anyone sits, or on a draw. The winner takes the pot minus the 5% platform fee. If a finished match is somehow never settled, the chain refunds both players automatically after 24 hours - locked stakes can never be stranded.";
   }
   var BOTH_STAKES = "Once both stakes lock, the match begins.";
+  // S-HALL-L3-FIX-2 (B2) — RULED 2026-09-08 (LOBBY_DESIGN amendment 2026-09-08b). A cancel act on a plaque whose
+  // escrow is no longer OPEN must not report a raw revert string under a button that promised a refund. Shown ONLY
+  // when the chain confirms the escrow has moved on; a genuinely unknown revert keeps the generic message.
+  var CANCEL_MOVED_ON = "this table is no longer cancellable - the match has moved on";
   // S-HALL-L3-FIX-1 (B4) — RULED 2026-09-08 as LOBBY_DESIGN.md section 8d (verbatim copy-block law). The bracket
   // slot is filled from the pending record, exactly as COMMITMENT fills its own. CC never paraphrases this line.
   function STRAND_LOCKED(stakeWei) { return "Your " + dycOf(stakeWei) + " DYC is locked in escrow, but the table has not opened yet."; }
@@ -403,7 +407,9 @@
   //  row (t.id null) to close. Nothing else about the refund changes.
   function ceremonyCancel(t) {
     ceremony = { kind: "cancel", step: "cancel", ctx: { tableId: t.id, escrowMatchId: t.escrowMatchId }, error: null }; renderSheet();
+    var road = null;
     return signerRoad().then(function (r) {
+      road = r;
       var esc = escContract(r);
       return feeOverrides().then(function (fee) { return esc.cancelMatch.staticCall(BigInt(t.escrowMatchId)).then(function () { return esc.cancelMatch(BigInt(t.escrowMatchId), fee); }); })
         .then(function (tx) { return tx.wait(); }).then(function () {
@@ -411,7 +417,17 @@
           if (t.slot) settleStrand(t.slot);                  // the stake is refunded — the record has done its work
           ceremony = null; sheet = null; openStrand = null; openUnknown = null; readLiquidAgain(); render();
         });
-    }).catch(function (e) { if (ceremony) { ceremony.step = "error"; ceremony.error = ceremonyMsg(e); } renderSheet(); });
+    }).catch(function (e) {
+      // The staticCall rejects BEFORE any wallet prompt, so nothing was signed and no gas was spent. Report the
+      // generic message at once, then — if the chain says the escrow simply moved on — replace it with the ruled
+      // line. No custom-error ABI decode here (standing polish item); the state read is the honest signal.
+      if (!ceremony) return;
+      ceremony.step = "error"; ceremony.error = ceremonyMsg(e); renderSheet();
+      if (!road || t.escrowMatchId == null) return;
+      return readOpenState(road, t.escrowMatchId).then(function (st) {
+        if (st.ok && st.state !== 1 && ceremony && ceremony.step === "error") { ceremony.error = CANCEL_MOVED_ON; renderSheet(); }
+      });
+    });
   }
   function readLiquidAgain() { loadEthers().then(function (ethers) { readLiquid(ethers); }).catch(function () {}); }
 
@@ -513,8 +529,15 @@
       return r.provider.getTransactionReceipt(rec.openTxHash).then(function (rc) {
         if (!rc) { openUnknown = { slot: slot, txHash: rec.openTxHash, stake: rec.stake }; sheet = { kind: "strand" }; renderSheet(); return; }
         var id = parseMatchId(r, rc);
-        if (serverOpen(ctx, id, slot)) { sheet = null; }
-        render();
+        // S-HALL-L3-FIX-2 (B1) — THE SAME GATE ITS SIBLING HAS. Without it this branch re-sent the open for an
+        // escrow that had already been joined and settled, minting a table nobody could take: the ghost proven in
+        // S-HALL-GHOST-TABLE-1. An escrow that is no longer OPEN-and-ours means the record is SPENT, not pending.
+        return readOpenState(r, id).then(function (st) {
+          if (!st.ok) { resumeNote = "could not read the escrow just now — a pending table is still waiting; your stake is safe."; return; }
+          if (st.state !== 1 || st.playerA !== me) { settleStrand(slot); return; }   // the escrow moved on without us
+          if (serverOpen(ctx, id, slot)) { sheet = null; }
+          render();
+        });
       });
     }
     // A draft with no tx hash: the lock was never cast, so NO stake is at risk. We deliberately do NOT auto-cast

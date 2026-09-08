@@ -262,8 +262,9 @@ All money-adjacent copy in the Hall comes from THIS spec (verbatim
 copy-block law): the covenant line (2b), the commitment text (5),
 the both-stakes line (6), the friend-lock line (7), the three
 settlement variants + abort line (8c), the unopened-table line
-(8d, amended 2026-09-08), the limit texts (9). CC never
-paraphrases money copy; changes are ruled amendments here.
+(8d, amended 2026-09-08), the moved-on cancel line (amended
+2026-09-08b), the limit texts (9). CC never paraphrases money
+copy; changes are ruled amendments here.
 
 =====================================================
 ## 12. WHAT THE HALL NEVER SHOWS
@@ -346,3 +347,22 @@ on the server's own acknowledgement - the {opened} ack, or our
 escrowMatchId appearing in the server's {tables} broadcast. A
 send that the socket did not carry, a server refusal, and an
 unreadable chain all LEAVE the record standing.
+
+=====================================================
+## AMENDMENT 2026-09-08b (S-HALL-L3-FIX-2) - THE MOVED-ON CANCEL
+=====================================================
+RULED by the owner 2026-09-08, following the ghost table proven
+in S-HALL-GHOST-TABLE-1: a plaque can outlive its escrow, and its
+CANCEL act then promises a refund the chain will not give.
+
+The cancel ceremony staticCalls before it casts, so the refusal
+costs nothing - no signature, no gas. When that read-only call
+reverts AND the chain confirms the escrow is no longer OPEN, the
+error state carries this line, verbatim:
+
+  "this table is no longer cancellable - the match has moved on"
+
+It is shown ONLY on that confirmation. A revert for any other
+reason keeps the generic message - the Hall never claims to know
+why when it does not. Decoding the escrow's custom errors is a
+separate polish item and is deliberately NOT done for this line.

@@ -43,6 +43,7 @@ const LAW = [
   ["8c abort",           "unclaimed pots refund both players automatically after 24 hours."],
   ["8c free",            "no stakes at this table"],
   ["8d unopened table",  "Your [10] DYC is locked in escrow, but the table has not opened yet."],
+  ["cancel moved-on",    "this table is no longer cancellable - the match has moved on"],
   ["9 limit set",        "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this."],
   ["9 limit block",      "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: [X] DYC."],
 ];
@@ -58,6 +59,12 @@ ok("8d built from the record's stake (slot filled, not hardcoded)",
    /function STRAND_LOCKED\(stakeWei\)[^]*?dycOf\(stakeWei\)[^]*?DYC is locked in escrow, but the table has not opened yet\./.test(HALL));
 ok("the 2026-09-08 amendment note is recorded", /AMENDMENT 2026-09-08 \(S-HALL-L3-FIX-1\)/.test(DOC));
 
+console.log("\n── the moved-on cancel line ruled 2026-09-08b ──");
+ok("enumerated in the section 11 copy block", /moved-on cancel line \(amended\s+2026-09-08b\)/.test(norm(DOC)));
+ok("the 2026-09-08b amendment note is recorded", /AMENDMENT 2026-09-08b \(S-HALL-L3-FIX-2\)/.test(DOC));
+ok("shown only on a confirmed non-OPEN escrow (state read, not a decode)",
+   /readOpenState\(road, t\.escrowMatchId\)[^]*?st\.ok && st\.state !== 1[^]*?CANCEL_MOVED_ON/.test(HALL));
+
 // ── ADVISORY: every other quoted doc line. Never fails the run; surfaces drift for a human to rule on.
 console.log("\n── advisory · other quoted doc lines (not section-11 ruled copy) ──");
 const lawSet = new Set(LAW.map(([, l]) => norm(l)));
@@ -70,5 +77,5 @@ while ((m = re.exec(DOC))) {
 }
 console.log("    " + lit + " carried literally, " + diff + " rendered differently — advisory only.");
 
-console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + LAW.length + " ruled lines × doc+code, + 3 structural)");
+console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + LAW.length + " ruled lines × doc+code, + " + (pass + fail - LAW.length * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);
