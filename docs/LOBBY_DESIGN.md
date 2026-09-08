@@ -215,6 +215,20 @@ c. SETTLEMENT STRIP (match over; wire.html's strip, dressed):
    refund both players automatically after 24 hours."
    FREE matches: the strip is just the result + "no stakes at
    this table" - one line.
+d. THE UNOPENED TABLE (added by AMENDMENT 2026-09-08; see the
+   amendment note at the foot of this file). The state where the
+   stake is LOCKED on chain but the server was never told, so no
+   table exists. The Hall must never leave this state silent or
+   dressed as a pending wallet prompt. One line, verbatim copy
+   ruled here (the bracket slot is filled from the pending
+   record, as in Screen 4's commitment text):
+   "Your [10] DYC is locked in escrow, but the table has not
+   opened yet."
+   Two acts, both always offered: FINISH OPENING (re-derive the
+   escrow id from the lock receipt and redo the server handoff)
+   and CANCEL AND REFUND (the cancelMatch road, full refund to
+   source). The line stands in the Hall until one of the two
+   completes - dismissing the sheet never hides a locked stake.
 
 =====================================================
 ## 9. SCREEN 8 - SET YOUR LIMIT (loss-limit sheet)
@@ -247,8 +261,9 @@ color language (bronze/silver/gold/diamond map naturally).
 All money-adjacent copy in the Hall comes from THIS spec (verbatim
 copy-block law): the covenant line (2b), the commitment text (5),
 the both-stakes line (6), the friend-lock line (7), the three
-settlement variants + abort line (8c), the limit texts (9). CC
-never paraphrases money copy; changes are ruled amendments here.
+settlement variants + abort line (8c), the unopened-table line
+(8d, amended 2026-09-08), the limit texts (9). CC never
+paraphrases money copy; changes are ruled amendments here.
 
 =====================================================
 ## 12. WHAT THE HALL NEVER SHOWS
@@ -311,3 +326,23 @@ references ("store listing card", "faction-chip idiom", "dashboard
 card idiom", "P2P-send-panel idiom") are read from v1.1 as the
 SHAPE of the element (a repeated card, a filter row, a balance
 strip, a reveal-validate-confirm form), not as a visual instruction.
+
+=====================================================
+## AMENDMENT 2026-09-08 (S-HALL-L3-FIX-1) - 8d, THE UNOPENED TABLE
+=====================================================
+RULED by the owner 2026-09-08, following the strand of the same
+date: two Bronze locks confirmed on chain (10 DYC each) whose
+server-open message was never delivered, leaving no table, no
+plaque, and no way back through the UI.
+
+Section 8 gains 8d above. Its one line is money-adjacent copy and
+therefore falls under the section 11 copy-block law: verbatim,
+never paraphrased, the bracket slot filled from the pending
+record. Section 11's enumeration is extended to include it.
+
+The engineering law that accompanies it (not copy, recorded here
+so the copy is not read alone): a pending record is cleared ONLY
+on the server's own acknowledgement - the {opened} ack, or our
+escrowMatchId appearing in the server's {tables} broadcast. A
+send that the socket did not carry, a server refusal, and an
+unreadable chain all LEAVE the record standing.

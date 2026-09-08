@@ -35,6 +35,7 @@
     var vanish = null;             // M-P6 — { deadline } while the opponent is in the 90s grace
     var lossLimit = null;          // M-P6 — { cap, netLossToday, remaining }
     var authMode = null, authAddr = null; // for auto-reconnect: replay the same auth on a dropped socket
+    var lastOpened = null;         // S-HALL-L3-FIX-1 (B2) — the server's {opened} ack, surfaced to the view
     var reconnecting = false;
     var redacted = false, serverView = null; // M-A3 — staked road: pure view renderer (no mirror `g`)
 
@@ -55,7 +56,9 @@
       } catch (e) { return null; }
     }
 
-    function send(o) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); } catch (e) {} }
+    // S-HALL-L3-FIX-1 (B1) — send REPORTS: true ONLY when the socket exists, is OPEN, and ws.send did not throw.
+    // A dropped message can no longer look like a delivered one. Additive — callers that ignore the return are unchanged.
+    function send(o) { try { if (ws && ws.readyState === 1) { ws.send(JSON.stringify(o)); return true; } } catch (e) {} return false; }
 
     // M-A3 — normalize a server {view} to the same render shape the mirror `view()` produces (so wire.html renders both).
     function normalizeServerView(v) {
@@ -76,7 +79,7 @@
     }
     function view() {
       if (redacted && serverView && match) return normalizeServerView(serverView);
-      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, lossLimit: lossLimit, reconnecting: reconnecting, lastReject: lastReject }; // S-HALL-L2: lastReject surfaces server refusals (FREE tier-0, join-not-locked, loss backstop) to the Hall
+      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, lossLimit: lossLimit, reconnecting: reconnecting, lastReject: lastReject, lastOpened: lastOpened }; // S-HALL-L2: lastReject surfaces server refusals (FREE tier-0, join-not-locked, loss backstop) to the Hall
       var seat = match.seat, mine = g.players[seat], opp = g.players[1 - seat];
       var legal = (phase === "play" && turn === seat) ? E.playableIndices(g, seat) : [];
       return {
@@ -126,7 +129,10 @@
       if (m.type === "authed") { me = m.address; log("authed " + (m.dev ? "(dev) " : "") + m.address); push(); return; }
       if (m.type === "auth-error") { lastReject = "auth: " + m.error; log("AUTH REJECTED " + m.error); push(); return; }
       if (m.type === "tables") { tables = m.tables; push(); return; }
-      if (m.type === "opened") { log("opened table " + m.table.id); return; }
+      // S-HALL-L3-FIX-1 (B2) — the ACK. Was log-only and did not push, so no caller could ever learn the server
+      // accepted the open. Now recorded and pushed: the Hall clears its pending record ONLY on this (or on our
+      // escrowMatchId appearing in {tables}), never on a fire-and-forget send.
+      if (m.type === "opened") { lastOpened = { table: m.table, at: Date.now() }; log("opened table " + m.table.id); push(); return; }
       if (m.type === "error") { lastReject = m.error; log("ERROR " + m.error); push(); return; }
       if (m.type === "match") {
         match = { matchId: m.matchId, seat: m.seat, opponent: m.opponent, seed: m.seed, winTarget: m.winTarget };
@@ -215,20 +221,24 @@
         if (!nonce) return; if (!sessionWallet) sessionWallet = ethers.Wallet.createRandom(); authMode = "wallet"; doAuth();
       },
       // S-HALL-L3 (B1) — sign in as the connected browser wallet. Additive; the rig's authWallet (random) road is untouched.
-      authConnected: function () { if (!nonce) return; authMode = "connected"; doAuth(); },
+      // S-HALL-L3-FIX-1 (B3) — set the MODE first. The old order returned before assigning authMode when the
+      // challenge had not landed yet, so the challenge handler's `if (authMode) doAuth()` found null and the session
+      // NEVER authenticated (with no retry — the Hall had already cleared its bootstrap poll). Setting the mode first
+      // makes the challenge handler's documented "robust to either ordering" actually true.
+      authConnected: function () { authMode = "connected"; if (!nonce) return; doAuth(); },
       authDev: function (addr) { authMode = "dev"; authAddr = addr; send({ type: "auth-dev", address: addr }); },
       // M-P6 loss limits + slip re-request over the wire
       setLossLimit: function (amountWei) { send({ type: "set-loss-limit", amount: String(amountWei) }); },
       clearLossLimit: function () { send({ type: "clear-loss-limit" }); },
       getLossLimit: function () { send({ type: "get-loss-limit" }); },
       isDevMode: function () { return devMode; },
-      open: function (tier, faction) { lastReject = null; send({ type: "open", tier: tier, faction: faction }); }, // FREE
-      close: function (tableId) { send({ type: "close", tableId: tableId }); },
-      join: function (tableId, faction) { lastReject = null; send({ type: "join", tableId: tableId, faction: faction }); }, // FREE (and STAKED — the server looks up the table's escrow itself and gates on verifyLocked)
+      open: function (tier, faction) { lastReject = null; return send({ type: "open", tier: tier, faction: faction }); }, // FREE (B1: reports delivery)
+      close: function (tableId) { return send({ type: "close", tableId: tableId }); }, // B1: reports delivery
+      join: function (tableId, faction) { lastReject = null; return send({ type: "join", tableId: tableId, faction: faction }); }, // FREE (and STAKED — the server looks up the table's escrow itself and gates on verifyLocked). B1: reports delivery
       // S-HALL-L2 — SEND-ONLY staked open. The Hall casts approve+openMatch from the player's BROWSER wallet (its own
       //   persistPending road, not the private-key chain below), then hands the minted escrow matchId to the server here.
       //   Mirrors openStaked's server message exactly; the private-key openStaked stays the rig's road, untouched.
-      stakedOpen: function (o) { lastReject = null; send({ type: "open", tier: o.friend ? 0 : o.tier, faction: o.faction, escrowMatchId: String(o.escrowMatchId), friend: !!o.friend, stake: o.friend ? String(o.stake) : undefined }); },
+      stakedOpen: function (o) { lastReject = null; return send({ type: "open", tier: o.friend ? 0 : o.tier, faction: o.faction, escrowMatchId: String(o.escrowMatchId), friend: !!o.friend, stake: o.friend ? String(o.stake) : undefined }); }, // B1: returns FALSE when the socket did not carry it — the strand's silent drop
       // ---- M-P4 STAKED: users cast approve/open/join from THEIR OWN wallet (chain-first), then open/join the lobby
       //      table carrying the escrow matchId. The store buy flow is the precedent. LIQUID source only this rung. ----
       setChain: function (o) {

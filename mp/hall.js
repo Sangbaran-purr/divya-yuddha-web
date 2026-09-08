@@ -116,12 +116,29 @@
         if (v && v.screen === "match" && v.settlement) settlementView = v.settlement; // keep the slip visible in the lobby after leaving
         // busy-sentinel honesty: a dropped/refused socket is DEAD (busy face), never a false empty room.
         if (v && v.connected === false) { feedState = "dead"; scheduleReconnect(); return render(); }
-        if (v && Array.isArray(v.tables)) { tables = v.tables.slice(); feedState = "live"; reconnectTries = 0; } // whole-list reconcile
+        if (v && Array.isArray(v.tables)) { tables = v.tables.slice(); feedState = "live"; reconnectTries = 0; reconcilePendingAgainstTables(tables); } // whole-list reconcile (+ B2: our escrow appearing here is the server's own proof it learned the open)
         if (v && v.lossLimit) lossLimit = v.lossLimit;
         if (v && v.settlement) settlementView = v.settlement; // a pending slip surfaced in the lobby (resume-after-reload)
+        // S-HALL-L3-FIX-1 (B2) — the {opened} ACK. It used to be log-only; it now clears the record that was
+        //   waiting for it. Nothing else in the Hall may clear an open record.
+        if (v && v.lastOpened && v.lastOpened.at !== seenOpenAck) { seenOpenAck = v.lastOpened.at; consumeOpenAck(); }
+        // S-HALL-L3-FIX-1 (B3) — RESUME ON AUTHED. `v.me` is set only when the server accepted our signature, so
+        //   a resume can no longer fire into a socket that would refuse it. Once per feed generation.
+        if (v && v.me && resumedGen !== gen) {
+          resumedGen = gen; signedInAs = signedInAs || v.me;
+          try { if (client.resumeSettlement) client.resumeSettlement(); } catch (e) {}
+          try { resumePendingTx(); } catch (e) {}
+        }
         if (v && v.me && !signedInAs) signedInAs = v.me;      // B1 — the recovered connected-wallet identity
         // surface a server refusal honestly (FREE tier-0, join-not-locked, loss backstop) — de-duped so it shows once.
-        if (v && v.lastReject && v.lastReject !== seenReject) { seenReject = v.lastReject; lastServerError = v.lastReject; if (sheet) renderSheet(); }
+        if (v && v.lastReject && v.lastReject !== seenReject) {
+          seenReject = v.lastReject; lastServerError = v.lastReject;
+          // B2 — a refusal ({error}) arriving while an open record waits in step:"server" surfaces the ruled
+          //   affordance. It NEVER clears the record: the stake is locked and still needs finishing or refunding.
+          var awaiting = listPending().filter(function (e) { return e.rec && e.rec.kind === "open" && e.rec.step === "server"; });
+          if (awaiting.length === 1 && !openStrand) { raiseStrand(awaiting[0].slot, awaiting[0].rec.escrowMatchId, awaiting[0].rec.stake); }
+          if (sheet) renderSheet();
+        }
         // a friend "made" sheet shows the code once the new table arrives in the feed; refresh just that sheet.
         if (sheet && sheet.kind === "friend" && sheet.ctx && sheet.ctx.made) renderSheet();
         render();
@@ -133,7 +150,12 @@
       // connected-wallet-signature auth for the deployed server so it knows your address — the acts are inert in L1).
       // S-HALL-L3 (B1) — sign in as the CONNECTED wallet (personal_sign; the server recovers this address = the escrow player).
       //   Wait for the wallet to be present (production: injected at load; the staked road never uses a random session wallet).
-      var poll = setInterval(function () { if (client && me && window.ethereum) { clearInterval(poll); client.authConnected(); client.getLossLimit && setTimeout(function () { try { client.getLossLimit(); } catch (e) {} }, 600); setTimeout(function () { try { if (client.resumeSettlement) client.resumeSettlement(); } catch (e) {} try { resumePendingTx(); } catch (e) {} }, 1100); } }, 120);
+      // S-HALL-L3-FIX-1 (B3) — the poll BOOTSTRAPS the sign-in and nothing else. The old road also scheduled the
+      //   resume on a fixed 1100ms timer, which fired while the personal_sign prompt was still on screen: the send
+      //   went into an unauthed socket the server would refuse, and the record was cleared anyway. Resume is now
+      //   driven by the AUTHED signal in onUpdate. (authConnected is safe before the challenge: B3 sets the mode
+      //   first, so the challenge handler signs when it lands.)
+      var poll = setInterval(function () { if (client && me && window.ethereum) { clearInterval(poll); client.authConnected(); client.getLossLimit && setTimeout(function () { try { client.getLossLimit(); } catch (e) {} }, 600); } }, 120);
       setTimeout(function () { clearInterval(poll); }, 20000); // patient: a mobile in-app wallet can inject window.ethereum a beat late (DYWallet's 3s-detection reasoning)
     } catch (e) { feedState = "dead"; render(); }
     // bounded connect watchdog: no {tables} within 8s → dead face (never a false empty room)
@@ -142,6 +164,7 @@
   // bounded auto-reconnect: on a dead feed, tear down and re-create the client on a backoff (recovers when the server
   // returns). Every wait is bounded; a fresh feedGen invalidates any stale in-flight onUpdate.
   var reconnectTimer = null, reconnectTries = 0;
+  var resumedGen = 0, seenOpenAck = null;   // B3: resume fires once per feed generation, on the authed signal
   function scheduleReconnect() {
     if (reconnectTimer || reconnectTries >= 8) return;
     var delay = Math.min(1000 * Math.pow(1.7, reconnectTries), 10000);
@@ -186,6 +209,12 @@
   var lastActCtx = null;        // facts of the table we last acted on (kept for logging/telemetry)
   var lastServerError = null;   // a server refusal to surface honestly (FREE tier-0, join-not-locked, loss backstop)
   var seenReject = null;        // de-dupe the surfaced reject
+  // S-HALL-L3-FIX-1 (B4) — the lock-confirmed-but-server-untold state, and its unknown-receipt sibling.
+  var openStrand = null;        // { slot, escrowMatchId, stake } — lock CONFIRMED, table not opened (the 8d affordance)
+  var openUnknown = null;       // { slot, txHash, stake } — bounded wait elapsed, receipt not yet seen (no 8d claim)
+  var resumeNote = null;        // B3 — resume never fails in silence; this line is rendered in the lobby
+  var ackWatch = {};            // slot -> timer: a delivered send that never draws an ack raises the affordance
+  var ACK_WAIT_MS = 8000;
 
   // ── THE RULED MONEY COPY (docs/LOBBY_DESIGN.md section 11, VERBATIM — only the bracket slots are filled). ──
   var FACTIONS = ["devas", "asuras", "vanaras", "nagas"];
@@ -194,6 +223,9 @@
     return "Your " + dycOf(stakeWei) + " DYC locks in escrow now. It returns in full if you cancel before anyone sits, or on a draw. The winner takes the pot minus the 5% platform fee. If a finished match is somehow never settled, the chain refunds both players automatically after 24 hours - locked stakes can never be stranded.";
   }
   var BOTH_STAKES = "Once both stakes lock, the match begins.";
+  // S-HALL-L3-FIX-1 (B4) — RULED 2026-09-08 as LOBBY_DESIGN.md section 8d (verbatim copy-block law). The bracket
+  // slot is filled from the pending record, exactly as COMMITMENT fills its own. CC never paraphrases this line.
+  function STRAND_LOCKED(stakeWei) { return "Your " + dycOf(stakeWei) + " DYC is locked in escrow, but the table has not opened yet."; }
   function FRIEND_LOCK(addr) { return "private table - visible only by this code, and only " + addr + " can take the seat."; }
   var LIMIT_SET_TEXT = "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this.";
   function LIMIT_BLOCK(headroomWei) { return "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: " + dycOf(headroomWei) + " DYC."; }
@@ -224,11 +256,35 @@
   // ── persistPending / resumePendingTx (design-doc names) — a per-wallet record in the dyhall:: namespace, written at
   //    every tx hash + the escrowMatchId from the openMatch receipt, so a page death mid-ceremony resumes or abandons
   //    cleanly. Survives BOTH the approve→openMatch gap and the openMatch→server-open gap (the stated failure cases). ──
-  function pendingKey() { return "dyhall::pending::" + (me || "anon"); }
-  function persistPending(rec) { try { window.localStorage.setItem(pendingKey(), JSON.stringify(rec)); } catch (e) {} }
-  function readPending() { try { var s = window.localStorage.getItem(pendingKey()); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
-  function clearPending() { try { window.localStorage.removeItem(pendingKey()); } catch (e) {} }
-  function mergePending(patch) { persistPending(Object.assign({}, readPending() || {}, patch)); }
+  //  S-HALL-L3-FIX-1 (B4) — PER-ATTEMPT RECORDS. The old road kept ONE slot per wallet and wrote it with a
+  //  full setItem at ceremony start, so a second open ERASED the first attempt's tx hash — at most one of two
+  //  locks could ever be recovered. Records now key per attempt: slot = the openMatch tx hash once known, with
+  //  a single pre-hash "draft" slot per wallet. The draft is a distinct key, so it can never overwrite a
+  //  hash-keyed record. A pre-FIX-1 single-slot record is adopted (never orphaned) by listPending.
+  var PEND_ROOT = "dyhall::pending::";
+  function pendWallet() { return (me || "anon"); }
+  function pendPrefix() { return PEND_ROOT + pendWallet() + "::"; }
+  function pendKey(slot) { return pendPrefix() + slot; }
+  function writePending(slot, rec) { try { window.localStorage.setItem(pendKey(slot), JSON.stringify(rec)); } catch (e) {} }
+  function readPendingSlot(slot) { try { var s = window.localStorage.getItem(pendKey(slot)); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+  function clearPendingSlot(slot) { try { window.localStorage.removeItem(pendKey(slot)); } catch (e) {} }
+  function mergePendingSlot(slot, patch) { writePending(slot, Object.assign({}, readPendingSlot(slot) || {}, patch)); }
+  function clearLegacyPending() { try { window.localStorage.removeItem(PEND_ROOT + pendWallet()); } catch (e) {} }
+  function listPending() {
+    var out = [];
+    try {
+      var pre = pendPrefix();
+      for (var i = 0; i < window.localStorage.length; i++) {
+        var k = window.localStorage.key(i); if (!k || k.indexOf(pre) !== 0) continue;
+        var rec = null; try { rec = JSON.parse(window.localStorage.getItem(k) || "null"); } catch (e) {}
+        if (rec) out.push({ slot: k.slice(pre.length), rec: rec });
+      }
+      var legacy = window.localStorage.getItem(PEND_ROOT + pendWallet());   // pre-FIX-1 single slot — adopted, never orphaned
+      if (legacy) { var lr = null; try { lr = JSON.parse(legacy); } catch (e) {} if (lr) out.push({ slot: "__legacy__", rec: lr, legacy: true }); }
+    } catch (e) {}
+    return out;
+  }
+  function dropRecord(e) { if (e && e.legacy) clearLegacyPending(); else if (e) clearPendingSlot(e.slot); }
 
   function parseMatchId(r, rc) {
     var esc = escContract(r), id = null;
@@ -237,41 +293,83 @@
     return id.toString();
   }
   // approve only when the standing allowance is short (store precedent — one tx when already approved)
-  function ensureAllowance(r, stakeWei) {
+  function ensureAllowance(r, stakeWei, slot) {
     var dyc = dycContract(r);
     return dyc.allowance(me, escrowAddr()).then(function (a) {
       if (BigInt(a) >= BigInt(stakeWei)) return false; // already sufficient
-      mergePending({ step: "approve" });
+      mergePendingSlot(slot, { step: "approve" });
       return feeOverrides().then(function (fee) { return dyc.approve.staticCall(escrowAddr(), BigInt(stakeWei)).then(function () { return dyc.approve(escrowAddr(), BigInt(stakeWei), fee); }); })
-        .then(function (tx) { mergePending({ approveTxHash: tx.hash }); return tx.wait(); }).then(function () { return true; });
+        .then(function (tx) { mergePendingSlot(slot, { approveTxHash: tx.hash }); return tx.wait(); }).then(function () { return true; });
+    });
+  }
+  //  S-HALL-L3-FIX-1 (B4) — the wait is BOUNDED. An unbounded tx.wait() is what froze the sheet on the
+  //  "confirm in your wallet…" line while the lock sat confirmed on chain: it neither resolved nor threw, so
+  //  serverOpen was never reached and no error was ever shown. After OPEN_WAIT_MS we ask the provider for the
+  //  receipt ourselves, once; a still-unknown receipt is reported honestly instead of hanging forever.
+  var OPEN_WAIT_MS = 60000;
+  function waitBounded(r, tx) {
+    var timer = null;
+    return Promise.race([
+      Promise.resolve(tx.wait()).catch(function () { return null; }),
+      new Promise(function (res) { timer = setTimeout(function () { res("timeout"); }, OPEN_WAIT_MS); }),
+    ]).then(function (out) {
+      if (timer) clearTimeout(timer);
+      if (out && out !== "timeout") return out;
+      return r.provider.getTransactionReceipt(tx.hash).catch(function () { return null; });
     });
   }
   function castOpenMatch(r, ctx) {
     var esc = escContract(r);
-    mergePending({ step: "openMatch" });
+    mergePendingSlot("draft", { step: "openMatch" });
     return feeOverrides().then(function (fee) {
       return esc.openMatch.staticCall(BigInt(ctx.stakeWei), ctx.friendAddr || r.ethers.ZeroAddress, 0).then(function () {
         return esc.openMatch(BigInt(ctx.stakeWei), ctx.friendAddr || r.ethers.ZeroAddress, 0, fee);
       });
-    }).then(function (tx) { mergePending({ openTxHash: tx.hash }); return tx.wait(); }).then(function (rc) { return parseMatchId(r, rc); });
+    }).then(function (tx) {
+      // PROMOTE: this attempt now owns its own record, keyed by its tx hash. The draft is released so a second
+      // ceremony cannot overwrite this one (the two-lock overwrite that lost the first escrow).
+      var slot = String(tx.hash);
+      writePending(slot, Object.assign({}, readPendingSlot("draft") || {}, { step: "openMatch", openTxHash: slot, at: Date.now() }));
+      clearPendingSlot("draft");
+      return waitBounded(r, tx).then(function (rc) { return { slot: slot, txHash: slot, rc: rc }; });
+    });
   }
-  function serverOpen(ctx, id) {
-    mergePending({ step: "server", escrowMatchId: id });
-    client.stakedOpen({ tier: ctx.tier, faction: ctx.faction, escrowMatchId: id, friend: !!ctx.friendAddr, stake: ctx.stakeWei });
-    clearPending();
+  //  S-HALL-L3-FIX-1 (B2) — THE ACKNOWLEDGED HANDOFF. clearPending() has LEFT this function. The record is
+  //  journaled with the escrow id, the send is ATTEMPTED, and the record then STANDS until the server's
+  //  {opened} ack (or our escrowMatchId appearing in {tables}) proves the server learned it. A send the socket
+  //  did not carry now returns false instead of looking delivered.
+  function serverOpen(ctx, id, slot) {
+    mergePendingSlot(slot, { step: "server", escrowMatchId: String(id) });
+    var delivered = !!(client && client.stakedOpen({ tier: ctx.tier, faction: ctx.faction, escrowMatchId: id, friend: !!ctx.friendAddr, stake: ctx.stakeWei }));
+    if (delivered) armAckWatch(slot, ctx.stakeWei, id);
+    else raiseStrand(slot, id, ctx.stakeWei);
+    return delivered;
   }
 
   // THE OPEN CEREMONY — ctx = { tier, faction, stakeWei, friendAddr? }
   function ceremonyOpen(ctx) {
     lastActCtx = { tier: ctx.tier, faction: ctx.faction, stake: ctx.stakeWei, friend: !!ctx.friendAddr };
     ceremony = { kind: "open", step: "approve", ctx: ctx, error: null };
-    persistPending({ kind: "open", step: "approve", tier: ctx.tier, faction: ctx.faction, stake: ctx.stakeWei, friend: !!ctx.friendAddr, friendAddr: ctx.friendAddr || null });
+    writePending("draft", { kind: "open", step: "approve", tier: ctx.tier, faction: ctx.faction, stake: ctx.stakeWei, friend: !!ctx.friendAddr, friendAddr: ctx.friendAddr || null, at: Date.now() });
     renderSheet();
     return signerRoad().then(function (r) {
-      return ensureAllowance(r, ctx.stakeWei).then(function () {
+      return ensureAllowance(r, ctx.stakeWei, "draft").then(function () {
         ceremony.step = "lock"; renderSheet();
         return castOpenMatch(r, ctx);
-      }).then(function (id) { serverOpen(ctx, id); ceremony = null; if (!ctx.friendAddr) { sheet = null; render(); } return id; });
+      }).then(function (out) {
+        if (!out.rc) {
+          // bounded out with no receipt: we do NOT know the lock landed, so we do not claim it did (the 8d line
+          // is only honest once the lock is confirmed). The record stands; a reload or CHECK AGAIN resumes it.
+          ceremony = null; openUnknown = { slot: out.slot, txHash: out.txHash, stake: ctx.stakeWei };
+          sheet = { kind: "strand" }; renderSheet(); return null;
+        }
+        var id = parseMatchId(r, out.rc);
+        var delivered = serverOpen(ctx, id, out.slot);
+        ceremony = null;
+        if (!delivered) { renderCurrent(); return id; }   // raiseStrand already opened the affordance
+        if (!ctx.friendAddr) { sheet = null; render(); }
+        return id;
+      });
     }).catch(function (e) { if (ceremony) { ceremony.step = "error"; ceremony.error = ceremonyMsg(e); } renderSheet(); });
   }
 
@@ -280,35 +378,84 @@
     // ctx = { tableId, faction, escrowMatchId, stakeWei, opponent }
     lastActCtx = { tier: ctx.tier, faction: ctx.faction, stake: ctx.stakeWei, opponent: ctx.opponent, friend: !!ctx.friend };
     ceremony = { kind: "join", step: "approve", ctx: ctx, error: null };
-    persistPending({ kind: "join", step: "approve", tableId: ctx.tableId, faction: ctx.faction, escrowMatchId: ctx.escrowMatchId, stake: ctx.stakeWei });
+    var jslot = "join-" + String(ctx.escrowMatchId);
+    writePending(jslot, { kind: "join", step: "approve", tableId: ctx.tableId, faction: ctx.faction, escrowMatchId: ctx.escrowMatchId, stake: ctx.stakeWei, at: Date.now() });
     renderSheet();
     return signerRoad().then(function (r) {
-      return ensureAllowance(r, ctx.stakeWei).then(function () {
+      return ensureAllowance(r, ctx.stakeWei, jslot).then(function () {
         ceremony.step = "lock"; renderSheet();
-        mergePending({ step: "joinMatch" });
+        mergePendingSlot(jslot, { step: "joinMatch" });
         var esc = escContract(r);
-        return feeOverrides().then(function (fee) { return esc.joinMatch.staticCall(BigInt(ctx.escrowMatchId), 0).then(function () { return esc.joinMatch(BigInt(ctx.escrowMatchId), 0, fee); }); }).then(function (tx) { mergePending({ joinTxHash: tx.hash }); return tx.wait(); });
+        return feeOverrides().then(function (fee) { return esc.joinMatch.staticCall(BigInt(ctx.escrowMatchId), 0).then(function () { return esc.joinMatch(BigInt(ctx.escrowMatchId), 0, fee); }); }).then(function (tx) { mergePendingSlot(jslot, { joinTxHash: tx.hash }); return tx.wait(); });
       }).then(function () {
-        mergePending({ step: "server" });
-        client.join(ctx.tableId, ctx.faction);
-        clearPending(); ceremony = null; sheet = null; render();
+        // B1/B2 — the joiner's stake is money too: journal, attempt, and only clear when the socket carried it.
+        mergePendingSlot(jslot, { step: "server" });
+        var delivered = !!(client && client.join(ctx.tableId, ctx.faction));
+        ceremony = null;
+        if (!delivered) { resumeNote = "your stake locked, but the table could not be told — reload to finish taking the seat."; renderCurrent(); return; }
+        clearPendingSlot(jslot); sheet = null; render();
       });
     }).catch(function (e) { if (ceremony) { ceremony.step = "error"; ceremony.error = ceremonyMsg(e); } renderSheet(); });
   }
 
   // THE CANCEL — cancelMatch (full refund) then the server close. escrowMatchId from the table.
+  //  S-HALL-L3-FIX-1 (B4) — the SAME cancel road now also serves a stranded escrow, which has no server table
+  //  row (t.id null) to close. Nothing else about the refund changes.
   function ceremonyCancel(t) {
     ceremony = { kind: "cancel", step: "cancel", ctx: { tableId: t.id, escrowMatchId: t.escrowMatchId }, error: null }; renderSheet();
     return signerRoad().then(function (r) {
       var esc = escContract(r);
       return feeOverrides().then(function (fee) { return esc.cancelMatch.staticCall(BigInt(t.escrowMatchId)).then(function () { return esc.cancelMatch(BigInt(t.escrowMatchId), fee); }); })
         .then(function (tx) { return tx.wait(); }).then(function () {
-          client.close(t.id);
-          ceremony = null; sheet = null; readLiquidAgain(); render();
+          if (t.id && client) client.close(t.id);            // a ghost has no table to close
+          if (t.slot) settleStrand(t.slot);                  // the stake is refunded — the record has done its work
+          ceremony = null; sheet = null; openStrand = null; openUnknown = null; readLiquidAgain(); render();
         });
     }).catch(function (e) { if (ceremony) { ceremony.step = "error"; ceremony.error = ceremonyMsg(e); } renderSheet(); });
   }
   function readLiquidAgain() { loadEthers().then(function (ethers) { readLiquid(ethers); }).catch(function () {}); }
+
+  //  S-HALL-L3-FIX-1 (B4) — raise the ruled affordance. Called when a lock is CONFIRMED but the server was not
+  //  told: the send was refused by a closed socket, or it was carried but no ack ever came back (a refusal such
+  //  as "not authed"). The record is NEVER cleared here — it is what FINISH OPENING and the reload road use.
+  function raiseStrand(slot, escrowMatchId, stakeWei) {
+    openUnknown = null;
+    openStrand = { slot: slot, escrowMatchId: String(escrowMatchId), stake: String(stakeWei) };
+    sheet = { kind: "strand" };
+    // Paint on the next tick: a caller may still be inside its ceremony (ceremony not yet nulled), and the sheet
+    // renders the ceremony strip in place of the two acts while one is in flight. render() does not draw the
+    // sheet on the lobby road, so the affordance is drawn explicitly here — one place, every raising path.
+    setTimeout(function () { renderCurrent(); renderSheet(); }, 0);
+  }
+  function armAckWatch(slot, stakeWei, id) {
+    if (ackWatch[slot]) clearTimeout(ackWatch[slot]);
+    ackWatch[slot] = setTimeout(function () {
+      delete ackWatch[slot];
+      var rec = readPendingSlot(slot);
+      if (!rec || rec.step !== "server") return;            // the ack (or the {tables} reconcile) already cleared it
+      raiseStrand(slot, rec.escrowMatchId || id, rec.stake || stakeWei); renderCurrent();
+    }, ACK_WAIT_MS);
+  }
+  function settleStrand(slot) {                              // the server has confirmed this escrow — the record may go
+    if (ackWatch[slot]) { clearTimeout(ackWatch[slot]); delete ackWatch[slot]; }
+    clearPendingSlot(slot);
+    if (openStrand && openStrand.slot === slot) { openStrand = null; if (sheet && sheet.kind === "strand") sheet = null; }
+    if (openUnknown && openUnknown.slot === slot) openUnknown = null;
+  }
+  //  B2 — the ONLY roads that clear an open record. (a) our escrowMatchId is now a table in the server's own
+  //  broadcast — the strongest possible proof the server learned it; (b) the {opened} ack, when exactly one
+  //  record is awaiting one (the ack frame carries no escrowMatchId, so the broadcast is the precise signal).
+  function reconcilePendingAgainstTables(list) {
+    listPending().forEach(function (e) {
+      var r = e.rec; if (!r || r.kind !== "open" || r.step !== "server" || !r.escrowMatchId) return;
+      var seen = list.some(function (t) { return t && String(t.escrowMatchId) === String(r.escrowMatchId); });
+      if (seen) { if (e.legacy) { clearLegacyPending(); } else { settleStrand(e.slot); } }
+    });
+  }
+  function consumeOpenAck() {
+    var waiting = listPending().filter(function (e) { return e.rec && e.rec.kind === "open" && e.rec.step === "server"; });
+    if (waiting.length === 1) { if (waiting[0].legacy) clearLegacyPending(); else settleStrand(waiting[0].slot); }
+  }
 
   function ceremonyMsg(e) {
     var m = (e && (e.shortMessage || e.reason || e.message)) || "the cast failed";
@@ -318,41 +465,77 @@
   }
 
   // ── RESUME (on load, after the gate passes) — complete or abandon a pending ceremony cleanly. ──
+  //  S-HALL-L3-FIX-1 (B3/B4) — resume walks ALL records for this wallet, one pass, sequentially. It is driven by
+  //  the AUTHED signal (see startFeed/onUpdate), never by a fixed timer firing into a socket the server has not
+  //  yet accepted. Every failure leaves the record standing and says so.
   function resumePendingTx() {
-    var rec = readPending(); if (!rec || !client) return;
+    var recs = listPending(); if (!recs.length || !client) return;
+    resumeNote = null;
     signerRoad().then(function (r) {
-      if (rec.kind === "open") return resumeOpen(r, rec);
-      if (rec.kind === "join") return resumeJoin(r, rec);
-      if (rec.kind === "settle") return resumeSettle(r, rec); // L3 (P4) — a settle interrupted between cast and confirmation
-      clearPending();
-    }).catch(function () { /* no wallet/road — leave the record; the next visit retries. The stake (if locked) is refundable via cancel/abort. */ });
+      return recs.reduce(function (chain, e) {
+        return chain.then(function () {
+          if (e.rec.kind === "open") return resumeOpenRecord(r, e);
+          if (e.rec.kind === "join") return resumeJoin(r, e.rec, e);
+          if (e.rec.kind === "settle") return resumeSettle(r, e.rec);
+          return null;
+        }).catch(function (err) { resumeNote = "a pending table could not be finished: " + ceremonyMsg(err) + " — your stake is safe."; });
+      }, Promise.resolve());
+    }).then(function () { if (resumeNote) renderCurrent(); })
+      .catch(function (err) {
+        // B3 — never a bare silence. The record is LEFT standing and the road is named.
+        resumeNote = "could not reach your wallet to finish a pending table — your stake is safe; reload to retry.";
+        renderCurrent();
+      });
   }
-  function resumeOpen(r, rec) {
-    ceremony = { kind: "open", step: "resume", ctx: { tier: rec.tier, faction: rec.faction, stakeWei: rec.stake, friendAddr: rec.friendAddr }, error: null };
-    sheet = { kind: rec.friend ? "friend" : "open" }; renderSheet();
+  // tri-state escrow read: an UNREADABLE chain must never be mistaken for "not ours" (that would clear a record
+  // that is protecting a real locked stake — the exact class of bug this task closes).
+  function readOpenState(r, id) {
+    return escContract(r).matches(BigInt(id))
+      .then(function (mm) { return { ok: true, state: Number(mm.state), playerA: String(mm.playerA).toLowerCase() }; })
+      .catch(function () { return { ok: false }; });
+  }
+  function resumeOpenRecord(r, e) {
+    var rec = e.rec, slot = e.slot;
+    if (e.legacy) {                                   // adopt a pre-FIX-1 single-slot record onto the new road
+      slot = rec.openTxHash ? String(rec.openTxHash) : "draft";
+      writePending(slot, rec); clearLegacyPending();
+    }
     var ctx = { tier: rec.tier, faction: rec.faction, stakeWei: rec.stake, friendAddr: rec.friendAddr };
     if (rec.step === "server" && rec.escrowMatchId) {
-      return verifyOpenOwned(r, rec.escrowMatchId).then(function (ok) { if (ok) { serverOpen(ctx, rec.escrowMatchId); ceremony = null; sheet = null; render(); } else { clearPending(); ceremony = null; sheet = null; render(); } });
-    }
-    if (rec.step === "openMatch" && rec.openTxHash) {
-      return r.provider.getTransactionReceipt(rec.openTxHash).then(function (rc) {
-        if (!rc) { ceremony = null; sheet = null; render(); return; }                 // not mined yet — leave it; a later visit resumes
-        var id = parseMatchId(r, rc); serverOpen(ctx, id); ceremony = null; sheet = null; render();
+      return readOpenState(r, rec.escrowMatchId).then(function (st) {
+        if (!st.ok) { resumeNote = "could not read the escrow just now — a pending table is still waiting; your stake is safe."; return; }
+        if (st.state !== 1 || st.playerA !== me) { settleStrand(slot); return; }   // no longer an OPEN escrow of ours
+        if (serverOpen(ctx, rec.escrowMatchId, slot)) { sheet = null; }
+        render();
       });
     }
-    // approve done / openMatch un-sent (or unknown) — re-drive from where the allowance stands (no double-lock: openMatch hasn't run)
-    return ceremonyOpen(ctx);
+    if (rec.openTxHash) {
+      return r.provider.getTransactionReceipt(rec.openTxHash).then(function (rc) {
+        if (!rc) { openUnknown = { slot: slot, txHash: rec.openTxHash, stake: rec.stake }; sheet = { kind: "strand" }; renderSheet(); return; }
+        var id = parseMatchId(r, rc);
+        if (serverOpen(ctx, id, slot)) { sheet = null; }
+        render();
+      });
+    }
+    // A draft with no tx hash: the lock was never cast, so NO stake is at risk. We deliberately do NOT auto-cast
+    // money on page load (the old road re-drove ceremonyOpen here, which would now mean one wallet prompt per
+    // stale record). The draft is simply left; it is overwritten by the next ceremony.
+    return Promise.resolve();
   }
-  function resumeJoin(r, rec) {
-    ceremony = { kind: "join", step: "resume", ctx: rec, error: null }; sheet = { kind: "seat" }; renderSheet();
+  function resumeJoin(r, rec, e) {
+    var jslot = (e && e.slot) || ("join-" + String(rec.escrowMatchId));
     if (rec.step === "server" || rec.step === "joinMatch") {
       // joinMatch may have landed — check the escrow: MATCHED with me as playerB → just (re)send the server join
       return escContract(r).matches(BigInt(rec.escrowMatchId)).then(function (mm) {
-        if (Number(mm.state) === 2 && String(mm.playerB).toLowerCase() === me) { client.join(rec.tableId, rec.faction); clearPending(); ceremony = null; sheet = null; render(); } // MATCHED=2
-        else { return ceremonyJoin({ tableId: rec.tableId, faction: rec.faction, escrowMatchId: rec.escrowMatchId, stakeWei: rec.stake }); }
-      }).catch(function () { return ceremonyJoin({ tableId: rec.tableId, faction: rec.faction, escrowMatchId: rec.escrowMatchId, stakeWei: rec.stake }); });
+        if (Number(mm.state) === 2 && String(mm.playerB).toLowerCase() === me) {   // MATCHED=2
+          if (client && client.join(rec.tableId, rec.faction)) { clearPendingSlot(jslot); sheet = null; render(); }
+          else { resumeNote = "your stake is locked at that table — reload to finish taking the seat."; }
+          return;
+        }
+        resumeNote = "a seat you started is no longer joinable — your stake is refundable on chain.";
+      }).catch(function () { resumeNote = "could not read the escrow for a seat you started; your stake is safe."; });
     }
-    return ceremonyJoin({ tableId: rec.tableId, faction: rec.faction, escrowMatchId: rec.escrowMatchId, stakeWei: rec.stake });
+    return Promise.resolve();   // pre-lock join draft: nothing cast, nothing at risk, no surprise wallet prompt
   }
   function verifyOpenOwned(r, id) {
     // MatchState: NONE=0, OPEN=1, MATCHED=2, SETTLED=3, ABORTED=4
@@ -525,9 +708,54 @@
     else if (sheet.kind === "friend") html = friendCreateHTML();
     else if (sheet.kind === "friendjoin") html = friendJoinHTML();
     else if (sheet.kind === "limit") html = limitSheetHTML();
+    else if (sheet.kind === "strand") html = strandSheetHTML();
     var host = $("hall-sheet-host") || (function () { var h = el("div"); h.id = "hall-sheet-host"; document.body.appendChild(h); return h; })();
     host.innerHTML = html;
     wireSheet();
+  }
+
+  //  S-HALL-L3-FIX-1 (B4) — THE RULED AFFORDANCE (LOBBY_DESIGN.md 8d, amended 2026-09-08). Shown when a lock is
+  //  CONFIRMED on chain but the table has not opened — the state that stranded 20 DYC on 2026-09-08. Two acts:
+  //  FINISH OPENING (re-derive the escrow id and redo the server handoff) and CANCEL AND REFUND (the existing
+  //  cancelMatch road, now ghost-safe). The copy line is verbatim law; only the stake slot is filled.
+  function strandSheetHTML() {
+    if (openStrand) {
+      var line = STRAND_LOCKED(openStrand.stake);
+      return sheetOverlay(
+        '<h2 class="hall-sheet-title">THE TABLE HAS NOT OPENED</h2>' +
+        '<p class="hall-strand-line state-line">' + line + '</p>' +
+        (ceremony ? ceremonyStrip(ceremony) :
+          '<div class="hall-strand-acts">' +
+          '<button class="hall-act hall-strand-finish" data-strand-finish="1">FINISH OPENING</button> ' +
+          '<button class="hall-act hall-strand-cancel" data-strand-cancel="1">CANCEL AND REFUND</button>' +
+          '</div>'), "hall-sheet-strand");
+    }
+    // the bounded wait elapsed with no receipt yet: we do NOT claim the stake is locked (that would be the 8d
+    // line asserting something unproven). Honest, resumable, one manual re-check — never an automatic retry loop.
+    return sheetOverlay(
+      '<h2 class="hall-sheet-title">STILL WAITING FOR THE NETWORK</h2>' +
+      '<p class="state-line">Your lock has not confirmed yet. Nothing is lost — it finishes on its own, or check again.</p>' +
+      (ceremony ? ceremonyStrip(ceremony) : '<div class="hall-strand-acts"><button class="hall-act hall-strand-check" data-strand-check="1">CHECK AGAIN</button></div>'),
+      "hall-sheet-strand");
+  }
+
+  //  FINISH OPENING — re-derive the escrow id from the receipt (or reuse the journalled one) and redo the handoff.
+  function strandFinish() {
+    var st = openStrand || openUnknown; if (!st) return;
+    var rec = readPendingSlot(st.slot) || {};
+    ceremony = { kind: "open", step: "resume", ctx: { tier: rec.tier, faction: rec.faction, stakeWei: rec.stake }, error: null }; renderSheet();
+    signerRoad().then(function (r) {
+      return resumeOpenRecord(r, { slot: st.slot, rec: rec }).then(function () {
+        ceremony = null;
+        if (!readPendingSlot(st.slot)) { openStrand = null; openUnknown = null; sheet = null; }
+        renderCurrent();
+      });
+    }).catch(function (e) { if (ceremony) { ceremony.step = "error"; ceremony.error = ceremonyMsg(e); } renderSheet(); });
+  }
+  //  CANCEL AND REFUND — the existing cancelMatch road, addressed by the journalled escrowMatchId.
+  function strandCancel() {
+    if (!openStrand) return;
+    ceremonyCancel({ id: null, escrowMatchId: openStrand.escrowMatchId, slot: openStrand.slot });
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -560,25 +788,25 @@
   function ceremonySettle(slip) {
     if (!slip || slip.escrowMatchId == null) return;
     settleState = { casting: true }; renderCurrent();
-    persistPending({ kind: "settle", escrowMatchId: String(slip.escrowMatchId), result: slip.result, signature: slip.signature });
+    writePending("settle", { kind: "settle", escrowMatchId: String(slip.escrowMatchId), result: slip.result, signature: slip.signature, at: Date.now() });
     return signerRoad().then(function (r) {
       var esc = escContract(r);
       return feeOverrides().then(function (fee) {
         return esc.settle.staticCall(BigInt(slip.escrowMatchId), slip.result, slip.signature).then(function () {
           return esc.settle(BigInt(slip.escrowMatchId), slip.result, slip.signature, fee);
         });
-      }).then(function (tx) { mergePending({ settleTxHash: tx.hash }); return tx.wait(); })
+      }).then(function (tx) { mergePendingSlot("settle", { settleTxHash: tx.hash }); return tx.wait(); })
         .then(function () { return esc.matches(BigInt(slip.escrowMatchId)); })
-        .then(function (mm) { settleState = { settled: true, terminalState: Number(mm.state) }; clearPending(); markSlipSettled(String(slip.escrowMatchId)); readLiquidAgain(); renderCurrent(); });
+        .then(function (mm) { settleState = { settled: true, terminalState: Number(mm.state) }; clearPendingSlot("settle"); markSlipSettled(String(slip.escrowMatchId)); readLiquidAgain(); renderCurrent(); });
     }).catch(function (e) { settleState = { casting: false, error: ceremonyMsg(e) }; renderCurrent(); });
   }
   // resume a settle interrupted between cast and confirmation (P4): if already SETTLED on chain, resolve; else re-offer.
   function resumeSettle(r, rec) {
     return escContract(r).matches(BigInt(rec.escrowMatchId)).then(function (mm) {
-      if (Number(mm.state) === 3) { settleState = { settled: true, terminalState: 3 }; clearPending(); markSlipSettled(String(rec.escrowMatchId)); renderCurrent(); return; } // SETTLED=3
+      if (Number(mm.state) === 3) { settleState = { settled: true, terminalState: 3 }; clearPendingSlot("settle"); markSlipSettled(String(rec.escrowMatchId)); renderCurrent(); return; } // SETTLED=3
       // not settled — leave the slip's Cast button live (matchclient.resumeSettlement surfaced it); drop the stale pending
-      clearPending();
-    }).catch(function () { clearPending(); });
+      clearPendingSlot("settle");
+    }).catch(function () { clearPendingSlot("settle"); });
   }
 
   // ── THE MATCH SCREEN (ported from wire.html; neutral hall-* hooks) ──
@@ -741,6 +969,10 @@
       lim = '<button class="hall-limit-invite" data-act="limit-sheet">set a daily limit</button>';
     }
     var who = signedInAs ? '<div class="hall-signedin state-line">signed in as <span class="hall-signedin-addr">' + shortAddr(signedInAs) + '</span></div>' : '';
+    // S-HALL-L3-FIX-1 (B4) — a locked-but-unopened stake is never hidden by dismissing the sheet: the lobby keeps
+    //   a standing line (the ruled 8d text) that reopens the affordance. B3 — and resume never fails in silence.
+    if (openStrand) who += '<div class="hall-strand-banner state-line">' + STRAND_LOCKED(openStrand.stake) + ' <button class="hall-act hall-strand-reopen" data-strand-reopen="1">FINISH OPENING</button></div>';
+    if (resumeNote) who += '<div class="hall-resume-note state-line">' + resumeNote + '</div>';
     return '<div class="hall-header">' +
       '<div class="hall-liquid"><span class="hall-liquid-label">Liquid</span> <b>' + liq + '</b>' + who + '</div>' +
       '<div class="hall-limit">' + lim + '</div></div>';
@@ -831,6 +1063,8 @@
     Array.prototype.forEach.call(document.querySelectorAll(".hall-rail-chip"), function (c) {
       c.onclick = function () { selectedTier = c.getAttribute("data-tier"); render(); };
     });
+    // S-HALL-L3-FIX-1 (B4) — reopen the ruled affordance from the standing lobby line.
+    var sr = document.querySelector("[data-strand-reopen]"); if (sr) sr.onclick = function () { sheet = { kind: "strand" }; renderSheet(); };
     // the live acts: every control carries data-act; route it to a sheet or a cast.
     Array.prototype.forEach.call(document.querySelectorAll("[data-act]"), function (b) {
       b.addEventListener("click", function (e) {
@@ -857,6 +1091,10 @@
   // ── the sheet's own wiring (faction picks, tier rows, the acts, close) ──
   function wireSheet() {
     var host = $("hall-sheet-host"); if (!host) return;
+    // S-HALL-L3-FIX-1 (B4) — the ruled acts.
+    var sf = host.querySelector("[data-strand-finish]"); if (sf) sf.onclick = function () { strandFinish(); };
+    var sc = host.querySelector("[data-strand-cancel]"); if (sc) sc.onclick = function () { strandCancel(); };
+    var sk = host.querySelector("[data-strand-check]"); if (sk) sk.onclick = function () { strandFinish(); };
     var close = host.querySelector("[data-sheet-close]"); if (close) close.onclick = function () { if (ceremony && ceremony.step !== "error") return; sheet = null; ceremony = null; renderSheet(); };
     var ov = host.querySelector(".hall-sheet-overlay"); if (ov) ov.addEventListener("click", function (e) { if (e.target === ov && !(ceremony && ceremony.step !== "error")) { sheet = null; ceremony = null; renderSheet(); } });
     // live-capture input values into ctx so a re-render (e.g. a faction pick) never wipes a half-typed field
@@ -974,7 +1212,8 @@
         matchView: matchView ? { matchId: matchView.matchId, seat: matchView.seat, phase: matchView.phase, myTurn: matchView.myTurn, over: !!matchView.outcome } : null,
         signedInAs: signedInAs, settleState: settleState, settlement: settlementView || (matchView && matchView.settlement) || null,
         lossLimit: lossLimit, liquid: liquid == null ? null : liquid.toString(),
-        pending: readPending(), lastServerError: lastServerError, escrow: escrowAddr(),
+        pending: listPending(), strand: openStrand, unknownOpen: openUnknown, resumeNote: resumeNote,
+        lastServerError: lastServerError, escrow: escrowAddr(),
         matchReject: matchView ? matchView.lastReject : null,
       };
     },
