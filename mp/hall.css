@@ -4,7 +4,7 @@
    (screens 1-13 APPROVED as drawn; drift D1-D12 dressed in the mockups' language).
 
    TOKENS are the game's DS §1 canonical block, pulled read-only from game/index.html — not re-invented here.
-   GROUND is assets/hall/hall_ground_tall.jpg (phone) / hall_ground_wide.jpg (wide), the canvas's own plates.
+   GROUND is assets/hall/backdrop_tall.webp (phone) / backdrop_wide.webp (wide) — the round-two statue walls.
    THE DRESS TOUCHES NO MARKUP: hall.js is byte-identical; every data-* hook, the three ids the suites query
    (#hall-root, #hall-sheet-host, #hall-friend-code) and the three classes they count (.hall-rail-chip,
    .hall-strand-line, .hall-sheet-err) are styled, never hidden. Ruled copy is never text-transformed. */
@@ -49,14 +49,29 @@ button { background: none; border: 0; border-radius: 0; padding: 0; text-align: 
 /* ══ THE GROUND ══ the canvas's plate, then its four-stop scrim, then the room on top. */
 html { background: var(--ink); }
 body {
-  margin: 0; min-height: 100%;
-  background: var(--ink) url("../assets/hall/hall_ground_tall.jpg") center top / 100% auto no-repeat;
+  margin: 0; min-height: 100%; background: var(--ink);
   color: var(--paper); font-family: var(--cp); font-size: 16px; line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+/* THE WALLS RIDE A FIXED LAYER, not the body's own background. On body, `cover` scales to the DOCUMENT height —
+   so a long floor would blow the image up and crop the two statues clean out of frame, losing exactly what the
+   art is for. A fixed layer covers the VIEWPORT at any page length, identically in every browser (and without
+   background-attachment: fixed, which iOS does not honour). */
 body::before {
-  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-  background: linear-gradient(180deg, rgba(7,4,2,.08) 0%, rgba(7,4,2,.45) 30%, rgba(7,4,2,.82) 58%, var(--ink) 82%);
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: var(--ink) url("../assets/hall/backdrop_tall.webp") center top / cover no-repeat;
+}
+/* THE DARK-CENTRE LAW, set to the art rather than to a guess. Measured column luminance over the top 45%:
+   backdrop_tall's corridor runs 25%-80% of its width (517px of 941); backdrop_wide's runs 20%-85% (1086px of
+   1672); both centre at ~52.5%. Content must sit on that corridor. Cropping the statues out would take the
+   art's soul with them, so the answer is CONTAINMENT + SCRIM: the statues keep the top band, where they are
+   meant to be seen, and the scrim deepens fast so every panel below the title lands on near-black.
+   A second, radial layer pins the darkness to the corridor's centre instead of only to the vertical. */
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;   /* same level as the walls, painted after them */
+  background:
+    radial-gradient(135% 78% at 52.5% 2%, rgba(7,4,2,0) 0%, rgba(7,4,2,.22) 46%, rgba(7,4,2,.72) 78%, var(--ink) 100%),
+    linear-gradient(180deg, rgba(7,4,2,0) 0%, rgba(7,4,2,.18) 22%, rgba(7,4,2,.66) 44%, rgba(7,4,2,.93) 66%, var(--ink) 84%);
 }
 body > * { position: relative; z-index: 1; }
 
@@ -124,10 +139,14 @@ body > * { position: relative; z-index: 1; }
 .hall-account-note { font-size: 13px; color: var(--paper); }
 
 /* ══ THE COVENANT ══ the room's one standing promise. */
+/* the covenant is the ONE line with no panel behind it — on the statue walls it can land on a lit banner,
+   so it carries its own shadow rather than trusting the scrim to be dark everywhere it goes. */
 .hall-covenant {
   font-family: var(--cz); font-size: 10.5px; letter-spacing: .3em; text-transform: uppercase;
   color: var(--paper-dim); text-align: center; margin: 0; padding: 2px 0;
+  text-shadow: 0 1px 3px rgba(7,4,2,.95), 0 0 12px rgba(7,4,2,.85);
 }
+.hall-title { text-shadow: 0 1px 4px rgba(7,4,2,.9); }
 
 /* ══ THE RAIL ══ the mockup's door grammar: medallion over label over price, count beneath.
    L-N1 keeps the horizontal chip scroll. Never hidden — the suite counts .hall-rail-chip. */
@@ -156,14 +175,27 @@ body > * { position: relative; z-index: 1; }
 .hall-rail-chip:focus-visible, .hall-act:focus-visible, .hall-door:focus-visible,
 .hall-nav-links a:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 .hall-glyph { width: 26px; height: 26px; display: block; }
-.hall-medallion { color: currentColor; }
-.tier-free .hall-medallion, .hall-chip-all { color: var(--t-free); }
-.tier-bronze .hall-medallion { color: var(--t-bronze); }
-.tier-silver .hall-medallion { color: var(--t-silver); }
-.tier-gold .hall-medallion { color: var(--t-gold); }
-.tier-diamond .hall-medallion { color: var(--t-diamond); }
-.tier-friend .hall-medallion { color: var(--gold); }
-.hall-chip-all { font-family: var(--cz); font-size: 11px; letter-spacing: .16em; justify-content: center; }
+/* S-HALL-DRESS-3 (M1) — the tier medallion is a raster on its own dark ground, so it wears a rounded-square
+   cell exactly as the faction sigils do. It is bigger than the old sprite mark because the art earns it. */
+.hall-medallion {
+  width: 38px; height: 38px; border-radius: 9px; object-fit: cover;
+  border: 1px solid var(--gold-dim-25); background: var(--plaque-lo);
+}
+.hall-rail-chip .hall-medallion { width: 42px; height: 42px; }
+.hall-rail-chip.on .hall-medallion { border-color: var(--gold); box-shadow: 0 0 12px rgba(232,200,116,.22); }
+.hall-tier-rows .hall-medallion, .hall-plaque-head .hall-medallion, .hall-seat-opp .hall-medallion {
+  width: 30px; height: 30px; border-radius: 7px;
+}
+/* S-HALL-DRESS-3 (R5) — the six tier inks tinted the SPRITE through currentColor, which a raster ignores.
+   Rather than leave six dead rules, each door keeps its ink ON ITS LABEL: the rail still reads bronze,
+   silver, gold, diamond at a glance, now in the word instead of the mark. */
+.tier-free .hall-chip-label, .tier-free .hall-tier-label { color: var(--t-free); }
+.tier-bronze .hall-chip-label, .tier-bronze .hall-tier-label { color: var(--t-bronze); }
+.tier-silver .hall-chip-label, .tier-silver .hall-tier-label { color: var(--t-silver); }
+.tier-gold .hall-chip-label, .tier-gold .hall-tier-label { color: var(--t-gold); }
+.tier-diamond .hall-chip-label, .tier-diamond .hall-tier-label { color: var(--t-diamond); }
+.tier-friend .hall-chip-label, .tier-friend .hall-tier-label { color: var(--gold); }
+.hall-chip-all .hall-chip-label { color: var(--t-free); }
 
 /* ══ THE PLATE ══ the canvas's hexagonal act, with its two gold lozenges. Every standing act wears it. */
 .hall-door, .hall-act, .hall-act-seat, .hall-act-cancel-open, .hall-act-close-free {
@@ -234,8 +266,14 @@ body > * { position: relative; z-index: 1; }
 /* ══ SCREEN 3 — THE EMPTY ROOM ══ a resting board, one honest line, two ways out.
    D6: the practice line takes the canvas's quiet italic note. */
 .hall-empty { padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
-.hall-empty-board { width: 100%; max-width: 240px; border: 1px solid var(--gold-dim-25); border-radius: 10px; overflow: hidden; }
-.hall-empty-board img { display: block; width: 100%; height: auto; opacity: .55; }
+/* S-HALL-DRESS-3 (M3) — the arena, served from THIS repo. It is the room's centrepiece at rest, so it is
+   given real size and is no longer dimmed to .55: the round-two plate is already lit for this. */
+.hall-empty-board {
+  width: 100%; max-width: 280px; border: 1px solid var(--gold-dim-25); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 0 26px rgba(0,0,0,.55);
+}
+.hall-empty-board img, .hall-empty-board picture { display: block; width: 100%; height: auto; }
+.hall-empty-board img { opacity: .92; }
 .hall-empty-line { text-align: center; font-style: italic; font-size: 15px; color: var(--paper-dim); line-height: 1.45; }
 .hall-empty-doors { display: flex; flex-direction: column; gap: 10px; align-items: stretch; width: 100%; }
 .hall-empty-practice {
@@ -487,13 +525,25 @@ body > * { position: relative; z-index: 1; }
 .hall-settle-err { color: var(--crimson); font-size: 13.5px; margin: 0; }
 .hall-retry { color: var(--paper-dim); }
 
+/* ══ THE MID RANGE (tablet) ══ still the tall backdrop, whose corridor is 55% of the width and centres at
+   52.5%. Below 600px the column is full-bleed and the scrim carries it; from 600 up there is slack to sit
+   the column ON the corridor instead of on the viewport, so it does. 54vw is the corridor's 55% less a hair. */
+@media (min-width: 600px) and (max-width: 899.98px) {
+  .hall-wrap { width: min(430px, 54vw); margin-left: calc(52.5% - min(215px, 27vw)); margin-right: auto; }
+}
+
 /* ══ WIDE (screen 13) ══ the same composition, one step calmer: the wide plate, a two-column floor. */
 @media (min-width: 900px) {
-  body { background-image: url("../assets/hall/hall_ground_wide.jpg"); }
-  body::before {
-    background: linear-gradient(180deg, rgba(7,4,2,.25) 0%, rgba(7,4,2,.72) 45%, rgba(7,4,2,.96) 80%, var(--ink) 100%);
+  body::before { background-image: url("../assets/hall/backdrop_wide.webp"); }
+  body::after {
+    background:
+      radial-gradient(88% 108% at 52.5% 0%, rgba(7,4,2,0) 0%, rgba(7,4,2,.20) 48%, rgba(7,4,2,.74) 84%, var(--ink) 100%),
+      linear-gradient(180deg, rgba(7,4,2,0) 0%, rgba(7,4,2,.26) 20%, rgba(7,4,2,.72) 46%, rgba(7,4,2,.96) 76%, var(--ink) 100%);
   }
-  .hall-wrap { max-width: 1120px; padding: 26px 32px 96px; }
+  /* The corridor at wide is 20%-85% of the width = 832px at 1280 — and it centres at 52.5%, not 50%, because
+     the art's two statues are not symmetric. So the column is centred ON THE CORRIDOR rather than on the
+     viewport: an 820px column whose left margin is calc(52.5% - 410px). Measured, not guessed. */
+  .hall-wrap { width: 820px; max-width: 100%; margin-left: calc(52.5% - 410px); margin-right: auto; padding: 26px 32px 96px; }
   .hall-title { font-size: 21px; }
   .hall-nav-brand img { height: 44px; }
   .hall-faction-sigil .hall-sigil { max-width: 84px; }
@@ -506,7 +556,7 @@ body > * { position: relative; z-index: 1; }
   .hall-sheet-overlay { align-items: center; }
   .hall-sheet { border-radius: var(--r); max-height: 86vh; }
   .hall-empty { grid-column: 1 / -1; }
-  .hall-empty-board { max-width: 300px; }
+  .hall-empty-board { max-width: 420px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

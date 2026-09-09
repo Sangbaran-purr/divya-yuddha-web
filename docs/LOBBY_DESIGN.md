@@ -124,8 +124,9 @@ Zero open tables anywhere. Designed as a promise kept, not a
 failure.
 - Centerpiece: the Kshetra board at rest with a lit lamp (an
   existing board/story render crop - no new art).
-- The truth line (.state-line): "No one is seated right now -
-  because every opponent here is a real person."
+- The truth line (.state-line): "No warrior is seated - yet. Open
+  the first table, or summon someone you already trust."
+  [amended 2026-09-09b; the former line is recorded in that amendment]
 - Three generous doors, ruled order: CHALLENGE A FRIEND (Screen
   6) - PRACTICE FREE VS AI (opens the normal AI game; the label
   says plainly "practice - no stakes, AI opponent") - OPEN A
@@ -429,3 +430,22 @@ unsettled slip is not time-critical (the chain refunds both seats
 after 24 hours), while a forfeit is immediate and irreversible.
 The re-key is DEFERRED, not waived: the moment the battle ends,
 if the wallet no longer matches the session, the switch runs then.
+
+=====================================================
+## AMENDMENT 2026-09-09b - THE EMPTY ROOM'S TRUTH LINE
+=====================================================
+Owner-ruled 2026-09-09, in S-HALL-DRESS-3. Screen 3's truth line is
+replaced. It is NOT promoted into section 11: section 11 stays defined
+as the MONEY-ADJACENT ruled copy, and this line is a truth about who is
+in the room, not about a stake. copyproof therefore does not grow an
+entry and stays at its measured 46.
+
+  OLD: "No one is seated right now - because every opponent here is a
+        real person."
+  NEW: "No warrior is seated - yet. Open the first table, or summon
+        someone you already trust."
+
+The old line stated a fact and stopped; the new one states the fact and
+names the two ways out, which are the two doors the same screen already
+carries (OPEN A TABLE AND WAIT, CHALLENGE A FRIEND). mp/hall.js carries
+the new words byte-for-byte.

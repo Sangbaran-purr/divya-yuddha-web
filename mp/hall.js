@@ -16,17 +16,21 @@
   // Owner-ruled 2026-09-09: ornament.js's veto is a SCRIPT veto over the authored SVG geometry; the raster art
   // is its carve-out, and the approved mockups compose on exactly these files. Markup only — no handler reads it.
   function sigilImg(stem, cls) { return '<img class="hall-glyph ' + (cls || "") + '" src="../assets/hall/' + stem + '.jpg" alt="" aria-hidden="true">'; }
+  // S-HALL-DRESS-3 (M1) — the tier mark is the ROUND-TWO RASTER MEDALLION. The ornament sprite stays whole in
+  // js/ornament.js and is untouched: wire.html and the other rooms still draw from it, and the ESCROW LOCK below
+  // still does too. Only the Hall's tier emitters moved (the DRESS-2 pattern). Markup only.
+  function medallionImg(stem, cls) { return '<img class="hall-glyph ' + (cls || "") + '" src="../assets/hall/' + stem + '.webp" alt="" aria-hidden="true">'; }
 
   // ── D3/D4/A7: THE ONE canonical tier config. id/label/stake(wei)/usd/open/medallion/sort. Table 0 (FREE) first-class.
   //    The M-P4 road (matchclient.openStaked) is called with `stake`. Retiring a door = flip `open` (no markup edit).
   var DEC = 1000000000000000000n;
   var TIERS = [
-    { id: "free",    label: "FREE",    tier: 0,    stake: "0",                     usd: "no stake",  open: true, medallion: "dy-tier-free",    cls: "tier-free",    sort: 0 },
-    { id: "bronze",  label: "BRONZE",  tier: 10,   stake: (10n * DEC).toString(),   usd: "$0.10",     open: true, medallion: "dy-tier-bronze",  cls: "tier-bronze",  sort: 1 },
-    { id: "silver",  label: "SILVER",  tier: 50,   stake: (50n * DEC).toString(),   usd: "$0.50",     open: true, medallion: "dy-tier-silver",  cls: "tier-silver",  sort: 2 },
-    { id: "gold",    label: "GOLD",    tier: 200,  stake: (200n * DEC).toString(),  usd: "$2",        open: true, medallion: "dy-tier-gold",    cls: "tier-gold",    sort: 3 },
-    { id: "diamond", label: "DIAMOND", tier: 1000, stake: (1000n * DEC).toString(), usd: "$10",       open: true, medallion: "dy-tier-diamond", cls: "tier-diamond", sort: 4 },
-    { id: "friend",  label: "FRIEND",  tier: null, stake: null,                     usd: "10-10,000", open: true, medallion: "dy-lock-escrow",  cls: "tier-friend",  sort: 5, friend: true },
+    { id: "free",    label: "FREE",    tier: 0,    stake: "0",                     usd: "no stake",  open: true, medallion: "tier_free",    cls: "tier-free",    sort: 0 },
+    { id: "bronze",  label: "BRONZE",  tier: 10,   stake: (10n * DEC).toString(),   usd: "$0.10",     open: true, medallion: "tier_bronze",  cls: "tier-bronze",  sort: 1 },
+    { id: "silver",  label: "SILVER",  tier: 50,   stake: (50n * DEC).toString(),   usd: "$0.50",     open: true, medallion: "tier_silver",  cls: "tier-silver",  sort: 2 },
+    { id: "gold",    label: "GOLD",    tier: 200,  stake: (200n * DEC).toString(),  usd: "$2",        open: true, medallion: "tier_gold",    cls: "tier-gold",    sort: 3 },
+    { id: "diamond", label: "DIAMOND", tier: 1000, stake: (1000n * DEC).toString(), usd: "$10",       open: true, medallion: "tier_diamond", cls: "tier-diamond", sort: 4 },
+    { id: "friend",  label: "FRIEND",  tier: null, stake: null,                     usd: "10-10,000", open: true, medallion: "tier_friend",   cls: "tier-friend",  sort: 5, friend: true },
   ];
   function shortAddr(a) { a = String(a || ""); return a.length >= 10 ? a.slice(0, 6) + "…" + a.slice(-4) : a; }
   var FACTION_SIGIL = { devas: "sigil_devas", asuras: "sigil_asuras", vanaras: "sigil_vanaras", nagas: "sigil_nagas" };
@@ -672,7 +676,7 @@
       var right = isFree ? '<span class="hall-tier-note">no stake - human opponent</span>'
         : (aff ? '<span class="hall-tier-usd">~' + t.usd + '</span>' : '<span class="hall-tier-note">insufficient liquid DYC</span>');
       rows += '<button class="' + cls + '" data-tier-row="' + t.id + '"' + (aff ? "" : " aria-disabled=\"true\"") + '>' +
-        svgUse(t.medallion, "hall-medallion " + t.cls) + '<span class="hall-tier-label">' + t.label + '</span>' +
+        medallionImg(t.medallion, "hall-medallion " + t.cls) + '<span class="hall-tier-label">' + t.label + '</span>' +
         '<span class="hall-tier-stake">' + (isFree ? "no stake" : (Number(BigInt(t.stake) / DEC)) + " DYC") + '</span>' + right + '</button>';
     });
     var ctx = sheet.ctx || {};
@@ -705,7 +709,7 @@
     var act = ceremony ? ceremonyStrip(ceremony) : '<button class="hall-act hall-act-join" data-join-do="1"' + (canAct ? "" : " disabled") + '>TAKE THIS SEAT</button>';
     return sheetOverlay(
       '<h2 class="hall-sheet-title">TAKE THIS SEAT</h2>' +
-      '<div class="hall-seat-opp">' + sigil + '<span class="hall-plaque-addr">' + shortAddr(t.opener) + '</span>' + (td ? svgUse(td.medallion, "hall-medallion " + td.cls) : "") + '<span class="hall-plaque-stake">' + dycOf(t.stake) + ' DYC</span></div>' +
+      '<div class="hall-seat-opp">' + sigil + '<span class="hall-plaque-addr">' + shortAddr(t.opener) + '</span>' + (td ? medallionImg(td.medallion, "hall-medallion " + td.cls) : "") + '<span class="hall-plaque-stake">' + dycOf(t.stake) + ' DYC</span></div>' +
       '<div class="hall-pot-line state-line">Pot ' + dycOf(pot) + ' DYC <span class="hall-fee-line">- ' + dycOf(fee) + ' fee -> winner takes ' + dycOf(win) + ' DYC</span></div>' +
       '<div class="hall-sheet-faction"><div class="hall-sheet-sub">Your faction</div>' + factionPicker(selectedFaction) + '</div>' +
       commit + '<p class="hall-seat-rule"><b>' + BOTH_STAKES + '</b></p>' +
@@ -1062,14 +1066,17 @@
   }
 
   function rail() {
-    var chips = '<button class="hall-rail-chip hall-chip-all' + (selectedTier === "all" ? " on" : "") + '" data-tier="all">ALL</button>';
+    // S-HALL-DRESS-3 (R6) — THE ONE MARKUP ADDITION: the ALL door had no mark at all; round two gives it one,
+    // so the rail reads as seven doors of one family rather than six marks and a word.
+    var chips = '<button class="hall-rail-chip hall-chip-all' + (selectedTier === "all" ? " on" : "") + '" data-tier="all">' +
+      medallionImg("tier_all", "hall-medallion") + '<span class="hall-chip-label">ALL</span></button>';
     TIERS.slice().sort(function (a, b) { return a.sort - b.sort; }).forEach(function (t) {
       if (!t.open) return;
       var count = tierCount(t);
       var countTxt = t.friend ? "" : (feedState === "dead" ? '<span class="hall-chip-count blank">—</span>' : '<span class="hall-chip-count">' + count + '</span>');
       var usd = t.friend ? "10-10,000" : t.usd;
       chips += '<button class="hall-rail-chip ' + t.cls + (selectedTier === t.id ? " on" : "") + '" data-tier="' + t.id + '">' +
-        svgUse(t.medallion, "hall-medallion") +
+        medallionImg(t.medallion, "hall-medallion") +
         '<span class="hall-chip-label">' + t.label + '</span>' +
         '<span class="hall-chip-usd">' + usd + '</span>' + countTxt + '</button>';
     });
@@ -1114,7 +1121,7 @@
     // table", no medallion, no lock — keyed on staked, never on tier.
     var td = t.staked ? stakedTierDef(t) : null;
     var stakeTxt = t.staked ? (Number(BigInt(t.stake) / DEC)) + " DYC · ~" + (td ? td.usd : "") : "Free table";
-    var medallion = (t.staked && td) ? svgUse(td.medallion, "hall-medallion " + td.cls) : "";
+    var medallion = (t.staked && td) ? medallionImg(td.medallion, "hall-medallion " + td.cls) : "";
     var sigil = t.faction && FACTION_SIGIL[t.faction] ? sigilImg(FACTION_SIGIL[t.faction], "hall-sigil") : '<span class="hall-sigil-empty" aria-hidden="true"></span>';
     var lock = t.staked ? svgUse("dy-lock-escrow", "hall-lock") : "";
     if (isYou) {
@@ -1137,10 +1144,16 @@
 
   function emptyRoom() {
     // screen 3 — only when the feed is LIVE and reports zero tables anywhere.
-    var board = (function () { var b = (CFG.chain && CFG.chain.readRpcUrls) ? "" : ""; return "https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_bg.jpg"; })();
+    // S-HALL-DRESS-3 (M3) — S-HALL-BOARD-1 PAID. This src was hard-coded to an EXTERNAL PAGES HOST: a live
+    // cross-origin dependency in a money room, on a host this repo does not control. The arena now comes from
+    // THIS repo, and the <picture> hands the wide plate to wide viewports. (The IIFE it replaces carried a dead
+    // line — `var b = (CFG.chain && CFG.chain.readRpcUrls) ? "" : ""` — both branches "" and b never read.)
     return '<div class="hall-empty">' +
-      '<div class="hall-empty-board"><img src="' + board + '" alt="" aria-hidden="true" loading="lazy" onerror="this.style.display=\'none\'"></div>' +
-      '<div class="hall-empty-line state-line">No one is seated right now - because every opponent here is a real person.</div>' +
+      '<div class="hall-empty-board"><picture>' +
+      '<source media="(min-width: 900px)" srcset="../assets/hall/arena_wide.webp">' +
+      '<img src="../assets/hall/arena_tall.webp" alt="" aria-hidden="true" loading="lazy" onerror="this.style.display=\'none\'">' +
+      '</picture></div>' +
+      '<div class="hall-empty-line state-line">No warrior is seated - yet. Open the first table, or summon someone you already trust.</div>' +
       '<div class="hall-empty-doors">' +
       '<button class="hall-act" data-act="friend-sheet">CHALLENGE A FRIEND</button>' +
       '<a class="hall-act hall-empty-practice" href="../game/index.html?v=33d0757">practice — no stakes, AI opponent</a>' +
