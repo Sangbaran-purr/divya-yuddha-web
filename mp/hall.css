@@ -67,10 +67,15 @@ body > * { position: relative; z-index: 1; }
   padding: 10px 14px; background: var(--frost); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--gold-dim-25);
 }
+/* S-HALL-DRESS-2 (U1) — the brand is the GAME'S MARK (assets/brand/logo.webp, the same file index.html,
+   store.html and dashboard.html already wear), not a word set in Cinzel. The <span> stays in the DOM as the
+   no-CSS fallback and the <img>'s alt carries the full title, so the brand reads even if the file 404s. */
 .hall-nav-brand {
+  display: inline-flex; align-items: center; text-decoration: none; color: var(--gold);
   font-family: var(--cz); font-size: 12px; letter-spacing: .2em; text-transform: uppercase;
-  color: var(--gold); text-decoration: none;
 }
+.hall-nav-brand img { height: 34px; width: auto; display: block; }
+.hall-nav-brand-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .hall-nav-links { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .hall-nav-links a, .hall-nav-here {
   font-family: var(--cz); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
@@ -208,10 +213,13 @@ body > * { position: relative; z-index: 1; }
 }
 /* D11 — the plaque address, in screen 2's opener grammar */
 .hall-plaque-addr { font-family: var(--cp); font-size: 13px; letter-spacing: .04em; color: var(--paper); }
+/* the inline mark: a small rounded square for the same reason the picker cell is one. The EMPTY face keeps
+   its own mark-shaped cell (dashed, no art) — a table with no faction is never given someone else's sigil. */
 .hall-sigil, .hall-sigil-empty {
-  width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--gold-quiet); flex: 0 0 auto;
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--gold-quiet); flex: 0 0 auto;
 }
-.hall-sigil-empty { border-style: dashed; }
+.hall-sigil { object-fit: cover; display: block; }
+.hall-sigil-empty { border-style: dashed; background: rgba(0,0,0,.25); }
 .hall-you-tag {
   font-family: var(--cz); font-size: 9px; letter-spacing: .2em; color: var(--hi);
   border: 1px solid var(--gold-2); border-radius: 999px; padding: 3px 8px;
@@ -322,14 +330,39 @@ body > * { position: relative; z-index: 1; }
 .hall-sheet-foot { display: flex; justify-content: center; padding-top: 4px; }
 .hall-sheet-err { color: var(--crimson); font-size: 13.5px; text-align: center; margin: 0; }
 .hall-sheet-switch { font-size: 13px; color: var(--paper-dim); text-align: center; }
-.hall-sheet-faction, .hall-faction { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-.hall-faction-sigil {
-  width: 44px; height: 44px; flex: 0 0 auto; border-radius: 50%; border: 1px solid var(--gold-quiet);
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
-  background: var(--plaque-lo); color: var(--gold-2);
+/* S-HALL-DRESS-2 (U2) — THE PICKER. Four equal cells on one grid, even gutters, the name clear of the mark.
+   The cells are ROUNDED SQUARES, not circles: only the Deva sigil is a true roundel — the other three are
+   shield and mask shapes that fill their square, and a 50% radius cropped three of the four.
+   The button shell is untouched by the dress: .hall-faction-sigil is what hall.js binds its handler to, and
+   data-faction is what six suites click. Only what sits inside the button changed. */
+/* .hall-sheet-faction is the WRAPPER (the "Your faction" label above the picker); .hall-faction is the picker
+   itself. L1b styled them as one and the label sat beside the marks; making both a 4-column grid starved the
+   picker to an 82px column split four ways. The wrapper stacks; only the picker is the grid. */
+.hall-sheet-faction { display: flex; flex-direction: column; gap: 8px; }
+.hall-faction {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start;
 }
-.hall-faction-sigil .hall-glyph { width: 24px; height: 24px; }
-.hall-faction-sigil.on { border-color: var(--gold); box-shadow: 0 0 14px rgba(232,200,116,.22); }
+.hall-faction-sigil {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 4px 8px; border: 1px solid transparent; border-radius: 12px;
+  background: none; cursor: pointer; transition: background .18s, border-color .18s;
+}
+.hall-faction-sigil .hall-sigil {
+  width: 100%; max-width: 64px; aspect-ratio: 1 / 1; height: auto; display: block;
+  object-fit: cover; border-radius: 10px; border: 1px solid var(--gold-dim-25);
+  transition: border-color .18s, box-shadow .18s;
+}
+.hall-faction-sigil > span {
+  font-family: var(--cz); font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--paper-dim); text-align: center; line-height: 1.2;
+}
+/* selection reads two ways at once: the ground lifts and the mark's edge lights */
+.hall-faction-sigil.on { background: rgba(232,200,116,.08); border-color: var(--gold-dim-25); }
+.hall-faction-sigil.on .hall-sigil {
+  border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset, 0 0 16px rgba(232,200,116,.28);
+}
+.hall-faction-sigil.on > span { color: var(--hi); }
+.hall-faction-sigil:hover .hall-sigil { border-color: var(--gold-2); }
 
 /* tier rows (screen 4) */
 .hall-tier-rows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -462,6 +495,9 @@ body > * { position: relative; z-index: 1; }
   }
   .hall-wrap { max-width: 1120px; padding: 26px 32px 96px; }
   .hall-title { font-size: 21px; }
+  .hall-nav-brand img { height: 44px; }
+  .hall-faction-sigil .hall-sigil { max-width: 84px; }
+  .hall-faction-sigil > span { font-size: 10px; }
   .hall-rail { overflow-x: visible; flex-wrap: wrap; justify-content: center; }
   .hall-floor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
   .hall-floor-lost { display: flex; }

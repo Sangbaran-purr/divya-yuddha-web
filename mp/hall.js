@@ -12,6 +12,10 @@
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   function svgUse(id, cls) { return '<svg class="hall-glyph ' + (cls || "") + '" aria-hidden="true"><use href="#' + id + '"></use></svg>'; }
+  // S-HALL-DRESS-2 (U2) — the faction mark is the MASTER'S RASTER SIGIL, not the authored abstract sprite.
+  // Owner-ruled 2026-09-09: ornament.js's veto is a SCRIPT veto over the authored SVG geometry; the raster art
+  // is its carve-out, and the approved mockups compose on exactly these files. Markup only — no handler reads it.
+  function sigilImg(stem, cls) { return '<img class="hall-glyph ' + (cls || "") + '" src="../assets/hall/' + stem + '.jpg" alt="" aria-hidden="true">'; }
 
   // ── D3/D4/A7: THE ONE canonical tier config. id/label/stake(wei)/usd/open/medallion/sort. Table 0 (FREE) first-class.
   //    The M-P4 road (matchclient.openStaked) is called with `stake`. Retiring a door = flip `open` (no markup edit).
@@ -25,7 +29,7 @@
     { id: "friend",  label: "FRIEND",  tier: null, stake: null,                     usd: "10-10,000", open: true, medallion: "dy-lock-escrow",  cls: "tier-friend",  sort: 5, friend: true },
   ];
   function shortAddr(a) { a = String(a || ""); return a.length >= 10 ? a.slice(0, 6) + "…" + a.slice(-4) : a; }
-  var FACTION_SIGIL = { devas: "dy-devas", asuras: "dy-asuras", vanaras: "dy-vanaras", nagas: "dy-nagas" };
+  var FACTION_SIGIL = { devas: "sigil_devas", asuras: "sigil_asuras", vanaras: "sigil_vanaras", nagas: "sigil_nagas" };
 
   // ── per-browser overrides (the store-proof anvil-vs-mainnet idiom): match-server URL + a dev identity/gate for the proof
   function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
@@ -638,7 +642,7 @@
   function factionPicker(selected, cls) {
     var out = '<div class="hall-faction ' + (cls || "") + '" role="group" aria-label="Choose your faction">';
     FACTIONS.forEach(function (f) {
-      out += '<button class="hall-faction-sigil' + (selected === f ? " on" : "") + '" data-faction="' + f + '" aria-pressed="' + (selected === f ? "true" : "false") + '">' + svgUse(FACTION_SIGIL[f], "hall-sigil") + '<span>' + f.charAt(0).toUpperCase() + f.slice(1) + '</span></button>';
+      out += '<button class="hall-faction-sigil' + (selected === f ? " on" : "") + '" data-faction="' + f + '" aria-pressed="' + (selected === f ? "true" : "false") + '">' + sigilImg(FACTION_SIGIL[f], "hall-sigil") + '<span>' + f.charAt(0).toUpperCase() + f.slice(1) + '</span></button>';
     });
     return out + '</div>';
   }
@@ -694,7 +698,7 @@
     var t = sheet.ctx.table;
     var td = t.staked ? stakedTierDef(t) : null;
     var pot = BigInt(t.stake) * 2n, fee = pot * 5n / 100n, win = pot - fee;
-    var sigil = t.faction && FACTION_SIGIL[t.faction] ? svgUse(FACTION_SIGIL[t.faction], "hall-sigil") : "";
+    var sigil = t.faction && FACTION_SIGIL[t.faction] ? sigilImg(FACTION_SIGIL[t.faction], "hall-sigil") : "";
     var commit = '<p class="hall-commit-text state-line">' + COMMITMENT(t.stake) + '</p>';
     if (crossesLimit(t.stake)) commit += '<p class="hall-limit-block state-line">' + LIMIT_BLOCK(headroomWei()) + '</p>';
     var canAct = selectedFaction && affordable(t.stake) && !crossesLimit(t.stake);
@@ -750,7 +754,7 @@
         (ctx.err ? '<p class="state-line hall-sheet-err">' + ctx.err + '</p>' : "") +
         '<button class="hall-sheet-switch" data-sheet-switch="friend">create a private table instead</button>', "hall-sheet-friendjoin");
     }
-    var sigil = t.faction && FACTION_SIGIL[t.faction] ? svgUse(FACTION_SIGIL[t.faction], "hall-sigil") : "";
+    var sigil = t.faction && FACTION_SIGIL[t.faction] ? sigilImg(FACTION_SIGIL[t.faction], "hall-sigil") : "";
     var commit = '<p class="hall-commit-text state-line">' + COMMITMENT(t.stake) + '</p>';
     if (crossesLimit(t.stake)) commit += '<p class="hall-limit-block state-line">' + LIMIT_BLOCK(headroomWei()) + '</p>';
     var canAct = selectedFaction && affordable(t.stake) && !crossesLimit(t.stake);
@@ -888,7 +892,7 @@
   }
 
   // ── THE MATCH SCREEN (ported from wire.html; neutral hall-* hooks) ──
-  function factionSigilSmall(f) { return f && FACTION_SIGIL[f] ? svgUse(FACTION_SIGIL[f], "hall-sigil") : ""; }
+  function factionSigilSmall(f) { return f && FACTION_SIGIL[f] ? sigilImg(FACTION_SIGIL[f], "hall-sigil") : ""; }
   function mUnit(u) { return '<span class="hall-mini"><b>' + u.power + '</b> ' + u.n + '</span>'; }
 
   function statusStrip(v) {
@@ -1111,7 +1115,7 @@
     var td = t.staked ? stakedTierDef(t) : null;
     var stakeTxt = t.staked ? (Number(BigInt(t.stake) / DEC)) + " DYC · ~" + (td ? td.usd : "") : "Free table";
     var medallion = (t.staked && td) ? svgUse(td.medallion, "hall-medallion " + td.cls) : "";
-    var sigil = t.faction && FACTION_SIGIL[t.faction] ? svgUse(FACTION_SIGIL[t.faction], "hall-sigil") : '<span class="hall-sigil-empty" aria-hidden="true"></span>';
+    var sigil = t.faction && FACTION_SIGIL[t.faction] ? sigilImg(FACTION_SIGIL[t.faction], "hall-sigil") : '<span class="hall-sigil-empty" aria-hidden="true"></span>';
     var lock = t.staked ? svgUse("dy-lock-escrow", "hall-lock") : "";
     if (isYou) {
       var wait = t.staked ? "your stake is locked in escrow - waiting for an opponent" : "waiting for an opponent";
