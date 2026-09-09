@@ -1,0 +1,13 @@
+{
+  "name": "divya-yuddha-web-tests",
+  "private": true,
+  "description": "Test-scoped only. This does NOT make the site a built project — the site is static files served whole by GitHub Pages, and nothing here is referenced by any page.",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "devDependencies": {
+    "ethers": "^6.17.0",
+    "jsdom": "^22.1.0",
+    "ws": "^8.21.3"
+  }
+}

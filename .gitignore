@@ -1,3 +1,9 @@
 .DS_Store
 *.log
 .env
+
+# S-HALL-SUITE-1 — the test guard's own weight never rides the Pages truck.
+# tests/ itself is committed (small, text-only, referenced by no page); its dependencies are not.
+tests/node_modules/
+tests/.anvil*
+tests/package-lock.json
