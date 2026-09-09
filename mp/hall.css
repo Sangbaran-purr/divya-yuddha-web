@@ -1,219 +1,479 @@
-/* S-HALL-L1 THE BONES — MINIMAL NEUTRAL layout only. No dress: no ornament, no color language beyond legibility,
-   system-safe type. Every hook class here is a stable reskin target; L1b (the game's chrome) REPLACES this file whole.
-   Both widths are LAYOUT (phone-first stacking; wide = the rail as a fixed row + the floor as a grid). */
+/* S-HALL-L1B — THE DRESS. The game's chrome on L1's bones; reskin-in-place, no flow touched (T42).
+   Authority: LOBBY_DESIGN v1.1 amendment 2026-08-27 (the Hall wears THE GAME's dress, never the site's
+   treasury/store idioms) + the ruled mockup canvas "The Hall", 13 screens, verdict of 2026-09-09
+   (screens 1-13 APPROVED as drawn; drift D1-D12 dressed in the mockups' language).
 
-* { box-sizing: border-box; }
-body { margin: 0; background: #101010; color: #e6e6e6; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-.hall-glyph { width: 20px; height: 20px; display: inline-block; vertical-align: middle; }
-button, a.hall-act { font: inherit; }
+   TOKENS are the game's DS §1 canonical block, pulled read-only from game/index.html — not re-invented here.
+   GROUND is assets/hall/hall_ground_tall.jpg (phone) / hall_ground_wide.jpg (wide), the canvas's own plates.
+   THE DRESS TOUCHES NO MARKUP: hall.js is byte-identical; every data-* hook, the three ids the suites query
+   (#hall-root, #hall-sheet-host, #hall-friend-code) and the three classes they count (.hall-rail-chip,
+   .hall-strand-line, .hall-sheet-err) are styled, never hidden. Ruled copy is never text-transformed. */
 
-/* nav */
-.hall-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #2a2a2a; flex-wrap: wrap; }
-.hall-nav-brand { color: #e6e6e6; text-decoration: none; font-weight: 700; letter-spacing: 1px; }
-.hall-nav-links { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-.hall-nav-links a { color: #b9b9b9; text-decoration: none; }
-.hall-nav-here { color: #fff; font-weight: 600; }
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&display=swap");
 
-/* wrap */
-.hall-wrap { max-width: 560px; margin: 0 auto; padding: 14px; }
-.hall-title { font-size: 18px; letter-spacing: 3px; text-align: center; margin: 6px 0 14px; }
-.hall-root { min-height: 200px; }
+:root {
+  /* — the game's DS §1 canonical — */
+  --ink:#070402;                     /* page ground */
+  --plaque-hi:#2b1c0a;               /* plaque face, top */
+  --plaque-lo:#160d05;               /* plaque face, bottom */
+  --gold-hi:#e8c874;                 /* emphasis text, fills */
+  --gold-bright:#f4df9a;             /* hover */
+  --gold-dim-25:rgba(232,200,116,.25);
+  --parchment:#d8c9a3;               /* body text */
+  --ember:#ff8c33;                   /* fire accent — never used for money in this room */
+  --gold:#E8C874; --gold-2:#C9A84C; --gold-quiet:#8a7434;
+  --paper:#e8ddc0; --paper-dim:#cbbd96; --paper-faint:#8f8470;
+  --line:#3a2e14; --hi:#F0D080;
+  --crimson:#e0483c; --crimson-dim:#7a231d;
 
-/* state / quiet lines */
-.state-line { color: #a9a9a9; font-size: 13px; text-align: center; }
-.hall-busy { padding: 22px 12px; text-align: center; color: #9a9a9a; }
-.hall-retry { background: none; border: 1px solid #555; color: #ddd; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  /* — the canvas's chrome grammar — */
+  --frost:rgba(0,0,0,.42);
+  --frost-line:var(--gold-quiet);
+  --r:12px;                          /* panel radius */
+  --cz:Cinzel,Georgia,'Times New Roman',serif;
+  --cp:'Crimson Pro',Georgia,'Times New Roman',serif;
+  --plate-clip:polygon(14px 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0 50%);
 
-/* gate + connect */
-.hall-gate { border: 1px solid #333; border-radius: 8px; padding: 18px; text-align: center; }
-.hall-gate-line { line-height: 1.6; color: #cfcfcf; }
-.hall-connect p { color: #bbb; }
-
-/* header strip */
-.hall-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #2f2f2f; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
-.hall-liquid-label { color: #9a9a9a; font-size: 12px; }
-.hall-liquid b { font-weight: 700; }
-.hall-limit-invite { background: none; border: none; color: #bcbcbc; text-decoration: underline; cursor: pointer; padding: 0; }
-.hall-limit-set { color: #cfcfcf; font-size: 13px; }
-
-/* covenant line */
-.hall-covenant { letter-spacing: 2px; font-variant: small-caps; text-transform: uppercase; margin: 10px 0 14px; color: #cbcbcb; }
-
-/* tier rail — phone: horizontal scroll (L-N1 proposed; the 2x3 grid alt is one class away). */
-.hall-rail { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 8px; -webkit-overflow-scrolling: touch; }
-.hall-rail-chip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 74px; padding: 8px 10px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #ddd; cursor: pointer; }
-.hall-rail-chip.on { border-color: #888; background: #232323; }
-.hall-chip-label { font-size: 11px; letter-spacing: 1px; }
-.hall-chip-usd { font-size: 10px; color: #8f8f8f; }
-.hall-chip-count { font-size: 12px; font-weight: 700; }
-.hall-chip-count.blank { color: #666; }
-.hall-medallion { width: 22px; height: 22px; }
-
-/* standing doors */
-.hall-doors { display: flex; gap: 10px; margin: 12px 0; }
-.hall-door { flex: 1; padding: 11px; border-radius: 8px; cursor: pointer; letter-spacing: 1px; }
-.hall-door-open { background: #2a2a2a; border: 1px solid #6a6a6a; color: #fff; }
-.hall-door-friend { background: none; border: 1px solid #4a4a4a; color: #ddd; }
-
-/* floor + plaques */
-.hall-floor { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
-.hall-plaque { border: 1px solid #333; border-radius: 8px; padding: 12px; background: #171717; }
-.hall-plaque-you { border-color: #8a7434; background: #1c1a12; }
-.hall-plaque-head { display: flex; align-items: center; gap: 8px; }
-.hall-plaque-stake { font-weight: 700; }
-.hall-you-tag { margin-left: auto; color: #d8c98a; font-size: 12px; }
-.hall-lock { width: 16px; height: 16px; opacity: .8; }
-.hall-plaque-opener { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: #bcbcbc; font-size: 13px; }
-.hall-sigil { width: 18px; height: 18px; }
-.hall-sigil-empty { width: 18px; height: 18px; display: inline-block; } /* reserved slot when the record has no faction */
-.hall-plaque-wait { text-align: left; margin-top: 8px; }
-.hall-plaque-acts { display: flex; gap: 8px; margin-top: 10px; }
-.hall-empty-tier { padding: 16px; }
-
-/* empty room (screen 3) */
-.hall-empty { text-align: center; padding: 14px 6px; }
-.hall-empty-board img { max-width: 220px; width: 60%; border-radius: 8px; opacity: .85; }
-.hall-empty-line { margin: 14px auto; max-width: 420px; }
-.hall-empty-doors { display: flex; flex-direction: column; gap: 10px; max-width: 340px; margin: 0 auto; }
-
-/* acts */
-.hall-act { display: inline-block; padding: 11px 14px; border-radius: 8px; background: #2a2a2a; border: 1px solid #6a6a6a; color: #fff; text-decoration: none; text-align: center; cursor: pointer; }
-.hall-act-inert, button.hall-inert { padding: 10px 12px; border-radius: 7px; background: #1d1d1d; border: 1px solid #3a3a3a; color: #8f8f8f; cursor: not-allowed; }
-
-/* the one inert line */
-.hall-inert-note { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #000; border: 1px solid #444; border-radius: 8px; padding: 8px 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; }
-.hall-inert-note.show { opacity: 1; }
-
-/* WIDE: the rail a fixed row, the floor a grid, doors right-aligned in the header region */
-@media (min-width: 900px) {
-  .hall-wrap { max-width: 1120px; }
-  .hall-rail { flex-wrap: wrap; overflow: visible; }
-  .hall-floor { display: grid; grid-template-columns: repeat(3, 1fr); }
-  .hall-plaque-you { grid-column: 1 / -1; }
-  .hall-doors { max-width: 420px; margin-left: auto; }
+  /* — the three tier inks the mockups set — */
+  --t-free:#cbbd96; --t-bronze:#c98a4b; --t-silver:#d3d6da; --t-gold:#E8C874; --t-diamond:#bfe9ff;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   S-HALL-L2 — THE ACTS (neutral styling only; every selector is a stable reskin
-   target for L1b. No dress: legibility + layout, nothing of the game's chrome). */
+*, *::before, *::after { box-sizing: border-box; }
 
-/* the live acts replace the inert look — normal tappable buttons */
-.hall-door-open, .hall-door-friend { background: #232323; border: 1px solid #6a6a6a; color: #fff; }
-.hall-door-friend { background: none; }
-.hall-act-seat, .hall-act-cancel-open, .hall-share, .hall-act-close-free, .hall-open-one,
-.hall-limit-invite, .hall-limit-set { font: inherit; cursor: pointer; background: #232323; border: 1px solid #5a5a5a; color: #ddd; border-radius: 7px; padding: 8px 12px; }
-.hall-share, .hall-open-one, .hall-limit-invite, .hall-limit-set { background: none; text-decoration: underline; border: none; color: #bcbcbc; padding: 4px 2px; }
+/* THE UA RESET. The browser paints <button> with its own grey face and Arial; every control in this room
+   draws its own surface, so the default must be cleared once here or it leaks through anything that only
+   sets a colour (the sheet's close, the tier rows, the faction sigils). */
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; border-radius: 0; padding: 0; text-align: inherit; }
 
-/* faction picker */
-.hall-faction { display: flex; gap: 8px; flex-wrap: wrap; }
-.hall-faction-sigil { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 66px; padding: 8px 6px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #cfcfcf; cursor: pointer; font-size: 12px; }
-.hall-faction-sigil.on { border-color: #8a7434; background: #201d13; color: #e8d9a8; }
-.hall-faction-sigil .hall-sigil { width: 22px; height: 22px; }
+/* ══ THE GROUND ══ the canvas's plate, then its four-stop scrim, then the room on top. */
+html { background: var(--ink); }
+body {
+  margin: 0; min-height: 100%;
+  background: var(--ink) url("../assets/hall/hall_ground_tall.jpg") center top / 100% auto no-repeat;
+  color: var(--paper); font-family: var(--cp); font-size: 16px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: linear-gradient(180deg, rgba(7,4,2,.08) 0%, rgba(7,4,2,.45) 30%, rgba(7,4,2,.82) 58%, var(--ink) 82%);
+}
+body > * { position: relative; z-index: 1; }
 
-/* the sheet overlay + panel */
-#hall-sheet-host { position: fixed; inset: 0; z-index: 70; pointer-events: none; }
-.hall-sheet-overlay { position: fixed; inset: 0; background: rgba(4, 3, 1, .72); display: flex; align-items: flex-end; justify-content: center; pointer-events: auto; overflow-y: auto; }
-.hall-sheet { width: 100%; max-width: 560px; background: #141210; border: 1px solid #333; border-top-left-radius: 12px; border-top-right-radius: 12px; padding: 18px 16px 12px; margin-top: auto; }
-.hall-sheet-title { color: #e8d9a8; font-size: .82rem; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 12px; }
-.hall-sheet-sub { color: #9a9a9a; font-size: 12px; margin: 12px 0 5px; }
-.hall-sheet-act { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-.hall-sheet-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
-.hall-sheet-close { background: none; border: none; color: #8f8f8f; text-decoration: underline; cursor: pointer; font: inherit; }
-.hall-sheet-err { color: #c0703f; }
-.hall-sheet-switch { display: block; width: 100%; margin-top: 12px; background: none; border: none; color: #bcbcbc; text-decoration: underline; cursor: pointer; font: inherit; text-align: center; }
-.hall-sheet input { width: 100%; box-sizing: border-box; background: #0b0906; border: 1px solid #5a5a5a; border-radius: 6px; color: #e6e6e6; font: inherit; padding: 9px 10px; }
+/* ══ NAV ══ dressed, every link kept (verdict A2). The mockup's back-arrow entry is DEFERRED to the
+   MULTIPLAYER-button task in the game repo, where "the game is the front door" lands as one thought. */
+.hall-nav {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--frost); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--gold-dim-25);
+}
+.hall-nav-brand {
+  font-family: var(--cz); font-size: 12px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--gold); text-decoration: none;
+}
+.hall-nav-links { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.hall-nav-links a, .hall-nav-here {
+  font-family: var(--cz); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--paper-dim); text-decoration: none;
+}
+.hall-nav-links a:hover { color: var(--gold-bright); }
+.hall-nav-here { color: var(--gold); border-bottom: 1px solid var(--gold-2); padding-bottom: 2px; }
 
-/* tier rows (open sheet) */
-.hall-tier-rows { display: flex; flex-direction: column; gap: 6px; }
-.hall-tier-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #ddd; cursor: pointer; font: inherit; text-align: left; }
-.hall-tier-row.on { border-color: #8a7434; background: #201d13; }
-.hall-tier-row.unaffordable { opacity: .5; cursor: not-allowed; }
-.hall-tier-label { font-weight: 600; letter-spacing: 1px; }
-.hall-tier-stake { margin-left: auto; }
-.hall-tier-usd, .hall-tier-note { color: #8f8f8f; font-size: 12px; }
-.hall-tier-note { color: #a98f5a; }
+/* ══ WRAP + TITLE ══ the mockup's rule-flanked h1. */
+.hall-wrap { max-width: 430px; margin: 0 auto; padding: 18px 16px 96px; display: flex; flex-direction: column; gap: 14px; }
+.hall-title {
+  font-family: var(--cz); font-weight: 400; font-size: 17px; letter-spacing: .26em; text-transform: uppercase;
+  color: var(--gold); text-align: center; margin: 4px 0 0; white-space: nowrap;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+}
+.hall-title::before, .hall-title::after {
+  content: ""; height: 1px; width: 46px; flex: 0 0 auto;
+  background: linear-gradient(90deg, transparent, var(--gold-quiet));
+}
+.hall-title::after { background: linear-gradient(90deg, var(--gold-quiet), transparent); }
+.hall-root { display: flex; flex-direction: column; gap: 14px; }
 
-/* commitment + money lines (the ruled copy) */
-.hall-commit-text { margin: 14px 0 0; line-height: 1.6; color: #cfcfcf; }
-.hall-limit-block { margin: 10px 0 0; color: #d8b46a; border: 1px solid rgba(138, 111, 58, .4); border-radius: 7px; padding: 9px 11px; }
-.hall-seat-rule { margin: 12px 0 0; color: #e8d9a8; }
-.hall-seat-opp { display: flex; align-items: center; gap: 8px; }
-.hall-pot-line { margin-top: 8px; }
-.hall-fee-line { color: #8f8f8f; }
-.hall-free-refusal, .hall-friend-note { margin-top: 10px; color: #a98f5a; }
+/* ══ THE FROST PANEL ══ one object, reused by every card the mockups draw as a panel. */
+.hall-header, .hall-plaque, .hall-lostcard, .hall-gate, .hall-settle, .hall-match,
+.hall-ceremony, .hall-limit-block, .hall-empty, .hall-dealing, .hall-strand-banner {
+  background: var(--frost); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--frost-line); border-radius: var(--r);
+}
 
-/* friend code chip */
-.hall-code-chip { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px dashed #8a7434; border-radius: 8px; background: #17140c; cursor: pointer; margin-bottom: 12px; }
-.hall-code-label { font-size: 11px; letter-spacing: .12em; color: #a98f5a; }
-.hall-code-value { font-family: ui-monospace, Menlo, monospace; font-size: 1.1rem; color: #e8d9a8; word-break: break-all; }
-.hall-code-copy { font-size: 11px; color: #8f8f8f; }
-.hall-friend-lock-line { line-height: 1.6; }
+/* ══ HEADER STRIP ══ liquid, its coin, and the limit line. */
+.hall-header { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.hall-liquid { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-family: var(--cp); }
+.hall-liquid-label {
+  font-family: var(--cz); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--paper-dim);
+}
+.hall-liquid b {
+  font-family: var(--cz); font-size: 16px; letter-spacing: .04em; color: var(--gold); font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  padding-left: 22px;
+  background: url("../assets/hall/coin.png") left center / 16px 16px no-repeat;
+}
+.hall-signedin { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--paper-dim); }
+.hall-signedin-addr { font-family: var(--cz); font-size: 11px; letter-spacing: .08em; color: var(--gold); }
+.hall-limit { font-size: 12.5px; color: var(--paper-dim); font-style: italic; }
+.hall-limit-invite, .hall-limit-set { font-size: 12.5px; font-style: italic; }
+.hall-account-note { font-size: 13px; color: var(--paper); }
 
-/* ceremony strip */
-.hall-ceremony { margin-top: 14px; }
-.hall-ceremony-step { display: inline-block; padding: 3px 8px; border: 1px solid #3a3a3a; border-radius: 5px; margin-right: 6px; color: #9a9a9a; }
-.hall-ceremony-step.on { border-color: #8a7434; color: #e8d9a8; }
-.hall-ceremony-step.done { color: #6f6f6f; text-decoration: line-through; }
-.hall-ceremony-wait { color: #8f8f8f; font-size: 12px; margin-top: 6px; }
-.hall-ceremony-error { color: #c0703f; }
-.hall-act-limit-remove { background: none; border: 1px solid #5a5a5a; color: #c0703f; }
+/* ══ THE COVENANT ══ the room's one standing promise. */
+.hall-covenant {
+  font-family: var(--cz); font-size: 10.5px; letter-spacing: .3em; text-transform: uppercase;
+  color: var(--paper-dim); text-align: center; margin: 0; padding: 2px 0;
+}
 
-/* interim state (B7) */
-.hall-interim { text-align: center; padding: 40px 16px; max-width: 480px; margin: 0 auto; }
-.hall-interim-line { color: #e8d9a8; font-size: 1.05rem; letter-spacing: .04em; margin-bottom: 12px; }
-.hall-interim-facts { margin-bottom: 16px; }
-.hall-interim-note { line-height: 1.6; margin-bottom: 20px; }
-.hall-interim-back { display: inline-block; }
+/* ══ THE RAIL ══ the mockup's door grammar: medallion over label over price, count beneath.
+   L-N1 keeps the horizontal chip scroll. Never hidden — the suite counts .hall-rail-chip. */
+.hall-rail {
+  display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; margin: 0 -2px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.hall-rail::-webkit-scrollbar { display: none; }
+.hall-rail-chip {
+  flex: 0 0 auto; width: 92px; padding: 10px 4px 9px; display: flex; flex-direction: column;
+  align-items: center; gap: 4px; cursor: pointer; text-align: center;
+  background: var(--frost); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--frost-line); border-radius: var(--r); color: var(--paper-dim);
+  transition: border-color .18s, box-shadow .18s;
+}
+.hall-chip-label { font-family: var(--cz); font-size: 10px; letter-spacing: .16em; color: var(--gold); }
+.hall-chip-usd { font-family: var(--cp); font-size: 10.5px; letter-spacing: .06em; color: var(--paper-dim); }
+.hall-chip-count {
+  font-family: var(--cz); font-size: 14px; color: var(--hi); font-variant-numeric: tabular-nums;
+}
+.hall-chip-count.blank { color: var(--gold-quiet); }
+.hall-rail-chip.on {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(232,200,116,.35) inset, 0 0 18px rgba(232,200,116,.15);
+}
+.hall-rail-chip:focus-visible, .hall-act:focus-visible, .hall-door:focus-visible,
+.hall-nav-links a:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.hall-glyph { width: 26px; height: 26px; display: block; }
+.hall-medallion { color: currentColor; }
+.tier-free .hall-medallion, .hall-chip-all { color: var(--t-free); }
+.tier-bronze .hall-medallion { color: var(--t-bronze); }
+.tier-silver .hall-medallion { color: var(--t-silver); }
+.tier-gold .hall-medallion { color: var(--t-gold); }
+.tier-diamond .hall-medallion { color: var(--t-diamond); }
+.tier-friend .hall-medallion { color: var(--gold); }
+.hall-chip-all { font-family: var(--cz); font-size: 11px; letter-spacing: .16em; justify-content: center; }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   S-HALL-L3 — THE BRIDGES (the match in the browser; neutral, hall-* reskin
-   targets for L1b). Ported from wire.html's logic, none of its rig styling. */
+/* ══ THE PLATE ══ the canvas's hexagonal act, with its two gold lozenges. Every standing act wears it. */
+.hall-door, .hall-act, .hall-act-seat, .hall-act-cancel-open, .hall-act-close-free {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 13px 28px; margin: 0 4px; border: 1px solid var(--gold-quiet);
+  background: linear-gradient(180deg, var(--plaque-hi), var(--plaque-lo));
+  clip-path: var(--plate-clip);
+  font-family: var(--cz); font-size: 13px; font-weight: 600; letter-spacing: .22em; line-height: 1.2;
+  text-transform: uppercase; text-align: center; color: var(--gold); text-decoration: none;
+  cursor: pointer; transition: color .18s, border-color .18s;
+}
+.hall-door:hover, .hall-act:hover, .hall-act-seat:hover, .hall-act-cancel-open:hover, .hall-act-close-free:hover { color: var(--gold-bright); border-color: var(--gold); }
+.hall-door[disabled], .hall-act[disabled], .hall-act-seat[disabled], .hall-act-inert {
+  color: var(--paper-faint); border-color: var(--line);
+  background: linear-gradient(180deg, #1a120a, #0d0804); cursor: default;
+}
+.hall-doors { display: flex; gap: 10px; }
+.hall-doors > * { flex: 1; }
+/* measured at 390: each door gets 166px, so the plate's default 13px/.22em wrapped to two lines */
+.hall-doors .hall-door { padding: 13px 12px; font-size: 9.5px; letter-spacing: .10em; white-space: nowrap; }
+.hall-door-open { background: linear-gradient(180deg, #4a3410, #1c1206); border-color: var(--gold); color: var(--hi); }
+.hall-plaque-acts > *, .hall-strand-acts > *, .hall-lostcard-act .hall-act, .hall-controls-act .hall-act {
+  padding: 10px 18px; font-size: 10.5px; letter-spacing: .14em; min-height: 40px;
+}
+/* TAKE THIS SEAT is the one act the whole room exists for — it is lit, like the open door. */
+.hall-act-seat {
+  background: linear-gradient(180deg, #4a3410, #1c1206); border-color: var(--gold); color: var(--hi);
+}
 
-/* signed-in identity (B1) */
-.hall-signedin { font-size: 11px; margin-top: 2px; }
-.hall-signedin-addr { font-family: ui-monospace, Menlo, monospace; color: #cbbf94; }
+/* the lozenges — drawn on a wrapper so the clipped plate keeps its points */
+.hall-doors, .hall-plaque-acts, .hall-strand-acts, .hall-lostcard-act { position: relative; }
 
-/* the matched moment (B2) */
-.hall-dealing { text-align: center; padding: 48px 16px; }
-.hall-dealing-opp { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
-.hall-dealing-line { color: #e8d9a8; font-size: 1.05rem; letter-spacing: .04em; }
+/* ══ THE FLOOR ══ plaques as frost panels; your own table lit gold. */
+.hall-floor { display: flex; flex-direction: column; gap: 10px; }
+.hall-plaque { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.hall-plaque-you {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(232,200,116,.3) inset, 0 0 22px rgba(232,200,116,.14);
+}
+.hall-plaque-head, .hall-seat-opp, .hall-plaque-opener {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.hall-plaque-head { justify-content: space-between; }
+.hall-plaque-stake {
+  font-family: var(--cz); font-size: 15px; letter-spacing: .06em; color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+/* D11 — the plaque address, in screen 2's opener grammar */
+.hall-plaque-addr { font-family: var(--cp); font-size: 13px; letter-spacing: .04em; color: var(--paper); }
+.hall-sigil, .hall-sigil-empty {
+  width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--gold-quiet); flex: 0 0 auto;
+}
+.hall-sigil-empty { border-style: dashed; }
+.hall-you-tag {
+  font-family: var(--cz); font-size: 9px; letter-spacing: .2em; color: var(--hi);
+  border: 1px solid var(--gold-2); border-radius: 999px; padding: 3px 8px;
+}
+.hall-plaque-wait { font-style: italic; font-size: 13px; color: var(--paper-dim); }
+.hall-plaque-acts, .hall-strand-acts, .hall-lostcard-act { display: flex; gap: 10px; flex-wrap: wrap; }
+.hall-plaque-acts > *, .hall-strand-acts > * { flex: 1 1 auto; }
+.hall-tier-note, .hall-fee-line, .hall-pot-line, .hall-seat-rule {
+  font-size: 13px; color: var(--paper-dim); margin: 0;
+}
 
-/* the match screen */
-.hall-match { max-width: 640px; margin: 0 auto; }
-.hall-mstatus { border: 1px solid #333; border-radius: 8px; padding: 9px 12px; margin: 0 0 10px; }
-.hall-mstatus.warn, .hall-mreject.warn { border-color: #7a4a2a; color: #d9a06a; }
-.hall-mclock { border: 1px solid #333; border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; }
-.hall-mclock #hall-clockcd.warn, #hall-clockcd.warn { color: #d9534f; font-weight: 700; }
-.hall-mhead { border: 1px solid #2f2f2f; border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; }
-.hall-mhead-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.hall-mpill { font-size: 11px; border: 1px solid #3a3a3a; border-radius: 5px; padding: 2px 7px; color: #bcbcbc; }
-.hall-mresult { color: #e8d9a8; margin-top: 8px; }
-.hall-mphase { margin-top: 6px; }
-.hall-mreject { border: 1px solid #7a4a2a; border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
+/* ══ SCREEN 3 — THE EMPTY ROOM ══ a resting board, one honest line, two ways out.
+   D6: the practice line takes the canvas's quiet italic note. */
+.hall-empty { padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.hall-empty-board { width: 100%; max-width: 240px; border: 1px solid var(--gold-dim-25); border-radius: 10px; overflow: hidden; }
+.hall-empty-board img { display: block; width: 100%; height: auto; opacity: .55; }
+.hall-empty-line { text-align: center; font-style: italic; font-size: 15px; color: var(--paper-dim); line-height: 1.45; }
+.hall-empty-doors { display: flex; flex-direction: column; gap: 10px; align-items: stretch; width: 100%; }
+.hall-empty-practice {
+  font-family: var(--cp); font-style: italic; font-size: 12.5px; letter-spacing: 0; text-transform: none;
+  font-weight: 400; color: var(--paper-faint); background: none; border-color: var(--line); clip-path: none;
+  border-radius: 10px; min-height: 38px; padding: 9px 14px;
+}
+.hall-empty-tier { font-family: var(--cz); font-size: 10px; letter-spacing: .2em; color: var(--paper-dim); text-align: center; }
 
-/* boards */
-.hall-board { display: flex; gap: 12px; margin: 0 0 12px; }
-.hall-board-side { flex: 1; border: 1px solid #2a2a2a; border-radius: 8px; padding: 10px; min-height: 60px; }
-.hall-board-me { border-color: #4a4530; }
-.hall-mini { display: inline-block; border: 1px solid #3a3a3a; border-radius: 6px; padding: 4px 8px; margin: 3px 4px 0 0; font-size: 13px; }
-.hall-mini b { color: #e8d9a8; margin-right: 4px; }
+/* ══ STATE LINES ══ the room's voice: italic parchment, never shouted. Ruled copy is never transformed. */
+.state-line { font-family: var(--cp); font-size: 14px; color: var(--paper-dim); line-height: 1.5; }
+.state-line.warn, .warn { color: var(--crimson); }
 
-/* controls */
-.hall-controls { border: 1px solid #2f2f2f; border-radius: 8px; padding: 12px; }
-.hall-controls-act { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.hall-hand, .hall-mull, .hall-tgt { font: inherit; cursor: pointer; background: #1a1a1a; border: 1px solid #444; color: #999; border-radius: 6px; padding: 8px 10px; margin: 0 6px 6px 0; }
-.hall-hand.playable { color: #e6e6e6; border-color: #6a6a6a; background: #232323; }
-.hall-hand[disabled] { opacity: .45; cursor: default; }
-.hall-mull.on { border-color: #d9534f; color: #e6b3b0; }
-.hall-tgt { border-color: #8a7434; color: #e8d9a8; }
-.hall-pass, .hall-concede, .hall-cancelplay, .hall-mleave { background: #232323; border: 1px solid #5a5a5a; color: #ddd; }
-.hall-concede { color: #c0703f; }
+/* ══ THE THREE FACES ══ busy, empty and inert must never read as one another (P5).
+   BUSY: gold, breathing, a pulse-dot.  EMPTY: parchment, still, a full room-card.
+   DEAD/INERT: crimson-edged, a card that ASKS FOR A HAND — never a quiet empty room. */
+.hall-busy {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 22px 14px; text-align: center; color: var(--gold); font-style: italic; font-size: 14.5px;
+  border: 1px dashed var(--gold-dim-25); border-radius: var(--r); background: rgba(0,0,0,.28);
+}
+.hall-busy::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--gold);
+  animation: hall-pulse 1.4s ease-in-out infinite;
+}
+@keyframes hall-pulse { 0%,100% { opacity: .25; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
+/* D2/D3/D4 — sign-in, reconnect and the lost table share ONE card, in screen 10's gate grammar. */
+.hall-floor-lost { align-items: stretch; }
+.hall-lostcard {
+  padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center;
+  border-color: var(--crimson-dim); background: rgba(40,10,6,.34);
+  color: var(--paper); font-size: 14.5px;
+}
+.hall-lostcard::before {
+  content: ""; width: 34px; height: 1px; background: var(--crimson-dim);
+}
 
-/* settlement strip (B5) — the ruled §8c copy */
-.hall-settle { border: 1px solid #4a4530; border-radius: 8px; padding: 12px 14px; margin: 0 0 12px; background: #16140c; }
-.hall-settle.warn { border-color: #7a4a2a; }
-.hall-settle-line { color: #e8d9a8; line-height: 1.55; }
-.hall-settle-abort { margin-top: 8px; font-size: 12px; }
-.hall-settle-act { margin-top: 10px; }
-.hall-settle-err { color: #c0703f; margin-top: 6px; }
-.hall-lobby-settle { margin: 0 0 12px; }
+/* ══ THE GATE (screen 10) ══ the logo band over the Torana's one paragraph. D12: the door is a primary plate. */
+.hall-gate {
+  padding: 0 0 18px; display: flex; flex-direction: column; gap: 14px; align-items: center; overflow: hidden;
+}
+.hall-gate::before {
+  content: ""; display: block; width: 100%; height: 96px;
+  background: url("../assets/hall/logo_band.jpg") center center / cover no-repeat;
+  border-bottom: 1px solid var(--gold-dim-25); opacity: .85;
+}
+.hall-gate-line { margin: 0 16px; text-align: center; font-size: 14.5px; line-height: 1.5; color: var(--paper); }
+.hall-gate-door { background: linear-gradient(180deg, #4a3410, #1c1206); border-color: var(--gold); color: var(--hi); }
+.hall-connect { display: flex; flex-direction: column; gap: 12px; align-items: center; padding: 18px 16px; }
+
+/* ══ D1 — THE STRANDED STAKE ══ screen 8's strip grammar (big / line / quiet), lit like a plaque of yours.
+   The ruled line is never transformed and never hidden — p7dom reads its text through all three forms. */
+.hall-strand-banner {
+  margin-top: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+  border-color: var(--gold); background: rgba(74,52,16,.30);
+}
+.hall-strand-line { font-family: var(--cp); font-size: 14.5px; line-height: 1.5; color: var(--paper); }
+.hall-strand-check { font-style: italic; font-size: 12.5px; color: var(--paper-faint); }
+.hall-strand-reopen, .hall-strand-finish {
+  background: linear-gradient(180deg, #4a3410, #1c1206); border-color: var(--gold); color: var(--hi);
+}
+.hall-strand-cancel { color: var(--paper-dim); }
+
+/* ══ SHEETS (screens 4, 5, 6, 9) ══ the ceremony panel: a scrim, then one frost sheet. */
+.hall-sheet-overlay {
+  position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(7,4,2,.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+.hall-sheet {
+  width: 100%; max-width: 430px; max-height: 92vh; overflow-y: auto;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 12px;
+  background: linear-gradient(180deg, #120b04, var(--ink));
+  border: 1px solid var(--frost-line); border-radius: var(--r) var(--r) 0 0;
+}
+.hall-sheet-title {
+  font-family: var(--cz); font-size: 15px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--gold); text-align: center; margin: 0;
+}
+.hall-sheet-sub {
+  font-family: var(--cz); font-size: 10px; letter-spacing: .28em; text-transform: uppercase;
+  color: var(--paper-dim); text-align: center; margin: 0;
+}
+.hall-sheet-act { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.hall-sheet-act > * { flex: 1 1 auto; }
+.hall-sheet-close {
+  font-family: var(--cz); font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--paper-dim); background: none; border: 1px solid var(--line); border-radius: 999px;
+  padding: 8px 18px; cursor: pointer;
+}
+.hall-sheet-close:hover { color: var(--gold-bright); border-color: var(--gold-2); }
+.hall-sheet-foot { display: flex; justify-content: center; padding-top: 4px; }
+.hall-sheet-err { color: var(--crimson); font-size: 13.5px; text-align: center; margin: 0; }
+.hall-sheet-switch { font-size: 13px; color: var(--paper-dim); text-align: center; }
+.hall-sheet-faction, .hall-faction { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.hall-faction-sigil {
+  width: 44px; height: 44px; flex: 0 0 auto; border-radius: 50%; border: 1px solid var(--gold-quiet);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: var(--plaque-lo); color: var(--gold-2);
+}
+.hall-faction-sigil .hall-glyph { width: 24px; height: 24px; }
+.hall-faction-sigil.on { border-color: var(--gold); box-shadow: 0 0 14px rgba(232,200,116,.22); }
+
+/* tier rows (screen 4) */
+.hall-tier-rows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.hall-tier-rows > * {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px;
+  background: rgba(0,0,0,.30); border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.hall-tier-rows > *:hover { background: rgba(232,200,116,.05); }
+.hall-tier-rows > *:last-child { border-bottom: 0; }
+.hall-tier-rows > *.on { background: rgba(232,200,116,.07); }
+.hall-tier-rows > *[disabled], .hall-tier-rows > *.dim { opacity: .45; cursor: default; }
+.hall-tier-label { font-family: var(--cz); font-size: 11px; letter-spacing: .16em; color: var(--gold); flex: 1; }
+.hall-tier-stake { font-size: 13px; color: var(--paper); font-variant-numeric: tabular-nums; }
+.hall-tier-usd { font-size: 11px; color: var(--paper-dim); margin-left: 6px; }
+
+/* the ruled money copy (screens 4, 5, 6) — the room's plain voice, set to read */
+.hall-commit-text {
+  font-size: 14.5px; line-height: 1.5; color: var(--paper); margin: 0;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: rgba(0,0,0,.3);
+}
+.hall-free-refusal, .hall-friend-note, .hall-friend-lock-line, .hall-resume-note {
+  font-size: 13.5px; color: var(--paper-dim); margin: 0;
+}
+
+/* D5 — THE FRIEND CODE (screen 6): the code set wide in Cinzel; the input in the canvas's field. */
+.hall-code-chip {
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px solid var(--gold-quiet); border-radius: 10px; background: rgba(0,0,0,.6);
+}
+.hall-code-label { font-family: var(--cz); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--paper-dim); }
+.hall-code-value { font-family: var(--cz); font-size: 20px; letter-spacing: .36em; color: var(--hi); }
+.hall-code-copy, .hall-limit-copy, .hall-share {
+  font-family: var(--cz); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--paper-dim); background: none; border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 12px; cursor: pointer;
+}
+.hall-code-copy:hover, .hall-limit-copy:hover, .hall-share:hover { color: var(--gold-bright); border-color: var(--gold-2); }
+.hall-friend-code, .hall-limit-input, .hall-friend-opponent, .hall-friend-stake {
+  width: 100%; padding: 12px 14px; font-family: var(--cp); font-size: 15px; color: var(--paper);
+  border: 1px solid var(--gold-quiet); border-radius: 10px; background: rgba(0,0,0,.6);
+}
+.hall-friend-code::placeholder, .hall-limit-input::placeholder,
+.hall-friend-opponent::placeholder, .hall-friend-stake::placeholder { color: #6f6250; }
+
+/* D7 — THE CEREMONY (screens 4/5): the two numbered beats, the lit one gold. */
+.hall-ceremony { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.hall-ceremony-step {
+  display: flex; gap: 10px; align-items: center; justify-content: center;
+  font-family: var(--cz); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--paper-dim);
+}
+.hall-ceremony-step.on, .hall-ceremony-step .on { color: var(--hi); }
+.hall-ceremony-wait { font-style: italic; font-size: 13px; color: var(--paper-dim); text-align: center; }
+.hall-ceremony-error { color: var(--crimson); font-size: 13.5px; text-align: center; }
+
+/* D9 — THE LIMIT (screen 9): the field, then two plates side by side. */
+.hall-limit-block { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.hall-limit-set { display: flex; gap: 10px; flex-wrap: wrap; }
+.hall-limit-set > * { flex: 1 1 auto; }
+.hall-limit-invite { font-size: 13px; color: var(--paper-dim); }
+
+/* ══ SCREEN 7 — MATCH FOUND ══ one beat: the opponent named, the stakes locked, the deal. */
+.hall-dealing { padding: 22px 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
+.hall-dealing-opp { display: flex; align-items: center; gap: 10px; }
+.hall-dealing-line { font-style: italic; font-size: 15px; color: var(--paper-dim); }
+
+/* ══ SCREEN 12 — THE HALL'S OWN STRIPS ══ dressed in the canvas's grammar. The battle behind them is
+   game/ and wire.html territory: untouched, frozen (verdict A3). */
+.hall-match { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.hall-mhead, .hall-mhead-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.hall-mpill {
+  font-family: var(--cz); font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--hi);
+  border: 1px solid var(--gold-2); border-radius: 999px; padding: 3px 8px;
+}
+.hall-mstatus { font-family: var(--cz); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); }
+.hall-mclock { font-family: var(--cz); font-size: 22px; letter-spacing: .1em; color: var(--hi); font-variant-numeric: tabular-nums; }
+.hall-mclock .state-line { font-family: var(--cz); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--paper-dim); }
+.hall-mclock.warn, .hall-mclock.warn b { color: var(--ember); }
+.hall-mphase { font-family: var(--cz); font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: var(--paper-dim); }
+.hall-board { display: flex; flex-direction: column; gap: 8px; }
+.hall-board-side, .hall-board-me {
+  display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: rgba(0,0,0,.3);
+}
+.hall-board-me { border-color: var(--gold-dim-25); }
+.hall-mini {
+  font-size: 12.5px; color: var(--paper-dim); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px;
+}
+.hall-mini b { font-family: var(--cz); color: var(--gold); font-weight: 400; }
+.hall-controls { display: flex; flex-direction: column; gap: 8px; }
+/* a hand card and an astra target are CHIPS, not plates */
+.hall-mull, .hall-tgt {
+  font-family: var(--cp); font-size: 12.5px; color: var(--paper); padding: 7px 12px;
+  border: 1px solid var(--line); border-radius: 999px; background: rgba(0,0,0,.34); cursor: pointer;
+}
+.hall-mull:hover, .hall-tgt:hover { border-color: var(--gold-2); color: var(--gold-bright); }
+.hall-mull.on { border-color: var(--crimson-dim); color: var(--crimson); }
+/* the quiet inline words: they sit INSIDE a sentence and must read as part of it */
+.hall-open-one, .hall-cancelplay, .hall-retry, .hall-sheet-switch, .hall-limit-invite, .hall-limit-set {
+  font-family: inherit; font-size: inherit; color: var(--gold); background: none; border: 0;
+  border-bottom: 1px solid var(--gold-dim-25); padding: 0 1px; cursor: pointer;
+}
+.hall-open-one:hover, .hall-cancelplay:hover, .hall-retry:hover,
+.hall-sheet-switch:hover, .hall-limit-invite:hover, .hall-limit-set:hover { color: var(--gold-bright); }
+.hall-controls-act { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.hall-hand { display: flex; gap: 6px; flex-wrap: wrap; }
+.hall-mresult { font-family: var(--cz); font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--hi); }
+.hall-mreject, .hall-mleave, .hall-concede, .hall-pass, .hall-cancelplay { color: var(--paper-dim); }
+/* D10 — the mulligan confirm, in the strip's own grammar */
+.hall-mullconfirm { background: linear-gradient(180deg, #4a3410, #1c1206); border-color: var(--gold); color: var(--hi); }
+
+/* ══ SCREEN 8 — THE SETTLEMENT STRIP ══ big / line / quiet, and D8's cast as the primary plate. */
+.hall-settle, .hall-lobby-settle { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+/* The strip's first line IS the ruled money sentence — hall.js emits no separate title element, so it is
+   lifted by WEIGHT and INK only. It is never transformed: an uppercased ruled sentence is not the ruled
+   sentence, and copyproof + p7dom read these words through doc, code and DOM alike. */
+.hall-settle-line { font-size: 14.5px; color: var(--paper); margin: 0; }
+.hall-settle-line:first-child { font-size: 15.5px; color: var(--hi); }
+.hall-settle-act { display: flex; gap: 10px; flex-wrap: wrap; }
+.hall-settle-act > * { flex: 1 1 auto; }
+.hall-settle-cast { background: linear-gradient(180deg, #4a3410, #1c1206); border-color: var(--gold); color: var(--hi); }
+.hall-settle-abort { color: var(--paper-dim); }
+.hall-settle-err { color: var(--crimson); font-size: 13.5px; margin: 0; }
+.hall-retry { color: var(--paper-dim); }
+
+/* ══ WIDE (screen 13) ══ the same composition, one step calmer: the wide plate, a two-column floor. */
+@media (min-width: 900px) {
+  body { background-image: url("../assets/hall/hall_ground_wide.jpg"); }
+  body::before {
+    background: linear-gradient(180deg, rgba(7,4,2,.25) 0%, rgba(7,4,2,.72) 45%, rgba(7,4,2,.96) 80%, var(--ink) 100%);
+  }
+  .hall-wrap { max-width: 1120px; padding: 26px 32px 96px; }
+  .hall-title { font-size: 21px; }
+  .hall-rail { overflow-x: visible; flex-wrap: wrap; justify-content: center; }
+  .hall-floor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  .hall-floor-lost { display: flex; }
+  .hall-doors { justify-content: flex-end; }
+  .hall-doors > * { flex: 0 1 240px; }
+  .hall-sheet-overlay { align-items: center; }
+  .hall-sheet { border-radius: var(--r); max-height: 86vh; }
+  .hall-empty { grid-column: 1 / -1; }
+  .hall-empty-board { max-width: 300px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hall-busy::before { animation: none; opacity: .8; }
+  * { transition: none !important; }
+}
