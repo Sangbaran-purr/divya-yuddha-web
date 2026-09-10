@@ -140,10 +140,14 @@ async function hall(url, escAddr, dycAddr, player, provider, opts) {
   w.localStorage.setItem("dyhall::readRpcUrl", RPC);
   w.localStorage.setItem("dyhall::devAccess", "1");     // the documented proof-only gate bypass
   const run = (p) => { const code = fs.readFileSync(p, "utf8"); w.eval(code); };
+  // S-HALL-SLIP-SCOPE-1 — opts.srcDir points the two PRODUCT files at another checkout of them (a temp dir holding
+  //   `git show HEAD:` bytes), so a suite can drive the pre-fix Hall beside the new one in the same flow. Default is
+  //   the working tree, unchanged for every existing suite.
+  const SRC = opts.srcDir || SITE;
   run(path.join(SITE, "config.js"));
   if (!opts.noWallet) run(path.join(SITE, "js/wallet.js"));   // control: boot with DYWallet absent (init cannot run)
-  run(path.join(SITE, "mp/matchclient.js"));
-  run(path.join(SITE, "mp/hall.js"));
+  run(path.join(SRC, "mp/matchclient.js"));
+  run(path.join(SRC, "mp/hall.js"));
   w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
   w.__net = net;   // so a suite holding only `w` can still tear down safely (see teardown)
   return { dom, w, eth, sockets, net, sent };

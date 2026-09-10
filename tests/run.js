@@ -28,6 +28,7 @@ const SUITES = [
   { name: "friendlookup",  file: path.join(__dirname, "suites", "friendlookup.js"), chain: true, expect: 21 },
   { name: "chrome",        file: path.join(__dirname, "suites", "chrome.js"), chain: true, expect: 25 },
   { name: "account",       file: path.join(__dirname, "suites", "account.js"), chain: true, expect: 43 },
+  { name: "slipscope",     file: path.join(__dirname, "suites", "slipscope.js"), chain: true, expect: 19 },
 ];
 
 function freePort() {

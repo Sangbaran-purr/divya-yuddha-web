@@ -141,7 +141,7 @@
         // S-HALL-ACCOUNT-1 (R1) — THE DEFERRED RE-KEY. The battle held the switch off so a wallet click could not
         // cost a forfeit; the shield lifts the moment the battle clears, and the law resumes unprompted.
         if (maybeReKey()) return;
-        if (v && v.screen === "match" && v.settlement) settlementView = v.settlement; // keep the slip visible in the lobby after leaving
+        if (v && v.screen === "match" && (v.settlement || v.pendingSlip)) settlementView = v.settlement || v.pendingSlip; // keep the slip visible in the lobby after leaving (S-HALL-SLIP-SCOPE-1: an off-match slip lands here too)
         // busy-sentinel honesty: a dropped/refused socket is DEAD (busy face), never a false empty room.
         // S-HALL-CHROME-1 (M4) — THE HALL NEVER PROMPTS THE WALLET WITHOUT A HUMAN ACT. The old road called
         // scheduleReconnect() here, which rebuilt the client and fired authConnected() → personal_sign: a MetaMask
@@ -151,7 +151,7 @@
         if (v && v.connected === false) { feedState = "dead"; connectionLost = true; return render(); }
         if (v && Array.isArray(v.tables)) { tables = v.tables.slice(); feedState = "live"; reconnectTries = 0; connectionLost = false; reconcilePendingAgainstTables(tables); } // whole-list reconcile (+ B2: our escrow appearing here is the server's own proof it learned the open)
         if (v && v.lossLimit) lossLimit = v.lossLimit;
-        if (v && v.settlement) settlementView = v.settlement; // a pending slip surfaced in the lobby (resume-after-reload)
+        if (v && (v.settlement || v.pendingSlip)) settlementView = v.settlement || v.pendingSlip; // a pending slip surfaced in the lobby (resume-after-reload). S-HALL-SLIP-SCOPE-1 — THE HONEST HOME: an old unsettled slip surfaces here as its own affordance, never as a live match's outcome.
         // S-HALL-L3-FIX-1 (B2) — the {opened} ACK. It used to be log-only; it now clears the record that was
         //   waiting for it. Nothing else in the Hall may clear an open record.
         if (v && v.lastOpened && v.lastOpened.at !== seenOpenAck) {
@@ -910,6 +910,16 @@
     return h;
   }
 
+  // S-HALL-SLIP-SCOPE-1 — THE RENDER-SITE LOCK. Inside a live match only a slip whose matchId is THAT match may
+  //   render. matchclient already scopes what it files into `settlement`; this reads the slip's own word again at
+  //   the point the strip is drawn, so the law is legible where the lie used to be printed. A slip with no matchId
+  //   is an old record from before the client kept the word — ruled NOT this match, shown at the lobby home instead.
+  function slipForMatch(v) {
+    var s = v && v.settlement; if (!s) return null;
+    if (s.matchId == null || v.matchId == null) return null;
+    return String(s.matchId) === String(v.matchId) ? s : null;
+  }
+
   function settlementStrip(s) {
     if (!s) return "";
     if (s.error) return '<div class="hall-settle warn"><div class="hall-settle-line">' + s.error + '</div><div class="hall-settle-abort state-line">' + ABORT_LINE + '</div></div>';
@@ -937,7 +947,7 @@
         '<div class="hall-dealing-opp">' + factionSigilSmall(v.oppFaction) + '<span class="hall-plaque-addr">' + shortAddr(v.opponent || v.oppName) + '</span></div>' +
         '<div class="hall-dealing-line">the stakes are locked - dealing…</div></div>';
     }
-    var h = statusStrip(v) + settlementStrip(v.settlement);
+    var h = statusStrip(v) + settlementStrip(slipForMatch(v));
     // header
     h += '<div class="hall-mhead"><div class="hall-mhead-row">you (' + (v.myFaction || "?") + ') vs ' + factionSigilSmall(v.oppFaction) + shortAddr(v.opponent || v.oppName) +
       '<span class="hall-mpill">round ' + v.round + '</span><span class="hall-mpill">wins ' + v.roundWins[0] + '-' + v.roundWins[1] + ' (to ' + v.winTarget + ')</span></div>';
@@ -998,8 +1008,8 @@
     var cp = document.querySelector("[data-cancelplay]"); if (cp) cp.onclick = function () { pendingPlay = null; renderMatchScreen(); };
     var ps = document.querySelector("[data-pass]"); if (ps && !ps.disabled) ps.onclick = function () { client.pass(); };
     var cc = document.querySelector("[data-concede]"); if (cc && !cc.disabled) cc.onclick = function () { client.concede(); };
-    var st = document.querySelector("[data-settle]"); if (st && !st.disabled) st.onclick = function () { var s = v.settlement || (settlementView); if (s && s.slip) ceremonySettle(s.slip); };
-    var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { dismissedMatch[v.matchId] = true; settlementView = v.settlement || settlementView; matchView = null; if (maybeReKey()) return; render(); };
+    var st = document.querySelector("[data-settle]"); if (st && !st.disabled) st.onclick = function () { var s = slipForMatch(v); if (s && s.slip) ceremonySettle(s.slip); }; // S-HALL-SLIP-SCOPE-1 — the match screen casts only its own match's slip
+    var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { dismissedMatch[v.matchId] = true; settlementView = slipForMatch(v) || v.pendingSlip || settlementView; matchView = null; if (maybeReKey()) return; render(); }; // S-HALL-SLIP-SCOPE-1 — only this match's own slip promotes on leave
   }
 
   // the live clock / vanish countdown tick (renders the numbers from the SERVER deadline; the client never decides).

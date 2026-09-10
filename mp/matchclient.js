@@ -30,7 +30,11 @@
     var match = null;              // { matchId, seat, opponent, seed, factions, winTarget }
     var g = null;                  // the local mirror
     var phase = null, turn = null, lastSeq = 0, outcome = null, lastReject = null;
-    var settlement = null;         // M-P5 — the signed slip + settle state (persisted, resume-able)
+    var settlement = null;         // M-P5 — the signed slip + settle state (persisted, resume-able). S-HALL-SLIP-SCOPE-1:
+                                   //   THE LIVE MATCH'S OWN SLIP ONLY. Stamped with the matchId the server names.
+    var pendingSlip = null;        // S-HALL-SLIP-SCOPE-1 — a slip that is NOT this match's (resumed from storage, or a
+                                   //   frame for an older match). It never rides the match screen; the Hall gives it
+                                   //   the lobby home. A slip renders only in the context of the match it names.
     var clock = null;              // M-P6 — { kind, seat, deadline, thinkMs, warnMs } (server-broadcast; client draws only)
     var vanish = null;             // M-P6 — { deadline } while the opponent is in the 90s grace
     var lossLimit = null;          // M-P6 — { cap, netLossToday, remaining }
@@ -52,6 +56,10 @@
     // M-P5 slip persistence (persist-before-wait, resume): a received slip is saved locally so a dropped socket or a
     // reload never loses the winner's ability to cast settle. Keyed by escrowMatchId.
     function slipKey(eid) { return "dy_mp_slip_" + eid; }
+    // S-HALL-SLIP-SCOPE-1 — is this slip the LIVE match's own? A slip with no matchId is an old record written before
+    //   the client kept the word; it is ruled NOT this match (the safe reading) and goes to the lobby home.
+    function isLiveSlip(mid) { return !!(mid != null && match && match.matchId != null && String(mid) === String(match.matchId)); }
+    function fileSlip(rec) { if (isLiveSlip(rec.matchId)) { settlement = rec; } else { pendingSlip = rec; } }
     function persistSlip(s) { try { if (typeof localStorage !== "undefined" && s && s.escrowMatchId) localStorage.setItem(slipKey(s.escrowMatchId), JSON.stringify(s)); } catch (e) {} }
     function loadLatestUnsettledSlip() {
       try {
@@ -82,7 +90,7 @@
         oppUnits: v.oppUnits.concat(v.oppHeroes || []).map(function (u) { return { uid: u.uid, n: u.n, power: u.power }; }),
         oppHandCount: v.oppHand.count, oppHandRevealed: !!v.oppHand.revealed, oppHandCards: v.oppHand.cards || null,
         myMulliganed: v.myMulliganed, oppMulliganed: v.oppMulliganed,
-        outcome: outcome, lastReject: lastReject, settlement: settlement,
+        outcome: outcome, lastReject: lastReject, settlement: settlement, pendingSlip: pendingSlip,
         clock: clock, vanish: vanish, lossLimit: lossLimit, reconnecting: reconnecting,
         redacted: true, legal: v.legal, lastMove: v.lastMove, deckCounts: v.deckCounts,
         // S-HALL-CHROME-1 (M2) — the lobby list rides the MATCH view too. Without it the Hall's `tables` cannot be
@@ -93,7 +101,7 @@
     }
     function view() {
       if (redacted && serverView && match) return normalizeServerView(serverView);
-      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, lossLimit: lossLimit, reconnecting: reconnecting, lastReject: lastReject, lastOpened: lastOpened }; // S-HALL-L2: lastReject surfaces server refusals (FREE tier-0, join-not-locked, loss backstop) to the Hall
+      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, pendingSlip: pendingSlip, lossLimit: lossLimit, reconnecting: reconnecting, lastReject: lastReject, lastOpened: lastOpened }; // S-HALL-L2: lastReject surfaces server refusals (FREE tier-0, join-not-locked, loss backstop) to the Hall
       var seat = match.seat, mine = g.players[seat], opp = g.players[1 - seat];
       var legal = (phase === "play" && turn === seat) ? E.playableIndices(g, seat) : [];
       return {
@@ -105,7 +113,7 @@
         oppUnits: opp.units.filter(function (u) { return !u.ghost; }).map(function (u) { return { uid: u.uid, n: u.n, power: E.effPower ? E.effPower(g, 1 - seat, u) : u.power }; }),
         oppHandCount: opp.hand.length, // COUNT only in the UI (peekable in memory — the free-era cost, Q1)
         myMulliganed: mine.mulliganed, oppMulliganed: opp.mulliganed,
-        outcome: outcome, lastReject: lastReject, settlement: settlement,
+        outcome: outcome, lastReject: lastReject, settlement: settlement, pendingSlip: pendingSlip,
         clock: clock, vanish: vanish, lossLimit: lossLimit, reconnecting: reconnecting,
         tables: tables,                     // S-HALL-CHROME-1 (M2) — see normalizeServerView
       };
@@ -157,6 +165,7 @@
         // build the MIRROR — identical newGame args on both clients + the server → identical deterministic deal
         g = E.newGame({ p0: m.p0, p1: m.p1, p0Faction: m.p0Faction, p1Faction: m.p1Faction, rng: seeded(m.seed) });
         phase = "mulligan"; turn = g.turn; lastSeq = 0; outcome = null; lastReject = null; clock = null; vanish = null; reconnecting = false; redacted = false; serverView = null;
+        settlement = null;         // S-HALL-SLIP-SCOPE-1 — a new match starts with an empty strip by law, not by luck.
         log("match " + m.matchId + " — you are seat " + m.seat + " (" + (m.seat === 0 ? m.p0Faction : m.p1Faction) + ")");
         push(); return;
       }
@@ -164,6 +173,7 @@
         // M-A3 STAKED road — NO seed, NO mirror. The client is a pure view renderer; state arrives as {view}s.
         match = { matchId: m.matchId, seat: m.seat, opponent: m.opponent, winTarget: m.winTarget };
         redacted = true; g = null; serverView = null; outcome = null; lastReject = null; clock = null; vanish = null; reconnecting = false;
+        settlement = null;         // S-HALL-SLIP-SCOPE-1 — same law on the staked road.
         log("staked match " + m.matchId + " (redacted) — you are seat " + m.seat + " (" + (m.seat === 0 ? m.p0Faction : m.p1Faction) + ")");
         push(); return;
       }
@@ -194,13 +204,17 @@
       if (m.type === "settlement") {
         // the referee-signed slip. The WINNER casts settle from their own wallet (Q3); the loser gets it for
         // transparency; a draw lets either cast. Persist immediately (resume) BEFORE any wait.
-        settlement = { escrowMatchId: m.escrowMatchId, stake: m.stake, result: m.result, resultName: m.resultName, youWon: !!m.youWon, winnerSeat: m.winnerSeat, slip: m.slip, refereeAddress: m.refereeAddress, forfeit: !!m.forfeit, settled: false, at: Date.now() };
+        // S-HALL-SLIP-SCOPE-1 — matchId is KEPT. The server has named the match on this frame since the beginning
+        //   (wshub {settlement} carries it on both roads); the client used to drop it, which is what let an old slip
+        //   render as a live match's outcome. Persisted with the record, so a resumed slip knows its own match.
+        var rec = { matchId: m.matchId != null ? String(m.matchId) : null, escrowMatchId: m.escrowMatchId, stake: m.stake, result: m.result, resultName: m.resultName, youWon: !!m.youWon, winnerSeat: m.winnerSeat, slip: m.slip, refereeAddress: m.refereeAddress, forfeit: !!m.forfeit, settled: false, at: Date.now() };
         clock = null; vanish = null;
-        persistSlip(settlement);
+        persistSlip(rec);
+        fileSlip(rec);
         log("settlement slip: " + m.resultName + (m.youWon ? " — you WON, cast settle to collect" : (m.result === 2 ? " — draw, cast to refund both" : " — opponent settles")));
         push(); return;
       }
-      if (m.type === "settlement-error") { settlement = { error: m.error, at: Date.now() }; clock = null; vanish = null; log("settlement error: " + m.error); push(); return; }
+      if (m.type === "settlement-error") { fileSlip({ matchId: m.matchId != null ? String(m.matchId) : null, error: m.error, at: Date.now() }); clock = null; vanish = null; log("settlement error: " + m.error); push(); return; }
       if (m.type === "loss-limit") { lossLimit = { cap: m.cap, netLossToday: m.netLossToday, remaining: m.remaining }; log("loss limit: " + (m.cap == null ? "none" : (BigInt(m.cap) / 1000000000000000000n) + " DYC/day, " + (BigInt(m.remaining) / 1000000000000000000n) + " left")); push(); return; }
     }
 
@@ -321,7 +335,9 @@
         }).catch(function (e) { settlement.casting = false; settlement.castError = e.message; push(); throw e; });
       },
       requestSlip: function (escrowMatchId) { send({ type: "get-slip", escrowMatchId: escrowMatchId || (settlement && settlement.escrowMatchId) }); },
-      resumeSettlement: function () { var s = loadLatestUnsettledSlip(); if (s) { settlement = s; push(); } return s; },
+      // S-HALL-SLIP-SCOPE-1 — a resumed slip is by definition not the live match's business: it goes to pendingSlip,
+      //   which the Hall gives the lobby home. It NEVER reaches the match slot.
+      resumeSettlement: function () { var s = loadLatestUnsettledSlip(); if (s) { pendingSlip = s; push(); } return s; },
       mulligan: function (indices) { send({ type: "move", matchId: match && match.matchId, action: { type: "mulligan", indices: indices || [] } }); },
       play: function (handIndex, targetIndex) { send({ type: "move", matchId: match && match.matchId, action: { type: "play", handIndex: handIndex, targetIndex: targetIndex != null ? targetIndex : null } }); },
       pass: function () { send({ type: "move", matchId: match && match.matchId, action: { type: "pass" } }); },
