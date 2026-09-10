@@ -19,7 +19,7 @@ const PICK = ARGS.filter(function (a) { return a.indexOf("--") !== 0; });
 
 // name → file. copyproof is already committed under mp/ and needs no chain; it runs first and fastest.
 const SUITES = [
-  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 51 },
+  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 56 },
   { name: "p4",            file: path.join(__dirname, "suites", "p4.js"), chain: true, expect: 7 },
   { name: "p8rig",         file: path.join(__dirname, "suites", "p8rig.js"), chain: true, expect: 7 },
   { name: "p7dom",         file: path.join(__dirname, "suites", "p7dom.js"), chain: true, expect: 4 },
@@ -28,7 +28,7 @@ const SUITES = [
   { name: "friendlookup",  file: path.join(__dirname, "suites", "friendlookup.js"), chain: true, expect: 21 },
   { name: "chrome",        file: path.join(__dirname, "suites", "chrome.js"), chain: true, expect: 25 },
   { name: "account",       file: path.join(__dirname, "suites", "account.js"), chain: true, expect: 43 },
-  { name: "slipscope",     file: path.join(__dirname, "suites", "slipscope.js"), chain: true, expect: 19 },
+  { name: "slipscope",     file: path.join(__dirname, "suites", "slipscope.js"), chain: true, expect: 34 },
   { name: "ceremony",      file: path.join(__dirname, "suites", "ceremony.js"), chain: true, expect: 19 },
   { name: "takeover",      file: path.join(__dirname, "suites", "takeover.js"), chain: true, expect: 25 },
 ];

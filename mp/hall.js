@@ -127,7 +127,7 @@
         // L3 — the MATCH view (staked redacted road): render the battle in the browser. The matched-moment beat plays
         //   once per matchId, then the battle; the settlement strip rides the over state. A dismissed match falls to lobby.
         if (v && v.screen === "match" && v.matchId && !dismissedMatch[v.matchId]) {
-          if (matchView == null || matchView.matchId !== v.matchId) { settleState = null; pendingPlay = null; mullPick = {}; }
+          if (matchView == null || matchView.matchId !== v.matchId) { settleState = {}; pendingPlay = null; mullPick = {}; }
           // S-HALL-CHROME-1 (M2) — keep the lobby list CURRENT while the battle owns the screen. This branch
           // returns before the lobby reconcile below, which is why the floor used to come back frozen at its
           // pre-join frame (and re-expose a table the join had already consumed).
@@ -572,7 +572,7 @@
         return chain.then(function () {
           if (e.rec.kind === "open") return resumeOpenRecord(r, e);
           if (e.rec.kind === "join") return resumeJoin(r, e.rec, e);
-          if (e.rec.kind === "settle") return resumeSettle(r, e.rec);
+          if (e.rec.kind === "settle") return resumeSettle(r, e);
           return null;
         }).catch(function (err) { resumeNote = "a pending table could not be finished: " + ceremonyMsg(err) + " — your stake is safe."; });
       }, Promise.resolve());
@@ -881,8 +881,17 @@
   // ════════════════════════════════════════════════════════════════════════
   var matchView = null;      // the latest {screen:"match"} view (null in the lobby)
   var lastView = null;       // the latest view of any kind (for the clock/vanish tick)
-  var settleState = null;    // { casting } | { settled, terminalState } | { error } — the browser settle cast state
+  //  S-HALL-SLIP-LIST-1 (R1) — A MAP, keyed by escrowMatchId. It used to be ONE object for the whole page, which was
+  //  honest while only one slip could ever render. With a LIST of pots that single object would drive every row: one
+  //  row casting would disable them all, one row's error would print under them all, and — the serious one — one
+  //  row's success would print "settled - N DYC in your wallet" on pots that were never cast. A money line claiming
+  //  a pot is in the wallet when it is not. Per-row truth, or the list is not honest.
+  var settleState = {};      // escrowMatchId -> { casting } | { settled, terminalState } | { casting:false, error }
+  function settleStateFor(eid) { return (eid == null) ? null : (settleState[String(eid)] || null); }
   var settlementView = null; // a pending slip surfaced in the lobby (resume-after-reload)
+  var castThisSession = {};  // S-HALL-SLIP-LIST-1 — escrowMatchId -> the slip record cast in THIS session. Storage
+                             //   drops a settled slip at once, but its "settled - N DYC in your wallet" confirmation
+                             //   must stay on screen, exactly as a lone slip's does today.
   var seatedElsewhere = null;// S-HALL-ELSEWHERE-1 — { matchId, seat } from the view. REFRESHED on every frame,
                              //   never remembered: the room-end broadcast drops the field and so must the Hall.
   var dealtMatches = {};      // matchId -> true once the "dealing…" beat has played
@@ -896,6 +905,10 @@
   //  S-HALL-ELSEWHERE-1 — §11 amendment 2026-09-10a. Its reader holds a live stake in a battle they cannot see;
   //  what they are told here is what they believe about that stake. Verbatim from LOBBY_DESIGN.md.
   var SEATED_ELSEWHERE_LINE = "Your warrior is already seated - the battle is live in another window.";
+  //  S-HALL-SLIP-LIST-1 — §11 amendment 2026-09-10b, by the 2026-09-10a criterion: a player owed a pot, told where
+  //  to collect it. [N] is the live count. The header appears ONLY at two or more — at one, today's lone-slip
+  //  markup stands byte-for-byte and no singular form is ever needed.
+  function SLIPS_HEADER(n) { return "You have " + n + " unsettled pots waiting - each one can be collected here."; }
   function WON_LINE(total, fee) { return "You won. Collect " + total + " DYC - " + fee + " to the treasury."; }
   function WON_SETTLED(total) { return "settled - " + total + " DYC in your wallet"; }
   var DRAW_LINE = "A draw - both stakes return in full.";
@@ -903,28 +916,40 @@
   var FREE_LINE = "no stakes at this table";
 
   // ── THE BROWSER SETTLE CAST (the winner casts from their OWN wallet; persistPending; resolves on the terminal read) ──
+  //  S-HALL-SLIP-LIST-1 (R2) — the pending slot is KEYED per escrow id. One shared "settle" slot was honest while
+  //  only one cast could be in flight; with a list, two casts would overwrite each other's RESUME RECORD — and that
+  //  record is the road back to a pot interrupted between cast and confirmation. A strand waiting to happen.
+  function settleSlot(eid) { return "settle-" + String(eid); }
   function ceremonySettle(slip) {
     if (!slip || slip.escrowMatchId == null) return;
-    settleState = { casting: true }; renderCurrent();
-    writePending("settle", { kind: "settle", escrowMatchId: String(slip.escrowMatchId), result: slip.result, signature: slip.signature, at: Date.now() });
+    var eid = String(slip.escrowMatchId), slot = settleSlot(eid);
+    settleState[eid] = { casting: true };
+    // keep the record: storage drops it the moment it settles, but its confirmation belongs on screen this session.
+    var held = lobbySlips().filter(function (x) { return String(x.escrowMatchId) === eid; })[0];
+    if (held) castThisSession[eid] = held;
+    renderCurrent();
+    writePending(slot, { kind: "settle", escrowMatchId: eid, result: slip.result, signature: slip.signature, at: Date.now() });
     return signerRoad().then(function (r) {
       var esc = escContract(r);
       return feeOverrides().then(function (fee) {
         return esc.settle.staticCall(BigInt(slip.escrowMatchId), slip.result, slip.signature).then(function () {
           return esc.settle(BigInt(slip.escrowMatchId), slip.result, slip.signature, fee);
         });
-      }).then(function (tx) { mergePendingSlot("settle", { settleTxHash: tx.hash }); return tx.wait(); })
+      }).then(function (tx) { mergePendingSlot(slot, { settleTxHash: tx.hash }); return tx.wait(); })
         .then(function () { return esc.matches(BigInt(slip.escrowMatchId)); })
-        .then(function (mm) { settleState = { settled: true, terminalState: Number(mm.state) }; clearPendingSlot("settle"); markSlipSettled(String(slip.escrowMatchId)); readLiquidAgain(); renderCurrent(); });
-    }).catch(function (e) { settleState = { casting: false, error: ceremonyMsg(e) }; renderCurrent(); });
+        .then(function (mm) { settleState[eid] = { settled: true, terminalState: Number(mm.state) }; clearPendingSlot(slot); markSlipSettled(eid); readLiquidAgain(); renderCurrent(); });
+    }).catch(function (e) { settleState[eid] = { casting: false, error: ceremonyMsg(e) }; renderCurrent(); });
   }
   // resume a settle interrupted between cast and confirmation (P4): if already SETTLED on chain, resolve; else re-offer.
-  function resumeSettle(r, rec) {
+  //  S-HALL-SLIP-LIST-1 (R2) — takes the ENTRY, so it clears the slot the record was actually found in. With keyed
+  //  slots a hardcoded "settle" would clear the wrong pot's record (or none at all).
+  function resumeSettle(r, e) {
+    var rec = e.rec, slot = e.slot, eid = String(rec.escrowMatchId);
     return escContract(r).matches(BigInt(rec.escrowMatchId)).then(function (mm) {
-      if (Number(mm.state) === 3) { settleState = { settled: true, terminalState: 3 }; clearPendingSlot("settle"); markSlipSettled(String(rec.escrowMatchId)); renderCurrent(); return; } // SETTLED=3
-      // not settled — leave the slip's Cast button live (matchclient.resumeSettlement surfaced it); drop the stale pending
-      clearPendingSlot("settle");
-    }).catch(function () { clearPendingSlot("settle"); });
+      if (Number(mm.state) === 3) { settleState[eid] = { settled: true, terminalState: 3 }; clearPendingSlot(slot); markSlipSettled(eid); renderCurrent(); return; } // SETTLED=3
+      // not settled — leave the slip's Cast button live (the list surfaced it); drop the stale pending
+      clearPendingSlot(slot);
+    }).catch(function () { clearPendingSlot(slot); });
   }
 
   // ── THE MATCH SCREEN (ported from wire.html; neutral hall-* hooks) ──
@@ -952,6 +977,26 @@
     return String(s.matchId) === String(v.matchId) ? s : null;
   }
 
+  // S-HALL-SLIP-LIST-1 — the lobby home's slips: the stored unsettled list unioned with settlementView, deduped by
+  //   escrowMatchId, newest first. A slip with no escrowMatchId (an error slip) can never dedupe and always rides.
+  function lobbySlips() {
+    var out = [];
+    try { if (client && client.unsettledSlips) out = client.unsettledSlips().slice(); } catch (e) { out = []; }
+    var add = function (rec) {
+      if (!rec) return;
+      var eid = rec.escrowMatchId;
+      if (eid != null && out.some(function (x) { return String(x.escrowMatchId) === String(eid); })) return;
+      out.push(rec);
+    };
+    Object.keys(castThisSession).forEach(function (k) { add(castThisSession[k]); });
+    add(settlementView);      // an ERROR slip carries no escrowMatchId and can never dedupe — it always rides
+    return out.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+  }
+  // what is still OWED: a row settled in this session is a confirmation, not a pot waiting. The header counts these.
+  function owedCount(list) {
+    return list.filter(function (x) { var ss = settleStateFor(x.escrowMatchId); return !(ss && ss.settled); }).length;
+  }
+
   function settlementStrip(s) {
     if (!s) return "";
     if (s.error) return '<div class="hall-settle warn"><div class="hall-settle-line">' + s.error + '</div><div class="hall-settle-abort state-line">' + ABORT_LINE + '</div></div>';
@@ -959,14 +1004,15 @@
       return '<div class="hall-settle"><div class="hall-settle-line state-line">' + FREE_LINE + '</div></div>';
     }
     var stake = BigInt(s.stake), pot = stake * 2n, rake = pot * 5n / 100n, total = pot - rake;
-    var settled = settleState && settleState.settled, casting = settleState && settleState.casting, castErr = settleState && settleState.error;
+    var ss = settleStateFor(s.escrowMatchId);   // S-HALL-SLIP-LIST-1 — THIS row's state, never the page's
+    var settled = ss && ss.settled, casting = ss && ss.casting, castErr = ss && ss.error;
     var line, showCast = false;
     if (settled) {
       line = (s.result === 2) ? DRAW_LINE : (s.youWon ? WON_SETTLED(dycOf(total)) : "This match is settled.");
     } else if (s.result === 2) { line = DRAW_LINE; showCast = true; }
     else if (s.youWon) { line = s.forfeit ? FORFEIT_LINE(dycOf(total)) : WON_LINE(dycOf(total), dycOf(rake)); showCast = true; }
     else { line = "You lost this match - the winner collects the pot."; }
-    var cast = showCast ? '<div class="hall-settle-act"><button class="hall-act hall-settle-cast" data-settle="1"' + (casting ? " disabled" : "") + '>' + (casting ? "casting…" : "CAST SETTLE") + '</button></div>' : "";
+    var cast = showCast ? '<div class="hall-settle-act"><button class="hall-act hall-settle-cast" data-settle="' + String(s.escrowMatchId) + '"' + (casting ? " disabled" : "") + '>' + (casting ? "casting…" : "CAST SETTLE") + '</button></div>' : "";
     var err = castErr ? '<div class="hall-settle-err state-line">' + castErr + '</div>' : "";
     return '<div class="hall-settle"><div class="hall-settle-line">' + line + '</div>' +
       '<div class="hall-settle-abort state-line">' + ABORT_LINE + '</div>' + cast + err + '</div>';
@@ -1068,7 +1114,15 @@
     if (matchView) { sheet = null; renderSheet(); renderMatchScreen(); return; } // L3 — a live match: the battle in the browser
     // the Hall (lobby). A settlement slip (resume-after-reload, or after leaving the over screen) rides on top — pre-settle
     //   (the Cast button) or resolved (the settled line).
-    var pendingSlip = settlementView ? '<div class="hall-lobby-settle">' + settlementStrip(settlementView) + '</div>' : "";
+    // S-HALL-SLIP-LIST-1 (R4) — THE UNION, deduped by escrowMatchId, newest first. The stored list alone is not
+    //   enough: an ERROR slip carries no escrowMatchId and is never persisted (it lives only in settlementView), and
+    //   a slip CAST THIS SESSION is marked settled in storage — it leaves the list, but its "settled - N DYC in your
+    //   wallet" confirmation must stay on screen, exactly as it does today.
+    var homeSlips = lobbySlips();
+    var owed = owedCount(homeSlips);
+    var slipsHead = owed >= 2 ? '<div class="hall-slips-head state-line">' + SLIPS_HEADER(owed) + '</div>' : "";
+    var pendingSlip = homeSlips.length
+      ? '<div class="hall-lobby-settle">' + slipsHead + homeSlips.map(settlementStrip).join("") + '</div>' : "";
     // S-HALL-ELSEWHERE-1 (R2, shape B) — a STANDING line, rendered whenever the view carries `seated`. Shape (A)
     //   (replace the empty-room line only) was refused: emptyRoom() renders solely when the floor is EMPTY, so on a
     //   busy floor the seated sibling would be told nothing and the incident would reproduce. Nothing is displaced —
@@ -1077,7 +1131,14 @@
     var seatedLine = seatedElsewhere ? '<div class="hall-empty-line state-line hall-seated-elsewhere">' + SEATED_ELSEWHERE_LINE + '</div>' : "";
     root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + seatedLine + pendingSlip + rail() + doors() + floor();
     wireHall();
-    var st = document.querySelector(".hall-lobby-settle [data-settle]"); if (st && !st.disabled) st.onclick = function () { if (settlementView && settlementView.slip) ceremonySettle(settlementView.slip); };
+    // S-HALL-SLIP-LIST-1 — one wiring per row, each closed over ITS OWN slip. data-settle carries the escrow id, so
+    //   N buttons never collide and a row's cast can only ever settle that row.
+    Array.prototype.forEach.call(document.querySelectorAll(".hall-lobby-settle [data-settle]"), function (b) {
+      if (b.disabled) return;
+      var eid = b.getAttribute("data-settle");
+      var row = homeSlips.filter(function (x) { return String(x.escrowMatchId) === eid; })[0];
+      if (row && row.slip) b.onclick = function () { ceremonySettle(row.slip); };
+    });
     // NOTE: the sheet lives in its OWN body element (#hall-sheet-host), independent of hall-root, so a floor re-render
     // never rebuilds it (which would wipe a half-typed input). renderSheet() is called only on sheet-state changes.
   }
@@ -1404,7 +1465,7 @@
     tables = []; feedState = "connecting"; connectionLost = false; reconnectTries = 0;
     // A-keyed state leaves the screen (nothing here is persisted; the records are)
     sheet = null; ceremony = null; openStrand = null; openUnknown = null; resumeNote = null;
-    settlementView = null; settleState = null; matchView = null; lossLimit = null; liquid = null;
+    settlementView = null; settleState = {}; castThisSession = {}; matchView = null; lossLimit = null; liquid = null;
     signedInAs = null; seenReject = null; lastServerError = null; freeOpenPending = false;
     resumedGen = 0; seenOpenAck = null; selectedFaction = null;
     me = addr; accountNote = ACCOUNT_CHANGED(addr);
@@ -1420,7 +1481,7 @@
     client = null; feedGen++; gateGen++;
     tables = []; feedState = "connecting"; connectionLost = false;
     sheet = null; ceremony = null; openStrand = null; openUnknown = null; resumeNote = null;
-    settlementView = null; settleState = null; matchView = null; lossLimit = null; liquid = null;
+    settlementView = null; settleState = {}; castThisSession = {}; matchView = null; lossLimit = null; liquid = null;
     signedInAs = null; accountNote = null; pendingReKey = null; signInNeeded = false;
     me = null; accessState = "connect"; renderSheet(); render();
   }

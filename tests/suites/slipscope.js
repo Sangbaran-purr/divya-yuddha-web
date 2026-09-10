@@ -218,13 +218,18 @@ async function main() {
   await H.until(() => st().signedInAs && st().feedState === "live", 15000, "hall authed");
   await H.until(() => w.document.querySelector(".hall-lobby-settle"), 15000, "the lobby home");
 
-  console.log("\n── P3 · one slip at a time (the lobby home) ──");
+  // S-HALL-SLIP-LIST-1 — these two checks used to assert ONE-AT-A-TIME, and P3c stood as the EVIDENCE that the
+  //   older pot was hidden. That debt is paid: the home now shows every pot the player is owed, newest first. The
+  //   checks are re-authored to the truth they now guard; P3c stays, because "still stored and unsettled" is still
+  //   the fact that makes the older pot real.
+  console.log("\n── P3 · every pot in view, newest first (the lobby home) ──");
   const lobbyStrips = w.document.querySelectorAll(".hall-lobby-settle .hall-settle");
   const lobbyText = w.document.querySelector(".hall-lobby-settle").textContent.replace(/\s+/g, " ").trim();
-  ok("P3a · exactly ONE slip renders at the lobby home", lobbyStrips.length === 1, "found " + lobbyStrips.length);
-  ok("P3b · it is the NEWER slip (by `at`) — the older one is not shown",
-     lobbyText.indexOf(LIE_LOSS) >= 0 && lobbyText.indexOf(OLD_WIN_LINE) < 0, lobbyText);
-  ok("P3c · the older slip is still stored and unsettled — hidden, not lost (evidence for S-HALL-SLIP-LIST-1)",
+  ok("P3a · BOTH slips render at the lobby home — the older pot is no longer hidden", lobbyStrips.length === 2, "found " + lobbyStrips.length);
+  ok("P3b · newest first, and the older WIN is visible with its own ruled line",
+     lobbyText.indexOf(LIE_LOSS) >= 0 && lobbyText.indexOf(OLD_WIN_LINE) >= 0 &&
+     lobbyText.indexOf(LIE_LOSS) < lobbyText.indexOf(OLD_WIN_LINE), lobbyText.slice(0, 200));
+  ok("P3c · the older slip is stored and unsettled — the pot is real, and now it is in view",
      JSON.parse(w.localStorage.getItem("dy_mp_slip_555")).settled === false);
 
   console.log("\n── P2 · the honest home (lobby) ──");
@@ -269,6 +274,116 @@ async function main() {
   const stillText = w.document.querySelector(".hall-settle") ? w.document.querySelector(".hall-settle").textContent.replace(/\s+/g, " ").trim() : "";
   ok("P1j · a slip naming ANOTHER match, arriving mid-battle, does NOT render here",
      stillText.indexOf(OLD_WIN_LINE) < 0 && stillText.indexOf(dycLine(S)) >= 0, stillText);
+
+  // ═══ L · S-HALL-SLIP-LIST-1 — every pot a player is owed, in view ═══════
+  console.log("\n── L · the hidden win, found ──");
+  {
+    // two REAL escrow matches, MATCHED on chain, each with a genuine referee-signed slip — so a cast really settles.
+    const RESULT_TYPES = { Result: [{ name: "matchId", type: "uint256" }, { name: "playerA", type: "address" },
+      { name: "playerB", type: "address" }, { name: "stake", type: "uint256" }, { name: "result", type: "uint8" }] };
+    const net = await provider.getNetwork();
+    const domain = { name: "StakeEscrow", version: "1", chainId: Number(net.chainId), verifyingContract: ethers.getAddress(escAddr) };
+    const ESC_FULL = ["function openMatch(uint256,address,uint8) returns (uint256)", "function joinMatch(uint256,uint8)",
+      "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)"];
+    const p1n = new ethers.NonceManager(p1);
+    async function matchedEscrow(stake) {
+      await (await new ethers.Contract(dycAddr, ERC20, p2).mint(p2w.address, stake)).wait();
+      await (await new ethers.Contract(dycAddr, ERC20, p2).approve(escAddr, stake)).wait();
+      const rc = await (await new ethers.Contract(escAddr, ESC_FULL, p2).openMatch(stake, p1.address, 0)).wait();
+      let id = null; rc.logs.forEach((l) => { try { const pp = new ethers.Interface(ESC_FULL).parseLog(l); if (pp && pp.name === "MatchOpened") id = pp.args.id; } catch (e) {} });
+      await (await new ethers.Contract(dycAddr, ERC20, p1n).mint(p1.address, stake)).wait();
+      await (await new ethers.Contract(dycAddr, ERC20, p1n).approve(escAddr, stake)).wait();
+      await (await new ethers.Contract(escAddr, ESC_FULL, p1n).joinMatch(id, 0)).wait();
+      return id;
+    }
+    // result 1 = WIN_B; the Hall is p1 = playerB, so it WON and gets a CAST SETTLE on each row.
+    async function castableSlip(stake, at) {
+      const id = await matchedEscrow(stake);
+      const sig = await referee.signTypedData(domain, RESULT_TYPES,
+        { matchId: BigInt(id), playerA: ethers.getAddress(p2w.address), playerB: ethers.getAddress(p1.address), stake: BigInt(stake), result: 1 });
+      return { id: id.toString(), rec: slip({ escrowMatchId: id.toString(), matchId: "m-REAL-" + id, stake: stake.toString(),
+        result: 1, resultName: "WIN_B", youWon: true, winnerSeat: 1, forfeit: false, at: at,
+        slip: { escrowMatchId: id.toString(), matchId: id.toString(), playerA: p2w.address, playerB: p1.address, stake: stake.toString(), result: 1, signature: sig } }) };
+    }
+    const older = await castableSlip(50n * DEC, Date.now() - 900000);   // the HIDDEN win — 95 DYC, older
+    const newer = await castableSlip(S,          Date.now() - 60000);   // 19 DYC, newer
+    const LIST_SEED = {}; LIST_SEED["dy_mp_slip_" + older.id] = older.rec; LIST_SEED["dy_mp_slip_" + newer.id] = newer.rec;
+    const HEADER = (n) => "You have " + n + " unsettled pots waiting - each one can be collected here.";
+    const WON_SETTLED_19 = "settled - 19 DYC in your wallet";
+    const rows = (win) => Array.prototype.map.call(win.document.querySelectorAll(".hall-lobby-settle .hall-settle"), (e) => e.outerHTML);
+    const headText = (win) => { const e = win.document.querySelector(".hall-slips-head"); return e ? e.textContent.replace(/\s+/g, " ").trim() : null; };
+
+    // ── the PRE-FIX bytes: the older win is HIDDEN behind the newer slip
+    {
+      const PRE_FIX_REF = "e3345e3";   // the last commit before S-HALL-SLIP-LIST-1 (a pin names a COMMIT, never a ref)
+      const preHall = execFileSync("git", ["show", PRE_FIX_REF + ":mp/hall.js"], { cwd: H.SITE, maxBuffer: 8 << 20 }).toString();
+      if (preHall.indexOf("SLIPS_HEADER") >= 0) { console.log("  ✖ the pre-fix pin " + PRE_FIX_REF + " already contains the list"); process.exit(1); }
+      const pre = path.join(os.tmpdir(), "dy_sliplist_pre_" + process.pid, "mp");
+      fs.mkdirSync(pre, { recursive: true });
+      fs.writeFileSync(path.join(pre, "hall.js"), preHall);
+      fs.writeFileSync(path.join(pre, "matchclient.js"), execFileSync("git", ["show", PRE_FIX_REF + ":mp/matchclient.js"], { cwd: H.SITE, maxBuffer: 8 << 20 }));
+      const h0 = await H.hall(url, escAddr, dycAddr, p1, provider, { ls: LIST_SEED, srcDir: path.dirname(pre) });
+      await H.until(() => h0.w.DYHall._state().signedInAs, 15000, "pre-fix hall authed");
+      await H.until(() => h0.w.document.querySelector(".hall-lobby-settle"), 15000, "the pre-fix home");
+      const t0 = h0.w.document.querySelector(".hall-lobby-settle").textContent.replace(/\s+/g, " ").trim();
+      ok("L1 · PRE-FIX bytes: only ONE slip renders — the older WIN is invisible", rows(h0.w).length === 1 && t0.indexOf(dycLine(50n * DEC)) < 0, t0.slice(0, 140));
+      H.teardown(h0);
+    }
+
+    const h2 = await H.hall(url, escAddr, dycAddr, p1, provider, { ls: LIST_SEED });
+    const w2 = h2.w, st2 = () => w2.DYHall._state();
+    await H.until(() => st2().signedInAs, 15000, "list hall authed");
+    await H.until(() => rows(w2).length === 2, 20000, "both pots at the home");
+    ok("L2 · NOW: BOTH pots render at the lobby home — the hidden win is found", rows(w2).length === 2);
+    ok("L3 · the ruled header reads the ruled words with the live count", headText(w2) === HEADER(2), JSON.stringify(headText(w2)));
+    const txt2 = w2.document.querySelector(".hall-lobby-settle").textContent.replace(/\s+/g, " ").trim();
+    ok("L4 · NEWEST FIRST", txt2.indexOf(dycLine(S)) >= 0 && txt2.indexOf(dycLine(50n * DEC)) >= 0 &&
+       txt2.indexOf(dycLine(S)) < txt2.indexOf(dycLine(50n * DEC)));
+    ok("L5 · each pot carries its OWN cast, keyed by its escrow id",
+       !!w2.document.querySelector('[data-settle="' + older.id + '"]') && !!w2.document.querySelector('[data-settle="' + newer.id + '"]'));
+
+    // ── P7 · THE MAP: casting one row paints ONLY that row
+    console.log("\n── L · the map: one row's cast is one row's business ──");
+    const beforeOlder = rows(w2).filter((r) => r.indexOf('data-settle="' + older.id + '"') >= 0)[0];
+    w2.document.querySelector('[data-settle="' + newer.id + '"]').click();
+    await H.until(() => (w2.document.querySelector('[data-settle="' + newer.id + '"]') || {}).disabled, 8000, "the newer row casting").catch(() => {});
+    const castSlots = (st2().pending || []).map((e) => e.slot).filter((x) => String(x).indexOf("settle") === 0);
+    const castingRow = w2.document.querySelector('[data-settle="' + newer.id + '"]');
+    ok("L6 · the cast row alone shows casting…", !!castingRow && castingRow.disabled && castingRow.textContent.indexOf("casting") >= 0);
+    const duringOlder = rows(w2).filter((r) => r.indexOf('data-settle="' + older.id + '"') >= 0)[0];
+    ok("L7 · the OTHER row's markup is BYTE-IDENTICAL — no false 'casting', no false 'settled'", duringOlder === beforeOlder);
+
+    // the settle really lands on chain
+    await H.until(() => { const ss = st2().settleState || {}; return ss[newer.id] && ss[newer.id].settled; }, 60000, "the cast settling on chain");
+    ok("L8 · the cast really SETTLED on chain (escrow terminal state 3)", (st2().settleState[newer.id] || {}).terminalState === 3,
+       JSON.stringify(st2().settleState));
+    const settledRow = rows(w2).filter((r) => r.indexOf(WON_SETTLED_19) >= 0)[0];
+    ok("L9 · its row KEEPS its confirmation on screen, exactly as a lone slip's does today", !!settledRow);
+    ok("L10 · but the header is GONE — it counts what is still OWED, and one pot is left", headText(w2) === null,
+       JSON.stringify(headText(w2)));
+    ok("L11 · the OTHER row is STILL byte-identical — the settled row painted nothing but itself",
+       rows(w2).filter((r) => r.indexOf('data-settle="' + older.id + '"') >= 0)[0] === beforeOlder);
+
+    // ── P8 · the keyed pending slot
+    ok("L12 · the pending slot was KEYED by escrow id — never a shared 'settle' two casts could overwrite",
+       castSlots.length === 1 && castSlots[0] === "settle-" + newer.id, JSON.stringify(castSlots));
+    ok("L13 · and it was cleared when that cast resolved, leaving no stale record",
+       Object.keys(JSON.parse(w2.localStorage.getItem("dyhall::pending") || "{}")).indexOf("settle-" + newer.id) < 0);
+
+    // ── the last pot, then a FRESH session: storage is the truth, and it is empty
+    w2.document.querySelector('[data-settle="' + older.id + '"]').click();
+    await H.until(() => { const ss = st2().settleState || {}; return ss[older.id] && ss[older.id].settled; }, 60000, "the last pot settling");
+    ok("L14 · cast the last pot → nothing on the home offers a cast any more",
+       w2.document.querySelectorAll(".hall-lobby-settle [data-settle]").length === 0);
+    const ls3 = {}; Object.keys(LIST_SEED).forEach((k) => { const v3 = w2.localStorage.getItem(k); if (v3) ls3[k] = v3; });
+    const h3 = await H.hall(url, escAddr, dycAddr, p1, provider, { ls: ls3 });
+    await H.until(() => h3.w.DYHall._state().signedInAs, 15000, "the fresh hall authed");
+    await H.sleep(800);
+    ok("L15 · and a FRESH session finds the home empty — both records are settled in storage",
+       h3.w.document.querySelector(".hall-lobby-settle") === null);
+    H.teardown(h3);
+    H.teardown(h2);
+  }
 
   H.teardown(h);
   try { fr.c.disconnect && fr.c.disconnect(); } catch (e) {}

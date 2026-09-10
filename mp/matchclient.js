@@ -62,16 +62,24 @@
     function isLiveSlip(mid) { return !!(mid != null && match && match.matchId != null && String(mid) === String(match.matchId)); }
     function fileSlip(rec) { if (isLiveSlip(rec.matchId)) { settlement = rec; } else { pendingSlip = rec; } }
     function persistSlip(s) { try { if (typeof localStorage !== "undefined" && s && s.escrowMatchId) localStorage.setItem(slipKey(s.escrowMatchId), JSON.stringify(s)); } catch (e) {} }
-    function loadLatestUnsettledSlip() {
+    // S-HALL-SLIP-LIST-1 — EVERY pot the player is owed, newest first. The old loader returned only the newest, so an
+    //   uncast WIN could sit invisible behind a later uncast draw until that one settled (SLIP-SCOPE-1 P3c proved it).
+    //   Read from storage at every call, never cached: a cast marks its own record settled and the next read drops it.
+    function loadUnsettledSlips() {
       try {
-        if (typeof localStorage === "undefined") return null;
-        var best = null;
+        if (typeof localStorage === "undefined") return [];
+        var out = [];
         for (var i = 0; i < localStorage.length; i++) {
           var k = localStorage.key(i); if (k.indexOf("dy_mp_slip_") !== 0) continue;
           var s = JSON.parse(localStorage.getItem(k) || "null");
-          if (s && !s.settled && (!best || (s.at || 0) > (best.at || 0))) best = s;
+          if (s && !s.settled) out.push(s);
         }
-        return best;
+        return out.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+      } catch (e) { return []; }
+    }
+    function loadLatestUnsettledSlip() {
+      try {
+        return loadUnsettledSlips()[0] || null;
       } catch (e) { return null; }
     }
 
@@ -344,6 +352,9 @@
       // S-HALL-SLIP-SCOPE-1 — a resumed slip is by definition not the live match's business: it goes to pendingSlip,
       //   which the Hall gives the lobby home. It NEVER reaches the match slot.
       resumeSettlement: function () { var s = loadLatestUnsettledSlip(); if (s) { pendingSlip = s; push(); } return s; },
+      // S-HALL-SLIP-LIST-1 — a LIVE getter, not a snapshot on the view. A cast marks its own record settled, and the
+      //   home must see that on the very next render — not on the next socket frame. Read the truth, never remember it.
+      unsettledSlips: function () { return loadUnsettledSlips(); },
       mulligan: function (indices) { send({ type: "move", matchId: match && match.matchId, action: { type: "mulligan", indices: indices || [] } }); },
       play: function (handIndex, targetIndex) { send({ type: "move", matchId: match && match.matchId, action: { type: "play", handIndex: handIndex, targetIndex: targetIndex != null ? targetIndex : null } }); },
       pass: function () { send({ type: "move", matchId: match && match.matchId, action: { type: "pass" } }); },

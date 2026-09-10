@@ -47,6 +47,7 @@ const LAW = [
   ["friend reachability", "could not reach the table server - your code is fine, try again in a moment"],
   ["cross-account",      "this was prepared for another account - switch back to [0xA...] to finish it"],
   ["seated elsewhere",   "Your warrior is already seated - the battle is live in another window."],
+  ["unsettled pots",     "You have [N] unsettled pots waiting - each one can be collected here."],
   ["9 limit set",        "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this."],
   ["9 limit block",      "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: [X] DYC."],
 ];
@@ -93,6 +94,16 @@ ok("the 2026-09-10a amendment note is recorded", /AMENDMENT 2026-09-10a \(S-HALL
 ok("it renders ONLY on the server's field, and the Hall never remembers it",
    /seatedElsewhere = \(v && v\.seatedElsewhere\) \|\| null;/.test(HALL) &&
    /seatedElsewhere \? '<div class="hall-empty-line state-line hall-seated-elsewhere">' \+ SEATED_ELSEWHERE_LINE/.test(HALL));
+
+console.log("\n── the unsettled-pots header ruled 2026-09-10b ──");
+ok("enumerated in the section 11 copy block", /unsettled-pots\s+header \(amended 2026-09-10b\)/.test(norm(DOC)));
+ok("the 2026-09-10b amendment note is recorded", /AMENDMENT 2026-09-10b \(S-HALL-SLIP-LIST-1\)/.test(DOC));
+// THE STRUCTURAL GUARD: the header is built from the LIVE count (slot filled, not hardcoded) and renders ONLY at
+// two or more — at one, the lone-slip markup is what it always was.
+ok("built from the live count of what is still OWED, and shown only at TWO OR MORE",
+   /function SLIPS_HEADER\(n\) \{ return "You have " \+ n \+ " unsettled pots waiting/.test(HALL) &&
+   /owed >= 2 \? '<div class="hall-slips-head state-line">' \+ SLIPS_HEADER\(owed\)/.test(HALL) &&
+   /function owedCount\(list\)[\s\S]{0,220}!\(ss && ss\.settled\)/.test(HALL));
 
 console.log("\n── advisory · other quoted doc lines (not section-11 ruled copy) ──");
 const lawSet = new Set(LAW.map(([, l]) => norm(l)));

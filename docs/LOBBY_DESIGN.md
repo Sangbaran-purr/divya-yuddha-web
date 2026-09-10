@@ -266,7 +266,8 @@ settlement variants + abort line (8c), the unopened-table line
 (8d, amended 2026-09-08), the moved-on cancel line (amended
 2026-09-08b), the friend-code reachability line (amended
 2026-09-08c), the cross-account line (amended 2026-09-08d), the
-seated-elsewhere line (amended 2026-09-10a), the
+seated-elsewhere line (amended 2026-09-10a), the unsettled-pots
+header (amended 2026-09-10b), the
 limit texts (9). CC never paraphrases money copy; changes are
 ruled amendments here.
 
@@ -482,3 +483,27 @@ empty, and a seated player deserves the truth on a busy floor too. While
 it is up, the empty-room truth line is suppressed so the two never
 coexist. No act rides on it in this rung; moving a live seat between tabs
 is its own future scope.
+
+=====================================================
+## AMENDMENT 2026-09-10b (S-HALL-SLIP-LIST-1) - THE UNSETTLED-POTS HEADER
+=====================================================
+Owner-ruled 2026-09-10, on the evidence of S-HALL-SLIP-SCOPE-1 (check P3c):
+the lobby home surfaced only the NEWEST unsettled slip, so an uncast WIN
+could sit invisible behind a later uncast draw until that one settled. A
+player could be owed a pot and not know it.
+
+It joins section 11 by the 2026-09-10a criterion - a player owed a pot,
+told where to collect it - money-adjacent by consequence and by mention
+both.
+
+  "You have [N] unsettled pots waiting - each one can be collected here."
+
+[N] is the live count, rendered as a numeral. The header appears ONLY at
+TWO OR MORE: at one slip the lone-slip markup stands exactly as it did
+before this amendment, and no singular form is ever ruled or rendered.
+
+The home shows every unsettled slip the player holds, NEWEST FIRST, each
+with its own ruled settlement line and its own cast. A cast on one row
+settles that row alone; the list re-renders one shorter and the header
+disappears at exactly one. Inside a live match nothing changes: only a
+slip whose matchId is THAT match renders there (S-HALL-SLIP-SCOPE-1).
