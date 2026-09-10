@@ -133,6 +133,20 @@ async function hall(url, escAddr, dycAddr, player, provider, opts) {
     live() { return sockets.filter((s) => s.readyState === 1).length; },
     sent() { return sent; },
   };
+  // S-HALL-FREE-1 — jsdom exposes no fetch, no crypto.subtle and no TextEncoder; every browser does. The harness
+  //   supplies the REAL node implementations (not fakes) and stands in for the web server on same-origin relative
+  //   URLs, exactly as it already stands in for the socket, the wallet and the chain. Bytes come off disk, from the
+  //   site repo, so the Hall's pin check runs against the real file it names.
+  w.TextEncoder = TextEncoder;
+  w.crypto = w.crypto || {}; try { w.crypto.subtle = require("crypto").webcrypto.subtle; } catch (e) {}
+  w.fetch = function (u) {
+    const rel = String(u).split("?")[0];
+    const file = rel.indexOf("/") === 0 ? path.join(SITE, rel) : path.resolve(SITE, "mp", rel);
+    return new Promise((res) => {
+      let body = null; try { body = fs.readFileSync(file, "utf8"); } catch (e) { body = null; }
+      res({ ok: body != null, status: body == null ? 404 : 200, text: () => Promise.resolve(body == null ? "" : body) });
+    });
+  };
   for (const [k, v] of Object.entries(opts.ls || {})) w.localStorage.setItem(k, v);
   w.localStorage.setItem("dyhall::matchServerUrl", url);
   w.localStorage.setItem("dyhall::stakeEscrowAddress", escAddr);

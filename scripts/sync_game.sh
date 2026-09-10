@@ -56,6 +56,12 @@ if [ ! -f "$DEST/src/engine.js" ]; then
   echo "error: archive did not produce src/engine.js (the M-P2 wrapper engine copy) — aborting" >&2
   exit 1
 fi
+# S-HALL-FREE-1 (R2) — THE PIN, beside the copy. The Hall lazy-loads this engine to play a FREE (mirror) match, and
+# an engine it cannot vouch for is an engine it must not play. The web3 match server has carried such a pin since
+# M-P3 (engineguard); the site had none. Written here, by the one road that produces the copy, so the pin can never
+# drift from the bytes it names.
+shasum -a 256 "$DEST/src/engine.js" | cut -d" " -f1 > "$DEST/src/engine.sha256"
+echo "engine pin: $(cat "$DEST/src/engine.sha256")"
 
 BEFORE="$(grep -c ": 'assets/video/';" "$DEST/index.html" || true)"
 if [ "$BEFORE" != "1" ]; then

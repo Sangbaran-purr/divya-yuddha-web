@@ -52,6 +52,7 @@
       try { p.resolve(out); } catch (e) {}
     }
     var reconnecting = false;
+    var enginePending = false;     // S-HALL-FREE-1 — one in-flight engine load, never a second
     var redacted = false, serverView = null; // M-A3 — staked road: pure view renderer (no mirror `g`)
 
     // M-P5 slip persistence (persist-before-wait, resume): a received slip is saved locally so a dropped socket or a
@@ -175,6 +176,21 @@
       if (m.type === "opened") { lastOpened = { table: m.table, at: Date.now() }; log("opened table " + m.table.id); push(); return; }
       if (m.type === "error") { lastReject = m.error; log("ERROR " + m.error); push(); return; }
       if (m.type === "match") {
+        //  S-HALL-FREE-1 (R1) — THE MIRROR ROAD NEEDS AN ENGINE. The Hall stubs E (its staked road is redacted and
+        //  needs none), so a FREE {match} frame used to throw here. A host that can supply one says so with
+        //  deps.ensureEngine(); the frame is held, the engine is loaded ONCE, and the frame is replayed. A host that
+        //  cannot supply one is REFUSED honestly — never a throw, never a silent lobby.
+        if (typeof E.newGame !== "function") {
+          if (deps.ensureEngine && !enginePending) {
+            enginePending = true;
+            deps.ensureEngine().then(function () { enginePending = false; handle(m); },
+              function (err) { enginePending = false; log("engine unavailable: " + (err && err.message ? err.message : err));
+                lastReject = "this table needs the game engine, which could not be loaded - reload and try again"; push(); });
+            return;
+          }
+          log("no engine for the mirror road — refusing the match frame");
+          lastReject = "this table needs the game engine, which is not loaded here"; push(); return;
+        }
         match = { matchId: m.matchId, seat: m.seat, opponent: m.opponent, seed: m.seed, winTarget: m.winTarget };
         // build the MIRROR — identical newGame args on both clients + the server → identical deterministic deal
         g = E.newGame({ p0: m.p0, p1: m.p1, p0Faction: m.p0Faction, p1Faction: m.p1Faction, rng: seeded(m.seed) });
@@ -259,7 +275,17 @@
         else { log("ws closed"); push(); }
       };
       ws.onerror = function () { log("ws error"); };
-      ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
+      //  S-HALL-FREE-1 (R4) — THE HANDLER GUARD, the server's own law mirrored. A frame that throws inside handle()
+      //  used to escape into the event loop: in node it kills the process, in a browser it is swallowed and the
+      //  FRAME IS SIMPLY LOST — the tab sits in the lobby while its match runs. Now it is logged and refused, the
+      //  session lives, and the next frame is handled.
+      ws.onmessage = function (ev) {
+        var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        try { handle(m); } catch (e) {
+          log("frame refused (" + (m && m.type) + "): " + (e && e.message ? e.message : e));
+          lastReject = "a message from the table could not be read - the session is still open"; push();
+        }
+      };
     }
 
     return {

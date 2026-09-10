@@ -60,6 +60,53 @@
       s.onload = function () { res(window.ethers); }; s.onerror = function () { rej(new Error("ethers failed")); }; document.head.appendChild(s);
     });
   }
+  // ── S-HALL-FREE-1 (R1/R2) — THE ENGINE, LAZILY, AND ONLY IF IT IS THE RIGHT ONE ─────────────────────────────
+  //  The Hall plays the STAKED road redacted: the server sends views, the client renders them, no engine needed.
+  //  A FREE table rides the MIRROR road — the server sends a seed and each client runs the engine itself. The
+  //  Hall's own FREE door opens tier-0 tables, so the Hall must be able to play one. It loads the site's
+  //  sync-produced byte-identical copy (game/src/engine.js) — LOADED, never forked, never edited — plus the same
+  //  wrapper wire.html uses, and only on the first mirror frame. A staked-only session loads neither.
+  //  THE PIN (R2): scripts/sync_game.sh writes game/src/engine.sha256 beside the copy. The Hall hashes the source
+  //  it actually fetched and compares BEFORE building E. Drift refuses and says so — it never plays a wrong engine.
+  var HALL_E = {};                 // filled IN PLACE by ensureEngine(); matchclient captured this object at boot
+  var enginePromise = null;
+  //  MIRRORED BYTE-FOR-BYTE from mp/wire.html:99 — the twelve names the mirror road needs. There is ONE assembly
+  //  list; the suite asserts the two are identical, so neither file can hold a second opinion of which twelve.
+  var ENGINE_KEYS = ["newGame","playCard","pass","mulligan","doLeap","canLeap","bestLeap","designateShield","playableIndices","targetSpec","adjacentUnits","effPower"];
+  function sha256Hex(text) {
+    var enc = new TextEncoder().encode(text);
+    return crypto.subtle.digest("SHA-256", enc).then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+    });
+  }
+  function fetchText(src) {
+    return fetch(src, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(src + " " + r.status); return r.text(); });
+  }
+  function ensureEngine() {
+    if (enginePromise) return enginePromise;
+    var base = "../game/src/";
+    enginePromise = Promise.all([fetchText(base + "engine.js"), fetchText(base + "engine.sha256")])
+      .then(function (out) {
+        var src = out[0], pin = String(out[1]).trim().split(/\s+/)[0];
+        if (!/^[0-9a-f]{64}$/.test(pin)) throw new Error("the engine pin is unreadable");
+        return sha256Hex(src).then(function (got) {
+          if (got !== pin) throw new Error("engine drift: the copy does not match its pin");
+          //  We EXECUTE THE BYTES WE HASHED. A <script src> would re-fetch, and a re-fetch can serve something
+          //  other than what the pin vouched for; indirect eval runs this exact string in global scope, which is
+          //  what a <script> would have done to it. (If a Content-Security-Policy is ever added to the site, this
+          //  line needs 'unsafe-eval' — named here so the choice is visible, not discovered.)
+          (0, eval)(src);
+          return fetchText("wrapper.js?v=mp3").then(function (wsrc) { (0, eval)(wsrc); });
+        });
+      })
+      .then(function () {
+        ENGINE_KEYS.forEach(function (k) { HALL_E[k] = window[k]; });
+        if (typeof HALL_E.newGame !== "function") throw new Error("the engine loaded but exposes no newGame");
+        engineNote = null; renderCurrent(); return HALL_E;
+      })
+      .catch(function (e) { enginePromise = null; engineNote = ENGINE_REFUSED; renderCurrent(); throw e; });
+    return enginePromise;
+  }
   function readRpcUrl() { return lsGet("dyhall::readRpcUrl") || ((CFG.chain && CFG.chain.readRpcUrls) || [])[0]; } // anvil override for the local proof; mainnet otherwise
   function readProvider(ethers) { return new ethers.JsonRpcProvider(readRpcUrl(), undefined, { staticNetwork: true }); }
   var ACCESS_ABI = ["function balanceOf(address) view returns (uint256)"];
@@ -120,7 +167,7 @@
     var gen = ++feedGen;
     // the Hall READS the lobby AND plays the staked redacted match (server-authoritative; E/W stay stubbed — no client engine).
     client = window.DYMatchClient.createClient({
-      E: {}, W: {}, ethers: window.ethers, log: function () {},
+      E: HALL_E, W: window.DYWrapper || {}, ethers: window.ethers, log: function () {}, ensureEngine: ensureEngine,
       onUpdate: function (v) {
         if (gen !== feedGen) return;                          // read-generation guard on the feed
         lastView = v || null;
@@ -716,18 +763,24 @@
   function seatSheetHTML() {
     var t = sheet.ctx.table;
     var td = t.staked ? stakedTierDef(t) : null;
-    var pot = BigInt(t.stake) * 2n, fee = pot * 5n / 100n, win = pot - fee;
+    //  S-HALL-FREE-1 (R3) — THE FREE SEAT. This sheet was written for a staked table only: `BigInt(t.stake)` THREW
+    //  on a free table's null stake, inside a click handler, so the browser swallowed it and TAKE THIS SEAT simply
+    //  read DEAD. A free seat also owes no money copy — no pot, no commitment, no both-stakes rule. It reuses
+    //  FREE_LINE, which section 11 already rules (8c), so no new words ship.
+    var free = !t.staked;
+    var pot = free ? 0n : BigInt(t.stake) * 2n, fee = pot * 5n / 100n, win = pot - fee;
     var sigil = t.faction && FACTION_SIGIL[t.faction] ? sigilImg(FACTION_SIGIL[t.faction], "hall-sigil") : "";
-    var commit = '<p class="hall-commit-text state-line">' + COMMITMENT(t.stake) + '</p>';
-    if (crossesLimit(t.stake)) commit += '<p class="hall-limit-block state-line">' + LIMIT_BLOCK(headroomWei()) + '</p>';
-    var canAct = selectedFaction && affordable(t.stake) && !crossesLimit(t.stake);
+    var commit = free ? "" : '<p class="hall-commit-text state-line">' + COMMITMENT(t.stake) + '</p>';
+    if (!free && crossesLimit(t.stake)) commit += '<p class="hall-limit-block state-line">' + LIMIT_BLOCK(headroomWei()) + '</p>';
+    var canAct = free ? !!selectedFaction : (selectedFaction && affordable(t.stake) && !crossesLimit(t.stake));
     var act = ceremony ? ceremonyStrip(ceremony) : '<button class="hall-act hall-act-join" data-join-do="1"' + (canAct ? "" : " disabled") + '>TAKE THIS SEAT</button>';
     return sheetOverlay(
       '<h2 class="hall-sheet-title">TAKE THIS SEAT</h2>' +
       '<div class="hall-seat-opp">' + sigil + '<span class="hall-plaque-addr">' + shortAddr(t.opener) + '</span>' + (td ? medallionImg(td.medallion, "hall-medallion " + td.cls) : "") + '<span class="hall-plaque-stake">' + dycOf(t.stake) + ' DYC</span></div>' +
-      '<div class="hall-pot-line state-line">Pot ' + dycOf(pot) + ' DYC <span class="hall-fee-line">- ' + dycOf(fee) + ' fee -> winner takes ' + dycOf(win) + ' DYC</span></div>' +
+      (free ? '<div class="hall-pot-line state-line">' + FREE_LINE + '</div>'
+            : '<div class="hall-pot-line state-line">Pot ' + dycOf(pot) + ' DYC <span class="hall-fee-line">- ' + dycOf(fee) + ' fee -> winner takes ' + dycOf(win) + ' DYC</span></div>') +
       '<div class="hall-sheet-faction"><div class="hall-sheet-sub">Your faction</div>' + factionPicker(selectedFaction) + '</div>' +
-      commit + '<p class="hall-seat-rule"><b>' + BOTH_STAKES + '</b></p>' +
+      commit + (free ? "" : '<p class="hall-seat-rule"><b>' + BOTH_STAKES + '</b></p>') +
       '<div class="hall-sheet-act">' + act + '</div>', "hall-sheet-seat");
   }
 
@@ -888,6 +941,7 @@
   //  a pot is in the wallet when it is not. Per-row truth, or the list is not honest.
   var settleState = {};      // escrowMatchId -> { casting } | { settled, terminalState } | { casting:false, error }
   function settleStateFor(eid) { return (eid == null) ? null : (settleState[String(eid)] || null); }
+  var engineNote = null;     // S-HALL-FREE-1 — set when the engine could not be loaded or failed its pin
   var settlementView = null; // a pending slip surfaced in the lobby (resume-after-reload)
   var castThisSession = {};  // S-HALL-SLIP-LIST-1 — escrowMatchId -> the slip record cast in THIS session. Storage
                              //   drops a settled slip at once, but its "settled - N DYC in your wallet" confirmation
@@ -914,6 +968,9 @@
   var DRAW_LINE = "A draw - both stakes return in full.";
   function FORFEIT_LINE(total) { return "Your opponent left the table. The pot is yours - collect " + total + " DYC."; }
   var FREE_LINE = "no stakes at this table";
+  //  S-HALL-FREE-1 — the refusal when the engine cannot be vouched for. Ordinary copy, not §11: it makes no
+  //  money claim (a free table has no stake), so it does not join the ruled block.
+  var ENGINE_REFUSED = "this table needs the game engine, which could not be loaded - reload and try again";
 
   // ── THE BROWSER SETTLE CAST (the winner casts from their OWN wallet; persistPending; resolves on the terminal read) ──
   //  S-HALL-SLIP-LIST-1 (R2) — the pending slot is KEYED per escrow id. One shared "settle" slot was honest while
@@ -1128,8 +1185,9 @@
     //   busy floor the seated sibling would be told nothing and the incident would reproduce. Nothing is displaced —
     //   the arena, the doors, the plaques and the covenant all stand; emptyRoom() suppresses its own truth line
     //   while this one is up, so the two never coexist.
+    var engineLine = engineNote ? '<div class="hall-empty-line state-line warn hall-engine-note">' + engineNote + '</div>' : "";
     var seatedLine = seatedElsewhere ? '<div class="hall-empty-line state-line hall-seated-elsewhere">' + SEATED_ELSEWHERE_LINE + '</div>' : "";
-    root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + seatedLine + pendingSlip + rail() + doors() + floor();
+    root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + engineLine + seatedLine + pendingSlip + rail() + doors() + floor();
     wireHall();
     // S-HALL-SLIP-LIST-1 — one wiring per row, each closed over ITS OWN slip. data-settle carries the escrow id, so
     //   N buttons never collide and a row's cast can only ever settle that row.
