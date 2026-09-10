@@ -19,8 +19,12 @@ const MC = require(path.join(H.SITE, "mp/matchclient.js"));
 const DEC = 1000000000000000000n, S = 10n * DEC;
 const ERC20 = ["function approve(address,uint256) returns (bool)", "function mint(address,uint256)"];
 const ESC = ["function joinMatch(uint256,uint8)"];
+const ESCA = ["function openMatch(uint256,address,uint8) returns (uint256)", "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)"];
 const P2K = "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
 const WALLET_LINE = "confirm in your wallet…";
+// S-HALL-ELSEWHERE-1 — the §11 line ruled 2026-09-10a, quoted here as the suite's own copy of the truth.
+const RULED_LINE = "Your warrior is already seated - the battle is live in another window.";
+const EMPTY_ROOM_LINE = "No warrior is seated - yet.";
 
 let pass = 0, fail = 0;
 const ok = (n, c, d) => { c ? (pass++, console.log("  ✓ " + n)) : (fail++, console.log("  ✖ " + n + (d ? "\n      " + d : ""))); };
@@ -42,6 +46,7 @@ async function main() {
   const { makeLobby } = require(path.join(MS, "src/lobby")); const { loadGuardedEngine } = require(path.join(MS, "src/engineguard"));
   const { createRoom } = require(path.join(MS, "src/match")); const { makeMatchStore } = require(path.join(MS, "src/matchstore"));
   const { makeEscrowReader } = require(path.join(MS, "src/escrow")); const rng = require(path.join(MS, "src/rng"));
+  const ENG = loadGuardedEngine().engine;   // the raw seats below drive the FREE (mirror) road, which needs a real engine
   const servers = [];
   async function server() {
     const cfg = { PORT: 0, ALLOW_ORIGIN: "*", DEV_ADDRESS_MODE: true, NONCE_TTL_MS: 300000, TIERS: [0, 10, 50, 200, 1000],
@@ -89,7 +94,7 @@ async function main() {
     ok("D1a · the seat's client takes over — the match owns its state", !!A.st().matchView);
     ok("D1b · the battle is ON THE SCREEN, not merely in state", battleOnScreen(A.w));
     ok("D1c · nothing covers it — no sheet overlay stands", overlay(A.w) === null);
-    try { opp.disconnect && opp.disconnect(); } catch (e) {}
+    try { opp.raw.shutdown(); } catch (e) {}
     H.teardown(A.h);
   }
 
@@ -119,7 +124,7 @@ async function main() {
     ok("D3c · and the takeover CURES it: the frozen overlay and its wallet line are gone",
        overlay(A.w) === null && body(A.w).indexOf(WALLET_LINE) < 0,
        "overlay=" + (overlay(A.w) !== null) + " walletLine=" + (body(A.w).indexOf(WALLET_LINE) >= 0));
-    try { opp.disconnect && opp.disconnect(); } catch (e) {}
+    try { opp.raw.shutdown(); } catch (e) {}
     H.teardown(A.h);
   }
 
@@ -141,18 +146,109 @@ async function main() {
        bst().matchView == null, "sibling matchView=" + JSON.stringify(bst().matchView));
     // the evidence the queued S-HALL-ELSEWHERE-1 stands on: what the sibling is told while its address is in a battle
     const face = body(B.w);
-    ok("D2c · EVIDENCE for S-HALL-ELSEWHERE-1: the sibling is shown the EMPTY ROOM while its own address is seated",
-       face.indexOf("No warrior is seated") >= 0 && (bst().tables || []).length === 0,
-       "tables=" + (bst().tables || []).length + " | face: " + face.slice(face.indexOf("EVERY SEAT"), face.indexOf("EVERY SEAT") + 200));
+    // S-HALL-ELSEWHERE-1 — D2c was the EVIDENCE this task was queued on: the sibling was shown the empty room and
+    //   the words "No warrior is seated - yet." It is now the PROOF that the lie is gone and the ruled line stands.
+    ok("D2c · PAID: the sibling is told the ruled truth, verbatim, where the empty room used to lie",
+       face.indexOf(RULED_LINE) >= 0 && face.indexOf("No warrior is seated") < 0,
+       "face: " + face.slice(face.indexOf("EVERY SEAT"), face.indexOf("EVERY SEAT") + 220));
     // and the composed law: when the seat's socket dies, the living tab is re-seated (W3-PRESENCE-1)
     A.h.net.block(); A.h.net.sever();
     await H.until(() => bst().matchView, 40000, "the sibling re-seated");
+    ok("D2 · the SEAT'S OWN tab never renders the line — it is not elsewhere, it is here",
+       body(A.w).indexOf(RULED_LINE) < 0);
     ok("D2d · the seat's socket dies → the living tab is RE-SEATED (W3-PRESENCE-1, composed)", !!bst().matchView);
     await H.until(() => battleOnScreen(B.w), 20000, "the battle on the sibling's screen");
     ok("D2e · …and the screen comes there too — the player never loses the battle to a dead tab", battleOnScreen(B.w));
-    try { opp.disconnect && opp.disconnect(); } catch (e) {}
+    ok("D2 · the re-seated tab DROPS the line — it is the seat now, not a sibling of one",
+       body(B.w).indexOf(RULED_LINE) < 0);
+    try { opp.raw.shutdown(); } catch (e) {}
     H.teardown(A.h); H.teardown(B);
   }
+
+  // ═══ E · S-HALL-ELSEWHERE-1 — the busy floor, the forgetting, and the stranger ═══
+  //   Two RAW clients hold the seats so the match can be ENDED cheaply; the Hall is a lobby-only SIBLING of seat 0.
+  //   The seats are STAKED (redacted) on purpose — see the FREE-ROAD FINDING recorded at the foot of this block.
+  console.log("\n── E · the second tab tells the truth ──");
+  {
+    const s2 = await server();
+    // Section E gets its OWN seat-0 identity. c.player is already driven by the jsdom eth shim in D1/D3/D2 (whose
+    // ceremonies can still be in flight), and two senders on one account race the nonce. pE is nobody else's.
+    const pE = new ethers.NonceManager(new ethers.Wallet("0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e", c.provider));
+    const pEAddr = (await pE.getAddress()).toLowerCase();
+    await (await new ethers.Contract(c.dycAddr, ERC20, pE).mint(pEAddr, 1000n * DEC)).wait();
+    function raw(addr) {
+      let v = null;
+      const cl = MC.createClient({ E: {}, W: {}, ethers, log: () => {}, onUpdate: (nv) => { v = nv; } });
+      return { cl, view: () => v, addr };
+    }
+    async function connect(r) { r.cl.connect(s2.url); await H.sleep(500); r.cl.authDev(r.addr); await H.until(() => r.view() && r.view().me, 12000, "authed " + r.addr.slice(0, 8)); }
+    const iface2 = new ethers.Interface(ESCA), ESC2 = ESC;
+    async function stakedOpenBy(signer, r) {
+      await (await new ethers.Contract(c.dycAddr, ERC20, signer).approve(c.escAddr, S)).wait();
+      const rc = await (await new ethers.Contract(c.escAddr, ESCA, signer).openMatch(S, ethers.ZeroAddress, 0)).wait();
+      let id = null; rc.logs.forEach((l) => { try { const pp = iface2.parseLog(l); if (pp && pp.name === "MatchOpened") id = pp.args.id; } catch (e) {} });
+      r.cl.stakedOpen({ tier: 10, faction: "devas", escrowMatchId: id.toString(), stake: S.toString() });
+      const t = await H.until(() => (r.view().tables || []).filter((x) => x.escrowMatchId === id.toString())[0], 25000, "the staked table");
+      return { id, table: t };
+    }
+    async function stakedJoinBy(signer, r, id, tableId) {
+      await (await new ethers.Contract(c.dycAddr, ERC20, signer).approve(c.escAddr, S)).wait();
+      await (await new ethers.Contract(c.escAddr, ESC2, signer).joinMatch(BigInt(id), 0)).wait();
+      r.cl.join(tableId, "nagas");
+    }
+    const P1 = raw(pEAddr), P2 = raw(p2w.address.toLowerCase());
+    const X = raw("0x" + "7".repeat(40));
+    await connect(P1); await connect(P2); await connect(X);
+    X.cl.open(10, "nagas");                 // an unrelated FREE table, so the floor is BUSY when the sibling looks
+    await H.until(() => (X.view().tables || []).some((t) => t.opener === X.addr), 15000, "the third party's table");
+
+    const h = await H.hall(s2.url, c.escAddr, c.dycAddr, new ethers.Wallet("0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e", c.provider), c.provider, {});
+    const w = h.w, st = () => w.DYHall._state();
+    await H.until(() => st().signedInAs && st().feedState === "live", 15000, "the sibling authed");
+    ok("E1 · before any seat is taken, the sibling is NOT told (no field, no line)", body(w).indexOf(RULED_LINE) < 0);
+
+    const o1 = await stakedOpenBy(pE, P1);
+    await stakedJoinBy(p2, P2, o1.id, o1.table.id);
+    await H.until(() => P1.view() && P1.view().screen === "match", 60000, "the match");
+    await H.until(() => body(w).indexOf(RULED_LINE) >= 0, 20000, "the ruled line");
+    ok("E2 · the sibling of a SEATED address is told, verbatim", body(w).indexOf(RULED_LINE) >= 0);
+    const busy = (st().tables || []).length;
+    ok("E3 · …on a BUSY floor too — the reason shape (A) was refused (emptyRoom only renders when it is EMPTY)",
+       busy > 0 && w.document.querySelector(".hall-empty") === null, "tables on the floor: " + busy);
+    ok("E4 · the empty-room line and the seated line never coexist", body(w).indexOf(EMPTY_ROOM_LINE) < 0);
+    ok("E5 · the arena's doors and the covenant still stand beneath it",
+       body(w).indexOf("EVERY SEAT HERE IS HUMAN.") >= 0 && !!w.document.querySelector('[data-act="open-sheet"]'));
+
+    // END ROAD 1 — the match simply completes (both seats auto-pass every round)
+    P1.cl.mulligan([]); P2.cl.mulligan([]);
+    for (let i = 0; i < 80; i++) { P1.cl.pass(); P2.cl.pass(); await H.sleep(70); if (P1.view() && P1.view().outcome) break; }
+    const gone1 = await H.until(() => body(w).indexOf(RULED_LINE) < 0, 20000, "the line vanishing (match completed)").catch(() => false);
+    ok("E6 · END ROAD 1 (the match completes) — the line is GONE; no local memory kept it", !!gone1 && body(w).indexOf(RULED_LINE) < 0);
+
+    // END ROAD 2 — a second match, ended by BOTH seats going dark
+    const o2 = await stakedOpenBy(pE, P1);
+    await stakedJoinBy(p2, P2, o2.id, o2.table.id);
+    await H.until(() => body(w).indexOf(RULED_LINE) >= 0, 60000, "the ruled line again");
+    ok("E7 · a second match — the line returns", body(w).indexOf(RULED_LINE) >= 0);
+    // raw.shutdown() — not disconnect(): it clears the M-P6 auto-reconnect first, so both seats really go dark
+    P2.cl.raw.shutdown(); await H.sleep(200); P1.cl.raw.shutdown();
+    const gone2 = await H.until(() => body(w).indexOf(RULED_LINE) < 0, 30000, "the line vanishing (both seats gone)").catch(() => false);
+    ok("E8 · END ROAD 2 (both seats gone) — the line is GONE on the teardown broadcast", !!gone2 && body(w).indexOf(RULED_LINE) < 0);
+
+    // a stranger never sees it
+    const hz = await H.hall(s2.url, c.escAddr, c.dycAddr, new ethers.Wallet("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba", c.provider), c.provider, {});
+    await H.until(() => hz.w.DYHall._state().signedInAs, 15000, "the stranger authed");
+    await H.sleep(800);
+    ok("E9 · a session of an UNSEATED address never renders it", body(hz.w).indexOf(RULED_LINE) < 0);
+    H.teardown(hz); H.teardown(h);
+    [P1, P2, X].forEach((r) => { try { r.cl.raw.shutdown(); } catch (e) {} });
+  }
+  //  ⚠ FREE-ROAD FINDING, found while building E and NOT fixed here (queued; see the report). The Hall stubs the
+  //  engine (`E: {}` — it plays only the redacted STAKED road), so if W3-PRESENCE-1 ever RE-SEATS a Hall sibling
+  //  into a FREE (mirror) match, the {match} frame's `E.newGame(...)` throws inside ws.onmessage. Reachable only
+  //  when the same address opened a free table elsewhere (wire.html, the dark rig) and every other session of it
+  //  died — narrow, but a real crash in the Hall's socket handler. Section E uses STAKED seats so the suite never
+  //  depends on triggering it.
 
   // ═══ the enumerated roads, PINNED — so a future edit that re-opens one is noticed here ═══
   console.log("\n── the audited roads, pinned ──");

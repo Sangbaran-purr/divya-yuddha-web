@@ -266,6 +266,7 @@ settlement variants + abort line (8c), the unopened-table line
 (8d, amended 2026-09-08), the moved-on cancel line (amended
 2026-09-08b), the friend-code reachability line (amended
 2026-09-08c), the cross-account line (amended 2026-09-08d), the
+seated-elsewhere line (amended 2026-09-10a), the
 limit texts (9). CC never paraphrases money copy; changes are
 ruled amendments here.
 
@@ -449,3 +450,35 @@ The old line stated a fact and stopped; the new one states the fact and
 names the two ways out, which are the two doors the same screen already
 carries (OPEN A TABLE AND WAIT, CHALLENGE A FRIEND). mp/hall.js carries
 the new words byte-for-byte.
+
+=====================================================
+## AMENDMENT 2026-09-10a (S-HALL-ELSEWHERE-1) - THE SEATED-ELSEWHERE LINE
+=====================================================
+Owner-ruled 2026-09-10, on the evidence of S-HALL-TAKEOVER-1 (road 7/8,
+check D2c): a second authed session of an address that holds a live seat
+was shown the empty room and the words "No warrior is seated - yet." True
+of the floor, false of the player, at the player's most anxious moment.
+
+THE CRITERION THIS AMENDMENT RECORDS (a criterion, not an exception):
+section 11 holds the lines that tell a player what to believe about a
+stake they hold, whether or not the line names a number - money-adjacent
+by consequence. The friend reachability line (2026-09-08c) is already
+such a line. The empty-room line (2026-09-09b) stays outside: its reader
+holds no live stake. This line's reader does - the stake is in a battle
+they cannot see.
+
+  "Your warrior is already seated - the battle is live in another window."
+
+It renders ONLY on the server's word: the match server sends an additive
+`seated: { matchId, seat }` on the {tables} frame that session already
+receives, and only when the address holds a live seat AND this session is
+not the one holding it (W3-ELSEWHERE-1). The Hall never infers it from a
+table count or a local flag, and never remembers it: the room-end
+broadcast drops the field and the line goes with it on that same frame.
+
+It is a STANDING line beside the covenant, not a replacement for the
+empty-room line alone - the empty room renders only when the floor is
+empty, and a seated player deserves the truth on a busy floor too. While
+it is up, the empty-room truth line is suppressed so the two never
+coexist. No act rides on it in this rung; moving a live seat between tabs
+is its own future scope.

@@ -149,6 +149,7 @@
         // click reconnects. Mid-battle is NOT governed here — matchclient keeps its own auto-reconnect, because a
         // silent forfeit is worse than a popup (owner ruling R3).
         if (v && v.connected === false) { feedState = "dead"; connectionLost = true; return render(); }
+        seatedElsewhere = (v && v.seatedElsewhere) || null;   // S-HALL-ELSEWHERE-1 — never an `if`: absent means gone
         if (v && Array.isArray(v.tables)) { tables = v.tables.slice(); feedState = "live"; reconnectTries = 0; connectionLost = false; reconcilePendingAgainstTables(tables); } // whole-list reconcile (+ B2: our escrow appearing here is the server's own proof it learned the open)
         if (v && v.lossLimit) lossLimit = v.lossLimit;
         if (v && (v.settlement || v.pendingSlip)) settlementView = v.settlement || v.pendingSlip; // a pending slip surfaced in the lobby (resume-after-reload). S-HALL-SLIP-SCOPE-1 — THE HONEST HOME: an old unsettled slip surfaces here as its own affordance, never as a live match's outcome.
@@ -882,6 +883,8 @@
   var lastView = null;       // the latest view of any kind (for the clock/vanish tick)
   var settleState = null;    // { casting } | { settled, terminalState } | { error } — the browser settle cast state
   var settlementView = null; // a pending slip surfaced in the lobby (resume-after-reload)
+  var seatedElsewhere = null;// S-HALL-ELSEWHERE-1 — { matchId, seat } from the view. REFRESHED on every frame,
+                             //   never remembered: the room-end broadcast drops the field and so must the Hall.
   var dealtMatches = {};      // matchId -> true once the "dealing…" beat has played
   var dismissedMatch = {};    // matchId -> true once the player leaves the over screen back to the Hall
   var signedInAs = null;      // the recovered connected-wallet identity (B1; shown in the header)
@@ -890,6 +893,9 @@
 
   // ── the RULED settlement copy (docs/LOBBY_DESIGN.md section 11 → 8c, VERBATIM; only the [slots] filled) ──
   var ABORT_LINE = "unclaimed pots refund both players automatically after 24 hours.";
+  //  S-HALL-ELSEWHERE-1 — §11 amendment 2026-09-10a. Its reader holds a live stake in a battle they cannot see;
+  //  what they are told here is what they believe about that stake. Verbatim from LOBBY_DESIGN.md.
+  var SEATED_ELSEWHERE_LINE = "Your warrior is already seated - the battle is live in another window.";
   function WON_LINE(total, fee) { return "You won. Collect " + total + " DYC - " + fee + " to the treasury."; }
   function WON_SETTLED(total) { return "settled - " + total + " DYC in your wallet"; }
   var DRAW_LINE = "A draw - both stakes return in full.";
@@ -1063,7 +1069,13 @@
     // the Hall (lobby). A settlement slip (resume-after-reload, or after leaving the over screen) rides on top — pre-settle
     //   (the Cast button) or resolved (the settled line).
     var pendingSlip = settlementView ? '<div class="hall-lobby-settle">' + settlementStrip(settlementView) + '</div>' : "";
-    root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + pendingSlip + rail() + doors() + floor();
+    // S-HALL-ELSEWHERE-1 (R2, shape B) — a STANDING line, rendered whenever the view carries `seated`. Shape (A)
+    //   (replace the empty-room line only) was refused: emptyRoom() renders solely when the floor is EMPTY, so on a
+    //   busy floor the seated sibling would be told nothing and the incident would reproduce. Nothing is displaced —
+    //   the arena, the doors, the plaques and the covenant all stand; emptyRoom() suppresses its own truth line
+    //   while this one is up, so the two never coexist.
+    var seatedLine = seatedElsewhere ? '<div class="hall-empty-line state-line hall-seated-elsewhere">' + SEATED_ELSEWHERE_LINE + '</div>' : "";
+    root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + seatedLine + pendingSlip + rail() + doors() + floor();
     wireHall();
     var st = document.querySelector(".hall-lobby-settle [data-settle]"); if (st && !st.disabled) st.onclick = function () { if (settlementView && settlementView.slip) ceremonySettle(settlementView.slip); };
     // NOTE: the sheet lives in its OWN body element (#hall-sheet-host), independent of hall-root, so a floor re-render
@@ -1189,7 +1201,9 @@
       '<source media="(min-width: 900px)" srcset="../assets/hall/arena_wide.webp">' +
       '<img src="../assets/hall/arena_tall.webp" alt="" aria-hidden="true" loading="lazy" onerror="this.style.display=\'none\'">' +
       '</picture></div>' +
-      '<div class="hall-empty-line state-line">No warrior is seated - yet. Open the first table, or summon someone you already trust.</div>' +
+      // S-HALL-ELSEWHERE-1 — the two never coexist: while the standing seated line is up, this one would be the
+      //   lie it replaces ("No warrior is seated" to a player whose warrior IS seated). The doors stay.
+      (seatedElsewhere ? "" : '<div class="hall-empty-line state-line">No warrior is seated - yet. Open the first table, or summon someone you already trust.</div>') +
       '<div class="hall-empty-doors">' +
       '<button class="hall-act" data-act="friend-sheet">CHALLENGE A FRIEND</button>' +
       '<a class="hall-act hall-empty-practice" href="../game/index.html?v=33d0757">practice — no stakes, AI opponent</a>' +

@@ -46,6 +46,7 @@ const LAW = [
   ["cancel moved-on",    "this table is no longer cancellable - the match has moved on"],
   ["friend reachability", "could not reach the table server - your code is fine, try again in a moment"],
   ["cross-account",      "this was prepared for another account - switch back to [0xA...] to finish it"],
+  ["seated elsewhere",   "Your warrior is already seated - the battle is live in another window."],
   ["9 limit set",        "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this."],
   ["9 limit block",      "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: [X] DYC."],
 ];
@@ -83,6 +84,15 @@ ok("it passes through ceremonyMsg VERBATIM (never truncated or re-mapped)",
    /if \(e && e\.crossAccount\) return e\.message;/.test(HALL));
 ok("the companion account-changed line is NOT enumerated in section 11",
    !/account changed - the Hall is now following/.test(norm(DOC).split("HONESTY TEXT")[1].split("WHAT THE HALL NEVER SHOWS")[0] || ""));
+
+console.log("\n── the seated-elsewhere line ruled 2026-09-10a ──");
+ok("enumerated in the section 11 copy block", /seated-elsewhere line \(amended\s+2026-09-10a\)/.test(norm(DOC)));
+ok("the 2026-09-10a amendment note is recorded", /AMENDMENT 2026-09-10a \(S-HALL-ELSEWHERE-1\)/.test(DOC));
+// THE STRUCTURAL GUARD: the line may render only on the SERVER'S word. Never from a table count, never from a
+// local flag, and never remembered — the client's assignment is unconditional so the room-end frame clears it.
+ok("it renders ONLY on the server's field, and the Hall never remembers it",
+   /seatedElsewhere = \(v && v\.seatedElsewhere\) \|\| null;/.test(HALL) &&
+   /seatedElsewhere \? '<div class="hall-empty-line state-line hall-seated-elsewhere">' \+ SEATED_ELSEWHERE_LINE/.test(HALL));
 
 console.log("\n── advisory · other quoted doc lines (not section-11 ruled copy) ──");
 const lawSet = new Set(LAW.map(([, l]) => norm(l)));

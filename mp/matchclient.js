@@ -30,6 +30,7 @@
     var match = null;              // { matchId, seat, opponent, seed, factions, winTarget }
     var g = null;                  // the local mirror
     var phase = null, turn = null, lastSeq = 0, outcome = null, lastReject = null;
+    var seatedElsewhere = null;    // S-HALL-ELSEWHERE-1 — { matchId, seat } while THIS session's address holds a seat elsewhere
     var settlement = null;         // M-P5 — the signed slip + settle state (persisted, resume-able). S-HALL-SLIP-SCOPE-1:
                                    //   THE LIVE MATCH'S OWN SLIP ONLY. Stamped with the matchId the server names.
     var pendingSlip = null;        // S-HALL-SLIP-SCOPE-1 — a slip that is NOT this match's (resumed from storage, or a
@@ -101,7 +102,7 @@
     }
     function view() {
       if (redacted && serverView && match) return normalizeServerView(serverView);
-      if (!g || !match) return { screen: "lobby", me: me, tables: tables, connected: !!(ws && ws.readyState === 1), settlement: settlement, pendingSlip: pendingSlip, lossLimit: lossLimit, reconnecting: reconnecting, lastReject: lastReject, lastOpened: lastOpened }; // S-HALL-L2: lastReject surfaces server refusals (FREE tier-0, join-not-locked, loss backstop) to the Hall
+      if (!g || !match) return { screen: "lobby", me: me, tables: tables, seatedElsewhere: seatedElsewhere, connected: !!(ws && ws.readyState === 1), settlement: settlement, pendingSlip: pendingSlip, lossLimit: lossLimit, reconnecting: reconnecting, lastReject: lastReject, lastOpened: lastOpened }; // S-HALL-L2: lastReject surfaces server refusals (FREE tier-0, join-not-locked, loss backstop) to the Hall
       var seat = match.seat, mine = g.players[seat], opp = g.players[1 - seat];
       var legal = (phase === "play" && turn === seat) ? E.playableIndices(g, seat) : [];
       return {
@@ -151,7 +152,12 @@
       if (m.type === "challenge") { nonce = m.nonce; devMode = !!m.devMode; log("challenge"); if (authMode) doAuth(); push(); return; } // S-HALL-L3: if an auth mode is already chosen (e.g. authConnected called before the challenge), sign this challenge now — robust to either ordering. On a first connect authMode is null (unchanged), so the client's own authWallet/authDev/authConnected drives it; on reconnect authMode is set (as before).
       if (m.type === "authed") { me = m.address; log("authed " + (m.dev ? "(dev) " : "") + m.address); push(); return; }
       if (m.type === "auth-error") { lastReject = "auth: " + m.error; log("AUTH REJECTED " + m.error); push(); return; }
-      if (m.type === "tables") { tables = m.tables; push(); return; }
+      // S-HALL-ELSEWHERE-1 — the {tables} handler used to keep `m.tables` and DROP every other field, so the
+      //   server's `seated` word never reached the view. The assignment is UNCONDITIONAL on purpose: an `if`
+      //   would hold the last true value forever and print "your warrior is already seated" after the battle
+      //   ended — the stale lie this task exists to kill, mirrored onto the client. The room-end broadcast
+      //   carries no `seated`, so the client forgets on the very same frame the server clears it.
+      if (m.type === "tables") { tables = m.tables; seatedElsewhere = m.seated || null; push(); return; }
       // S-HALL-L3-FIX-1 (B2) — the ACK. Was log-only and did not push, so no caller could ever learn the server
       // accepted the open. Now recorded and pushed: the Hall clears its pending record ONLY on this (or on our
       // escrowMatchId appearing in {tables}), never on a fire-and-forget send.
