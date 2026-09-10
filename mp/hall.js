@@ -1325,7 +1325,7 @@
       (seatedElsewhere ? "" : '<div class="hall-empty-line state-line">No warrior is seated - yet. Open the first table, or summon someone you already trust.</div>') +
       '<div class="hall-empty-doors">' +
       '<button class="hall-act" data-act="friend-sheet">CHALLENGE A FRIEND</button>' +
-      '<a class="hall-act hall-empty-practice" href="../game/index.html?v=33d0757">practice — no stakes, AI opponent</a>' +
+      '<a class="hall-act hall-empty-practice" href="../game/index.html">practice — no stakes, AI opponent</a>' +
       '<button class="hall-act" data-act="open-sheet">OPEN A TABLE AND WAIT</button></div></div>';
   }
 

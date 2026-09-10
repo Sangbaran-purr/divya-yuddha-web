@@ -194,6 +194,36 @@ async function main() {
     H.teardown(w); B.srv.close();
   }
 
+  // ═══ S-HALL-ENTRY-1 · the Hall's header returns to the game ═══
+  //   chrome is the Hall's own frame, so its header lives here. Before this block no suite asserted a single nav
+  //   byte, so the header could change without a red.
+  console.log("\n── S-HALL-ENTRY-1 · the header returns to the game ──");
+  {
+    const JSDOM = require("jsdom").JSDOM;
+    const html = fs.readFileSync(path.join(H.SITE, "mp/hall.html"), "utf8");
+    const dom = new JSDOM(html, { url: "https://divyayuddha.games/mp/hall.html" });
+    const d = dom.window.document;
+    const nav = d.querySelector("nav.hall-nav");
+    const first = nav && nav.firstElementChild;
+    ok("E1 · the BACK control LEADS the header — the first thing in it", !!first && first.classList.contains("hall-nav-back"),
+       first ? first.outerHTML.slice(0, 120) : "(no nav)");
+    ok("E2 · it reads “← The Game”", !!first && first.textContent.trim() === "← The Game", first && JSON.stringify(first.textContent));
+    ok("E3 · and it RESOLVES to the game's front door", !!first && first.href === "https://divyayuddha.games/game/index.html", first && first.href);
+    ok("E4 · the separate “The Game” text link is retired — one road to the game, not two words for it",
+       Array.from(nav.querySelectorAll(".hall-nav-links a")).every((a) => a.textContent.trim() !== "The Game"));
+    const secondary = Array.from(nav.querySelectorAll(".hall-nav-links a")).map((a) => a.getAttribute("href"));
+    ok("E5 · Dashboard and Store remain as secondary doors (the Store funds stakes)",
+       secondary.indexOf("../dashboard.html") >= 0 && secondary.indexOf("../store.html") >= 0, JSON.stringify(secondary));
+    ok("E6 · the crest stays", !!nav.querySelector(".hall-nav-brand:not(.hall-nav-back) img"));
+    // THE LEDGER (R2): mp/ lives outside scripts/sync_game.sh's asserted 20-link ledger, so it carries NO game stamp.
+    // A stamp the sync cannot keep is a false guarantee — hall.js is a cached subresource the sync would rewrite
+    // without bumping its own ?v=, leaving browsers on the old link while the disk looked managed.
+    const mpFiles = fs.readdirSync(path.join(H.SITE, "mp")).filter((f) => /\.(html|js)$/.test(f));
+    const stamped = [];
+    mpFiles.forEach((f) => { (fs.readFileSync(path.join(H.SITE, "mp", f), "utf8").match(/game\/index\.html\?v=[0-9a-f]+/g) || []).forEach((m) => stamped.push(f + ": " + m)); });
+    ok("E7 · ZERO game stamps anywhere in mp/ — nothing there pretends the sync keeps it", stamped.length === 0, stamped.join(" | "));
+  }
+
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));
   process.exit(fail ? 1 : 0);
 }
