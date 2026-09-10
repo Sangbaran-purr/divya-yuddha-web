@@ -114,8 +114,15 @@ async function main() {
      JSON.parse(NEWER_LOSS).matchId === "m-OLD-777" && JSON.parse(OLDER_WIN).matchId === "m-OLD-555");
 
   // ═══ the PRE-FIX bytes, driven beside the new ones ═══
-  const HEAD_MC = execFileSync("git", ["show", "HEAD:mp/matchclient.js"], { cwd: H.SITE, maxBuffer: 8 << 20 }).toString();
-  const HEAD_HALL = execFileSync("git", ["show", "HEAD:mp/hall.js"], { cwd: H.SITE, maxBuffer: 8 << 20 }).toString();
+  // S-HALL-CEREMONY-1 correction: this used to read `HEAD:`, which DEFEATED ITSELF the moment the slip-scope fix
+  //   landed — HEAD then contained the fix and the reproduction went red. A pre-fix pin must name the commit, not a
+  //   moving ref. 8d1d423 is the last commit before S-HALL-SLIP-SCOPE-1 (dca23ab).
+  const PRE_FIX_REF = "8d1d423";
+  const at = (f) => execFileSync("git", ["show", PRE_FIX_REF + ":" + f], { cwd: H.SITE, maxBuffer: 8 << 20 }).toString();
+  const HEAD_MC = at("mp/matchclient.js"), HEAD_HALL = at("mp/hall.js");
+  if (HEAD_MC.indexOf("pendingSlip") >= 0 || HEAD_HALL.indexOf("slipForMatch") >= 0) {
+    console.log("  ✖ the pre-fix pin " + PRE_FIX_REF + " already CONTAINS the fix — the reproduction would pass emptily"); process.exit(1);
+  }
   {
     const d = driveClient(HEAD_MC, "pre");
     d.ls.setItem("dy_mp_slip_777", NEWER_LOSS);

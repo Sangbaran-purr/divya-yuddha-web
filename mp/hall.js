@@ -365,7 +365,12 @@
       if (BigInt(a) >= BigInt(stakeWei)) return false; // already sufficient
       mergePendingSlot(slot, { step: "approve" });
       return feeOverrides().then(function (fee) { return dyc.approve.staticCall(escrowAddr(), BigInt(stakeWei)).then(function () { return dyc.approve(escrowAddr(), BigInt(stakeWei), fee); }); })
-        .then(function (tx) { mergePendingSlot(slot, { approveTxHash: tx.hash }); return tx.wait(); }).then(function () { return true; });
+        //  S-HALL-CEREMONY-1 (R2) — BOUNDED, like the lock. An unbounded tx.wait() here neither resolved nor threw
+        //  on a wedged provider, freezing the sheet at "confirm in your wallet…" with the header never re-read.
+        //  A bounded-out approve claims nothing: the approve moves NO DYC (it sets an allowance), so we go on to
+        //  the lock, whose own staticCall is the truth-teller — a short allowance reverts there and the ruled
+        //  error face is shown. Nothing was locked at that beat.
+        .then(function (tx) { mergePendingSlot(slot, { approveTxHash: tx.hash }); return waitBounded(r, tx); }).then(function () { return true; });
     });
   }
   //  S-HALL-L3-FIX-1 (B4) — the wait is BOUNDED. An unbounded tx.wait() is what froze the sheet on the
@@ -427,14 +432,16 @@
           // bounded out with no receipt: we do NOT know the lock landed, so we do not claim it did (the 8d line
           // is only honest once the lock is confirmed). The record stands; a reload or CHECK AGAIN resumes it.
           ceremony = null; openUnknown = { slot: out.slot, txHash: out.txHash, stake: ctx.stakeWei };
-          sheet = { kind: "strand" }; renderSheet(); return null;
+          showSheet({ kind: "strand" }); return null;
         }
         var id = parseMatchId(r, out.rc);
         var delivered = serverOpen(ctx, id, out.slot);
-        ceremony = null;
-        readLiquidAgain();                                 // M3 — the open LOCK moved DYC; the header re-reads
-        if (!delivered) { renderCurrent(); return id; }   // raiseStrand already opened the affordance
-        if (!ctx.friendAddr) { sheet = null; render(); }
+        lockConfirmed();                                   // M3 + CEREMONY-1 — the lock moved DYC: beats end, header re-reads
+        // raiseStrand has already set the 8d card; repaint NOW rather than leaving the stale wallet line up for a
+        // tick until its own setTimeout lands. The strand's honest hold itself is untouched.
+        if (!delivered) { renderCurrent(); renderSheet(); return id; }
+        // the friend sheet STAYS — it carries the code to share — but it is repainted, never left on a stale beat.
+        if (!ctx.friendAddr) closeSheet(); else renderSheet();
         return id;
       });
     }).catch(function (e) { if (ceremony) { ceremony.step = "error"; ceremony.error = ceremonyMsg(e); } renderSheet(); });
@@ -458,10 +465,9 @@
         // B1/B2 — the joiner's stake is money too: journal, attempt, and only clear when the socket carried it.
         mergePendingSlot(jslot, { step: "server" });
         var delivered = !!(client && client.join(ctx.tableId, ctx.faction));
-        ceremony = null;
-        readLiquidAgain();                                 // M3 — the join LOCK moved DYC; the header re-reads
-        if (!delivered) { resumeNote = "your stake locked, but the table could not be told — reload to finish taking the seat."; renderCurrent(); return; }
-        clearPendingSlot(jslot); sheet = null; render();
+        lockConfirmed();                                   // M3 + CEREMONY-1 — the lock moved DYC: beats end, header re-reads
+        if (!delivered) { resumeNote = "your stake locked, but the table could not be told — reload to finish taking the seat."; renderCurrent(); renderSheet(); return; }
+        clearPendingSlot(jslot); closeSheet(); render();
       });
     }).catch(function (e) { if (ceremony) { ceremony.step = "error"; ceremony.error = ceremonyMsg(e); } renderSheet(); });
   }
@@ -479,7 +485,7 @@
         .then(function (tx) { return tx.wait(); }).then(function () {
           if (t.id && client) client.close(t.id);            // a ghost has no table to close
           if (t.slot) settleStrand(t.slot);                  // the stake is refunded — the record has done its work
-          ceremony = null; sheet = null; openStrand = null; openUnknown = null; readLiquidAgain(); render();
+          ceremony = null; openStrand = null; openUnknown = null; readLiquidAgain(); closeSheet(); render();
         });
     }).catch(function (e) {
       // The staticCall rejects BEFORE any wallet prompt, so nothing was signed and no gas was spent. Report the
@@ -519,7 +525,11 @@
   function settleStrand(slot) {                              // the server has confirmed this escrow — the record may go
     if (ackWatch[slot]) { clearTimeout(ackWatch[slot]); delete ackWatch[slot]; }
     clearPendingSlot(slot);
-    if (openStrand && openStrand.slot === slot) { openStrand = null; if (sheet && sheet.kind === "strand") sheet = null; }
+    //  S-HALL-CEREMONY-1 — the SIXTH omission site, found while proving P1: the ack settles the strand and clears
+    //  the sheet STATE, but nothing repainted the host, so the 8d card outlived the truth it narrated exactly as
+    //  the wallet line did. Routed through closeSheet(); guarded, so a settling that owns no sheet never wipes a
+    //  half-typed friend code.
+    if (openStrand && openStrand.slot === slot) { openStrand = null; if (sheet && sheet.kind === "strand") closeSheet(); }
     if (openUnknown && openUnknown.slot === slot) openUnknown = null;
   }
   //  B2 — the ONLY roads that clear an open record. (a) our escrowMatchId is now a table in the server's own
@@ -535,6 +545,10 @@
   function consumeOpenAck() {
     var waiting = listPending().filter(function (e) { return e.rec && e.rec.kind === "open" && e.rec.step === "server"; });
     if (waiting.length === 1) { if (waiting[0].legacy) clearLegacyPending(); else settleStrand(waiting[0].slot); }
+    //  S-HALL-CEREMONY-1 (R1) — the header's one-shot re-read at lock-confirm can race chain propagation on a
+    //  public RPC and was never corrected. The {opened} ack is a LATER, SETTLED moment we already handle: read
+    //  again here. Cheap, idempotent, and it makes the number right by the time the sheet is gone.
+    readLiquidAgain();
   }
 
   function ceremonyMsg(e) {
@@ -783,6 +797,18 @@
       (has ? '<button class="hall-door hall-act-limit-remove" data-limit-remove="1">REMOVE LIMIT</button>' : "") + '</div>' +
       (ctx.err ? '<p class="state-line hall-sheet-err">' + ctx.err + '</p>' : ""), "hall-sheet-limit");
   }
+
+  // ── S-HALL-CEREMONY-1 — THE CEREMONY FINISHES ITS OWN STORY ──────────────────────────────────────────────
+  //  The sheet lives in its OWN host (#hall-sheet-host); render() deliberately does not touch it (see the note at
+  //  the foot of render(), and raiseStrand's, which already said this law out loud for the strand road). So a bare
+  //  `sheet = null; render()` cleared the STATE and left the OVERLAY standing, frozen on whatever renderSheet()
+  //  last drew — beat 2's "confirm in your wallet…". Measured on a plain, fully successful staked open: no stall
+  //  was needed. Every ceremony terminus now goes through these, so the state and the face move together.
+  function closeSheet() { sheet = null; renderSheet(); }
+  function showSheet(next) { sheet = next; renderSheet(); }
+  //  THE MONEY MOMENT: the LOCK CONFIRMING ends the wallet beats and re-reads the header, whatever the delivery
+  //  road then does. Nothing downstream of it may decide whether the header is honest.
+  function lockConfirmed() { ceremony = null; readLiquidAgain(); }
 
   function renderSheet() {
     var existing = $("hall-sheet-overlay");
