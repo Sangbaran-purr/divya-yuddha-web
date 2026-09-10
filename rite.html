@@ -322,7 +322,7 @@
             <a href="mint.html">The Mint</a>
             <a href="store.html">The Store</a>
             <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html?v=33d0757">The Game</a>
+            <a href="game/index.html?v=adc0730">The Game</a>
           </div>
           <div id="nav-decl">
             <a id="nameplate-top" class="nameplate hidden" href="dashboard.html"><span class="flame-dot"></span><span id="addr-top"></span></a>
@@ -337,7 +337,7 @@
             <a href="mint.html">The Mint</a>
             <a href="store.html">The Store</a>
             <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html?v=33d0757">The Game</a>
+            <a href="game/index.html?v=adc0730">The Game</a>
           </nav>
         </div>
       </nav>
@@ -599,6 +599,12 @@
         // gated game copy, shows the one-time threshold notice, then the §8.4 wipe.
         function setSitePass() {
           try { sessionStorage.setItem("dyw_pass", "1"); } catch (e) {}
+          // G-MENU-MULTIPLAYER-1 (R6) — AND THE DEMO MARK DIES HERE. demo/index.html seeds dyw_demo so the
+          // game keeps Multiplayer's dimmed "Coming soon" inside the demo; sessionStorage is per-TAB, so a
+          // visitor walking demo -> Get Access -> here -> the game in ONE TAB would otherwise carry that
+          // mark in and find the door still dimmed after paying. The moment access is granted is the moment
+          // the mark stops being true, so it dies beside the pass that replaces it.
+          try { sessionStorage.removeItem("dyw_demo"); } catch (e) {}
         }
         function doorWipe(done) {
           var dw = document.getElementById("door-wipe");
@@ -633,8 +639,8 @@
           var entered = false;
           try { entered = !!localStorage.getItem("dy_site_entered"); } catch (e) {}
           function go() {
-            if (reduce) { window.location.href = "game/index.html?v=33d0757"; return; }
-            doorWipe(function () { window.location.href = "game/index.html?v=33d0757"; });
+            if (reduce) { window.location.href = "game/index.html?v=adc0730"; return; }
+            doorWipe(function () { window.location.href = "game/index.html?v=adc0730"; });
           }
           if (!entered) { thresholdNotice(go); } else { go(); }
         }

@@ -6032,6 +6032,40 @@ $('quests-back').onclick=()=>$('quests').classList.add('hidden');
 $('lp-sadhana').onclick=()=>openSadhanaPick();
 $('sad-pick-close').onclick=()=>$('sadhanapick').classList.add('hidden');
 $('sadhanapick').onclick=(e)=>{ if(e.target===$('sadhanapick')) $('sadhanapick').classList.add('hidden'); };   // backdrop tap closes
+/* ═══ G-MENU-MULTIPLAYER-1 — THE FRONT DOOR OPENS ═══════════════════════════════════════════════════
+   The standing ruling is that players always enter Multiplayer THROUGH THE GAME, so this plaque stops
+   saying "Coming soon" and becomes a door to the Hall.
+
+   THE WALL HOLDS ABSOLUTELY. This is a NAVIGATION LINK and nothing else: it opens no connection of any
+   kind, loads no new script, and reads nothing but one key of its own. The game learns exactly one new
+   string, and that string is a URL. (This note deliberately avoids naming the libraries and hosts the
+   wall forbids, so the wall's own grep over this file stays honestly zero rather than matching prose.)
+
+   IT SHIPS LOCKED AND IS UPGRADED, never the reverse. If this block ever fails to run, the player is
+   left with today's honest "Coming soon" rather than a door that goes nowhere.
+
+   THE HOST IS ABSOLUTE (owner-ruled 2026-09-10, R2) because THE FREE GAME IS THE FUNNEL and its door
+   must work too. The Hall lives only on the site; no sync road ever touches the free copy, so a relative
+   href would 404 there. This mirrors the site's own hardcoding of the free game's origin for its video,
+   VFX and asset bases.
+
+   THE DEMO KEEPS ITS DIMMED FACE (R1). demo/index.html seeds `dyw_demo` beside the site pass it already
+   seeds, before the iframe is given a src; absent that key the door is live. That honours the 2026-08-28
+   record and the ruled mockup's screen 11 ("MULTIPLAYER — in the real game, not in the demo"). One
+   sessionStorage read, in the same seed-then-load mechanism the honest door already uses. */
+(function(){
+  var mp = document.querySelector('#landing .mode.locked[data-soon]');
+  if (!mp) return;
+  var isDemo = false; try { isDemo = !!sessionStorage.getItem('dyw_demo'); } catch (e) {}
+  if (isDemo) return;                                  // the demo face is left EXACTLY as authored
+  mp.classList.remove('locked'); mp.classList.add('active');
+  mp.removeAttribute('data-soon');
+  mp.id = 'mode-mp';
+  var lock = mp.querySelector('.lockic'); if (lock) lock.remove();
+  var cap = mp.querySelector('.cap'); if (cap) cap.textContent = 'The Hall — human opponents, staked tables';
+  mp.dataset.href = 'https://divyayuddha.games/mp/hall.html';
+  mp.onclick = function(){ location.href = mp.dataset.href; };   // normal navigation, same tab
+})();
 document.querySelectorAll('#landing .mode.locked').forEach(b=> b.onclick=()=>toastMute('Coming soon'));
 
 /* ===================== FACTION INTRODUCTION =====================

@@ -16,6 +16,11 @@
          road is untouched — this only seeds THIS tab; a fresh context without the pass still bounces to rite. -->
     <script>
       try { sessionStorage.setItem("dyw_pass", "1"); } catch (e) {}
+      // G-MENU-MULTIPLAYER-1 (R1) — MARK THIS AS THE DEMO, beside the pass and by the same seed-then-load
+      // road. The demo and the gated game are the SAME bytes in an iframe, so nothing inside the document
+      // could tell them apart; this key is what lets the menu keep Multiplayer's dimmed "Coming soon" here
+      // while it is a live door to the Hall everywhere else. Seeded BEFORE the iframe is given its src.
+      try { sessionStorage.setItem("dyw_demo", "1"); } catch (e) {}
     </script>
 
     <style>
@@ -128,7 +133,7 @@
       // The pass is already seeded in <head>; now point the same-origin iframe at the current game snapshot.
       // ?v=45543ca is the current pin (SNAPSHOT.md source commit). This link IS in sync_game.sh's managed
       // entry-link set (S-DEMO-1: count grown to 7), so it re-stamps on every future snapshot advance.
-      document.getElementById("demo-game").src = "../game/index.html?v=33d0757";
+      document.getElementById("demo-game").src = "../game/index.html?v=adc0730";
     </script>
   </body>
 </html>
