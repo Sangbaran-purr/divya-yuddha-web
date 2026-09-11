@@ -4922,6 +4922,18 @@ const $=id=>document.getElementById(id);
 const TYPE_ICON={hero:'👑',unit:'⚔',astra:'🔱',mantra:'🕉',artifact:'🧿'};
 const RAR_CLASS={ L:'rar-L', M:'rar-M', E:'rar-E' };
 let G=null, pendingPlay=null, aiTimer=null, seenLog=0;
+/* ── BW1 (F3, R4) — THE SEAT LAW. The battle screen used to assume the human is seat 0 and the opponent seat 1, in
+   ~140 places. A wire player who JOINS a table sits in seat 1. The seat is now a parameter, resolved ONCE per match
+   by the entry: startGame and startStoryChapter set ME=0 (so vs-AI and Story behave byte-for-byte as before); the
+   wire entry sets whatever seat the server dealt. ABSOLUTE seats stay absolute in all DATA (engine state, G.events,
+   roundHistory, ownerPiOfUid); they turn into "me" / "the opponent" only where something is DRAWN. The DOM was
+   already me/opponent-shaped (punits/ounits, ptotal/ototal, .half.me/.half.opp), so N2 — "ME below, always" — is
+   this mapping and nothing more. The named literals that STAY: the both-seat iterations `for (const pi of [0,1])`,
+   the story predicates in src/chapters.js (story's player is seat 0 by construction), and the engine block. */
+let ME = 0, OPP = 1;
+let Wire = null;   // BW1 — null = not a wire match; else the frame's live wire state (see THE WIRE, above pump)
+function setSeats(me){ ME = me ? 1 : 0; OPP = 1 - ME; }
+function halfSel(pi){ return pi === ME ? '.half.me' : '.half.opp'; }   // an absolute seat → the screen half it is drawn in
 let inspectContext=null, pendingFly=null, knownUids=new Set(), lastPowers={}, lastRoundLen=0, focusRaf=0;
 let leapMode=null, placeMode=null, shieldMode=false;   // Vanara Leap / unit-placement / Deva Dharma-Shield selection state
 let lastTotals={o:null,p:null};
@@ -4958,13 +4970,14 @@ function sizeBoard(){
 let currentFactions={ p0:'devas', p1:'devas' };
 function startGame(p0Faction, p1Faction){
   Story=null;   // a PvAI match is never a story chapter
+  Wire=null; setSeats(0);   // BW1 — vs-AI: the human is seat 0, as it always was
   currentFactions={ p0: p0Faction||currentFactions.p0, p1: p1Faction||currentFactions.p1 };
   resetChoreo();   // never inherit a stuck choreoActive from a prior match
   const _wd=buildWaveDeck(currentFactions.p0, currentFactions.p1);   // S-PLAY-1: owned wave cards of the picked faction enter battle (Road B); null → today's plain match, byte-identical
   G = _wd
     ? newGame({p0:'You',p1:'Opponent',p0Faction:currentFactions.p0,p1Faction:currentFactions.p1, p1Difficulty:selectedDifficulty, wave1:true, scenario:{p0Deck:_wd.p0Deck, p1Deck:_wd.p1Deck}})
     : newGame({p0:'You',p1:'Opponent',p0Faction:currentFactions.p0,p1Faction:currentFactions.p1, p1Difficulty:selectedDifficulty}); seenLog=0;   // D2: only the AI (p1) takes the chosen difficulty; the human (p0) stays advanced
-  G.players[0].manualShield=true;   // the human designates Dharma Shield by hand (AI keeps auto-designate)
+  G.players[ME].manualShield=true;   // the human designates Dharma Shield by hand (AI keeps auto-designate)
   applyDiffChip(selectedDifficulty); $('diffchip').classList.remove('hidden');   // in-match tier chip (PvAI); story hides it
   matchRecorded=false;              // arm the one-shot match-result counter for this new match
   goStampDone=false; lastEarn=null; // slice 4: re-arm the earnings-stamp one-shot for the new match
@@ -5056,7 +5069,7 @@ function beginMulligan(){ mullMarked=new Set(); $('mull-story').classList.add('h
 }
 addEventListener('resize', ()=>{ if(!$('mulligan').classList.contains('hidden')){ mullPickPlate(); mullFitPlate(); } });
 function renderMulligan(){
-  const cap=mullCap(), hand=G.players[0].hand;
+  const cap=mullCap(), hand=G.players[ME].hand;
   // MEDALLION count (n / N) + the tray of N slots, filled per mark
   $('mullcount').textContent=`${mullMarked.size} / ${cap}`;
   const tray=$('mull-tray'); tray.innerHTML='';
@@ -5087,9 +5100,14 @@ function renderMulligan(){
   btn.classList.toggle('mull-redraw', n>0);
 }
 $('mullconfirm').onclick=()=>{
+  if (Wire){   // R2 — the mulligan is an act like any other: send the INDICES, apply on relay; the AI mulligan never runs
+    const hand=G.players[ME].hand, idx=[...mullMarked].map(u=>hand.findIndex(c=>c.uid===u)).filter(i=>i>=0);
+    if (wireSend({ type:'mulligan', indices: idx })) { $('mullconfirm').disabled = true; }
+    return;
+  }
   const snap=snapshotBoard(); const evStart=G.events.length;
-  mulligan(G, 0, [...mullMarked]);
-  if(!Story) mulligan(G, 1, aiMulliganPlan(G, 1));   // story: keep the scripted opponent's opening hand intact
+  mulligan(G,ME, [...mullMarked]);
+  if(!Story) mulligan(G,OPP, aiMulliganPlan(G,OPP));   // story: keep the scripted opponent's opening hand intact
   Audio2.sfx('draw');
   $('mulligan').classList.add('hidden');
   const evs=G.events.slice(evStart); render();
@@ -5455,7 +5473,7 @@ function questCtx(g, isStory, bonusEarned){
   const idx=new Map();
   for(let s=0;s<2;s++){ const p=(g.players&&g.players[s])||{};
     ['units','discard','hand','deck','heroes','removedHeroes'].forEach(k=>(p[k]||[]).forEach(c=>{ if(c) idx.set(c.uid,{side:s,card:c}); })); }
-  return { g, evs:g.events||[], won:g.winner===0, story:!!isStory, bonus:!!bonusEarned,
+  return { g, evs:g.events||[], won:g.winner===ME, story:!!isStory, bonus:!!bonusEarned,
            faction:(currentFactions&&currentFactions.p0)||'devas', realm:g.realm||'mrityulok', idx };
 }
 function _qSide(ctx, uid){ const e=ctx.idx.get(uid); return e?e.side:-1; }
@@ -5486,7 +5504,7 @@ const QUEST_DEFS = {
   // DAILY
   win1:        { scope:'daily', domain:'pvai',  kind:'count', target:1, label:'Win 1 match',                 measure:c=> c.won?1:0 },
   play2:       { scope:'daily', domain:'pvai',  kind:'count', target:2, label:'Play 2 matches',              measure:c=> 1 },
-  winby8:      { scope:'daily', domain:'pvai',  kind:'count', target:1, label:'Win a round by 8+',           measure:c=> (c.g.roundHistory||[]).some(h=>h.winner===0 && (h.t0-h.t1)>=8)?1:0 },
+  winby8:      { scope:'daily', domain:'pvai',  kind:'count', target:1, label:'Win a round by 8+',           measure:c=> (c.g.roundHistory||[]).some(h=>h.winner===ME && (h['t'+ME]-h['t'+OPP])>=8)?1:0 },
   play6units:  { scope:'daily', domain:'pvai',  kind:'count', target:1, label:'Play 6 Units in one match',   measure:c=>{ let n=0; for(const e of c.evs){ if(e.type==='play'){ const x=c.idx.get(e.sourceUid); if(x&&x.side===0&&x.card.t==='unit') n++; } } return n>=6?1:0; } },
   faction3:    { scope:'daily', domain:'pvai',  kind:'count', target:3, label:'Use your faction mechanic 3 times', measure:_qMechanic },
   herosurvives:{ scope:'daily', domain:'pvai',  kind:'count', target:1, label:'Win with your Hero surviving', measure:c=> (c.won && ((c.g.players[0].heroes||[]).length>0))?1:0 },
@@ -5645,7 +5663,7 @@ function recordMatchResult(){
   const P=loadProfile();                        // handles day rollover
   const winsBefore=P.wins|0;
   P.matches=(P.matches|0)+1;
-  if(G.winner===0){ P.wins=(P.wins|0)+1; P.winsToday=(P.winsToday|0)+1; }   // player is p0; win only
+  if(G.winner===ME){ P.wins=(P.wins|0)+1; P.winsToday=(P.winsToday|0)+1; }   // player is p0; win only
   saveProfile(P);
   // M1 §1 play-XP (PvAI match-result hook; story XP is granted in markChapterComplete). Engine untouched — reads G.winner only.
   const M=loadMeta();
@@ -5655,9 +5673,9 @@ function recordMatchResult(){
   // D2 §2 — DIFFICULTY REWARD MULTIPLIER, applied at THIS ONE POINT to the match's XP/coins/Amsha/Sadhana income only.
   // The AI side (p1) carries the chosen tier (D1 opts.p1Difficulty); a match with no difficulty falls back to 1.0.
   // Level-up rewards (reconciled INSIDE grantXp), quest claims (panel), and story (never reaches here) are NOT scaled.
-  const matchDiff = (G.players[1] && G.players[1].difficulty) || null;
+  const matchDiff = (G.players[OPP] && G.players[OPP].difficulty) || null;
   const mult = (matchDiff && META_CONFIG.DIFFICULTY_REWARD_MULT[matchDiff]!=null) ? META_CONFIG.DIFFICULTY_REWARD_MULT[matchDiff] : 1;
-  const won = G.winner===0;
+  const won = G.winner===ME;
   const dailyFirstMatch = !M.daily.firstMatchAwarded; if(dailyFirstMatch) M.daily.firstMatchAwarded=true;   // day-keyed +25 XP
   const firstWin = won && !M.daily.firstWinAwarded;    if(firstWin) M.daily.firstWinAwarded=true;           // own day-key guard, distinct from the XP daily-first
   const baseXp    = META_CONFIG.xp.matchComplete + (won?META_CONFIG.xp.matchWin:0) + (dailyFirstMatch?META_CONFIG.xp.dailyFirstMatch:0);
@@ -7541,12 +7559,13 @@ function showBossPlate(ch, done){
 }
 function startStoryChapter(id){
   const ch=CHAPTERS[id]; if(!ch) return;
+  Wire=null; setSeats(0);   // BW1 — Story: the player is seat 0 by construction (the chapter predicates rely on it)
   resetChoreo();   // never inherit a stuck choreoActive from a prior match (a retry after a frozen/aborted choreo)
   Story = { chapter:ch, mode:ch.mode||'LOCKED', beatIdx:0, scriptIdx:0, handoff:false, lineBeat:-1,
             oppTurns:0, midFired:{}, holdLine:ch.introLine||null, holdInstruct:'', round2Shown:false, asideShown:false };   // SUGGESTED (ch3–5) adds free-play beat/aside/mid state
   currentFactions={ p0:ch.playerFaction, p1:ch.opponentFaction };
   G=newGame({ p0:'You', p1:'Opponent', p0Faction:ch.playerFaction, p1Faction:ch.opponentFaction, realm:ch.realm||undefined, rng:storyRng(storySeedN++), scenario:ch.scenario }); seenLog=0;
-  G.players[0].manualShield=true; matchRecorded=true;   // matchRecorded=true is belt-and-suspenders; showGameOver also early-returns for story (no PvAI telemetry)
+  G.players[ME].manualShield=true; matchRecorded=true;   // matchRecorded=true is belt-and-suspenders; showGameOver also early-returns for story (no PvAI telemetry)
   knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; hideBoardTargetBar();
   ['gameover','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','storyselect','cutscene','storyresult','mulligan','bossvs','realmpop','diffchip'].forEach(id=>$(id).classList.add('hidden'));   // diffchip: story never shows the PvAI difficulty chip
   $('hudwrap').classList.remove('hidden');
@@ -7563,14 +7582,14 @@ function storyBeginMulligan(){ beginMulligan(); const el=$('mull-story');
 function storyOpponentStep(){
   const ch=Story.chapter, step=ch.opponentScript[Story.scriptIdx];
   Story.oppTurns=(Story.oppTurns||0)+1;                             // count opponent turns (afterTurn mid-panels key on this)
-  if(Story.handoff || !step || step.handoff){ Story.handoff=true; aiTakeTurn(G,1); return; }
+  if(Story.handoff || !step || step.handoff){ Story.handoff=true; aiTakeTurn(G,OPP); return; }
   Story.scriptIdx++;
-  if(step.action==='pass'){ pass(G,1); return; }
-  const idx=G.players[1].hand.findIndex(c=>c.n===step.cardName);
-  if(idx>=0) playCard(G,1,idx); else pass(G,1);                     // scripted Astras (Pashupatastra/Nagastra) are untargeted → no target needed
+  if(step.action==='pass'){ pass(G,OPP); return; }
+  const idx=G.players[OPP].hand.findIndex(c=>c.n===step.cardName);
+  if(idx>=0) playCard(G,OPP,idx); else pass(G,OPP);                     // scripted Astras (Pashupatastra/Nagastra) are untargeted → no target needed
 }
 /* --- mid-round story panels: three trigger kinds — afterRound (ch2), afterTurn (ch3 opponent T3), afterEvent (ch5 first venom tick) --- */
-function storySide0Uids(){ const p=G.players[0]||{}; const s=new Set();
+function storySide0Uids(){ const p=G.players[ME]||{}; const s=new Set();
   ['units','discard','hand','deck','heroes','removedHeroes'].forEach(k=>(p[k]||[]).forEach(c=>{ if(c) s.add(c.uid); })); return s; }
 function storyMidTriggered(m){
   if(m.afterRound!=null) return G.round===m.afterRound+1 && G.roundHistory.length>=m.afterRound;
@@ -7592,18 +7611,18 @@ function storyShowMid(){ const e=storyMidEntry(); if(!e){ pump(); return; }
 }
 /* --- guidance: mask the hand to the highlighted card/action, glow it, show Brihaspati --- */
 function storyBeat(){ const g=Story.chapter.guidance; return g[Math.min(Story.beatIdx, g.length-1)]; }
-function storyBestUnitIdx(){ const pl=G.players[0]; const idxs=playableIndices(G,0).filter(i=>pl.hand[i].t==='unit'); if(!idxs.length) return -1; return idxs.reduce((a,b)=> pl.hand[a].p>=pl.hand[b].p?a:b); }
-function _storyCard(i){ const c=G.players[0].hand[i]; return { kind:'card', index:i, uid:c?c.uid:null }; }   // carry the UID so glow matches by identity, not DOM position
+function storyBestUnitIdx(){ const pl=G.players[ME]; const idxs=playableIndices(G,ME).filter(i=>pl.hand[i].t==='unit'); if(!idxs.length) return -1; return idxs.reduce((a,b)=> pl.hand[a].p>=pl.hand[b].p?a:b); }
+function _storyCard(i){ const c=G.players[ME].hand[i]; return { kind:'card', index:i, uid:c?c.uid:null }; }   // carry the UID so glow matches by identity, not DOM position
 function storyResolveHighlight(h){                                   // → {kind:'pass'|'shield'|'card', index?, uid?}
   if(!h) return { kind:'pass' };
   if(h.concept) return { kind:'concept' };   // T60b R4: a CONCEPT beat teaches, not plays → NO glow (applyStoryGuidance glows only card/pass/shield, so 'concept' falls through to nothing)
   if(h.shield) return { kind:'shield' };
   if(h.action==='pass') return { kind:'pass' };
-  if(h.auto){ const opp=G.players[1];
-    if(h.auto==='bestOrPass' && opp.passed && totalPower(G,0)>totalPower(G,1)) return { kind:'pass' };   // ahead & foe done → hold (banks cards)
+  if(h.auto){ const opp=G.players[OPP];
+    if(h.auto==='bestOrPass' && opp.passed && totalPower(G,ME)>totalPower(G,OPP)) return { kind:'pass' };   // ahead & foe done → hold (banks cards)
     const bi=storyBestUnitIdx(); return bi>=0 ? _storyCard(bi) : { kind:'pass' };
   }
-  const i=G.players[0].hand.findIndex(c=>c.n===h.card); return i>=0 ? _storyCard(i) : { kind:'pass' };
+  const i=G.players[ME].hand.findIndex(c=>c.n===h.card); return i>=0 ? _storyCard(i) : { kind:'pass' };
 }
 const STORY_MOMENT_CHANGED = 'The moment has changed — fight with what you hold.';   // beat-availability fallback aside (once per chapter run)
 // item 2/4: scroll the highlighted hand card into view so its glow is actually VISIBLE (the slider can hold it off-screen).
@@ -7624,8 +7643,8 @@ function storyScrollToHighlight(el){
 // the named card is usable iff it is in hand AND currently LEGAL — reusing playableIndices, the SAME gate the UI uses for taps
 // (so e.g. Gayatri with an empty discard is "not usable"). No parallel legality check.
 function storyCardPlayable(name){
-  const idx=G.players[0].hand.findIndex(c=>c.n===name);
-  return idx>=0 && playableIndices(G,0).includes(idx);
+  const idx=G.players[ME].hand.findIndex(c=>c.n===name);
+  return idx>=0 && playableIndices(G,ME).includes(idx);
 }
 // ONE resolution shared by TEXT and GLOW. A named-card beat falls back to bestOrPass when the card is absent OR illegal.
 // Returns the fully-resolved target (kind/index/UID) so glow lands on the card by IDENTITY, and text agrees via fellBack.
@@ -7638,8 +7657,8 @@ function storyEffectiveHighlight(){
 function storyHiEl(uid){ return uid!=null ? document.querySelector(`#hand .hc[data-uid="${uid}"]`) : null; }   // the hand card by UID (glow anchor)
 const STORY_ASIDE = 'Your hand, your war — I only counsel.';   // §6 aside (dual-line) — once per SUGGESTED chapter, on first deviation
 const STORY_ASIDE_INSTRUCT = "You played your own choice — that's allowed. The glowing card is my suggestion, never a command.";
-function storyLargestEnemyUid(){ const foes=G.players[1].units.filter(u=>!u.ghost); if(!foes.length) return null;
-  return foes.reduce((a,b)=>effPower(G,1,a)>=effPower(G,1,b)?a:b).uid; }
+function storyLargestEnemyUid(){ const foes=G.players[OPP].units.filter(u=>!u.ghost); if(!foes.length) return null;
+  return foes.reduce((a,b)=>effPower(G,OPP,a)>=effPower(G,OPP,b)?a:b).uid; }
 function clearStoryTargetGlow(){ document.querySelectorAll('#field .bc.story-target').forEach(el=>el.classList.remove('story-target')); }
 function storySetTargetGlow(spec){ let uid=null; if(spec==='largestEnemy') uid=storyLargestEnemyUid();
   if(uid!=null){ const el=document.querySelector(`#field .bc[data-uid="${uid}"]`); if(el) el.classList.add('story-target'); } }
@@ -7662,10 +7681,10 @@ function applyStoryGuidance(){
   $('passbtn').classList.remove('story-hi'); const sb=$('shieldbtn'); if(sb) sb.classList.remove('story-hi');
   clearStoryTargetGlow();
   document.querySelectorAll('#hand .hc.story-shimmer').forEach(el=>el.classList.remove('story-shimmer'));
-  if(!Story || CutState || G.over || choreoActive || G.turn!==0 || G.players[0].passed){ hideBrihaspati(); return; }   // never guide behind a cutscene overlay
+  if(!Story || CutState || G.over || choreoActive || G.turn!==0 || G.players[ME].passed){ hideBrihaspati(); return; }   // never guide behind a cutscene overlay
   if(Story.mode==='FREE'){   // ch6–7: NO mask, NO glow, NO beats. Only a one-time Artifact shimmer + the held intro line (dual-line).
     const shim=Story.chapter.artifactShimmer;
-    const shimCard = shim ? G.players[0].hand.find(x=>x.n===shim) : null;   // the Artifact card in hand, if present (point at it by UID, not position)
+    const shimCard = shim ? G.players[ME].hand.find(x=>x.n===shim) : null;   // the Artifact card in hand, if present (point at it by UID, not position)
     if(shim && !Story.shimmerDone && shimCard){ const el=storyHiEl(shimCard.uid); if(el) el.classList.add('story-shimmer'); }
     // T60b R6: the "Play <Artifact>" instruct degrades WITH the shimmer — shown only while the card is in hand; suppressed (display only, string untouched) when absent. It returns as authored when the card arrives.
     const shimInstruct = shimCard ? Story.chapter.introInstruct : '';
@@ -7707,7 +7726,7 @@ function applyStoryGuidance(){
   const effBeat=Math.min(Story.beatIdx, Story.chapter.guidance.length-1);
   if(Story.lineBeat!==effBeat){ showBrihaspati(beat.line, beat.instruct); Story.lineBeat=effBeat; }
 }
-// SUGGESTED beat progression: every player commit funnels through runAction(actor!==1) → here. Advance on a turn-ending
+// SUGGESTED beat progression: every player commit funnels through runAction(actor!==OPP) → here. Advance on a turn-ending
 // action (play/pass); free actions (shield/leap) keep the turn. First non-suggested card PLAY earns the one aside.
 function storyAfterPlayerAction(evs){
   Story.holdLine=null; Story.holdInstruct='';                       // the player acted → drop any held line + its instruction
@@ -7721,7 +7740,7 @@ function storyAfterPlayerAction(evs){
   // waits at the "revive" moment for the scripted enemy Astra to kill a unit (engine-state-gated, not turn-indexed).
   const cur=storyBeat();
   const holding = cur && cur.holdForCard && cur.highlight && cur.highlight.card && !storyCardPlayable(cur.highlight.card);
-  const turnEnded = G.turn===1 || G.over || G.players[0].passed;
+  const turnEnded = G.turn===OPP || G.over || G.players[ME].passed;
   if(turnEnded && !holding && Story.beatIdx < Story.chapter.guidance.length-1) Story.beatIdx++;
   Story.lineBeat=-1;
 }
@@ -7730,8 +7749,8 @@ function storyPlayerTap(){                                           // LOCKED o
   if(!Array.isArray(Story.chapter.guidance) || !Story.chapter.guidance.length) return;   // no beat script → nothing to play
   const tgt=storyEffectiveHighlight().tgt;   // the SAME resolved target the glow used (honors the availability guard)
   hideBrihaspati(); Story.beatIdx++;
-  if(tgt.kind==='pass') runAction(()=>pass(G,0));
-  else if(tgt.kind==='card') runAction(()=>playCard(G,0,tgt.index));
+  if(tgt.kind==='pass') runAction(()=>pass(G,ME));
+  else if(tgt.kind==='card') runAction(()=>playCard(G,ME,tgt.index));
 }
 function showBrihaspati(line, instruct){ const b=$('brihaspati'); b.querySelector('.bri-line').textContent=line; b.querySelector('.bri-instruct').textContent=instruct||''; b.classList.remove('hidden'); }
 function hideBrihaspati(){ $('brihaspati').classList.add('hidden'); }
@@ -7885,13 +7904,13 @@ function cutVfxStop(){ if(CutVfx){ cancelAnimationFrame(CutVfx.raf); const c=$('
 function showStoryResult(){
   if(Story.resultShown) return; Story.resultShown=true;   // render() re-calls showGameOver each frame while G.over
   lastStoryEarn=null;   // slice 4: cleared each result; markChapterComplete sets it only when something was newly granted
-  const ch=Story.chapter, won=G.winner===0;
+  const ch=Story.chapter, won=G.winner===ME;
   hideBrihaspati(); const oc=$('objchip'); if(oc){ oc.classList.add('hidden'); oc.classList.remove('expanded'); }   // clear the FREE objective chip on the result screen
   Audio2.setRound3(false); Audio2.stopMusic(2);
   if(won){
     Audio2.fileSfx('sfx_victory');
     const winExtra = ch.win.extra ? STORY_PREDICATES[ch.win.extra](G) : true;
-    const complete = winExtra;   // g.winner===0 already true
+    const complete = winExtra;   // g.winner===ME already true
     const bonus = ch.bonus && STORY_PREDICATES[ch.bonus.predicateId] ? !!STORY_PREDICATES[ch.bonus.predicateId](G) : false;
     if(complete) markChapterComplete(ch.id, bonus);
     questsOnMatchEnd(G, true, bonus);   // slice 2: story-domain quests (storychapter counts REPLAYS; anystar needs the bonus)
@@ -8015,10 +8034,10 @@ function boardCard(c, pi, targetSet){
     (c.stolenBy!==-1?'<div class="stealbadge">🌀</div>':'')+
     `<div class="medallion ${state}">${c.bound?'0':ep}${mark?`<span class="mark">${mark}</span>`:''}</div>`;
   attachArt(d, c, fac, true);   // BOARD-ART SWAP (60/60 purpose-made zoomed tiles landed, all four factions at plain stems): the `true` arg ACTIVATES board-tile mode → boardTileSrc (https://sangbaran-purr.github.io/divya-yuddha/assets/board/, BOARD_ART_V) with the T93b onerror fallback (zoomed tile → framed card → no-art). Body cards (Units/Heroes) render the purpose-made zoomed art; a card without a tile falls back to the framed card gracefully. Hand + inspect (the other attachArt call sites) keep the framed cardArtSrc, unchanged.
-  // Leap selection (my own units, pi===0): pick a leaper, then an adjacent target.
-  const leapPick = pi===0 && leapMode && ((leapMode==='leaper') || (leapMode.leaper && leapMode.adj && leapMode.adj.has(c.uid)));
-  // Dharma Shield designation (my own un-shielded Units, pi===0).
-  const shieldPick = pi===0 && shieldMode && !c.ghost && c.t==='unit' && !isShielded(G,0,c);
+  // Leap selection (my own units, pi===ME): pick a leaper, then an adjacent target.
+  const leapPick = pi===ME && leapMode && ((leapMode==='leaper') || (leapMode.leaper && leapMode.adj && leapMode.adj.has(c.uid)));
+  // Dharma Shield designation (my own un-shielded Units, pi===ME).
+  const shieldPick = pi===ME && shieldMode && !c.ghost && c.t==='unit' && !isShielded(G,ME,c);
   if (targetSet && targetSet.has(c.uid)){ d.classList.add('targetable'); d.onclick=()=>resolveTarget(c.uid); }
   else if (shieldPick){ d.classList.add('targetable'); d.onclick=()=>shieldClick(c); }
   else if (leapPick){ d.classList.add('targetable'); d.onclick=()=>leapClick(c); }
@@ -8032,9 +8051,9 @@ function fillRow(el, cards, pi, targetSet){
   if(!cards.length){ el.classList.add('empty'); const e=document.createElement('div'); e.className='slot-empty'; e.textContent='☀'; el.appendChild(e); return; }
   el.classList.remove('empty');
   // Placement mode: interleave clickable slots in MY units row.
-  if (pi===0 && placeMode && el.id==='punits'){
+  if (pi===ME && placeMode && el.id==='punits'){
     el.appendChild(placeSlot(0));
-    cards.forEach((c,idx)=>{ el.appendChild(boardCard(c,0,targetSet)); el.appendChild(placeSlot(idx+1)); });
+    cards.forEach((c,idx)=>{ el.appendChild(boardCard(c,ME,targetSet)); el.appendChild(placeSlot(idx+1)); });
     return;
   }
   for (const c of cards) el.appendChild(boardCard(c,pi,targetSet));
@@ -8102,7 +8121,7 @@ function revealMaterializingHero(uid){ if(!materializingHeroes[uid]) return; del
   if(el){ el.classList.remove('materializing'); el.classList.add('materialize-in'); setTimeout(()=>{ if(el.isConnected) el.classList.add('aura'); }, 150*vfxT()); } }   // fade/scale-in, THEN the footlight ignites (~150ms later)
 function revealAllMaterializingHeroes(){ for(const uid in materializingHeroes) revealMaterializingHero(uid); }   // skip/reset safety: never leave a hero stuck hidden
 function render(targetSet){
-  const me=G.players[0], op=G.players[1];
+  const me=G.players[ME], op=G.players[OPP];
   $('rnum').textContent=G.round;
   $('pips').innerHTML =
     '<span class="pip-w">'+'★'.repeat(me.roundWins)+'</span><span class="pip-l">'+'★'.repeat(2-me.roundWins)+'</span>'+
@@ -8111,7 +8130,7 @@ function render(targetSet){
   $('opassed').textContent=op.passed?' · PASSED':''; $('ppassed').textContent=me.passed?' · PASSED':'';
   // ITEM 1: opponent-hand REVEAL indicator — Vibhishana / Vanara Scout set me.seesOppHand===g.round (one consumer, both setters). Tapping opens the peek panel.
   { const _rev=$('oreveal'); if(_rev) _rev.classList.toggle('hidden', !(me.seesOppHand===G.round && op.hand.length>0)); }
-  const t0=totalPower(G,0), t1=totalPower(G,1);
+  const t0=totalPower(G,ME), t1=totalPower(G,OPP);
   if (!choreoActive){                       // totals are HELD during choreography; animateTotals() counts them up after
     $('ptotal').textContent=t0; $('ototal').textContent=t1;
     const hudO=$('hud-o'), hudP=$('hud-p');
@@ -8120,17 +8139,17 @@ function render(targetSet){
     if (lastTotals.p!=null && t0!==lastTotals.p) pulsePlaque(hudP);
     lastTotals={o:t1, p:t0};
   }
-  fillRow($('oheroes'), op.heroes, 1, targetSet);
-  fillRow($('ounits'),  op.units,  1, targetSet);
-  fillRow($('punits'),  me.units,  0, targetSet);   // friendly targeting (Ahamkara) highlights here
-  fillRow($('pheroes'), me.heroes, 0, targetSet);
+  fillRow($('oheroes'), op.heroes, OPP, targetSet);
+  fillRow($('ounits'),  op.units,  OPP, targetSet);
+  fillRow($('punits'),  me.units,  ME, targetSet);   // friendly targeting (Ahamkara) highlights here
+  fillRow($('pheroes'), me.heroes, ME, targetSet);
   setArtChip('oart', op.artifact); setArtChip('part', me.artifact);
   sizeBoard();   // scale minis so nothing is ever clipped
 
   // hand carousel
   const hand=$('hand'); hand.innerHTML='';
-  const play=new Set(playableIndices(G,0));
-  const myTurn = G.turn===0 && !me.passed && !G.over;
+  const play=new Set(playableIndices(G,ME));
+  const myTurn = G.turn===ME && !me.passed && !G.over;
   me.hand.forEach((c,i)=>{
     const d=document.createElement('div');
     const ok = myTurn && play.has(i);
@@ -8142,19 +8161,19 @@ function render(targetSet){
     d.innerHTML=`<div class="hc-band"><div class="hc-nm">${c.n}</div>${c.sub?`<div class="hc-epi">${c.sub}</div>`:''}</div>`+
       `${c.p>0?`<div class="hc-chip">${c.p}</div>`:''}${c.lockedRound===G.round?'<div class="lockicon">🔒</div>':''}`;
     attachArt(d, c, me.faction);   // inserts <img class="art"> as first child → the crop layer (CSS)
-    d.onclick=()=>openInspect(c, 0, ok?i:-1);
+    d.onclick=()=>openInspect(c, ME, ok?i:-1);
     hand.appendChild(d);
   });
   updateFocus();
   renderBattleChrome(me, op);   // T42: deck stacks + score-column avatars (additive; reads engine state, writes no engine)
 
   $('passbtn').disabled=!myTurn;
-  $('leapbtn').classList.toggle('hidden', !(myTurn && me.faction==='vanaras' && canLeap(G,0) && !leapMode && !placeMode && !pendingPlay));
+  $('leapbtn').classList.toggle('hidden', !(myTurn && me.faction==='vanaras' && canLeap(G,ME) && !leapMode && !placeMode && !pendingPlay));
   // Dharma Shield: Deva human, designations remaining (< cap), an un-shielded Unit to protect.
-  const shieldable = me.faction==='devas' && me.shieldUids.length < shieldCap(me) && me.units.some(u=>!u.ghost && u.t==='unit' && !isShielded(G,0,u));
+  const shieldable = me.faction==='devas' && me.shieldUids.length < shieldCap(me) && me.units.some(u=>!u.ghost && u.t==='unit' && !isShielded(G,ME,u));
   $('shieldbtn').classList.toggle('hidden', !(myTurn && shieldable && !leapMode && !placeMode && !shieldMode && !pendingPlay));
   $('unbindbtn').classList.toggle('hidden', !(myTurn && me.units.some(u=>u.bound && !u.ghost) && !leapMode && !placeMode && !pendingPlay));
-  $('turnind').textContent = G.over?'MATCH OVER': myTurn?'YOUR TURN': me.passed&&op.passed?'—': (G.turn===1?'OPPONENT…':'…');
+  $('turnind').textContent = G.over?'MATCH OVER': myTurn?'YOUR TURN': me.passed&&op.passed?'—': (G.turn===OPP?'OPPONENT…':'…');
   $('turnind').className = myTurn?'you':'';
   if(Story) applyStoryGuidance();   // story: mask the hand to the guided card/action + Brihaspati (after the normal hand/pass render)
 
@@ -8235,13 +8254,13 @@ function drainBanner(){
 }
 function showRoundBanner(){
   const h=G.roundHistory[G.roundHistory.length-1];
-  const res = h.winner==null?'ROUND DRAWN': h.winner===0?'YOU WIN':'OPPONENT WINS';
-  const w0=G.players[0].roundWins, w1=G.players[1].roundWins;
+  const res = h.winner==null?'ROUND DRAWN': h.winner===ME?'YOU WIN':'OPPONENT WINS';
+  const w0=G.players[ME].roundWins, w1=G.players[OPP].roundWins;
   const lead = w0>w1?' · YOU LEAD': w1>w0?' · YOU TRAIL':'';
   enqueueBanner(`ROUND ${h.round} — ${res}${lead}`, { hold:1800, animDur:1.8, sfx: G.over?null:'sfx_round_end' });   // round-end gong for rounds 1&2 ONLY — at match end the victory/defeat stinger owns the moment
 }
 // PASS ANNOUNCEMENT (owner task): a pass emits no engine event, so it's detected UI-side via the players[pi].passed state transition in runAction. Same #banner visual class as the round-finish banner (reuse, no new look); ~1.5s hold; queued so it never stacks; sequenced into the same post-choreography position.
-function showPassBanner(pi){ enqueueBanner(pi===0?'YOU PASSED':'OPPONENT PASSED', { hold:1500, animDur:1.5 }); }
+function showPassBanner(pi){ enqueueBanner(pi===ME?'YOU PASSED':'OPPONENT PASSED', { hold:1500, animDur:1.5 }); }
 function announcePassIfAny(passedBefore){ for(const pi of [0,1]){ if(passedBefore && !passedBefore[pi] && G.players[pi] && G.players[pi].passed) showPassBanner(pi); } }
 
 /* ================= GAME FEEL: pacing speed, audio, helpers ================= */
@@ -8505,10 +8524,10 @@ $('testvfx').onclick=()=>{ const R=$('field').getBoundingClientRect(); if(!R.wid
 
 /* ---- opponent "thinking" pause + showcase + result summary + total count-up ---- */
 function aiThinkTime(){
-  const opp=G.players[1];
-  const boardCards = G.players[0].units.filter(u=>!u.ghost).length + opp.units.filter(u=>!u.ghost).length;
+  const opp=G.players[OPP];
+  const boardCards = G.players[ME].units.filter(u=>!u.ghost).length + opp.units.filter(u=>!u.ghost).length;
   let t = 1200 + boardCards*170 + (G.round-1)*250;
-  try{ const d=aiMove(G,1); if(d){ if(d.pass){ t+=550; } else if(d.play!=null){ const c=opp.hand[d.play]; if(c){ if(c.r==='L'||c.r==='M') t+=600; if(c.t==='hero') t+=400; } } } }catch(e){}
+  try{ const d=aiMove(G,OPP); if(d){ if(d.pass){ t+=550; } else if(d.play!=null){ const c=opp.hand[d.play]; if(c){ if(c.r==='L'||c.r==='M') t+=600; if(c.t==='hero') t+=400; } } } }catch(e){}
   t += Math.random()*400;
   return Math.max(1200, Math.min(3500, t));
 }
@@ -8524,7 +8543,7 @@ function fillShowcase(c, opts){
     ((c.r==='L'||c.r==='M')?`<div class="sc-tag">${RARITY_NAME[c.r]}</div>`:'')+ tag +
     (isBody?`<div class="sc-pw">${base}</div>`:'')+
     `<div class="sc-txt"><div class="sc-nm">${c.n}</div>${c.sub?`<div class="sc-sub">${c.sub}</div>`:''}<div class="sc-ty">${TYPE_ICON[c.t]||''} ${c.t} · ${RARITY_NAME[c.r]}</div><div class="sc-fx">${c.txt||''}</div></div>`;
-  const img=new Image(); img.className='sc-art'; img.onerror=()=>img.remove(); img.src=cardArtSrc({...c, base}, G.players[1].faction); el.insertBefore(img, el.firstChild);
+  const img=new Image(); img.className='sc-art'; img.onerror=()=>img.remove(); img.src=cardArtSrc({...c, base}, G.players[OPP].faction); el.insertBefore(img, el.firstChild);
   el.classList.toggle('shimmer', !reducedMotion() && (c.r==='L'||c.r==='M'));   // Mythic/Legendary shimmer sweep
 }
 // showcase an opponent play. `playedAs` = the play event's abilityName (the PRE-copy name — emitted before Maricha overwrites the
@@ -8532,7 +8551,7 @@ function fillShowcase(c, opts){
 async function showcaseCard(uid, playedAs){
   const c=findCardByUid(uid); if(!c) return;
   const sc=$('showcase'), el=$('showcaseCard');
-  const homeF=cardHomeFaction(c), isCopy = homeF && homeF!==G.players[1].faction && c.stolenBy===-1;
+  const homeF=cardHomeFaction(c), isCopy = homeF && homeF!==G.players[OPP].faction && c.stolenBy===-1;
   const transformed = playedAs && playedAs!==c.n;   // engine event carries the original name → a Maricha-style transform
   if(transformed){
     const orig = CARD_BY_NAME[playedAs] || (function(){ for(const f in DECKS){ const d=DECKS[f].find(x=>x.n===playedAs); if(d) return d; } })();
@@ -8573,7 +8592,7 @@ function showResultSummary(evs){
 }
 function animateTotals(ov0, ov1){   // ITEMS 2+3: optional target overrides — at round end we count to the ROUND'S true final scores (roundHistory), not the post-reset board
   return new Promise(res=>{
-    const target={ ptotal: ov0!=null?ov0:totalPower(G,0), ototal: ov1!=null?ov1:totalPower(G,1) };
+    const target={ ptotal: ov0!=null?ov0:totalPower(G,ME), ototal: ov1!=null?ov1:totalPower(G,OPP) };
     const start={ ptotal:parseInt($('ptotal').textContent)||0, ototal:parseInt($('ototal').textContent)||0 };
     if(reducedMotion() || (start.ptotal===target.ptotal && start.ototal===target.ototal)){ $('ptotal').textContent=target.ptotal; $('ototal').textContent=target.ototal; return res(); }
     ['ptotal','ototal'].forEach(id=>$(id).classList.add('counting'));
@@ -8609,7 +8628,7 @@ function posOf(uid, snap){
   return null;
 }
 function cDelay(ms){ return new Promise(r=>{ if(choreoSkip) return r(); const t=setTimeout(r, ms*speedMult*CHOREO_SPEED); choreoTimers.push([t,r]); }); }
-function snapTotals(){ if(!G) return; $('ptotal').textContent=totalPower(G,0); $('ototal').textContent=totalPower(G,1); ['ptotal','ototal'].forEach(id=>{ const e=$(id); if(e) e.classList.remove('counting'); }); }
+function snapTotals(){ if(!G) return; $('ptotal').textContent=totalPower(G,ME); $('ototal').textContent=totalPower(G,OPP); ['ptotal','ototal'].forEach(id=>{ const e=$(id); if(e) e.classList.remove('counting'); }); }
 function snapTo(t0,t1){ if(!G) return; $('ptotal').textContent=t0; $('ototal').textContent=t1; ['ptotal','ototal'].forEach(id=>{ const e=$(id); if(e) e.classList.remove('counting'); }); }   // ITEMS 2+3: snap totals to explicit final scores (round-end settle target / rAF-starvation fallback)
 // (a) An rAF-based choreo await (animateTotals + siblings) can HANG if rAF is starved (iOS backgrounding). Race it against
 // a 3s hard cap that snaps to the end-state, and register a "force finisher" so a tab-hide / skip / watchdog can end it NOW.
@@ -8762,7 +8781,7 @@ function leapArcFromText(leaperPos, text){
     if(!VFX.sprStreak(leaperPos.cx, ly, tx, ty, r.width)) fxLeapArc(leaperPos, { cx:tx, rect:r });   // E9 painted Vanara-green streak replaces the arc line
   }
 }
-function halfCenterClient(pi){ const el=document.querySelector(pi===1?'.half.opp':'.half.me'); if(!el) return null; const r=el.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; }
+function halfCenterClient(pi){ const el=document.querySelector(halfSel(pi)); if(!el) return null; const r=el.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; }
 
 /* ---------- IMPACT VFX: sprite particles (board-sized canvas) + midpoint-displacement lightning, event-driven ----------
    Pre-rendered soft sprites (drawImage, not per-frame gradients), cap 120, DPR≤2, rAF+delta, reduced-motion skip, ×CHOREO_SPEED, no libs. */
@@ -9561,7 +9580,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
       const np = venomStrikeNpAtAction;   // captured PRE-mutate (endRound already wiped pl.venomStrike + advanced g.round by choreo time — see runAction)
       const amtOf=t=>{ const mm=/[−-](\d+)/.exec(t||''); return mm?+mm[1]:0; };
       if(np>=0 && amtOf(ev.text)>=3 && ev===evs.find(e=>e.type==='toast' && e.abilityName==='Venom' && amtOf(e.text)>=3)){
-        const drained=1-np, eh=document.querySelector(drained===1?'.half.opp':'.half.me'); if(eh){ const r=eh.getBoundingClientRect(); VFX.sprVenomDrain(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }
+        const drained=1-np, eh=document.querySelector(halfSel(drained)); if(eh){ const r=eh.getBoundingClientRect(); VFX.sprVenomDrain(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }
       }
     }
     factionToast(ev.abilityName, ev.text); await cDelay(620); return; }
@@ -9573,22 +9592,22 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     if(src){ cpulse(src.el,'choreo-src'); calloutAt(src, ev.abilityName); }   // cpulse fires CONCURRENT with the impact visual (beat 1a)
     if(LEGACY_VFX && isBody && src) VFX.cardLand(src.cx, src.rect.top+src.rect.height/2);   // (a) card-lands dust + embers — same beat as the clash SFX [T77-gated]
     if(LEGACY_VFX && isAstra){ const tp=halfCenterClient(1-ownerPiOfUid(ev.sourceUid)); if(tp){ VFX.astraBurst(tp.x, tp.y); if(tier==='combat') vignetteFlash(); if(c.r==='M') VFX.mythic(tp.x, tp.y); } }   // (b) burst; combat → screen-edge vignette; Mythic → lightning + flash + smoke [T77-gated; astra hit-stop/shake stay below]
-    if(isAstra && c && c.id==='brahmastra'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(es===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprBrahmastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T78: BOARD EFFECT (NEW pipeline, ungated) — the golden pillar row-plate over the enemy rows (Brahmastra destroys ALL enemy Units, engine-verified). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). Its strike beat rides the unconditional spectacle hit-stop below.
-    if(isAstra && c && c.id==='pashupata'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(es===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprPashupatastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T89: BOARD EFFECT (NEW pipeline, ungated) — the violet devouring vortex over the enemy rows (Pashupatastra = AoE board damage, engine-verified; pierces shields). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). The vortex tear-open (beat 2) rides the spectacle hit-stop below.
-    if(isAstra && c && c.id==='tamasa'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(es===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTamasa(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // TAMASA — THE SMOTHERING (first Asura astra): the dim darkness plate over the CASTER's ENEMY half (es=1-ownerPiOfUid, f9c3149 idiom — correct for AI casts natively; the smother settles on the skipped opponent). DIM register — NO hit-stop coupling (the spectacle astra play beat already carries the astra impact; the darkness settles, it does not strike). Chaos Surge (the caster's own toast+buff, same evs list) plays as its OWN serialized beat — the wash on the ASURA/caster half (line ~9185, ownerPiOfUid(buffed unit)), opposite this plate, never merged (evs order play→toast→buff verified live). Nothing wired at the forced-skip consumption (it never calls pass() → no pass banner; the plate + the visible turn theft IS the card).
-    if(c && c.id==='amrita'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAmritaBless(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // AMRITA KALASHA — THE VESSEL'S BLESSING (ARTIFACT ROW opener).
-    if(c && c.id==='kishkindhacrown'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprKishkindhacrown(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // KISHKINDHA CROWN — THE CANOPY CROWNS THE HOST: the crest plate (green + gold) over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). VERDANT/ASCENDING register — no hit-stop; the canopy CRESTS UP (the Signet's press-down mirror). The Crown-precedent Leap +1/+1 beats (leaper + copied unit, engine ~520) play through the existing buff machinery every leap — nothing bespoke here. ascent composites WHOLE via the 'contain' fit vocab.
-    if(c && c.id==='ramasignet'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprRamasignet(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // RAMA'S SIGNET — THE SEAL OF TRUST: the press plate (gold + leaf-green) over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). STEADFAST register — no hit-stop; the seal is SET and HOLDS. The ward's ongoing work (floor-at-1 'block' at engine ~759, venom-floor ☠, token-negation silent skip) renders through the existing machinery — nothing bespoke here. Ring composites WHOLE via the 'contain' fit vocab.
-    if(c && c.id==='chandrahas'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprChandrahas(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // CHANDRAHAS — THE MOON BLADE'S GLEAM: the cold-silver-over-crimson arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). GLEAM register — no hit-stop. SAME-HALF COEXISTENCE (check 2, RULED): the ON-PLAY Chaos Surge (chaosSurge toast+buff) plays its OWN serialized beat on THIS SAME caster half — order (play→toast→buff) keeps them apart, neither suppressed (ADD). Passives (first-astra double / Chaos-twice) are made visible by the existing astra/Chaos beats playing twice — nothing bespoke.
-    if(c && c.id==='patala'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprPatala(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // PATALA THRONE — THE SEAT OF SERPENT KINGS: the abyssal-teal + old-gold rising-throne arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). MENACING/DEEP register — no hit-stop. STRIKE-PLATE NO-FIRE (load-bearing): the Throne's R11 passive deepens the round-end Venom drain to −(1+round); that −3-at-R2 toast qualifies on AMOUNT for the Vasuki-Strike payoff plate (sprVenomDrain) but its guard also requires venomStrikeNpAtAction≥0 (an ACTUAL Strike cast, captured pre-mutate) — Throne-alone leaves it −1 → the strike-plate stays silent. Only Throne+Strike (both conditions met, amounts additive per R11) fires it. No guard change here — the arrival plate is the ONLY new VFX.
-    if(c && c.id==='anantacoil'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAnantacoil(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // ANANTA COIL — THE ENDLESS SERPENT (ARRIVAL, the row's LAST plate): jade-white-over-deep-green uncoiling plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). ENDLESS register — no hit-stop. The R14 coil-BIRTH is a SEPARATE beat (the 'Ananta Coil' passive handler below) fired at each fallen Naga's cell.
-    if(c && c.id==='tripura'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTripuraRise(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // TRIPURA — THE THREE CITIES RISE: the tri-metal arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). DOMINION register — no hit-stop. The turn-start +1 pulse rides its own buff beat each turn (Crown-precedent emit, evs-carried per check 4); THE FALL fires later off the ninth-sibling 'passive' emit when any astra shatters it.
-    if(c && c.id==='kavacha'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprKavacha(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // DHARMA KAVACHA — THE WALL OF LAW: the structured wall plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT, not an astra (no isAstra gate). STRUCTURED register — no hit-stop. ADD, SUPPRESS NOTHING: the shield-formation beats (sprShieldForm per designated Unit, same evs on an AI cast) play WHOLE — check-2 PROVEN LIVE (sprShieldForm×2, suppress=false): the shield events target EXISTING Units (not the played Kavacha), so the played-this-action suppression never applies. The G4 chip glow (R95) covers the passive.
-    if(c && c.t==='mantra' && c.id==='gayatri'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(cst===1?'.half.opp':'.half.me'); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprGayatri(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T79: MANTRA row wash (NEW pipeline, ungated) — the serene sigil/lotus over the CASTER's (friendly) half; Gayatri revives the lowest friendly Unit shielded (engine-verified). No hit-stop coupling.
-    if(isAstra && c && c.id==='venomstrike'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(cst===1?'.half.opp':'.half.me'); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprVenomSurge(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // VASUKI VENOM STRIKE — THE CAST (the poison rises): the amplifier's announcement surge over the CASTER's half (Gayatri half-rect precedent; the source rises). ⚑ OPEN RULING: caster-side is the authored shape — to move it to the ENEMY half on the owner's word, flip `cst` → `1-cst` on THIS line only. The astra carries NO resolution (flag-only cast, emit-free); the payoff plate fires at round-end off the drain toast. The spectacle-tier cast machinery coexists (Ahamkara/Chaos precedent — no contradiction).
-    if(c && c.t==='mantra' && c.id==='pavamana'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(cst===1?'.half.opp':'.half.me'); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprPavamana(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T95: MANTRA cleanse wash (Gayatri sibling, row plate over the CASTER's friendly half) — the purifying chant. SERENE, no hit-stop. The cleanse itself emits no per-unit ticks (Q3) so there is nothing to suppress.
+    if(isAstra && c && c.id==='brahmastra'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprBrahmastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T78: BOARD EFFECT (NEW pipeline, ungated) — the golden pillar row-plate over the enemy rows (Brahmastra destroys ALL enemy Units, engine-verified). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). Its strike beat rides the unconditional spectacle hit-stop below.
+    if(isAstra && c && c.id==='pashupata'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprPashupatastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T89: BOARD EFFECT (NEW pipeline, ungated) — the violet devouring vortex over the enemy rows (Pashupatastra = AoE board damage, engine-verified; pierces shields). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). The vortex tear-open (beat 2) rides the spectacle hit-stop below.
+    if(isAstra && c && c.id==='tamasa'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTamasa(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // TAMASA — THE SMOTHERING (first Asura astra): the dim darkness plate over the CASTER's ENEMY half (es=1-ownerPiOfUid, f9c3149 idiom — correct for AI casts natively; the smother settles on the skipped opponent). DIM register — NO hit-stop coupling (the spectacle astra play beat already carries the astra impact; the darkness settles, it does not strike). Chaos Surge (the caster's own toast+buff, same evs list) plays as its OWN serialized beat — the wash on the ASURA/caster half (line ~9185, ownerPiOfUid(buffed unit)), opposite this plate, never merged (evs order play→toast→buff verified live). Nothing wired at the forced-skip consumption (it never calls pass() → no pass banner; the plate + the visible turn theft IS the card).
+    if(c && c.id==='amrita'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAmritaBless(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // AMRITA KALASHA — THE VESSEL'S BLESSING (ARTIFACT ROW opener).
+    if(c && c.id==='kishkindhacrown'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprKishkindhacrown(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // KISHKINDHA CROWN — THE CANOPY CROWNS THE HOST: the crest plate (green + gold) over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). VERDANT/ASCENDING register — no hit-stop; the canopy CRESTS UP (the Signet's press-down mirror). The Crown-precedent Leap +1/+1 beats (leaper + copied unit, engine ~520) play through the existing buff machinery every leap — nothing bespoke here. ascent composites WHOLE via the 'contain' fit vocab.
+    if(c && c.id==='ramasignet'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprRamasignet(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // RAMA'S SIGNET — THE SEAL OF TRUST: the press plate (gold + leaf-green) over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). STEADFAST register — no hit-stop; the seal is SET and HOLDS. The ward's ongoing work (floor-at-1 'block' at engine ~759, venom-floor ☠, token-negation silent skip) renders through the existing machinery — nothing bespoke here. Ring composites WHOLE via the 'contain' fit vocab.
+    if(c && c.id==='chandrahas'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprChandrahas(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // CHANDRAHAS — THE MOON BLADE'S GLEAM: the cold-silver-over-crimson arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). GLEAM register — no hit-stop. SAME-HALF COEXISTENCE (check 2, RULED): the ON-PLAY Chaos Surge (chaosSurge toast+buff) plays its OWN serialized beat on THIS SAME caster half — order (play→toast→buff) keeps them apart, neither suppressed (ADD). Passives (first-astra double / Chaos-twice) are made visible by the existing astra/Chaos beats playing twice — nothing bespoke.
+    if(c && c.id==='patala'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprPatala(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // PATALA THRONE — THE SEAT OF SERPENT KINGS: the abyssal-teal + old-gold rising-throne arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). MENACING/DEEP register — no hit-stop. STRIKE-PLATE NO-FIRE (load-bearing): the Throne's R11 passive deepens the round-end Venom drain to −(1+round); that −3-at-R2 toast qualifies on AMOUNT for the Vasuki-Strike payoff plate (sprVenomDrain) but its guard also requires venomStrikeNpAtAction≥0 (an ACTUAL Strike cast, captured pre-mutate) — Throne-alone leaves it −1 → the strike-plate stays silent. Only Throne+Strike (both conditions met, amounts additive per R11) fires it. No guard change here — the arrival plate is the ONLY new VFX.
+    if(c && c.id==='anantacoil'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAnantacoil(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // ANANTA COIL — THE ENDLESS SERPENT (ARRIVAL, the row's LAST plate): jade-white-over-deep-green uncoiling plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). ENDLESS register — no hit-stop. The R14 coil-BIRTH is a SEPARATE beat (the 'Ananta Coil' passive handler below) fired at each fallen Naga's cell.
+    if(c && c.id==='tripura'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTripuraRise(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // TRIPURA — THE THREE CITIES RISE: the tri-metal arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). DOMINION register — no hit-stop. The turn-start +1 pulse rides its own buff beat each turn (Crown-precedent emit, evs-carried per check 4); THE FALL fires later off the ninth-sibling 'passive' emit when any astra shatters it.
+    if(c && c.id==='kavacha'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprKavacha(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // DHARMA KAVACHA — THE WALL OF LAW: the structured wall plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT, not an astra (no isAstra gate). STRUCTURED register — no hit-stop. ADD, SUPPRESS NOTHING: the shield-formation beats (sprShieldForm per designated Unit, same evs on an AI cast) play WHOLE — check-2 PROVEN LIVE (sprShieldForm×2, suppress=false): the shield events target EXISTING Units (not the played Kavacha), so the played-this-action suppression never applies. The G4 chip glow (R95) covers the passive.
+    if(c && c.t==='mantra' && c.id==='gayatri'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprGayatri(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T79: MANTRA row wash (NEW pipeline, ungated) — the serene sigil/lotus over the CASTER's (friendly) half; Gayatri revives the lowest friendly Unit shielded (engine-verified). No hit-stop coupling.
+    if(isAstra && c && c.id==='venomstrike'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprVenomSurge(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // VASUKI VENOM STRIKE — THE CAST (the poison rises): the amplifier's announcement surge over the CASTER's half (Gayatri half-rect precedent; the source rises). ⚑ OPEN RULING: caster-side is the authored shape — to move it to the ENEMY half on the owner's word, flip `cst` → `1-cst` on THIS line only. The astra carries NO resolution (flag-only cast, emit-free); the payoff plate fires at round-end off the drain toast. The spectacle-tier cast machinery coexists (Ahamkara/Chaos precedent — no contradiction).
+    if(c && c.t==='mantra' && c.id==='pavamana'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprPavamana(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T95: MANTRA cleanse wash (Gayatri sibling, row plate over the CASTER's friendly half) — the purifying chant. SERENE, no hit-stop. The cleanse itself emits no per-unit ticks (Q3) so there is nothing to suppress.
     if(c && c.t==='mantra' && c.id==='ramanaam'){   // RAMA NAAM — MANTRA RADIANT BUFF wash (Gayatri/Pavamana sibling, row plate over the CASTER's friendly half). Rama Naam emits ONLY a log (no per-unit buff event), so the +2 floaters are UI-computed from the board (the friendly units the engine buffed) and land in the settle window (frames 26-36 ≈ 1.6s at 16fps). No engine touch.
-      const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(cst===1?'.half.opp':'.half.me');
+      const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst));
       const buffed=((G.players[cst]||{}).units||[]).filter(u=>!u.ghost).map(u=>u.uid);
       if(reducedMotion()){   // brief: single STATIC wash frame at 0.35 + static floaters, no animation
         if(mh){ const r=mh.getBoundingClientRect(); const w=document.createElement('img'); w.src='https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/layers/ramanaam/ramanaam_wash.png'; w.alt=''; w.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;object-fit:cover;opacity:.35;z-index:5;pointer-events:none;mix-blend-mode:screen'; document.body.appendChild(w); setTimeout(function(){ w.remove(); }, 1000); }
@@ -9647,7 +9666,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
   if (ev.type==='passive' && ev.abilityName==='Sudarshana'){ const u=ev.targetUids[0]; const dp=posOf(u, snap);   // T92: Sudarshana Chakra — the THROWN spinning discus. Anchor = the REMOVED hero's rect (posOf via snapshot — the hero was on board before the splice). It is a REMOVAL, not a kill → NO death dissolve (the hero returns next round); the strike + the hero's disappearance from the row carry the story. The callout names the cause AT the hero so the temporary removal isn't a silent vanishing (T88 principle).
     if(dp){
       // T97: the hero card is captured + persisted (captureVictims) → it stays VISIBLE through the whole cast beat AND the disc flight, so the disc bites a VISIBLE hero (no empty-slot flight). The 'removal' exit fires at the BITE below → hit-then-gone (the parked ruling's words). NO dissolve — T92 law: the hero returns next round, it is spirited off, not slain.
-      const caster=1-ownerPiOfUid(u), ch=document.querySelector(caster===1?'.half.opp':'.half.me');   // origin = the CASTER's half center (T79/T87 half idiom) — caster = the side opposite the removed hero's owner, cleanly derivable at the handler from the target uid.
+      const caster=1-ownerPiOfUid(u), ch=document.querySelector(halfSel(caster));   // origin = the CASTER's half center (T79/T87 half idiom) — caster = the side opposite the removed hero's owner, cleanly derivable at the handler from the target uid.
       let fx=null, fy=null; if(ch){ const r=ch.getBoundingClientRect(); fx=r.left+r.width/2; fy=r.top+r.height*0.5; }
       VFX.sprSudarshana(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width, fx, fy, 380);   // THROW — thrown flat from the caster's half; travelMs 380 → the flight completes at the frame-9 CONTACT PIN (cDelay scales by exactly vfxT, so the await below tracks the sprite frame timing).
       await cDelay(380);   // FLIGHT (frames 1-8) → the disc reaches the STILL-VISIBLE hero.
@@ -9666,7 +9685,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     for(let i=myIdx-1;i>=0;i--){ if(evs[i].type==='destroy'){ fallenUid=(evs[i].targetUids||[])[0]; break; } }
     const dp = fallenUid!=null ? posOf(fallenUid, snap) : null;   // snapshot fallback lives inside posOf (live cell → snap[uid] → null)
     if(dp){ VFX.sprAnantacoilBirth(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width); await cDelay(650); }   // the coil rises at the fallen cell; short readable beat, then the 28f tail rides the canvas (fire-and-forget) so an AoE multi-death doesn't stack long holds
-    else { const oi=G.players.findIndex(p=>p.faction==='nagas' && p.artifact && p.artifact.id==='anantacoil'); const oh = oi>=0 ? document.querySelector(oi===1?'.half.opp':'.half.me') : null; if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAnantacoilBirth(r.left+r.width/2, r.top+r.height*0.5, null); await cDelay(650); } }   // FALLBACK (snapshot missing the fallen cell — rare): the coil-owner's OWN half centre at default card scale (cw(null)=card width), so the birth is never silent
+    else { const oi=G.players.findIndex(p=>p.faction==='nagas' && p.artifact && p.artifact.id==='anantacoil'); const oh = oi>=0 ? document.querySelector(halfSel(oi)) : null; if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAnantacoilBirth(r.left+r.width/2, r.top+r.height*0.5, null); await cDelay(650); } }   // FALLBACK (snapshot missing the fallen cell — rare): the coil-owner's OWN half centre at default card scale (cw(null)=card width), so the birth is never silent
     return; }
   if (ev.type==='passive' && ev.abilityName==='Ahamkara'){ const u=ev.targetUids[0]; const dp=posOf(u, snap);   // T96: Ahamkara ego ARRIVAL — the seal ignites + the pillar rises AT the chosen unit's cell (Vajra-anchored; the doomed unit STAYS on board with doubled power, so posOf finds it live). DARK-BUFF register: NO hit-stop, no shake, no dissolve, no damage tick — the unit is glorified, not struck. R38: the doomed unit clears silently with the board at round end (no death moment). No doomed marker exists (Q4) → the seal/crown fade clean.
     if(dp){ VFX.sprAhamkara(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width); await cDelay(1500); }   // hold the ego arrival (24f @ SHEET_FPS 16 = 1500ms; cDelay scales by vfxT so the await tracks the sprite life)
@@ -9685,7 +9704,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
       const fold=/\+(\d+)/.exec(ev.text||''); if(fold){ const n=fold[1]; setTimeout(function(){ if(!choreoSkip) floatAt(dp, '+'+n, 'up'); }, (18/16)*vfxT()*1000); }   // fold floater — UI-computed, lands in the bloom/ripple window (~frame 18, life-lands beat), reads as part of the arrival not a separate tick
       await cDelay(2000); }   // hold the descent arrival (32f @ SHEET_FPS 16 = 2000ms; cDelay scales by vfxT so the await tracks the sprite life)
     return; }
-  if (ev.type==='passive' && ev.abilityName==='Tripura'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(os===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTripuraFall(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } return; }   // TRIPURA — THE FALL (the ninth sibling). The wide shatter plate over the OWNER'S half (os=ownerPiOfUid of the shattered artifact uid — it sits in the owner's discard at choreo time, check 3; either player's astra can shatter either side's Tripura, the uid carries the honesty). Serialized AFTER the astra beats that broke it (check 6 — the arrow lands, THEN the cities fall; the ruled Chaos anchor covers the Asura-cast case). DOMINION→DARK register — no hit-stop; the row's one violent moment, ending DARK (Tamasa-tail law). reduced-motion never reaches here (playEvent skipped).
+  if (ev.type==='passive' && ev.abilityName==='Tripura'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTripuraFall(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } return; }   // TRIPURA — THE FALL (the ninth sibling). The wide shatter plate over the OWNER'S half (os=ownerPiOfUid of the shattered artifact uid — it sits in the owner's discard at choreo time, check 3; either player's astra can shatter either side's Tripura, the uid carries the honesty). Serialized AFTER the astra beats that broke it (check 6 — the arrow lands, THEN the cities fall; the ruled Chaos anchor covers the Asura-cast case). DOMINION→DARK register — no hit-stop; the row's one violent moment, ending DARK (Tamasa-tail law). reduced-motion never reaches here (playEvent skipped).
   if (ev.type==='revive' && ev.abilityName==='Amrita Kalasha'){ const u=ev.targetUids[0]; const dp=posOf(u, snap);   // AMRITA KALASHA — THE REVIVAL: the nectar square at the revived unit's cell (the aegis pushed it back at power 1 → posOf finds it live). REPLACES the generic 'revive' 'note' floater for abilityName==='Amrita Kalasha' ONLY (STEP-0 check 3: Amrita is the sole 'revive' source; scoped per the 07-30 overlap ruling — new art replaces old). Serialized AFTER the death beat (the enemy kill emits destroy → revive in the same evs, check 6). SERENE — no hit-stop/shake/dissolve; the nectar pours, life lands. reduced-motion never reaches here (playEvent skipped; b30d8da precedent).
     if(dp){ VFX.sprAmritaRevive(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width);
       setTimeout(function(){ if(!choreoSkip) floatAt(dp, '1', 'up'); }, (16/16)*vfxT()*1000);   // the revived power (1) floater lands in the splash/life-lands window (~frame 16), part of the arrival, not a separate tick
@@ -9702,7 +9721,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
       await cDelay(1750);   // hold the fire beat (28f @ SHEET_FPS 16 = 1750ms; cDelay scales by vfxT so the await tracks the sprite life)
     }
     return; }
-  if(ev.type==='token' && ev.abilityName==='Nagastra'){ const t0=(ev.targetUids||[])[0]; if(t0!=null){ const es=ownerPiOfUid(t0), oh=document.querySelector(es===1?'.half.opp':'.half.me'); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprNagastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } } }   // NAGASTRA — THE STOLEN SERPENT contamination plate over the ENVENOMED (enemy) half. Anchor = ownerPiOfUid of the first token target (= the envenomed side; equivalent to 1-ownerPiOfUid(caster), read straight off the targets). ADD, SUPPRESS NOTHING — NO return: the generic token beat below (source pulse / callout / per-foe ☠ badge floaters / sfx_venom_apply / persistent .venombadge) plays WHOLE; the plate is the WEATHER, the beat is the rain. DIM venom register — no hit-stop (the spectacle astra PLAY beat already carried the impact). Chaos Surge (Asura caster) fires its OWN serialized beat inside this same loop (line ~9188, ownerPiOfUid(buffed unit)) — the wash on the ASURA half, opposite this plate, never merged.
+  if(ev.type==='token' && ev.abilityName==='Nagastra'){ const t0=(ev.targetUids||[])[0]; if(t0!=null){ const es=ownerPiOfUid(t0), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprNagastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } } }   // NAGASTRA — THE STOLEN SERPENT contamination plate over the ENVENOMED (enemy) half. Anchor = ownerPiOfUid of the first token target (= the envenomed side; equivalent to 1-ownerPiOfUid(caster), read straight off the targets). ADD, SUPPRESS NOTHING — NO return: the generic token beat below (source pulse / callout / per-foe ☠ badge floaters / sfx_venom_apply / persistent .venombadge) plays WHOLE; the plate is the WEATHER, the beat is the rain. DIM venom register — no hit-stop (the spectacle astra PLAY beat already carried the impact). Chaos Surge (Asura caster) fires its OWN serialized beat inside this same loop (line ~9188, ownerPiOfUid(buffed unit)) — the wash on the ASURA half, opposite this plate, never merged.
   if (src && (ev.type==='buff'||ev.type==='token')){ cpulse(src.el,'choreo-src'); calloutAt(src, ev.abilityName); }
   const tgts=ev.targetUids||[];
   if (!tgts.length){ await cDelay(180); return; }
@@ -9715,14 +9734,14 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
       // COMBAT damage adds a 70ms hit-stop on top so the hit lands, the queue pauses, THEN the number reads.
       let ft, fk, hitStop=0; const tcy=pos.rect.top+pos.rect.height/2, tfac=(G.players[ownerPiOfUid(tgts[i])]||{}).faction||'devas';
       if (ev.type==='damage' && ev.abilityName==='Sarpa Satra'){ cpulse(pos.el,'impact');   // SARPA SATRA Zone B — the enemy-row DRAIN. Fire the wide veil ONCE per action (the Chaos Surge once-guard idiom) over the ENEMY half (the damaged units' side, so it works whichever player cast it); SUPPRESS the per-enemy red tick + hit-stop (the veil descends + venom surges as a UNIFIED green drain — the SACRIFICE DRAIN register, not per-enemy strikes); KEEP the −N floater (the emitted amount = sacrificed power) on each enemy, landing across the surge window.
-        if(ev===evs.find(e=>e.type==='damage'&&e.abilityName==='Sarpa Satra')){ const ds=ownerPiOfUid(tgts[i]), eh=document.querySelector(ds===1?'.half.opp':'.half.me'); if(eh){ const r=eh.getBoundingClientRect(); VFX.sprSarpaB(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }
+        if(ev===evs.find(e=>e.type==='damage'&&e.abilityName==='Sarpa Satra')){ const ds=ownerPiOfUid(tgts[i]), eh=document.querySelector(halfSel(ds)); if(eh){ const r=eh.getBoundingClientRect(); VFX.sprSarpaB(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }
         ft=ev.text||String(ev.amount); fk='down heavy'; }   // no red sprDamage, no hitStop — the drain is the green weight, the −N floater STAYS
       else if (ev.type==='damage' && ev.abilityName==='Lanka Dahan'){ cpulse(pos.el,'impact');   // LANKA DAHAN — the INVERTED Sarpa two-zone. ONCE per action: fire the enemy BURN PLATE over the DAMAGED units' half (ownerPiOfUid — works whichever side cast), THEN (after the burn's hold) the INSPIRATION WASH over the OPPOSITE caster's half + friendly +1 floaters — fire first, inspiration second, never simultaneous. SUPPRESS the per-enemy red tick + hit-stop (unified burn, not per-enemy strikes); KEEP the −N floater (ev.amount — Patala −3 reads honestly). STEP-0.2: a lethal hit emits 'damage' BEFORE 'destroy', so the once-guard fires even on an all-kill board (no destroy-fallback needed); killed enemies still get their death beat via the destroy handler. STEP-0.3: an all-Ratri board emits ZERO 'damage' events → this branch never runs → cast beat only (honest — the fire was prevented; the silent friendly +1 still landed via render).
         if(ev===evs.find(e=>e.type==='damage'&&e.abilityName==='Lanka Dahan')){   // once-guard (Chaos Surge / Sarpa idiom)
           const ds=ownerPiOfUid(tgts[i]);                                          // ds = the DAMAGED (enemy) unit's owner
-          const eh=document.querySelector(ds===1?'.half.opp':'.half.me'); if(eh){ const r=eh.getBoundingClientRect(); VFX.sprLankaFire(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }   // the BURN over the enemy half
+          const eh=document.querySelector(halfSel(ds)); if(eh){ const r=eh.getBoundingClientRect(); VFX.sprLankaFire(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }   // the BURN over the enemy half
           setTimeout(function(){ if(choreoSkip) return;                            // after the burn's hold (fire recedes f18-24): the INSPIRATION over the CASTER's (opposite) half + friendly +1 floaters
-            const wh=document.querySelector((1-ds)===1?'.half.opp':'.half.me'); if(wh){ const r=wh.getBoundingClientRect(); VFX.sprLankaWash(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }
+            const wh=document.querySelector(halfSel((1-ds))); if(wh){ const r=wh.getBoundingClientRect(); VFX.sprLankaWash(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }
             const friends=((G.players[1-ds]||{}).units||[]).filter(u=>!u.ghost);   // the caster's units got the raw +1 (emit-blind) → UI-compute the floaters (Oath pattern), staggered across the wash window
             friends.forEach(function(u,k){ const el=document.querySelector('.bc[data-uid="'+u.uid+'"]'); if(el) setTimeout(function(){ if(!choreoSkip) floatText(el,1); }, k*90); });
           }, (18/16)*vfxT()*1000);
@@ -9741,7 +9760,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
           else if(ev.abilityName==='Leap'){ fxRing(pos,'buff'); leapArcFromText(pos, ev.text); }                          // E9 leap streak [T77-gated legacy]
           else if(!VFX.sprAura(pos.cx, tcy, tfac, pos.rect.width)){ fxRing(pos,'buff'); } }                               // E1 buff aura [T77-gated legacy]
         else if(ev.abilityName==='Chaos Surge'){   // T87: Chaos Surge REPLACES the gold tick with the dual-layer storm — wash over the surging half (ONCE per action), + an erratic mark on THIS surged unit ~350ms into the wash (setTimeout idiom).
-          if(ev===evs.find(e=>e.type==='buff' && e.abilityName==='Chaos Surge')){ const owner=ownerPiOfUid(tgts[i]), wh=document.querySelector(owner===1?'.half.opp':'.half.me'); if(wh){ const r=wh.getBoundingClientRect(); VFX.sprChaosWash(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }
+          if(ev===evs.find(e=>e.type==='buff' && e.abilityName==='Chaos Surge')){ const owner=ownerPiOfUid(tgts[i]), wh=document.querySelector(halfSel(owner)); if(wh){ const r=wh.getBoundingClientRect(); VFX.sprChaosWash(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }
           const mx=pos.cx, my=tcy, mw=pos.rect.width; setTimeout(()=>{ if(!choreoSkip) VFX.sprChaosMark(mx, my, mw); }, 350*vfxT()); }
         else if(ev.abilityName!=='Amrita Kalasha' && !evs.some(e=>e.type==='play' && e.sourceUid===tgts[i])) VFX.sprBuff(pos.cx, tcy, pos.rect.width);   // T84: gain tick, generic (Leap/on-play/mid-board). Suppressed for a unit PLAYED this action — its landing flare covers it. (Gayatri revive emits no buff.) AMRITA: also suppress the redundant tick for the blessing +2 — the caster-half arrival wash covers it (Sarpa idiom: suppress the tick under the plate, KEEP the +2 floater below).
         ft=ev.text||('+'+ev.amount); fk='up'; }                                                                          // cpulse + the +power number STAY
@@ -9763,14 +9782,14 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
 }
 function runAction(mutate, opts={}){
   const snap = snapshotBoard();
-  const passedBefore=[G.players[0].passed, G.players[1].passed];   // PASS ANNOUNCEMENT: detect a passed:false→true transition after this action resolves (pass emits no event)
+  const passedBefore=[G.players[ME].passed, G.players[OPP].passed];   // PASS ANNOUNCEMENT: detect a passed:false→true transition after this action resolves (pass emits no event)
   roundCountAtActionStart = G.roundHistory.length;
   const evStart = G.events.length;
-  venomStrikeNpAtAction = (G.players[0].venomStrike===G.round) ? 0 : (G.players[1].venomStrike===G.round) ? 1 : -1;   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
+  venomStrikeNpAtAction = (G.players[ME].venomStrike===G.round) ? 0 : (G.players[OPP].venomStrike===G.round) ? 1 : -1;   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
   mutate();
   const evs = G.events.slice(evStart);
-  if (Story && Story.mode==='SUGGESTED' && opts.actor!==1) storyAfterPlayerAction(evs);   // SUGGESTED: advance the beat / arm the aside on each player commit
-  if (Story && Story.mode==='FREE' && opts.actor!==1){ Story.holdLine=null; Story.holdInstruct=''; Story.shimmerDone=true; }   // FREE: dismiss the intro line + Artifact shimmer once the player acts
+  if (Story && Story.mode==='SUGGESTED' && opts.actor!==OPP) storyAfterPlayerAction(evs);   // SUGGESTED: advance the beat / arm the aside on each player commit
+  if (Story && Story.mode==='FREE' && opts.actor!==OPP){ Story.holdLine=null; Story.holdInstruct=''; Story.shimmerDone=true; }   // FREE: dismiss the intro line + Artifact shimmer once the player acts
   resetPowerBeat();   // new event beat — power-change blips coalesce within this batch
   if (reducedMotion() || !evs.length){
     // reduced-motion keeps AUDIO (it's not motion): fire the key sounds, skip the visual choreography.
@@ -9778,7 +9797,7 @@ function runAction(mutate, opts={}){
     for(const e of evs){ if(e.type==='buff') powerChangeSound('sfx_buff', e.abilityName); else if(e.type==='damage') powerChangeSound('sfx_debuff', e.abilityName); }
     if (evs.some(e=>e.type==='destroy')) Audio2.fileSfx('sfx_unit_destroy');
     render();
-    if (G.roundHistory.length>roundCountAtActionStart && !G.over){ const h=G.roundHistory[G.roundHistory.length-1]; snapTo(h.t0,h.t1); }   // ITEMS 2+3 reduced-motion: statically show the round's TRUE final scores (not the reset board) so they never contradict the winner banner
+    if (G.roundHistory.length>roundCountAtActionStart && !G.over){ const h=G.roundHistory[G.roundHistory.length-1]; snapTo(h['t'+ME],h['t'+OPP]); }   // ITEMS 2+3 reduced-motion: statically show the round's TRUE final scores (not the reset board) so they never contradict the winner banner
     showResultSummary(evs); announcePassIfAny(passedBefore); afterChoreo(); return;   // pass banner (if a pass just landed) enqueued BEFORE afterChoreo's round banner → pass shows first, round after
   }
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoForce=[];
@@ -9788,7 +9807,7 @@ function runAction(mutate, opts={}){
       const playEv = evs.find(e=>e.type==='play');
       koePos = {};   // T88b: reset the kill-on-entry position map for this action
       const koeUid = (playEv && evs.some(e=>e.type==='destroy' && (e.targetUids||[]).includes(playEv.sourceUid))) ? playEv.sourceUid : null;   // a played unit that dies THIS action (kill-on-entry, e.g. into Surasa's trap) — no board/snapshot rect
-      if ((opts.actor===1 || koeUid) && playEv){ try{ const sp=await showcaseCard(playEv.sourceUid, playEv.abilityName); if(koeUid && sp) koePos[koeUid]=sp; }catch(e){} }   // SHOWCASE for opponent plays AND for ANY kill-on-entry (own OR opp) so the card VISIBLY EXISTS before it dies; capture its rect so the death beats have a position. (playEv.abilityName = pre-copy name → two-phase Maricha reveal.)
+      if ((opts.actor===OPP || koeUid) && playEv){ try{ const sp=await showcaseCard(playEv.sourceUid, playEv.abilityName); if(koeUid && sp) koePos[koeUid]=sp; }catch(e){} }   // SHOWCASE for opponent plays AND for ANY kill-on-entry (own OR opp) so the card VISIBLY EXISTS before it dies; capture its rect so the death beats have a position. (playEv.abilityName = pre-copy name → two-phase Maricha reveal.)
       const victimUids=[]; for(const ev of evs){ if(ev.type==='destroy' && (ev.abilityName==='Vajra' || ev.abilityName==='Gandiva')) (ev.targetUids||[]).forEach(u=>victimUids.push(u)); else if(ev.type==='passive' && ev.abilityName==='Sudarshana') (ev.targetUids||[]).forEach(u=>victimUids.push(u)); }   // GANDIVA: clone BOTH kill victims pre-render (a double-kill has two 'Gandiva' destroy events) so each strike lands on its held card
       captureVictims(victimUids);            // T97: clone the struck cards WHILE still on board — the next render() empties their cells; the strike then lands on the held clone
       render();                              // final board; spawnFloaters + HUD totals held while choreoActive
@@ -9797,7 +9816,7 @@ function runAction(mutate, opts={}){
       if (roundEnded && !choreoSkip){   // ITEMS 2+3 — round-end RESOLUTION BEAT: the round-end effects (venom/round-end tier) already choreographed above; now settle the totals to the ROUND'S TRUE FINAL scores (roundHistory[last] — post-venom, PRE board-reset) so the score flip that decided the winner is VISIBLE, then hold before the banner. (Was: animateTotals→live totalPower = the post-RESET board = the desync root.)
         const h=G.roundHistory[G.roundHistory.length-1];
         try{ await cDelay(500); }catch(e){}                                       // beat: the poison settles
-        try{ await choreoRace(animateTotals(h.t0,h.t1), ()=>snapTo(h.t0,h.t1)); }catch(e){}   // count to the TRUE final totals (rAF-starvation snaps to the SAME final, not the reset board)
+        try{ await choreoRace(animateTotals(h['t'+ME],h['t'+OPP]), ()=>snapTo(h['t'+ME],h['t'+OPP])); }catch(e){}   // count to the TRUE final totals (rAF-starvation snaps to the SAME final, not the reset board)
         try{ await cDelay(800); }catch(e){}                                       // HOLD 800ms on the settled totals → THEN the ROUND banner fires in finally
       } else {
         try{ await choreoRace(animateTotals(), snapTotals); }catch(e){}            // mid-round: live totals count up (rAF starvation → 3s cap snaps to final)
@@ -9866,18 +9885,24 @@ function closeInspect(){ $('inspect').classList.add('hidden'); inspectContext=nu
 
 /* ---------- play flow ---------- */
 function doPlay(i, uid, srcRect, position){
-  const c=G.players[0].hand[i];
-  pendingFly = (srcRect && c) ? { rect:srcRect, uid:c.uid } : null;
-  runAction(()=>playCard(G,0,i,uid,position));
+  const c=G.players[ME].hand[i];
+  pendingFly = (srcRect && c) ? { rect:srcRect, uid:c.uid } : null;   // on the wire this is HELD until the relay lands
+  if (Wire){   // R2 — send, then apply on relay. The screen targets by uid; the wire takes the option INDEX.
+    let ti = null;
+    if (uid != null) { const sp = targetSpec(G, ME, c); ti = (sp && sp.options) ? sp.options.findIndex(o=>o.uid===uid) : -1; if (ti < 0) ti = null; }
+    if (!wireSend({ type:'play', handIndex:i, targetIndex:ti, position: position != null ? position : null })) pendingFly = null;
+    return;
+  }
+  runAction(()=>playCard(G,ME,i,uid,position));
 }
 
 function startPlay(i, srcRect){
-  const c=G.players[0].hand[i]; if(!c) return;
+  const c=G.players[ME].hand[i]; if(!c) return;
   // Vanara Unit placement: pick a slot on the Yuddha Row (only when it can matter — units already present).
-  if (c.t==='unit' && G.players[0].faction==='vanaras' && G.players[0].units.some(u=>!u.ghost)){
+  if (c.t==='unit' && G.players[ME].faction==='vanaras' && G.players[ME].units.some(u=>!u.ghost)){
     placeMode={ index:i, srcRect }; render(); showActionBar(`Place ${c.n} — tap a slot`, cancelPlace); return;
   }
-  const spec=targetSpec(G,0,c);
+  const spec=targetSpec(G,ME,c);
   if (spec && spec.options.length){
     pendingPlay={ index:i, spec, srcRect };
     if (spec.kind==='oppHandCard'){
@@ -9914,8 +9939,8 @@ function cancelTarget(){ pendingPlay=null; hideBoardTargetBar(); $('targeting').
 // ITEM 1 — opponent-hand PEEK. One consumer for both setters (Vibhishana + Vanara Scout): renders the opponent's
 // hand face-up (cardArtSrc, art-pending fallback on 404). Reduced-motion inherits the static overlay (no animation).
 function openOppPeek(){
-  if (!G || !(G.players[0].seesOppHand===G.round)) return;   // guard: only while the reveal is live this round
-  const op=G.players[1], box=$('oppeek-cards'); if(!box) return; box.innerHTML='';
+  if (!G || !(G.players[ME].seesOppHand===G.round)) return;   // guard: only while the reveal is live this round
+  const op=G.players[OPP], box=$('oppeek-cards'); if(!box) return; box.innerHTML='';
   if (!op.hand.length){ box.innerHTML='<div class="oppeek-empty">The opponent’s hand is empty.</div>'; }
   else op.hand.forEach(c=>{
     const d=document.createElement('div'); d.className='oppeek-card';
@@ -9945,24 +9970,27 @@ function resolvePlacement(pos){ const pm=placeMode; if(!pm) return; placeMode=nu
 function cancelPlace(){ placeMode=null; hideBoardTargetBar(); render(); }
 
 /* ---------- Vanara Leap ---------- */
-function startLeap(){ if(choreoActive || !canLeap(G,0)) return; leapMode='leaper'; render(); showActionBar('Leap — tap one of your Units', cancelLeap); }
+function startLeap(){ if(choreoActive || !canLeap(G,ME)) return; leapMode='leaper'; render(); showActionBar('Leap — tap one of your Units', cancelLeap); }
 function cancelLeap(){ leapMode=null; hideBoardTargetBar(); render(); }
 // Dharma Shield: free action — tap SHIELD, then a friendly Unit to designate (sticky, no un-designate, no auto-fallback).
 function startShield(){ if(choreoActive) return; shieldMode=true; render(); showActionBar('Dharma Shield — tap a friendly Unit to protect', cancelShield); }
 function cancelShield(){ shieldMode=false; hideBoardTargetBar(); render(); }
-function shieldClick(c){ shieldMode=false; hideBoardTargetBar(); runAction(()=>designateShield(G, 0, c.uid)); }
+function shieldClick(c){ shieldMode=false; hideBoardTargetBar();
+  if (Wire){ wireSend({ type:'shield', unitIndex: G.players[ME].units.indexOf(c) }); return; }
+  runAction(()=>designateShield(G,ME, c.uid)); }
 function leapClick(c){
   if (leapMode==='leaper'){
     // T49 (0b, Option B): widen the human target set to include non-ghost Gandhamadana units from ANYWHERE (excluding the
     // leaper itself) — mirrors the engine bestLeap pattern so the human path matches the AI. UI-only; doLeap/bestLeap untouched.
-    const P=G.players[0], gandh=P.units.filter(u=>!u.ghost && u.id==='gandhamadana' && u!==c);
+    const P=G.players[ME], gandh=P.units.filter(u=>!u.ghost && u.id==='gandhamadana' && u!==c);
     const adj=new Set(adjacentUnits(P, c).filter(u=>!u.ghost).concat(gandh).map(u=>u.uid));
     if (!adj.size){ showActionBar(`${c.n} has no adjacent ally — pick another`, cancelLeap); return; }
     leapMode={ leaper:c, adj }; render(); showActionBar(`${c.n} leaps onto which neighbour?`, cancelLeap);
   } else if (leapMode && leapMode.leaper && leapMode.adj.has(c.uid)){
     const leaper=leapMode.leaper;
     leapMode=null; hideBoardTargetBar();
-    runAction(()=>doLeap(G, 0, leaper, c, false));   // Leap is FREE — choreographs, still your turn
+    if (Wire){ const U=G.players[ME].units; wireSend({ type:'leap', leaperIndex: U.indexOf(leaper), targetIndex: U.indexOf(c) }); return; }
+    runAction(()=>doLeap(G,ME, leaper, c, false));   // Leap is FREE — choreographs, still your turn
   }
 }
 
@@ -9976,27 +10004,156 @@ $('leapbtn').onclick=startLeap;
 $('shieldbtn').onclick=startShield;
 // R20: Nagapasha unbind — spend the turn to free your most valuable bound Unit (one per turn).
 $('unbindbtn').onclick=()=>{
-  if(!(G.turn===0 && !G.players[0].passed && !G.over)) return;
-  const bound=G.players[0].units.filter(u=>u.bound && !u.ghost);
+  if (Wire) { toast('Unbinding is not available at a wire table yet.'); return; }   // BW1 — no wire word exists for R20
+  if(!(G.turn===ME && !G.players[ME].passed && !G.over)) return;
+  const bound=G.players[ME].units.filter(u=>u.bound && !u.ghost);
   if(!bound.length) return;
-  const t=bound.reduce((a,b)=>effPower(G,0,a)>=effPower(G,0,b)?a:b);
-  runAction(()=>{ t.bound=false; log(G,`You wrench ${t.n} free of the Nagapasha noose.`); afterAction(G,0); });
+  const t=bound.reduce((a,b)=>effPower(G,ME,a)>=effPower(G,ME,b)?a:b);
+  runAction(()=>{ t.bound=false; log(G,`You wrench ${t.n} free of the Nagapasha noose.`); afterAction(G,ME); });
 };
-$('passbtn').onclick=()=>{ if(G.turn===0&&!G.players[0].passed&&!G.over && !choreoActive){ runAction(()=>pass(G,0)); } };
+$('passbtn').onclick=()=>{ if(G.turn===ME&&!G.players[ME].passed&&!G.over && !choreoActive){ if (Wire){ wireSend({ type:'pass' }); return; } runAction(()=>pass(G,ME)); } };
 $('loghead').onclick=()=>$('logdrawer').classList.toggle('open');
 $('inspect').onclick=e=>{ if(e.target.id==='inspect' || e.target.closest('.inspect-hint')) closeInspect(); };
 $('hand').addEventListener('scroll', ()=>{ if(focusRaf) return; focusRaf=requestAnimationFrame(()=>{ focusRaf=0; updateFocus(); }); });
 window.addEventListener('resize', ()=>{ if(G){ sizeBoard(); updateFocus(); } VFX.resize(); if(CutState) cutResize(); });   // T104: CSS border-glow reflows with the card natively — no reconcile on resize
 
+/* ══ BW1 — THE WIRE: the real battle screen plays a FREE wire match (docs/BATTLE_WIRE_DESIGN_v1.md) ══════════════
+   This frame is a PASSIVE RENDERER of a match the Hall conducts. THE WALL: the frame opens no socket, reads no chain,
+   never sees a key, an address, a stake or an escrow id — the Hall owns all of that and speaks to this page only
+   through postMessage. THE LOCKSTEP LAW (R2, the thin client's own): an own act is SENT as wire:act and NOTHING is
+   applied until the server relays it back as wire:move, in seq order — own moves included. The server can refuse a
+   move ({reject}) and can move FOR a seat (clock auto-keep / auto-pass); an optimistic local apply would diverge on
+   either and double-apply on the echo. THE MIRROR (R3) is built with the server's EXACT newGame arguments
+   (match.js:19-23): no manualShield (engine.js:450 would stop auto-designating while the server keeps doing it), no
+   wave deck (the server plays the launch pool), no difficulty. */
+const WIRE_MODE = /[?&]wire=1(&|$)/.test(location.search);
+// the server's PRNG, BYTE-IDENTICAL to the table server's rng.js (and the Hall's matchclient copy). Integer math
+// → identical in node and every browser. src/test_wire.js pins this against rng.js over many seeds.
+function wireSeeded(seed) {
+  var s = seed >>> 0;
+  return function () {
+    s |= 0; s = (s + 0x6D2B79F5) | 0;
+    var t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// the parent must be THIS origin and THIS window's parent — never '*', never a sibling frame.
+function wireFromParent(ev){ return ev && ev.origin === location.origin && ev.source === window.parent; }
+function wirePost(msg){ try{ window.parent.postMessage(msg, location.origin); }catch(e){} }
+// loud refusal: the state is untouched, and the refusal is countable by whoever drives the frame.
+function wireRefuse(why, data){ if (Wire) Wire.refused.push(why); console.warn('[wire] refused:', why, data || ''); }
+
+function wireBoot(){   // R5 — ?wire=1: no intro, no landing; wait for the Hall, and say we are ready
+  ['landing','introv','factionselect','factionintro'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hidden'); });
+  let w=$('wirewait'); if(!w){ w=document.createElement('div'); w.id='wirewait'; w.textContent='waiting for the table…';
+    w.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#c9a84c;font:600 13px Cinzel,serif;letter-spacing:.2em;text-transform:uppercase;background:#070402;z-index:99'; document.body.appendChild(w); }
+  window.addEventListener('message', onWireMessage);
+  wirePost({ type:'wire:ready' });
+}
+function onWireMessage(ev){
+  if (!wireFromParent(ev)) { wireRefuse('wrong origin or sender', ev && ev.origin); return; }
+  const m = ev.data || {};
+  if (m.type === 'wire:start') { startWireMatch(m); return; }
+  if (!Wire) { wireRefuse('no match yet', m.type); return; }
+  if (String(m.matchId) !== Wire.matchId) { wireRefuse('foreign matchId', m.matchId); return; }
+  if (m.type === 'wire:move') {
+    if (m.seq !== Wire.seq + 1) { wireRefuse('out-of-order seq', { got:m.seq, expected:Wire.seq+1 }); return; }
+    Wire.seq = m.seq; Wire.queue.push(m.move); if (m.move && m.move.seat === ME) Wire.pending = false;
+    pump(); return;
+  }
+  if (m.type === 'wire:reject') {   // R2 — the server refused OUR act: the board is untouched (nothing was applied)
+    Wire.pending = false; pendingFly = null; placeMode = null; leapMode = null; shieldMode = false; hideBoardTargetBar();
+    if (!G.players[ME].mulliganed) $('mullconfirm').disabled = false;   // a refused mulligan can be sent again
+    toast('The table refused that move — ' + (m.reason || 'not allowed now')); render(); return;
+  }
+  if (m.type === 'wire:result') {   // a normal end reaches G.over through the relayed moves (the face shows then); this face is
+    // shown NOW only when the board cannot get there itself — a forfeit, or every relayed move applied and still not over
+    Wire.result = { winner: m.winner, roundWins: m.roundWins, forfeit: !!m.forfeit };
+    if (!G.over && (Wire.result.forfeit || !Wire.queue.length)) showWireResult(); return;
+  }
+  wireRefuse('unknown message', m.type);
+}
+function startWireMatch(st){
+  const seat = st.seat === 1 ? 1 : 0;
+  resetChoreo();
+  Story = null; setSeats(seat);
+  Wire = { matchId: String(st.matchId), seq: 0, queue: [], pending: false, refused: [], result: null };
+  // THE MIRROR — match.js:19-23, nothing added. Names are the frame's OWN labels (no address ever enters the frame);
+  // they are log text only and touch no state and no rng.
+  G = newGame({ p0: ME===0 ? 'You' : 'Opponent', p1: ME===1 ? 'You' : 'Opponent',
+                p0Faction: st.p0Faction, p1Faction: st.p1Faction, rng: wireSeeded(st.seed) });
+  seenLog = 0;
+  currentFactions = { p0: G.players[ME].faction, p1: G.players[OPP].faction };   // "p" = the half drawn below = ME
+  matchRecorded = true;   // R7 — the second lock: even a stray showGameOver can never record a wire match
+  goStampDone = true; lastEarn = null;
+  knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; hideBoardTargetBar();
+  ['gameover','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','mulligan','realmpop'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hidden'); });
+  const ww=$('wirewait'); if(ww) ww.remove();
+  $('diffchip').classList.add('hidden');
+  $('hudwrap').classList.remove('hidden');
+  $('logbody').innerHTML=''; $('loglast').textContent=''; $('logdrawer').classList.remove('open');
+  applyFactionTheme(); applyRealmBoard(G.realm); makeEmbers(); battleStageStart();
+  Audio2.playTrack('battle'); conchPending=true; showRealmIntro(); render();
+  VFX.init(); VFX.resize(); VFX.preloadSprites(); applyVfxQuality(); VFX.loadMatchSheets(currentFactions.p0, currentFactions.p1);
+  $('mullconfirm').disabled = false;
+  beginMulligan();
+}
+// apply ONE relayed move — the server's index-based descriptor (match.js apply), identical in meaning to
+// mp/matchclient.js applyRelayed: every index resolves to THIS mirror's own uids.
+function wireApply(mv){
+  const pi = mv.seat, pl = G.players[pi];
+  if (mv.type === 'mulligan') { mulligan(G, pi, (mv.indices||[]).map(ix=>pl.hand[ix].uid)); return; }
+  if (mv.type === 'play') {
+    const card = pl.hand[mv.handIndex]; let t = null;
+    if (mv.targetIndex != null) { const sp = targetSpec(G, pi, card); if (sp && sp.options) t = sp.options[mv.targetIndex].uid; }
+    playCard(G, pi, mv.handIndex, t, mv.position != null ? mv.position : null, mv.movePosition != null ? mv.movePosition : null); return;
+  }
+  if (mv.type === 'pass') { pass(G, pi); return; }
+  if (mv.type === 'shield') { designateShield(G, pi, pl.units[mv.unitIndex].uid); return; }
+  if (mv.type === 'leap') { doLeap(G, pi, pl.units[mv.leaperIndex], pl.units[mv.targetIndex], false); return; }
+  throw new Error('unknown relayed move ' + mv.type);
+}
+// drain the relay queue one move at a time, each through the SAME choreography road as every other act.
+function wireDrain(){
+  if (!Wire || choreoActive || !Wire.queue.length || G.over) return;
+  const mv = Wire.queue.shift();
+  if (mv.type === 'mulligan') { if (mv.seat === ME) $('mulligan').classList.add('hidden'); }
+  runAction(() => { try { wireApply(mv); } catch (e) { wireRefuse('relayed move would not apply', mv); } }, { actor: mv.seat });
+}
+// an own act goes OUT; it is applied only when it comes back.
+function wireSend(action){
+  if (!Wire || Wire.pending || G.over) return false;
+  Wire.pending = true;
+  wirePost({ type:'wire:act', matchId: Wire.matchId, action: action });
+  return true;
+}
+// N3 — the result face inside the frame: no rewards, no MAIN MENU; the Hall owns the exit.
+function showWireResult(){
+  const r = Wire && Wire.result, w = G.over ? G.winner : (r ? r.winner : null);
+  $('goh').textContent = w===ME ? '⚔ VICTORY ⚔' : w===OPP ? 'DEFEAT' : 'STALEMATE';
+  const rw = G.over ? [G.players[ME].roundWins, G.players[OPP].roundWins] : (r && r.roundWins ? [r.roundWins[ME], r.roundWins[OPP]] : [0,0]);
+  $('gop').textContent = (r && r.forfeit && !G.over) ? 'Your opponent left the table.' : `Final: ${rw[0]}–${rw[1]}.`;
+  $('go-earn').innerHTML=''; $('go-extra').innerHTML='';
+  const btns = document.querySelector('#gameover .go-btns');
+  if (btns) btns.innerHTML = '<button id="wire-leave">RETURN TO THE HALL</button>';
+  const lv = $('wire-leave'); if (lv) lv.onclick = () => wirePost({ type:'wire:leave', matchId: Wire.matchId });
+  $('gameover').classList.remove('hidden');
+  Audio2.setRound3(false); Audio2.stopMusic(2);
+  if (w===ME) Audio2.fileSfx('sfx_victory'); else if (w===OPP) Audio2.fileSfx('sfx_defeat'); else Audio2.sfx('roundloss');
+}
+
 function pump(){
   if (G.over) return;
+  if (Wire && !(G.players[ME].mulliganed && G.players[OPP].mulliganed)){ if (!choreoActive) wireDrain(); return; }   // BW1 — a relayed mulligan is not round 1: no conch yet
   fireConch();                                    // round-1 start = first pump of the match (mulligan resolved); guard makes it once-per-match, so rounds 2/3 are silent
   if (choreoActive) return;                       // don't schedule while a choreography is draining
+  if (Wire){ wireDrain(); return; }               // BW1 — the relay drives every move; the AI is NEVER entered for a wire seat
   if (Story && storyMidPending()){ storyShowMid(); return; }   // mid-round story panel (e.g. ch2 after R1) — pause, then re-pump
   Audio2.setRound3(G.round>=3);                   // Round 3 brings in the tabla-like pulse
-  if (G.turn===1 && !G.players[1].passed){
+  if (G.turn===OPP && !G.players[OPP].passed){
     showOppThinking(true);                         // humanized pause with a "thinking" indicator
-    aiTimer=setTimeout(()=>{ showOppThinking(false); runAction(()=> Story ? storyOpponentStep() : aiTakeTurn(G,1), {actor:1}); }, aiThinkTime());   // story: scripted opponent → AI handoff
+    aiTimer=setTimeout(()=>{ showOppThinking(false); runAction(()=> Story ? storyOpponentStep() : aiTakeTurn(G,OPP), {actor:OPP}); }, aiThinkTime());   // story: scripted opponent → AI handoff
   }
 }
 
@@ -10019,19 +10176,20 @@ function renderEarnStamp(lineEl, extraEl, e){
   if(e.questCompleted){ const el=document.createElement('div'); el.className='earn-quest'; el.textContent='Quest complete — claim in Quests'; el.style.animationDelay=(d+440)+'ms'; extraEl.appendChild(el); }
 }
 function showGameOver(){
+  if(Wire){ showWireResult(); return; }     // BW1 (R7, F6) — REWARDS OFF on the wire: no recordMatchResult, no quests, no stamp
   if(Story){ showStoryResult(); return; }   // story matches: separate result screen, and NEVER touch PvAI telemetry
   recordMatchResult();   // one-shot: bump telemetry + capture lastEarn (guarded against re-render)
-  const me=G.players[0];
-  $('goh').textContent = G.winner===0?'⚔ VICTORY ⚔': G.winner===1?'DEFEAT':'STALEMATE';
-  $('gop').textContent = `Final: ${me.roundWins}–${G.players[1].roundWins} across ${G.roundHistory.length} rounds.`;
+  const me=G.players[ME];
+  $('goh').textContent = G.winner===ME?'⚔ VICTORY ⚔': G.winner===OPP?'DEFEAT':'STALEMATE';
+  $('gop').textContent = `Final: ${me.roundWins}–${G.players[OPP].roundWins} across ${G.roundHistory.length} rounds.`;
   if(!goStampDone){ goStampDone=true;   // slice 4: earnings stamp — the ACTUAL awards from recordMatchResult, once per match
     if(lastEarn) renderEarnStamp($('go-earn'), $('go-extra'), lastEarn);
   }
   $('gameover').classList.remove('hidden');
   Audio2.setRound3(false);
   Audio2.stopMusic(2);   // fade battle music to SILENCE (no crossfade to menu) — result screen plays over silence; menu resumes on return to faction-select
-  if(G.winner===0) Audio2.fileSfx('sfx_victory');        // match-win stinger, immediately on reveal, over the music fade-out
-  else if(G.winner===1) Audio2.fileSfx('sfx_defeat');    // match-loss stinger
+  if(G.winner===ME) Audio2.fileSfx('sfx_victory');        // match-win stinger, immediately on reveal, over the music fade-out
+  else if(G.winner===OPP) Audio2.fileSfx('sfx_defeat');    // match-loss stinger
   else Audio2.sfx('roundloss');                          // stalemate keeps the synth cue
 }
 
@@ -10079,7 +10237,7 @@ function playIntro(done){
 }
 VFX.init();
 VFX.preloadSprites();   // T67b: preload the painted kit at PAGE LOAD (not match start) — sprites get the whole intro→landing→faction-select→mulligan window to load, so they're ready before the first play even on slow device connections (fixes the match-start race that made effects fire "occasionally/never" cold). Async, non-blocking; idempotent so the startGame call no-ops.
-playIntro(showLanding);   // R-A: the intro gates every launch; showLanding is the single home entry (skip + every fail path land here)
+if (WIRE_MODE) wireBoot(); else playIntro(showLanding);   // R-A: the intro gates every launch; showLanding is the single home entry. BW1 (R5): ?wire=1 skips intro + landing and waits for the Hall
 </script>
 </body>
 </html>
