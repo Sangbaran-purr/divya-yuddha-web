@@ -8035,7 +8035,7 @@ function boardCard(c, pi, targetSet){
   const sh=!c.ghost && c.t==='unit' && Q.isShielded(G,pi,c);
   if(c.bound) d.classList.add('bound');
   if(c.ward && !c.ghost) d.classList.add('warded');   // KISHKINDHA OATH: jade border-glow marks the sealed unit from cast until fire/expiry (driven by the engine c.ward flag; re-emitted every render like the badges → persists across re-renders/unrelated actions, clears when the engine clears the flag)
-  if(c.stolenBy===0) d.classList.add('stolen');   // shown on player-0 side after a Mohini steal
+  if(c.stolenBy===ME) d.classList.add('stolen');   // shown on MY side after I snare with Mohini (G-SEAT-FIX-1: was === 0)
   let state='', mark='';
   if(!c.ghost){ if(ep>c.base){ state='buffed'; mark='▲'; } else if(c.power<c.base){ state='hurt'; mark='▼'; } }
   const homeF=cardHomeFaction(c);
@@ -10113,7 +10113,8 @@ function onWireMessage(ev){
    events. Seat names arrive as {p0}/{p1} and read as You / Opponent by ME. The log is built from lastMove + events
    (the client builds its own log line — §5). Two public facts the first view shipped without are read WHEN CARRIED
    (W3-VIEW-2) and derived otherwise: passed (from lastMove passes, reset each round — unknown after a resync) and a
-   per-unit flags row (base · ward · asleep · stolenBy · lockedRound — absent: printed power, no badges). */
+   BOARD flags row (base · ward · asleep · stolenBy — absent: printed power, no badges). Narada's lock is a hand fact:
+   it rides myHandLocked (own seat only, parallel to myHand — doc 11e), never the board map. */
 let DEF_BY_ID = null;
 function defById(id, n){
   if (!DEF_BY_ID){ DEF_BY_ID = {}; for (const f in DECKS) for (const d of DECKS[f]) if (!DEF_BY_ID[d.id]) DEF_BY_ID[d.id] = d; }
@@ -10129,7 +10130,7 @@ function viewToState(v, prev){
       uid: row.uid != null ? row.uid : null, id: row.id, n: row.n != null ? row.n : d.n,
       power: row.power != null ? row.power : (d.p || 0), base: (f && f.base != null) ? f.base : (d.p != null ? d.p : (row.power || 0)),
       venom: row.venom || 0, bound: !!row.bound, ghost: false, ward: !!(f && f.ward), asleep: !!(f && f.asleep),
-      stolenBy: (f && f.stolenBy != null) ? f.stolenBy : -1, lockedRound: (f && f.lockedRound) || 0,
+      stolenBy: (f && f.stolenBy != null) ? f.stolenBy : -1, lockedRound: 0,
     }, extra || {});
   };
   const ghostCard = (gc) => ({ uid: gc.uid, id: 'ghost', n: 'Ghost', sub: 'Yama\u2019s token', t: 'unit', p: 1, r: 'C', power: 1, base: 1, ghost: true, venom: 0, bound: false, ward: false, asleep: false, stolenBy: -1, lockedRound: 0, txt: '' });
@@ -10154,7 +10155,7 @@ function viewToState(v, prev){
       return card({ uid: uid, id: r.id, n: r.n });
     });
     let hand;
-    if (seat === s) hand = (v.myHand || []).map((h, k) => card({ uid: v.myHandUids ? v.myHandUids[k] : null, id: h.id, n: h.n, power: h.p }, { t: h.t, p: h.p }));
+    if (seat === s) hand = (v.myHand || []).map((h, k) => card({ uid: v.myHandUids ? v.myHandUids[k] : null, id: h.id, n: h.n, power: h.p }, { t: h.t, p: h.p, lockedRound: (v.myHandLocked && v.myHandLocked[k]) ? v.round : 0 }));
     else if (v.oppHand && v.oppHand.revealed) hand = v.oppHand.cards.map(c => card({ uid: null, id: c.id, n: c.n, power: c.p }, { t: c.t, p: c.p }));
     else hand = Array.from({ length: (v.oppHand && v.oppHand.count) || 0 }, () => ({ uid: null, id: null, n: '', hidden: true }));
     const deckN = v.deckCounts ? (seat === s ? v.deckCounts.mine : v.deckCounts.opp) : 0;
