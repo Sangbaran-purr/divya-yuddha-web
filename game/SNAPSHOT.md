@@ -1,8 +1,8 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `b8750158843aca640afdc148ace1bcd666629921` (b875015)
-- Source committed: 2026-09-11 13:02:33 +0530
+- Source commit: `e1a810a3c79e69d69b5c6fd65575b0a69a4c3a8f` (e1a810a)
+- Source committed: 2026-09-11 13:39:54 +0530
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -25,14 +25,17 @@
 ## Gate preamble (marker: DYW-GATE-START / DYW-GATE-END)
 - Honest-door session check: no site pass -> redirect to ../rite.html. A courtesy redirect, not security.
 - localStorage namespace shim (prefix "dyw::"): the copy keeps its own memory, isolated from the free game (both live on the same github.io origin, which otherwise shares localStorage).
-- Return-to-gate gem-mark (top-left, safe-area aware).
+- Return-to-gate gem-mark (bottom-left, safe-area aware). Skipped when the page is framed with ?wire=1 (the Hall's battle frame): a tap there would navigate the battle away mid-match (S-HALL-WIRE-1 R5).
 
 ## Notes at sync time
 - Source working tree dirty files: 5 (ignored by the archive method).
 - game/ in-repo size: 2012 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The ten site->game links (rite.html x3, index.html x2, treasury.html x1, demo/index.html x1, store.html x1, explore.html x1, mint.html x1) are stamped game/index.html?v=b875015 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 10.
+- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2) are stamped game/index.html?v=e1a810a — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
+
+## STAMP (S-HALL-WIRE-1 R4)
+- game/STAMP holds the source short sha (e1a810a), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh

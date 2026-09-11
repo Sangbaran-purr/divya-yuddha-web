@@ -24,6 +24,13 @@
   function createClient(deps) {
     var E = deps.E, W = deps.W, ethers = deps.ethers, log = deps.log || function () {};
     var onUpdate = deps.onUpdate || function () {};
+    //  S-HALL-WIRE-1 (R7) — THE RELAY HOOK, additive. A host that shows the match in the GAME'S OWN SCREEN (the Hall's
+    //  battle frame) needs the ordered stream itself, not view snapshots: the deal, each {apply} in seq order, the
+    //  refusals, a resync, the end. FREE (mirror) road only — the staked road is redacted and never relays. A host
+    //  without the hook (wire.html, the frozen rig) is unaffected; a host that throws cannot break the client.
+    var onRelay = deps.onRelay || null;
+    function relay(e) { if (!onRelay || redacted) return; try { onRelay(e); } catch (err) { log("relay host threw: " + (err && err.message ? err.message : err)); } }
+    var heldMirror = [];           // S-HALL-WIRE-1 — mirror-road frames that land while the engine is still loading
     var ws = null, nonce = null, devMode = false, chain = null;
     var me = null;                 // my address
     var tables = [];
@@ -197,7 +204,14 @@
         phase = "mulligan"; turn = g.turn; lastSeq = 0; outcome = null; lastReject = null; clock = null; vanish = null; reconnecting = false; redacted = false; serverView = null;
         settlement = null;         // S-HALL-SLIP-SCOPE-1 — a new match starts with an empty strip by law, not by luck.
         log("match " + m.matchId + " — you are seat " + m.seat + " (" + (m.seat === 0 ? m.p0Faction : m.p1Faction) + ")");
-        push(); return;
+        // the deal, for a host that draws the battle itself: exactly the fields the frame is ruled to receive
+        // (BW §2) — never the names (wallet short forms) and never the opponent's address.
+        relay({ kind: "match", matchId: m.matchId, seat: m.seat, seed: m.seed, p0Faction: m.p0Faction, p1Faction: m.p1Faction });
+        push();
+        // S-HALL-WIRE-1 — an {apply}/{resync} that arrived while the engine was loading was held, not lost (the
+        // mirror would have thrown on a null g and silently skipped a move); replay it now, in arrival order.
+        var held = heldMirror; heldMirror = []; held.forEach(function (hm) { handle(hm); });
+        return;
       }
       if (m.type === "match-redacted") {
         // M-A3 STAKED road — NO seed, NO mirror. The client is a pure view renderer; state arrives as {view}s.
@@ -210,11 +224,13 @@
       if (m.type === "view") { serverView = m; redacted = true; reconnecting = false; if (m.over && !outcome) { /* {result} carries the canonical outcome */ } push(); return; }
       if (m.type === "phase") { phase = m.phase; push(); return; }
       if (m.type === "turn") { turn = m.seat; phase = m.phase || phase; push(); return; }
+      if (enginePending && (m.type === "apply" || m.type === "resync" || m.type === "result" || m.type === "abandoned")) { heldMirror.push(m); return; }
       if (m.type === "resync") {
         // M-P6 reconnect: the fresh {match} already rebuilt the mirror; replay the authoritative move log to catch up.
         lastSeq = 0; (m.moves || []).forEach(function (mv) { try { applyRelayed(mv); lastSeq++; } catch (e) { log("resync apply error: " + e.message); } });
         phase = m.phase; turn = (m.turn != null ? m.turn : g.turn); vanish = null; reconnecting = false;
-        log("resynced " + (m.moves ? m.moves.length : 0) + " moves — back in the match"); push(); return;
+        log("resynced " + (m.moves ? m.moves.length : 0) + " moves — back in the match");
+        relay({ kind: "resync", matchId: match && match.matchId, moves: (m.moves || []).slice() }); push(); return;
       }
       if (m.type === "clock") { clock = { kind: m.kind, seat: m.seat, deadline: m.deadline, thinkMs: m.thinkMs, warnMs: m.warnMs }; push(); return; }
       if (m.type === "opponent-vanished") { vanish = { deadline: m.deadline, graceMs: m.graceMs }; clock = null; log("opponent disconnected — " + Math.round((m.graceMs || 90000) / 1000) + "s to reconnect"); push(); return; }
@@ -226,11 +242,12 @@
         lastSeq = m.seq;
         try { applyRelayed(m.move); } catch (e) { log("mirror apply error: " + e.message); }
         turn = g.turn;
+        relay({ kind: "apply", matchId: m.matchId != null ? m.matchId : (match && match.matchId), seq: m.seq, move: m.move });
         push(); return;
       }
-      if (m.type === "reject") { lastReject = m.reason; log("REJECTED: " + m.reason); push(); return; }
-      if (m.type === "result") { outcome = { kind: "result", winner: m.winner, roundWins: m.roundWins, forfeit: !!m.forfeit, reason: m.reason }; phase = "over"; clock = null; vanish = null; log("RESULT winner=" + m.winner + " " + m.roundWins.join("-") + (m.forfeit ? " (forfeit)" : "")); push(); return; }
-      if (m.type === "abandoned") { outcome = { kind: "abandoned", reason: m.reason }; phase = "over"; clock = null; vanish = null; log("ABANDONED: " + m.reason); push(); return; }
+      if (m.type === "reject") { lastReject = m.reason; log("REJECTED: " + m.reason); if (match) relay({ kind: "reject", matchId: match.matchId, reason: m.reason }); push(); return; }
+      if (m.type === "result") { outcome = { kind: "result", winner: m.winner, roundWins: m.roundWins, forfeit: !!m.forfeit, reason: m.reason }; phase = "over"; clock = null; vanish = null; log("RESULT winner=" + m.winner + " " + m.roundWins.join("-") + (m.forfeit ? " (forfeit)" : "")); relay({ kind: "result", matchId: m.matchId != null ? m.matchId : (match && match.matchId), winner: m.winner, roundWins: m.roundWins, forfeit: !!m.forfeit }); push(); return; }
+      if (m.type === "abandoned") { outcome = { kind: "abandoned", reason: m.reason }; phase = "over"; clock = null; vanish = null; log("ABANDONED: " + m.reason); relay({ kind: "abandoned", matchId: m.matchId != null ? m.matchId : (match && match.matchId), reason: m.reason, roundWins: g ? [g.players[0].roundWins, g.players[1].roundWins] : null }); push(); return; }
       if (m.type === "settlement") {
         // the referee-signed slip. The WINNER casts settle from their own wallet (Q3); the loser gets it for
         // transparency; a draw lets either cast. Persist immediately (resume) BEFORE any wait.
@@ -385,6 +402,10 @@
       play: function (handIndex, targetIndex) { send({ type: "move", matchId: match && match.matchId, action: { type: "play", handIndex: handIndex, targetIndex: targetIndex != null ? targetIndex : null } }); },
       pass: function () { send({ type: "move", matchId: match && match.matchId, action: { type: "pass" } }); },
       concede: function () { send({ type: "move", matchId: match && match.matchId, action: { type: "concede" } }); },
+      // S-HALL-WIRE-1 (R7) — the battle frame's act, sent UNCHANGED as the move's action (the server's own shape, F4:
+      //   play with position/movePosition, shield, leap — everything the thin client's helpers cannot express). The
+      //   server's four guards judge it; a refusal comes back as {reject}. Returns whether the socket carried it.
+      act: function (action) { return send({ type: "move", matchId: match && match.matchId, action: action }); },
       targetSpecFor: targetSpecFor,
       view: view,
       raw: {

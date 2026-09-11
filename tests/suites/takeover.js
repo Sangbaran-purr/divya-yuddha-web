@@ -255,9 +255,21 @@ async function main() {
   {
     const hall = fs.readFileSync(path.join(H.SITE, "mp/hall.js"), "utf8");
     const hub = fs.readFileSync(path.join(MS, "src/wshub.js"), "utf8");
-    const dismissWrites = hall.split("\n").filter((l) => l.indexOf("dismissedMatch[") >= 0 && l.indexOf("] = true") >= 0);
+    // S-HALL-WIRE-1 re-home: the one write moved into leaveMatch(), which the battle frame's post-outcome wire:leave
+    //   shares with the [data-leave] buttons (R8 — the SAME leave law). The pin keeps its strictness, read as CODE
+    //   (comments stripped): ONE write, inside leaveMatch, and every caller is a [data-leave] click or the wire:leave
+    //   branch that refuses unless the match has an outcome.
+    const hallCode = hall.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/.*$/gm, "$1");
+    const lines = hallCode.split("\n");
+    const dismissWrites = lines.filter((l) => l.indexOf("dismissedMatch[") >= 0 && l.indexOf("] = true") >= 0);
+    const lmStart = hallCode.indexOf("function leaveMatch(v) {"), lmBody = lmStart >= 0 ? hallCode.slice(lmStart, hallCode.indexOf("\n  }", lmStart)) : "";
+    const callers = lines.filter((l) => /\bleaveMatch\(/.test(l) && l.indexOf("function leaveMatch(") < 0);
+    const wlBranch = hallCode.slice(hallCode.indexOf('if (m.type === "wire:leave")'), hallCode.indexOf("leaveMatch(matchView); return;") + 30);
     ok("road 2 · `dismissedMatch` is written at exactly ONE place — the player's own leave act",
-       dismissWrites.length === 1 && dismissWrites[0].indexOf("data-leave") >= 0, dismissWrites.join(" | ").trim());
+       dismissWrites.length === 1 && lmBody.indexOf(dismissWrites[0].trim()) >= 0 &&
+       callers.length >= 2 && callers.every((l) => l.indexOf("data-leave") >= 0 || l.indexOf("leaveMatch(matchView); return;") >= 0) &&
+       /if \(!\(matchView && matchView\.outcome/.test(wlBranch),
+       dismissWrites.join(" | ").trim() + " // callers: " + callers.map((l) => l.trim().slice(0, 80)).join(" | "));
     ok("road 6 · a join is REFUSED when the seat's socket is not open — no room is created into the void",
        hub.indexOf('openerWs.readyState !== 1') >= 0);
     ok("road 8 · the live-sibling refusal is still PRESENCE-1's line (a seat on a LIVE socket is never taken)",

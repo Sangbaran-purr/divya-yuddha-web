@@ -168,6 +168,7 @@
     // the Hall READS the lobby AND plays the staked redacted match (server-authoritative; E/W stay stubbed — no client engine).
     client = window.DYMatchClient.createClient({
       E: HALL_E, W: window.DYWrapper || {}, ethers: window.ethers, log: function () {}, ensureEngine: ensureEngine,
+      onRelay: onWireRelay,   // S-HALL-WIRE-1 — the FREE road's ordered stream, for the battle frame
       onUpdate: function (v) {
         if (gen !== feedGen) return;                          // read-generation guard on the feed
         lastView = v || null;
@@ -1075,6 +1076,11 @@
       '<div class="hall-settle-abort state-line">' + ABORT_LINE + '</div>' + cast + err + '</div>';
   }
 
+  function outcomeLine(v) {
+    return v.outcome.kind === "result"
+      ? (v.outcome.winner == null ? "the match is a draw" : (v.outcome.winner === v.seat ? "you win the match" : "you lose the match")) + " - rounds " + v.outcome.roundWins.join("-")
+      : "match abandoned - " + v.outcome.reason;
+  }
   function matchScreenHTML(v) {
     // B2 — the matched moment: one beat before the battle, on first entry to a match.
     if (!dealtMatches[v.matchId]) {
@@ -1082,14 +1088,13 @@
         '<div class="hall-dealing-opp">' + factionSigilSmall(v.oppFaction) + '<span class="hall-plaque-addr">' + shortAddr(v.opponent || v.oppName) + '</span></div>' +
         '<div class="hall-dealing-line">the stakes are locked - dealing…</div></div>';
     }
-    var h = statusStrip(v) + settlementStrip(slipForMatch(v));
+    var h = (wireF && wireF.fallback && wireF.matchId === String(v.matchId) ? '<div class="hall-mstatus warn">' + FRAME_FALLBACK_LINE + '</div>' : "") +
+      statusStrip(v) + settlementStrip(slipForMatch(v));
     // header
     h += '<div class="hall-mhead"><div class="hall-mhead-row">you (' + (v.myFaction || "?") + ') vs ' + factionSigilSmall(v.oppFaction) + shortAddr(v.opponent || v.oppName) +
       '<span class="hall-mpill">round ' + v.round + '</span><span class="hall-mpill">wins ' + v.roundWins[0] + '-' + v.roundWins[1] + ' (to ' + v.winTarget + ')</span></div>';
     if (v.outcome) {
-      h += '<div class="hall-mresult">' + (v.outcome.kind === "result"
-        ? (v.outcome.winner == null ? "the match is a draw" : (v.outcome.winner === v.seat ? "you win the match" : "you lose the match")) + " - rounds " + v.outcome.roundWins.join("-")
-        : "match abandoned - " + v.outcome.reason) + '</div>';
+      h += '<div class="hall-mresult">' + outcomeLine(v) + '</div>';
     } else {
       h += '<div class="hall-mphase state-line">' + (v.phase === "mulligan" ? "mulligan phase" : (v.myTurn ? "your turn" : "opponent's turn")) + '</div>';
     }
@@ -1121,8 +1126,14 @@
 
   function renderMatchScreen() {
     var root = $("hall-root"); if (!root || !matchView) return;
+    if (isFrameMatch(matchView)) {   // S-HALL-WIRE-1 — a FREE match plays in the game's own screen, beneath
+      root.innerHTML = frameMatchHTML(matchView);
+      var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { leaveMatch(matchView); };
+      syncFrameHost(); return;
+    }
     root.innerHTML = matchScreenHTML(matchView);
     wireMatchScreen(matchView);
+    syncFrameHost();
   }
   function renderCurrent() { if (matchView) renderMatchScreen(); else render(); } // the settle strip lives in the match OR the lobby (resume)
   // mark matchclient's persisted slip settled so resumeSettlement won't re-surface it on the next reload (the strip still shows this session).
@@ -1144,8 +1155,181 @@
     var ps = document.querySelector("[data-pass]"); if (ps && !ps.disabled) ps.onclick = function () { client.pass(); };
     var cc = document.querySelector("[data-concede]"); if (cc && !cc.disabled) cc.onclick = function () { client.concede(); };
     var st = document.querySelector("[data-settle]"); if (st && !st.disabled) st.onclick = function () { var s = slipForMatch(v); if (s && s.slip) ceremonySettle(s.slip); }; // S-HALL-SLIP-SCOPE-1 — the match screen casts only its own match's slip
-    var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { dismissedMatch[v.matchId] = true; settlementView = slipForMatch(v) || v.pendingSlip || settlementView; matchView = null; if (maybeReKey()) return; render(); }; // S-HALL-SLIP-SCOPE-1 — only this match's own slip promotes on leave
+    var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { leaveMatch(v); }; // S-HALL-SLIP-SCOPE-1 — only this match's own slip promotes on leave
   }
+  //  THE LEAVE LAW — one road out of an ended match, whichever door the player used (the text battle's button, the
+  //  free strip's, or the battle frame's RETURN TO THE HALL). S-HALL-SLIP-SCOPE-1: only this match's own slip promotes.
+  function leaveMatch(v) {
+    dismissedMatch[v.matchId] = true; settlementView = slipForMatch(v) || v.pendingSlip || settlementView; matchView = null;
+    unmountFrame();
+    if (maybeReKey()) return; render();
+  }
+
+  // ── S-HALL-WIRE-1 — THE BATTLE FRAME (BW1 site half; docs/BATTLE_WIRE_DESIGN_v1.md §2 as committed, 11a/11b/11c) ──
+  //  A FREE match plays in the GAME'S OWN SCREEN: a same-origin iframe of ../game/index.html?wire=1 beneath the Hall's
+  //  own lines. The Hall keeps the socket, the session and the mirror (R6: matchclient's mirror stays — the matchView
+  //  law and the engine pin are untouched); the frame is a renderer that receives the match and sends acts.
+  //  THE WALL: the frame never receives a key, an address, a stake or an escrow id. Every message to it is BUILT from
+  //  a fixed field list per type and checked once more before it leaves; a message that fails is refused, not sent.
+  //  The frame lives in its own host BESIDE #hall-root, because the match screen rewrites #hall-root on every update
+  //  and an iframe there would be torn down and reloaded on every move.
+  var WIRE_READY_MS = Number(lsGet("dyhall::wireReadyMs")) || 15000;   // R4 — no wire:ready in time: that match falls back to the Hall's text table (the override is proof-only, like dyhall::devAccess)
+  var FRAME_FALLBACK_LINE = "The battle screen did not answer - this match plays on in the Hall's table.";
+  var WIRE_SHAPES = {                 // §2, parent -> frame, exactly
+    "wire:start": ["matchId", "seat", "seed", "p0Faction", "p1Faction"],
+    "wire:move": ["matchId", "seq", "move"],
+    "wire:reject": ["matchId", "reason"],
+    "wire:result": ["matchId", "winner", "roundWins", "forfeit"],
+  };
+  var WALL_RE = /0x[0-9a-fA-F]{40}|"(?:address|opponent|stake|escrow[A-Za-z]*|key|privateKey|signature|slip|p0|p1)"\s*:/;
+  var wireF = null;                   // { matchId, deal, el, ready, started, moves{seq:move}, sent, actPending, result, resultSent, fallback, readyTimer }
+  var wireRefused = [];               // every refusal, loud (the suites count them)
+  function refuseWire(why, data) { wireRefused.push(why); try { console.warn("[hall wire] refused:", why, data == null ? "" : data); } catch (e) {} }
+  function isFrameMatch(v) { return !!(v && !v.redacted && wireF && !wireF.fallback && wireF.matchId === String(v.matchId)); }
+  function frameMatchHTML(v) {
+    if (!dealtMatches[v.matchId]) return matchScreenHTML(v);             // B2 — the matched moment, unchanged; the frame loads beneath it
+    if (!v.outcome) return "";
+    // R3 — THE FREE RESULT: the result line + FREE_LINE (§11 8c), two existing strings in one strip; the frame's own
+    //   face sits beneath (N3); the Hall owns the exit.
+    return '<div class="hall-settle hall-free-result"><div class="hall-settle-line"><span class="hall-mresult">' + outcomeLine(v) +
+      '</span> <span class="state-line">' + FREE_LINE + '</span></div>' +
+      '<div class="hall-controls-act"><button class="hall-act hall-mleave" data-leave="1">back to the Hall</button></div></div>';
+  }
+  function frameHost() {
+    var host = $("hall-frame-host");
+    if (!host) {
+      var root = $("hall-root"); if (!root || !root.parentNode) return null;
+      host = document.createElement("div"); host.id = "hall-frame-host"; host.className = "hall-frame-host"; host.hidden = true;
+      root.parentNode.insertBefore(host, root.nextSibling);
+    }
+    return host;
+  }
+  function readStamp() {               // R4 — game/STAMP, written by the sync beside the copy; never SNAPSHOT.md
+    return fetchText("../game/STAMP").then(function (t) { var s = String(t).trim(); return /^[0-9a-f]{7,40}$/.test(s) ? s : null; }, function () { return null; });
+  }
+  function mountFrame() {
+    var host = frameHost(); if (!host || !wireF || wireF.el) return;
+    // seed-then-load, the demo's road: the gate preamble reads dyw_pass at load. Never dyw_demo — this is a battle.
+    try { sessionStorage.setItem("dyw_pass", "1"); } catch (e) {}
+    var f = document.createElement("iframe");
+    f.className = "hall-frame"; f.title = "The battle"; f.setAttribute("allow", "autoplay");
+    wireF.el = f; host.appendChild(f);
+    var mine = wireF;
+    readStamp().then(function (sha) { if (wireF === mine && mine.el === f) f.src = "../game/index.html?" + (sha ? "v=" + sha + "&" : "") + "wire=1"; });
+    wireF.readyTimer = setTimeout(function () { if (wireF === mine && !mine.ready) frameFallback(); }, WIRE_READY_MS);
+  }
+  function unmountFrame() {
+    if (!wireF) return;
+    clearTimeout(wireF.readyTimer);
+    if (wireF.el && wireF.el.parentNode) wireF.el.parentNode.removeChild(wireF.el);
+    wireF = null;
+    var host = $("hall-frame-host"); if (host) host.hidden = true;
+  }
+  function frameFallback() {           // R4 — the thin client plays THIS match; the mirror (R6) is already current
+    if (!wireF) return;
+    clearTimeout(wireF.readyTimer);
+    if (wireF.el && wireF.el.parentNode) wireF.el.parentNode.removeChild(wireF.el);
+    wireF.el = null; wireF.fallback = true;
+    var host = $("hall-frame-host"); if (host) host.hidden = true;
+    renderCurrent();
+  }
+  function syncFrameHost() {
+    var host = $("hall-frame-host");
+    if (!(matchView && isFrameMatch(matchView))) {
+      if (wireF && (!matchView || wireF.matchId !== String(matchView.matchId))) unmountFrame();
+      if (host) host.hidden = true;
+      return;
+    }
+    if (!wireF.el) mountFrame();
+    host = frameHost(); if (!host) return;
+    host.hidden = false;
+    host.classList.toggle("dealing", !dealtMatches[matchView.matchId]);   // loads, unseen, behind the matched moment
+  }
+  // every message to the frame: built from the ruled field list, walled, then posted to OUR origin only.
+  function toFrame(type, fields) {
+    if (!wireF || !wireF.el || !wireF.el.contentWindow) return false;
+    var msg = { type: type };
+    WIRE_SHAPES[type].forEach(function (k) { msg[k] = fields[k]; });
+    if (WALL_RE.test(JSON.stringify(msg))) { refuseWire("the wall: a " + type + " would have carried money or identity", type); return false; }
+    try { wireF.el.contentWindow.postMessage(msg, location.origin); } catch (e) { return false; }
+    return true;
+  }
+  function startFrame() {
+    if (!wireF || !wireF.ready || !wireF.deal) return;
+    var d = wireF.deal;
+    toFrame("wire:start", { matchId: wireF.matchId, seat: d.seat, seed: d.seed, p0Faction: d.p0Faction, p1Faction: d.p1Faction });
+    wireF.started = true; wireF.sent = 0; wireF.resultSent = false;
+    flushFrame();
+  }
+  function flushFrame() {              // the ordered stream: seq 1..N, each exactly once, never ahead of the deal
+    if (!wireF || !wireF.ready || !wireF.started) return;
+    while (wireF.moves[wireF.sent + 1]) {
+      var seq = wireF.sent + 1;
+      toFrame("wire:move", { matchId: wireF.matchId, seq: seq, move: wireF.moves[seq] });
+      wireF.sent = seq;
+    }
+    if (wireF.result && !wireF.resultSent) {
+      toFrame("wire:result", { matchId: wireF.matchId, winner: wireF.result.winner, roundWins: wireF.result.roundWins, forfeit: wireF.result.forfeit });
+      wireF.resultSent = true;
+    }
+  }
+  // matchclient's relay (FREE road only): the deal, each applied move, the refusals, a resync, the end.
+  function onWireRelay(e) {
+    if (!e) return;
+    if (e.kind === "match") {
+      var mid = String(e.matchId);
+      if (wireF && wireF.matchId !== mid) unmountFrame();
+      var deal = { seat: e.seat, seed: e.seed, p0Faction: e.p0Faction, p1Faction: e.p1Faction };
+      if (!wireF) { wireF = { matchId: mid, deal: deal, el: null, ready: false, started: false, moves: {}, sent: 0, actPending: false, result: null, resultSent: false, fallback: false, readyTimer: null }; return; }
+      // the same match dealt again (a reconnect or a re-seat): the frame starts over from the deal; the resync follows
+      wireF.deal = deal; wireF.moves = {}; wireF.sent = 0; wireF.actPending = false; wireF.result = null;
+      if (wireF.ready) startFrame();
+      return;
+    }
+    if (!wireF || String(e.matchId) !== wireF.matchId) return;
+    if (e.kind === "apply") {
+      wireF.moves[e.seq] = e.move;
+      if (e.move && e.move.seat === wireF.deal.seat) wireF.actPending = false;   // our act (or the clock's, for us) landed
+      flushFrame(); return;
+    }
+    if (e.kind === "resync") {
+      if (wireF.sent > 0 && wireF.ready) startFrame();   // never replay on top of moves already shown
+      wireF.moves = {}; (e.moves || []).forEach(function (mv, i) { wireF.moves[i + 1] = mv; });
+      flushFrame(); return;
+    }
+    if (e.kind === "reject") {         // §2 (11c): only for the frame's OWN refused act
+      if (!wireF.actPending) return;
+      wireF.actPending = false;
+      toFrame("wire:reject", { matchId: wireF.matchId, reason: e.reason });
+      return;
+    }
+    if (e.kind === "result") { wireF.result = { winner: e.winner, roundWins: e.roundWins, forfeit: !!e.forfeit }; flushFrame(); return; }
+    if (e.kind === "abandoned") {      // R2 — FREE abandonment: no winner on the server's record; the frame says so
+      wireF.result = { winner: null, roundWins: e.roundWins || [0, 0], forfeit: true }; flushFrame(); return;
+    }
+  }
+  // the frame's words: origin AND sender checked on every one; the matchId on every one after the ready.
+  window.addEventListener("message", function (ev) {
+    var m = ev.data;
+    if (!m || typeof m.type !== "string" || m.type.indexOf("wire:") !== 0) return;   // not the bridge's word
+    if (!wireF || !wireF.el || ev.source !== wireF.el.contentWindow) return refuseWire("wrong sender", m.type);
+    if (ev.origin !== location.origin) return refuseWire("wrong origin", ev.origin);
+    if (m.type === "wire:ready") { wireF.ready = true; clearTimeout(wireF.readyTimer); startFrame(); return; }
+    if (String(m.matchId) !== wireF.matchId) return refuseWire("foreign matchId", m.matchId);
+    if (m.type === "wire:act") {
+      if (!m.action || typeof m.action.type !== "string") return refuseWire("malformed act", m.action);
+      if (matchView && matchView.outcome) return refuseWire("the match is over", m.action.type);
+      if (!client || !client.act) return refuseWire("no session", m.action.type);
+      wireF.actPending = true;
+      if (!client.act(m.action)) { wireF.actPending = false; toFrame("wire:reject", { matchId: wireF.matchId, reason: "not delivered" }); }
+      return;
+    }
+    if (m.type === "wire:leave") {     // R8 — only after an outcome: a frame message can never forfeit
+      if (!(matchView && matchView.outcome && String(matchView.matchId) === wireF.matchId)) return refuseWire("mid-match leave refused - a frame message can never forfeit", m.matchId);
+      leaveMatch(matchView); return;
+    }
+    refuseWire("unknown word", m.type);
+  });
 
   // the live clock / vanish countdown tick (renders the numbers from the SERVER deadline; the client never decides).
   var l3TickStarted = false;
@@ -1163,6 +1347,7 @@
   // ── RENDER ───────────────────────────────────────────────────────────────
   function render() {
     var root = $("hall-root"); if (!root) return;
+    if (!matchView) syncFrameHost();   // S-HALL-WIRE-1 — no match on screen, no frame (every road out: leave, lobby, re-key, wallet gone)
     if (accessState === "init") { root.innerHTML = '<div class="hall-busy" role="status">reading the gate…</div>'; return; }
     if (accessState === "connect") { root.innerHTML = connectCard(); wireConnect(); return; }
     if (accessState === "busy") { root.innerHTML = '<div class="hall-gate hall-busy" role="status">The gate is not answering right now — <button class="hall-retry" id="hall-retry">refresh to retry</button>.</div>'; wireRetry(); return; }
@@ -1578,6 +1763,8 @@
         accountNote: accountNote, pendingReKey: pendingReKey, walletSeen: walletSeen, signInNeeded: signInNeeded,
         lastServerError: lastServerError, escrow: escrowAddr(),
         matchReject: matchView ? matchView.lastReject : null,
+        wire: wireF ? { matchId: wireF.matchId, mounted: !!wireF.el, ready: wireF.ready, started: wireF.started, sent: wireF.sent, actPending: wireF.actPending, fallback: wireF.fallback, resultSent: wireF.resultSent } : null,
+        wireRefused: wireRefused.slice(),
       };
     },
   };

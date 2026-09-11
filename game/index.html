@@ -23,6 +23,7 @@
   } catch (e) {}
   function addGem(){
     if (document.getElementById("dyw-gate-return")) return;
+    if (window.top !== window && /[?&]wire=1(&|$)/.test(location.search)) return; /* S-HALL-WIRE-1 (R5): never inside the Hall's battle frame - a tap would navigate the battle away mid-match */
     var a = document.createElement("a");
     a.id = "dyw-gate-return";
     a.href = "../index.html";

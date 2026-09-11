@@ -147,6 +147,7 @@ cat > "$PRE" <<'PREAMBLE'
   } catch (e) {}
   function addGem(){
     if (document.getElementById("dyw-gate-return")) return;
+    if (window.top !== window && /[?&]wire=1(&|$)/.test(location.search)) return; /* S-HALL-WIRE-1 (R5): never inside the Hall's battle frame - a tap would navigate the battle away mid-match */
     var a = document.createElement("a");
     a.id = "dyw-gate-return";
     a.href = "../index.html";
@@ -250,18 +251,37 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 ## Gate preamble (marker: DYW-GATE-START / DYW-GATE-END)
 - Honest-door session check: no site pass -> redirect to ../rite.html. A courtesy redirect, not security.
 - localStorage namespace shim (prefix "$NS_PREFIX"): the copy keeps its own memory, isolated from the free game (both live on the same github.io origin, which otherwise shares localStorage).
-- Return-to-gate gem-mark (top-left, safe-area aware).
+- Return-to-gate gem-mark (bottom-left, safe-area aware). Skipped when the page is framed with ?wire=1 (the Hall's battle frame): a tap there would navigate the battle away mid-match (S-HALL-WIRE-1 R5).
 
 ## Notes at sync time
 - Source working tree dirty files: $SRC_DIRTY (ignored by the archive method).
 - game/ in-repo size: ${GAME_BYTES} KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The ten site->game links (rite.html x3, index.html x2, treasury.html x1, demo/index.html x1, store.html x1, explore.html x1, mint.html x1) are stamped game/index.html?v=$SRC_SHORT — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 10.
+- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2) are stamped game/index.html?v=$SRC_SHORT — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
+
+## STAMP (S-HALL-WIRE-1 R4)
+- game/STAMP holds the source short sha ($SRC_SHORT), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh
 SNAP
+
+# S-HALL-WIRE-1 (R4) — THE STAMP. The Hall's battle frame must load THESE bytes: a cached pre-wire copy would never
+# answer wire:ready. mp/ stays outside the entry-link ledger (S-HALL-ENTRY-1 R2), so the Hall cannot carry a stamped
+# link; instead the sync writes the short sha beside the copy and the Hall reads it (no-store) at mount. A file the
+# sync owns — never a link in mp/, never parsed out of SNAPSHOT.md. Guarded like every other sync output.
+printf '%s\n' "$SRC_SHORT" > "$DEST/STAMP"
+if [ "$(cat "$DEST/STAMP")" != "$SRC_SHORT" ] || ! grep -qE '^[0-9a-f]{7,}$' "$DEST/STAMP"; then
+  echo "error: game/STAMP was not written as the source short sha" >&2
+  exit 1
+fi
+echo "sync_game: STAMP -> $SRC_SHORT"
+# S-HALL-WIRE-1 (R5) — the gate gem must skip the Hall's battle frame; assert the skip line landed exactly once.
+if [ "$(grep -c 'S-HALL-WIRE-1 (R5): never inside the Hall' "$DEST/index.html")" != "1" ]; then
+  echo "error: the gate gem's battle-frame skip is missing from the injected preamble" >&2
+  exit 1
+fi
 
 # STAMP THE SITE-TO-GAME ENTRY LINKS (S8 flag-1): bind the twenty game/index.html links to the synced HEAD short sha,
 # so browsers refetch the gated entry exactly when the copy changes (stamps bind to bytes). Guarded: assert exactly

@@ -31,7 +31,7 @@ const SUITES = [
   { name: "slipscope",     file: path.join(__dirname, "suites", "slipscope.js"), chain: true, expect: 34 },
   { name: "ceremony",      file: path.join(__dirname, "suites", "ceremony.js"), chain: true, expect: 19 },
   { name: "takeover",      file: path.join(__dirname, "suites", "takeover.js"), chain: true, expect: 25 },
-  { name: "freedoor",      file: path.join(__dirname, "suites", "freedoor.js"), chain: true, expect: 17 },
+  { name: "freedoor",      file: path.join(__dirname, "suites", "freedoor.js"), chain: true, expect: 37 },
 ];
 
 function freePort() {

@@ -559,6 +559,23 @@ body > * { position: relative; z-index: 1; }
   .hall-empty-board { max-width: 420px; }
 }
 
+/* S-HALL-WIRE-1 — THE BATTLE FRAME. A FREE match plays in the game's own screen: a same-origin iframe in its own
+   host beside #hall-root (the match screen rewrites #hall-root on every update; the frame must survive that).
+   Phone: the frame bleeds to the viewport edges so the game gets the full 390 it was drawn for. Wider: a centred
+   520px column (the game is mobile-first; its own column is 520). Height: the viewport under the Hall's nav and
+   title. While the matched moment plays, the frame loads unseen beneath it (visibility, not display, so the game
+   measures a real viewport). */
+.hall-frame-host { width: 100%; max-width: 520px; margin: 0 auto; }
+.hall-frame-host[hidden] { display: none; }
+.hall-frame-host.dealing { visibility: hidden; height: 0; overflow: hidden; }
+.hall-frame { display: block; width: 100%; height: calc(100dvh - 150px); min-height: 560px; max-height: 900px;
+  border: 1px solid var(--gold-dim-25); border-radius: 12px; background: var(--ink); }
+@media (max-width: 599.98px) {
+  .hall-frame-host { width: calc(100% + 32px); max-width: none; margin: 0 -16px; }
+  .hall-frame { border-radius: 0; border-left: 0; border-right: 0; }
+}
+.hall-free-result .hall-settle-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+
 @media (prefers-reduced-motion: reduce) {
   .hall-busy::before { animation: none; opacity: .8; }
   * { transition: none !important; }

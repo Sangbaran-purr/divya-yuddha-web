@@ -81,8 +81,25 @@ async function main() {
     H.teardown(A); H.teardown(B);
   }
 
-  // ═══ NOW: the door plays ═══
-  console.log("\n── the door, opened ──");
+  // ═══ NOW: the door plays — in the GAME'S OWN SCREEN (S-HALL-WIRE-1) ═══
+  // jsdom cannot run the game (Pixi), so each tab's battle frame is a STUB standing where the game would: it answers
+  // wire:ready, reads what the Hall posts it, and sends acts back. What is proven is the HALL'S half of the §2
+  // contract. jsdom's postMessage fills neither origin nor source (its own TODO), so the stub speaks through
+  // constructed MessageEvents that carry both, and the frame's postMessage is replaced by a recorder.
+  console.log("\n── the door, opened: the battle frame ──");
+  const WIRE_KEYS = { "wire:start": "matchId,p0Faction,p1Faction,seat,seed,type", "wire:move": "matchId,move,seq,type",
+    "wire:reject": "matchId,reason,type", "wire:result": "forfeit,matchId,roundWins,type,winner" };
+  const WALL = /0x[0-9a-fA-F]{40}|"(address|opponent|stake|escrow\w*|key|privateKey|signature|slip|p0|p1)"\s*:/;
+  function stubFrame(h) {
+    const w = h.w, el = w.document.querySelector("#hall-frame-host iframe.hall-frame"), fw = el.contentWindow;
+    const rec = [];
+    fw.postMessage = (m, o) => rec.push({ m: JSON.parse(JSON.stringify(m)), o });
+    const say = (data, over) => w.dispatchEvent(new w.MessageEvent("message", Object.assign({ data, origin: w.location.origin, source: fw }, over || {})));
+    const tap = [];   // the server's own {apply} stream on this tab's socket
+    const sock = h.sockets[h.sockets.length - 1];
+    sock.on("message", (d) => { try { const m = JSON.parse(String(d)); if (m.type === "apply" || m.type === "result" || m.type === "reject") tap.push(m); } catch (e) {} });
+    return { el, fw, rec, say, tap, sock, sent: (t) => rec.filter((r) => r.m.type === t) };
+  }
   {
     const s1 = await server();
     const { A, B } = await twoHalls(s1.url);
@@ -103,12 +120,128 @@ async function main() {
     go.click();
     await H.until(() => st(A.w).matchView && st(B.w).matchView, 30000, "both tabs in the match");
     ok("F8 · BOTH Hall tabs enter the match", !!st(A.w).matchView && !!st(B.w).matchView);
-    await H.until(() => battle(A.w) && battle(B.w), 20000, "the battle on both screens");
-    ok("F9 · the battle is on BOTH screens", battle(A.w) && battle(B.w));
-    ok("F10 · the engine is loaded now — and it is the site's own copy",
+    await H.until(() => (st(A.w).wire || {}).mounted && (st(B.w).wire || {}).mounted, 20000, "the frame mounted on both screens");
+    await H.until(() => !A.w.document.querySelector(".hall-dealing") && !B.w.document.querySelector(".hall-dealing"), 8000, "the matched moment passes");
+    ok("F9 · the battle FRAME is mounted on BOTH screens — and the text battle is not drawn for a free match",
+       !!A.w.document.querySelector("#hall-frame-host iframe.hall-frame") && !!B.w.document.querySelector("#hall-frame-host iframe.hall-frame") &&
+       !A.w.document.querySelector(".hall-mhead, .hall-board") && !B.w.document.querySelector(".hall-mhead, .hall-board") &&
+       !A.w.document.getElementById("hall-frame-host").hidden);
+    ok("F10 · the engine is loaded now — and it is the site's own copy (R6: the Hall's mirror stays beside the frame)",
        typeof A.w.newGame === "function" && typeof B.w.newGame === "function");
+    const stamp = fs.readFileSync(path.join(H.SITE, "game/STAMP"), "utf8").trim();
+    await H.until(() => (A.w.document.querySelector("#hall-frame-host iframe.hall-frame").getAttribute("src") || "").indexOf("wire=1") >= 0, 5000, "the frame src");
+    ok("F18 · the frame loads the SYNCED bytes: ../game/index.html?v=<game/STAMP>&wire=1 (R4 — never SNAPSHOT.md)",
+       A.w.document.querySelector("#hall-frame-host iframe.hall-frame").getAttribute("src") === "../game/index.html?v=" + stamp + "&wire=1", stamp);
+    ok("F19 · the pass is seeded before the frame loads, and never the demo key (the frame is a battle, not a demo)",
+       A.w.sessionStorage.getItem("dyw_pass") === "1" && A.w.sessionStorage.getItem("dyw_demo") === null);
 
-    // play it to a result, through the Hall's own controls
+    const FA = stubFrame(A), FB = stubFrame(B);
+    const mid = String(st(A.w).matchView.matchId);
+    ok("F20 · nothing reaches a frame before it says it is ready", FA.rec.length === 0 && FB.rec.length === 0);
+    FA.say({ type: "wire:ready" }); FB.say({ type: "wire:ready" });
+    await H.sleep(150);
+    const startA = FA.sent("wire:start")[0], startB = FB.sent("wire:start")[0];
+    ok("F21 · wire:start carries EXACTLY { matchId, seat, seed, p0Faction, p1Faction } — no names, no address",
+       !!startA && !!startB && Object.keys(startA.m).sort().join(",") === WIRE_KEYS["wire:start"] && Object.keys(startB.m).sort().join(",") === WIRE_KEYS["wire:start"] &&
+       startA.m.seat === st(A.w).matchView.seat && startB.m.seat === st(B.w).matchView.seat && startA.m.seed === startB.m.seed && startA.m.matchId === mid,
+       JSON.stringify(startA && startA.m));
+    ok("F22 · posted to THIS origin only — never '*'", FA.rec.concat(FB.rec).every((r) => r.o === "https://divyayuddha.games"));
+
+    // THE BRIDGE REFUSES: three forged deliveries into A's Hall, none of which may reach the socket
+    const sentBefore = A.sent.length, refBefore = st(A.w).wireRefused.length;
+    FA.say({ type: "wire:act", matchId: mid, action: { type: "pass" } }, { origin: "https://evil.example" });
+    FA.say({ type: "wire:act", matchId: mid, action: { type: "pass" } }, { source: A.w });
+    FA.say({ type: "wire:act", matchId: "another-table", action: { type: "pass" } });
+    await H.sleep(150);
+    const refused = st(A.w).wireRefused.slice(refBefore);
+    ok("F23 · wrong origin, wrong sender and a foreign matchId are REFUSED loudly — and none reaches the server",
+       refused.join("|") === "wrong origin|wrong sender|foreign matchId" && A.sent.length === sentBefore, refused.join("|"));
+    FA.say({ type: "wire:leave", matchId: mid });
+    await H.sleep(120);
+    ok("F24 · a mid-match wire:leave is REFUSED - a frame message can never forfeit (R8)",
+       !!st(A.w).matchView && st(A.w).wireRefused.slice(-1)[0].indexOf("mid-match leave refused") === 0);
+
+    // a rich act crosses UNCHANGED; the server refuses it; the refusal goes back to THAT frame only
+    const rich = { type: "play", handIndex: 99, targetIndex: null, position: 2, movePosition: null };
+    FB.say({ type: "wire:act", matchId: mid, action: rich });
+    await H.until(() => FB.sent("wire:reject").length === 1, 8000, "the server's refusal relayed to the frame");
+    const onWire = B.sent.filter((f) => f.type === "move").slice(-1)[0];
+    ok("F25 · wire:act is relayed to the server BYTE-IDENTICAL: { type:'move', matchId, action } with the frame's action unchanged",
+       !!onWire && JSON.stringify(onWire.action) === JSON.stringify(rich) && String(onWire.matchId) === mid, JSON.stringify(onWire));
+    const rj = FB.sent("wire:reject")[0].m;
+    ok("F26 · the server's {reject} comes back as wire:reject { matchId, reason } (§2 11c)",
+       Object.keys(rj).sort().join(",") === WIRE_KEYS["wire:reject"] && rj.matchId === mid &&
+       rj.reason === (FB.tap.filter((m) => m.type === "reject").slice(-1)[0] || {}).reason, JSON.stringify(rj));
+    FB.sock.onmessage({ data: JSON.stringify({ type: "reject", reason: "a refusal the frame did not cause" }) });
+    await H.sleep(150);
+    ok("F27 · a {reject} the frame did not cause is NOT relayed to it", FB.sent("wire:reject").length === 1 && FA.sent("wire:reject").length === 0);
+
+    // play it to a result THROUGH THE FRAMES: each stub acts only on its own turn, the way the game does
+    for (let i = 0; i < 200; i++) {
+      for (const [h, F] of [[A, FA], [B, FB]]) {
+        const v = st(h.w).matchView, wr = st(h.w).wire; if (!v || v.over || !wr || wr.actPending) continue;
+        if (v.phase === "mulligan" && !F.__mull) { F.__mull = 1; F.say({ type: "wire:act", matchId: mid, action: { type: "mulligan", indices: [] } }); }
+        else if (v.phase === "play" && v.myTurn) F.say({ type: "wire:act", matchId: mid, action: { type: "pass" } });
+      }
+      await H.sleep(120);
+      if ((st(A.w).matchView || {}).over && (st(B.w).matchView || {}).over) break;
+    }
+    ok("F11 · the match is PLAYED TO A RESULT through the battle frame's acts", !!(st(A.w).matchView || {}).over && !!(st(B.w).matchView || {}).over,
+       JSON.stringify(st(A.w).matchView));
+    await H.sleep(300);
+    const applies = FA.tap.filter((m) => m.type === "apply");
+    const movesA = FA.sent("wire:move").map((r) => r.m), movesB = FB.sent("wire:move").map((r) => r.m);
+    ok("F28 · the move stream: seq 1..N, monotonic, each once — EQUAL to the server's {apply} seq and move, on BOTH frames",
+       applies.length > 0 && movesA.length === applies.length && movesB.length === applies.length &&
+       movesA.every((m, i) => m.seq === i + 1 && m.seq === applies[i].seq && JSON.stringify(m.move) === JSON.stringify(applies[i].move)) &&
+       JSON.stringify(movesA) === JSON.stringify(movesB), movesA.length + " sent vs " + applies.length + " applied");
+    const res = FA.tap.filter((m) => m.type === "result")[0], wrA = FA.sent("wire:result"), wrB = FB.sent("wire:result");
+    ok("F29 · wire:result { matchId, winner, roundWins, forfeit } — once per frame, the server's winner",
+       !!res && wrA.length === 1 && wrB.length === 1 && Object.keys(wrA[0].m).sort().join(",") === WIRE_KEYS["wire:result"] &&
+       wrA[0].m.winner === res.winner && JSON.stringify(wrA[0].m.roundWins) === JSON.stringify(res.roundWins) && wrA[0].m.forfeit === false,
+       JSON.stringify(wrA[0] && wrA[0].m));
+    const every = FA.rec.concat(FB.rec);
+    ok("F30 · EXACT keys on every message the Hall sent a frame (" + every.length + " messages)",
+       every.every((r) => WIRE_KEYS[r.m.type] && Object.keys(r.m).sort().join(",") === WIRE_KEYS[r.m.type]));
+    ok("F31 · THE WALL: no address, key, stake or escrow id in any of them", every.every((r) => !WALL.test(JSON.stringify(r.m))),
+       (every.find((r) => WALL.test(JSON.stringify(r.m))) || {}).m);
+    // the send road, read as code: every toFrame(...) builds its message from the deal, the stream or a reason — never
+    // from identity or money. Comments stripped first: count code, never prose.
+    const hallCode = fs.readFileSync(path.join(H.SITE, "mp/hall.js"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/.*$/gm, "$1");
+    const road = hallCode.slice(hallCode.indexOf("var WIRE_SHAPES"), hallCode.indexOf('refuseWire("unknown word"'));
+    const calls = road.match(/toFrame\("wire:[a-z]+", \{[^}]*\}\)/g) || [];
+    ok("F32 · the send road (" + calls.length + " toFrame calls) names no identity or money: me / signedInAs / opponent / address / stake / escrow / slip / liquid",
+       calls.length >= 5 && calls.every((c) => !/\b(me|signedInAs|opponent|address|stake|escrow\w*|slip|liquid|settlement\w*)\b/.test(c)), calls.join(" | "));
+    // R3 — the free result: the result line + FREE_LINE, two existing strings, one strip
+    const strip = A.w.document.querySelector(".hall-free-result");
+    const spans = strip ? strip.querySelectorAll(".hall-settle-line > span") : [];
+    ok("F12 · the FREE RESULT strip: the result line + '" + FREE_LINE + "' (§11 8c), above the frame; the Hall owns the exit",
+       !!strip && spans.length === 2 && /^you (win|lose) the match - rounds \d-\d$|^the match is a draw - rounds \d-\d$/.test(spans[0].textContent) &&
+       spans[1].textContent === FREE_LINE && !!strip.querySelector("[data-leave]") &&
+       !!(strip.compareDocumentPosition(A.w.document.getElementById("hall-frame-host")) & A.w.Node.DOCUMENT_POSITION_FOLLOWING),
+       strip && strip.textContent);
+    // R8 — the leave law, through the frame's own door, after the outcome
+    FB.say({ type: "wire:leave", matchId: mid });
+    await H.sleep(200);
+    ok("F33 · wire:leave after the outcome runs the LEAVE LAW: out of the match, frame unmounted, the lobby on screen",
+       st(B.w).matchView == null && st(B.w).wire == null && !B.w.document.querySelector("#hall-frame-host iframe") &&
+       B.w.document.getElementById("hall-frame-host").hidden);
+    H.teardown(A); H.teardown(B);
+  }
+
+  // ═══ THE READINESS GUARD (R4): a frame that never answers — that match plays on in the Hall's table ═══
+  console.log("\n── the readiness guard ──");
+  {
+    const s3 = await server();
+    const { A, B } = await twoHalls(s3.url, { ls: { "dyhall::wireReadyMs": "1500" } });
+    const t = await openFree(A, B);
+    B.w.document.querySelector('[data-act="seat"][data-tid="' + t.id + '"]').click(); await H.sleep(250);
+    B.w.document.querySelector('[data-faction="nagas"]').click(); await H.sleep(100);
+    B.w.document.querySelector("[data-join-do]").click();
+    await H.until(() => (st(A.w).wire || {}).fallback && (st(B.w).wire || {}).fallback, 20000, "the fallback on both");
+    await H.until(() => battle(A.w) && battle(B.w) && !A.w.document.querySelector(".hall-dealing"), 8000, "the text battle");
+    ok("F34 · no wire:ready in time: the frame is withdrawn, an honest line says so, and the Hall's table takes THAT match",
+       !A.w.document.querySelector("#hall-frame-host iframe") && body(A.w).indexOf("The battle screen did not answer") >= 0 && !!A.w.document.querySelector(".hall-mhead"));
     for (let i = 0; i < 120; i++) {
       for (const w of [A.w, B.w]) {
         const mc = w.document.querySelector("[data-mullconfirm]"); if (mc && !mc.disabled) { mc.click(); continue; }
@@ -117,10 +250,20 @@ async function main() {
       await H.sleep(120);
       if ((st(A.w).matchView || {}).over) break;
     }
-    ok("F11 · the match is PLAYED TO A RESULT through the Hall's own UI", !!(st(A.w).matchView || {}).over,
-       JSON.stringify(st(A.w).matchView));
-    ok("F12 · and the result is on the screen", /wins the match|WINS|a draw|Draw/i.test(body(A.w)) || body(A.w).indexOf("LEAVE") >= 0);
+    ok("F35 · and that match is PLAYED TO A RESULT through the Hall's own table (the mirror kept it current — R6)",
+       !!(st(A.w).matchView || {}).over && /wins the match|win the match|lose the match|a draw/i.test(body(A.w)), JSON.stringify(st(A.w).matchView));
     H.teardown(A); H.teardown(B);
+  }
+
+  // ═══ the synced copy carries what the frame needs (R4 STAMP · R5 the gem skip) ═══
+  {
+    const snap = fs.readFileSync(path.join(H.SITE, "game/SNAPSHOT.md"), "utf8");
+    const short = ((snap.match(/Source commit: `[0-9a-f]+` \(([0-9a-f]+)\)/) || [])[1]) || null;
+    ok("F36 · game/STAMP names the synced commit — the SNAPSHOT's own short sha",
+       fs.readFileSync(path.join(H.SITE, "game/STAMP"), "utf8").trim() === short, short);
+    const gi = fs.readFileSync(path.join(H.SITE, "game/index.html"), "utf8");
+    ok("F37 · the gate gem skips the Hall's battle frame (R5): the skip rides the injected preamble exactly once",
+       (gi.match(/window\.top !== window && \/\[\?&\]wire=1\(&\|\$\)\/\.test\(location\.search\)\) return;/g) || []).length === 1);
   }
 
   // ═══ the pin, and the handler guard ═══
