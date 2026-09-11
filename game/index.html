@@ -4935,6 +4935,22 @@ let ME = 0, OPP = 1;
 let Wire = null;   // BW1 — null = not a wire match; else the frame's live wire state (see THE WIRE, above pump)
 function setSeats(me){ ME = me ? 1 : 0; OPP = 1 - ME; }
 function halfSel(pi){ return pi === ME ? '.half.me' : '.half.opp'; }   // an absolute seat → the screen half it is drawn in
+/* BW3b — THE QUERY FACADE. The screen asks eight questions of the game state (effPower, totalPower, isShielded,
+   playableIndices, targetSpec, canLeap, adjacentUnits, shieldCap) — 29 call sites, every one routed through Q. On the
+   free road, vs-AI and Story, Q IS the engine (the same calls, the same answers). On the STAKED road G is a VIEW
+   ADAPTER (viewToState) and there is no engine state to ask: Q answers from what the server computed and sent —
+   powers, totals, shields, the legal block. The frame never runs the engine on a staked match. */
+const isViewState = (x) => !!(x && x._view);
+const Q = {
+  effPower: (g, pi, u) => isViewState(g) ? (u ? u.power : 0) : effPower(g, pi, u),
+  totalPower: (g, pi) => isViewState(g) ? (g.totals ? g.totals[pi] : 0) : totalPower(g, pi),
+  isShielded: (g, pi, u) => isViewState(g) ? !!(u && g._shielded[pi].has(u.uid)) : isShielded(g, pi, u),
+  playableIndices: (g, pi) => isViewState(g) ? ((pi === ME && g._legal) ? g._legal.playable.map(p => p.i) : []) : playableIndices(g, pi),
+  targetSpec: (g, pi, c) => isViewState(g) ? viewTargetSpec(g, pi, c) : targetSpec(g, pi, c),
+  canLeap: (g, pi) => isViewState(g) ? !!(pi === ME && g._legal && g._legal.canLeap) : canLeap(g, pi),
+  adjacentUnits: (P, c) => isViewState(P) ? viewAdjacent(P, c) : adjacentUnits(P, c),
+  shieldCap: (pl) => isViewState(pl) ? ((pl.artifact && pl.artifact.id === 'kavacha') ? 2 : 1) : shieldCap(pl),
+};
 let inspectContext=null, pendingFly=null, knownUids=new Set(), lastPowers={}, lastRoundLen=0, focusRaf=0;
 let leapMode=null, placeMode=null, shieldMode=false;   // Vanara Leap / unit-placement / Deva Dharma-Shield selection state
 let lastTotals={o:null,p:null};
@@ -7612,7 +7628,7 @@ function storyShowMid(){ const e=storyMidEntry(); if(!e){ pump(); return; }
 }
 /* --- guidance: mask the hand to the highlighted card/action, glow it, show Brihaspati --- */
 function storyBeat(){ const g=Story.chapter.guidance; return g[Math.min(Story.beatIdx, g.length-1)]; }
-function storyBestUnitIdx(){ const pl=G.players[ME]; const idxs=playableIndices(G,ME).filter(i=>pl.hand[i].t==='unit'); if(!idxs.length) return -1; return idxs.reduce((a,b)=> pl.hand[a].p>=pl.hand[b].p?a:b); }
+function storyBestUnitIdx(){ const pl=G.players[ME]; const idxs=Q.playableIndices(G,ME).filter(i=>pl.hand[i].t==='unit'); if(!idxs.length) return -1; return idxs.reduce((a,b)=> pl.hand[a].p>=pl.hand[b].p?a:b); }
 function _storyCard(i){ const c=G.players[ME].hand[i]; return { kind:'card', index:i, uid:c?c.uid:null }; }   // carry the UID so glow matches by identity, not DOM position
 function storyResolveHighlight(h){                                   // → {kind:'pass'|'shield'|'card', index?, uid?}
   if(!h) return { kind:'pass' };
@@ -7620,7 +7636,7 @@ function storyResolveHighlight(h){                                   // → {kin
   if(h.shield) return { kind:'shield' };
   if(h.action==='pass') return { kind:'pass' };
   if(h.auto){ const opp=G.players[OPP];
-    if(h.auto==='bestOrPass' && opp.passed && totalPower(G,ME)>totalPower(G,OPP)) return { kind:'pass' };   // ahead & foe done → hold (banks cards)
+    if(h.auto==='bestOrPass' && opp.passed && Q.totalPower(G,ME)>Q.totalPower(G,OPP)) return { kind:'pass' };   // ahead & foe done → hold (banks cards)
     const bi=storyBestUnitIdx(); return bi>=0 ? _storyCard(bi) : { kind:'pass' };
   }
   const i=G.players[ME].hand.findIndex(c=>c.n===h.card); return i>=0 ? _storyCard(i) : { kind:'pass' };
@@ -7645,7 +7661,7 @@ function storyScrollToHighlight(el){
 // (so e.g. Gayatri with an empty discard is "not usable"). No parallel legality check.
 function storyCardPlayable(name){
   const idx=G.players[ME].hand.findIndex(c=>c.n===name);
-  return idx>=0 && playableIndices(G,ME).includes(idx);
+  return idx>=0 && Q.playableIndices(G,ME).includes(idx);
 }
 // ONE resolution shared by TEXT and GLOW. A named-card beat falls back to bestOrPass when the card is absent OR illegal.
 // Returns the fully-resolved target (kind/index/UID) so glow lands on the card by IDENTITY, and text agrees via fellBack.
@@ -7659,7 +7675,7 @@ function storyHiEl(uid){ return uid!=null ? document.querySelector(`#hand .hc[da
 const STORY_ASIDE = 'Your hand, your war — I only counsel.';   // §6 aside (dual-line) — once per SUGGESTED chapter, on first deviation
 const STORY_ASIDE_INSTRUCT = "You played your own choice — that's allowed. The glowing card is my suggestion, never a command.";
 function storyLargestEnemyUid(){ const foes=G.players[OPP].units.filter(u=>!u.ghost); if(!foes.length) return null;
-  return foes.reduce((a,b)=>effPower(G,OPP,a)>=effPower(G,OPP,b)?a:b).uid; }
+  return foes.reduce((a,b)=>Q.effPower(G,OPP,a)>=Q.effPower(G,OPP,b)?a:b).uid; }
 function clearStoryTargetGlow(){ document.querySelectorAll('#field .bc.story-target').forEach(el=>el.classList.remove('story-target')); }
 function storySetTargetGlow(spec){ let uid=null; if(spec==='largestEnemy') uid=storyLargestEnemyUid();
   if(uid!=null){ const el=document.querySelector(`#field .bc[data-uid="${uid}"]`); if(el) el.classList.add('story-target'); } }
@@ -8015,8 +8031,8 @@ function boardCard(c, pi, targetSet){
   d.dataset.uid=c.uid;
   if(c.t==='hero' && !c.ghost){ const tint=HERO_AURA_TINT[c.id]||HERO_AURA_TINT._default; d.style.setProperty('--aura-1',tint[0]); d.style.setProperty('--aura-2',tint[1]);   // T104 PART 1: CSS footlight aura + per-hero tint (lifecycle collapses into render() → reflow/Sudarshana/round-transition all handled by construction)
     if(materializingHeroes[c.uid]) d.classList.add('materializing'); else d.classList.add('aura'); }   // T104-B: a hero mid-entry-arrival renders HIDDEN (survives this render) — the footlight ignites only on reveal
-  const ep=effPower(G,pi,c);
-  const sh=!c.ghost && c.t==='unit' && isShielded(G,pi,c);
+  const ep=Q.effPower(G,pi,c);
+  const sh=!c.ghost && c.t==='unit' && Q.isShielded(G,pi,c);
   if(c.bound) d.classList.add('bound');
   if(c.ward && !c.ghost) d.classList.add('warded');   // KISHKINDHA OATH: jade border-glow marks the sealed unit from cast until fire/expiry (driven by the engine c.ward flag; re-emitted every render like the badges → persists across re-renders/unrelated actions, clears when the engine clears the flag)
   if(c.stolenBy===0) d.classList.add('stolen');   // shown on player-0 side after a Mohini steal
@@ -8038,7 +8054,7 @@ function boardCard(c, pi, targetSet){
   // Leap selection (my own units, pi===ME): pick a leaper, then an adjacent target.
   const leapPick = pi===ME && leapMode && ((leapMode==='leaper') || (leapMode.leaper && leapMode.adj && leapMode.adj.has(c.uid)));
   // Dharma Shield designation (my own un-shielded Units, pi===ME).
-  const shieldPick = pi===ME && shieldMode && !c.ghost && c.t==='unit' && !isShielded(G,ME,c);
+  const shieldPick = pi===ME && shieldMode && !c.ghost && c.t==='unit' && !Q.isShielded(G,ME,c);
   if (targetSet && targetSet.has(c.uid)){ d.classList.add('targetable'); d.onclick=()=>resolveTarget(c.uid); }
   else if (shieldPick){ d.classList.add('targetable'); d.onclick=()=>shieldClick(c); }
   else if (leapPick){ d.classList.add('targetable'); d.onclick=()=>leapClick(c); }
@@ -8131,7 +8147,7 @@ function render(targetSet){
   $('opassed').textContent=op.passed?' · PASSED':''; $('ppassed').textContent=me.passed?' · PASSED':'';
   // ITEM 1: opponent-hand REVEAL indicator — Vibhishana / Vanara Scout set me.seesOppHand===g.round (one consumer, both setters). Tapping opens the peek panel.
   { const _rev=$('oreveal'); if(_rev) _rev.classList.toggle('hidden', !(me.seesOppHand===G.round && op.hand.length>0)); }
-  const t0=totalPower(G,ME), t1=totalPower(G,OPP);
+  const t0=Q.totalPower(G,ME), t1=Q.totalPower(G,OPP);
   if (!choreoActive){                       // totals are HELD during choreography; animateTotals() counts them up after
     $('ptotal').textContent=t0; $('ototal').textContent=t1;
     const hudO=$('hud-o'), hudP=$('hud-p');
@@ -8149,7 +8165,7 @@ function render(targetSet){
 
   // hand carousel
   const hand=$('hand'); hand.innerHTML='';
-  const play=new Set(playableIndices(G,ME));
+  const play=new Set(Q.playableIndices(G,ME));
   const myTurn = G.turn===ME && !me.passed && !G.over;
   me.hand.forEach((c,i)=>{
     const d=document.createElement('div');
@@ -8169,9 +8185,9 @@ function render(targetSet){
   renderBattleChrome(me, op);   // T42: deck stacks + score-column avatars (additive; reads engine state, writes no engine)
 
   $('passbtn').disabled=!myTurn;
-  $('leapbtn').classList.toggle('hidden', !(myTurn && me.faction==='vanaras' && canLeap(G,ME) && !leapMode && !placeMode && !pendingPlay));
+  $('leapbtn').classList.toggle('hidden', !(myTurn && me.faction==='vanaras' && Q.canLeap(G,ME) && !leapMode && !placeMode && !pendingPlay));
   // Dharma Shield: Deva human, designations remaining (< cap), an un-shielded Unit to protect.
-  const shieldable = me.faction==='devas' && me.shieldUids.length < shieldCap(me) && me.units.some(u=>!u.ghost && u.t==='unit' && !isShielded(G,ME,u));
+  const shieldable = me.faction==='devas' && me.shieldUids.length < Q.shieldCap(me) && me.units.some(u=>!u.ghost && u.t==='unit' && !Q.isShielded(G,ME,u));
   $('shieldbtn').classList.toggle('hidden', !(myTurn && shieldable && !leapMode && !placeMode && !shieldMode && !pendingPlay));
   $('unbindbtn').classList.toggle('hidden', !(myTurn && me.units.some(u=>u.bound && !u.ghost) && !leapMode && !placeMode && !pendingPlay));
   $('turnind').textContent = G.over?'MATCH OVER': myTurn?'YOUR TURN': me.passed&&op.passed?'—': (G.turn===OPP?'OPPONENT…':'…');
@@ -8198,7 +8214,7 @@ function render(targetSet){
   // round-end banner (skip on match over — gameover modal takes over)
   if (G.roundHistory.length>lastRoundLen){ if(!G.over && !choreoActive) showRoundBanner(); lastRoundLen=G.roundHistory.length; }   // ITEMS 2+3: suppress the EARLY (choreo-start render) round banner so it lands AFTER the settle beat; the runAction finally fires it once, post-hold. lastRoundLen still advances → no stray refire. (Reduced-motion path: choreoActive is false → banner fires here as before, right after the static final-score set.)
 
-  if (G.over) showGameOver();
+  if (G.over && !(isViewState(G) && choreoActive)) showGameOver();   // BW3b — staked: the final view's events animate FIRST; runAction's finally re-renders
 }
 
 /* ---------- board power tracking / floaters ---------- */
@@ -8207,7 +8223,7 @@ function boardUidSet(){ const s=new Set(); for(const [,c] of boardUnits()) s.add
 function spawnFloaters(){
   const cur={};
   for(const [pi,c] of boardUnits()){
-    const ep=effPower(G,pi,c); cur[c.uid]=ep;
+    const ep=Q.effPower(G,pi,c); cur[c.uid]=ep;
     if (!choreoActive && (c.uid in lastPowers) && lastPowers[c.uid]!==ep){   // choreography owns floaters while active
       const el=$('field').querySelector(`.bc[data-uid="${c.uid}"]`);
       if (el) floatText(el, ep-lastPowers[c.uid]);
@@ -8295,6 +8311,7 @@ function findCardByUid(uid){
     for(const z of [p.units,p.heroes,p.discard,p.hand]){ const c=z.find(x=>x&&x.uid===uid); if(c) return c; }
     if(p.artifact&&p.artifact.uid===uid) return p.artifact;
   }
+  if (G && G._lookup && G._lookup[uid]) return G._lookup[uid];   // BW3b — the staked road's played-card memory (an Astra/Mantra's discard entry carries no uid)
   return null;
 }
 
@@ -8593,7 +8610,7 @@ function showResultSummary(evs){
 }
 function animateTotals(ov0, ov1){   // ITEMS 2+3: optional target overrides — at round end we count to the ROUND'S true final scores (roundHistory), not the post-reset board
   return new Promise(res=>{
-    const target={ ptotal: ov0!=null?ov0:totalPower(G,ME), ototal: ov1!=null?ov1:totalPower(G,OPP) };
+    const target={ ptotal: ov0!=null?ov0:Q.totalPower(G,ME), ototal: ov1!=null?ov1:Q.totalPower(G,OPP) };
     const start={ ptotal:parseInt($('ptotal').textContent)||0, ototal:parseInt($('ototal').textContent)||0 };
     if(reducedMotion() || (start.ptotal===target.ptotal && start.ototal===target.ototal)){ $('ptotal').textContent=target.ptotal; $('ototal').textContent=target.ototal; return res(); }
     ['ptotal','ototal'].forEach(id=>$(id).classList.add('counting'));
@@ -8629,7 +8646,7 @@ function posOf(uid, snap){
   return null;
 }
 function cDelay(ms){ return new Promise(r=>{ if(choreoSkip) return r(); const t=setTimeout(r, ms*speedMult*CHOREO_SPEED); choreoTimers.push([t,r]); }); }
-function snapTotals(){ if(!G) return; $('ptotal').textContent=totalPower(G,ME); $('ototal').textContent=totalPower(G,OPP); ['ptotal','ototal'].forEach(id=>{ const e=$(id); if(e) e.classList.remove('counting'); }); }
+function snapTotals(){ if(!G) return; $('ptotal').textContent=Q.totalPower(G,ME); $('ototal').textContent=Q.totalPower(G,OPP); ['ptotal','ototal'].forEach(id=>{ const e=$(id); if(e) e.classList.remove('counting'); }); }
 function snapTo(t0,t1){ if(!G) return; $('ptotal').textContent=t0; $('ototal').textContent=t1; ['ptotal','ototal'].forEach(id=>{ const e=$(id); if(e) e.classList.remove('counting'); }); }   // ITEMS 2+3: snap totals to explicit final scores (round-end settle target / rAF-starvation fallback)
 // (a) An rAF-based choreo await (animateTotals + siblings) can HANG if rAF is starved (iOS backgrounding). Race it against
 // a 3s hard cap that snaps to the end-state, and register a "force finisher" so a tab-hide / skip / watchdog can end it NOW.
@@ -9852,7 +9869,7 @@ function openInspect(c, pi, handIndex){
   const fac=G.players[pi!=null?pi:0].faction;
   const card=$('inspectCard');
   card.className='inspect-card '+facClass(fac)+' '+rarClass(c);
-  const live = pi!=null && !c.ghost && (c.t==='unit'||c.t==='hero') ? effPower(G,pi,c) : c.p;
+  const live = pi!=null && !c.ghost && (c.t==='unit'||c.t==='hero') ? Q.effPower(G,pi,c) : c.p;
   const showPw = c.p>0 || c.t==='unit' || c.t==='hero';
   // keyword tooltips — one line per active status on this card (tap a badge → inspect shows it)
   const kws=[];
@@ -9861,7 +9878,7 @@ function openInspect(c, pi, handIndex){
     if (c.bound) kws.push(['⛓ Bound', 'Contributes 0 power until its owner spends a turn to unbind it.']);
     if (c.ward) kws.push(['Ward', 'Survives its next destruction this round, at 1 power.']);
     if (c.asleep) kws.push(['💤 Sleep', 'Its wake effect resolves at the start of its owner’s next turn.']);
-    if (c.t==='unit' && isShielded(G,pi,c)) kws.push(['🛡 Dharma Shield', 'Blocks the next Astra that would destroy it.']);
+    if (c.t==='unit' && Q.isShielded(G,pi,c)) kws.push(['🛡 Dharma Shield', 'Blocks the next Astra that would destroy it.']);
     if (c.stolenBy!==-1) kws.push(['🌀 Ensnared', 'Turned by Mohini — fights for the other side until round end.']);
   }
   const kwHtml = kws.map(([k,v])=>`<div class="kwtip"><b>${k}</b> — ${v}</div>`).join('');
@@ -9890,7 +9907,7 @@ function doPlay(i, uid, srcRect, position){
   pendingFly = (srcRect && c) ? { rect:srcRect, uid:c.uid } : null;   // on the wire this is HELD until the relay lands
   if (Wire){   // R2 — send, then apply on relay. The screen targets by uid; the wire takes the option INDEX.
     let ti = null;
-    if (uid != null) { const sp = targetSpec(G, ME, c); ti = (sp && sp.options) ? sp.options.findIndex(o=>o.uid===uid) : -1; if (ti < 0) ti = null; }
+    if (uid != null) { const sp = Q.targetSpec(G, ME, c); ti = (sp && sp.options) ? sp.options.findIndex(o=>o.uid===uid) : -1; if (ti < 0) ti = null; }
     if (!wireSend({ type:'play', handIndex:i, targetIndex:ti, position: position != null ? position : null })) pendingFly = null;
     return;
   }
@@ -9903,7 +9920,7 @@ function startPlay(i, srcRect){
   if (c.t==='unit' && G.players[ME].faction==='vanaras' && G.players[ME].units.some(u=>!u.ghost)){
     placeMode={ index:i, srcRect }; render(); showActionBar(`Place ${c.n} — tap a slot`, cancelPlace); return;
   }
-  const spec=targetSpec(G,ME,c);
+  const spec=Q.targetSpec(G,ME,c);
   if (spec && spec.options.length){
     pendingPlay={ index:i, spec, srcRect };
     if (spec.kind==='oppHandCard'){
@@ -9971,7 +9988,7 @@ function resolvePlacement(pos){ const pm=placeMode; if(!pm) return; placeMode=nu
 function cancelPlace(){ placeMode=null; hideBoardTargetBar(); render(); }
 
 /* ---------- Vanara Leap ---------- */
-function startLeap(){ if(choreoActive || !canLeap(G,ME)) return; leapMode='leaper'; render(); showActionBar('Leap — tap one of your Units', cancelLeap); }
+function startLeap(){ if(choreoActive || !Q.canLeap(G,ME)) return; leapMode='leaper'; render(); showActionBar('Leap — tap one of your Units', cancelLeap); }
 function cancelLeap(){ leapMode=null; hideBoardTargetBar(); render(); }
 // Dharma Shield: free action — tap SHIELD, then a friendly Unit to designate (sticky, no un-designate, no auto-fallback).
 function startShield(){ if(choreoActive) return; shieldMode=true; render(); showActionBar('Dharma Shield — tap a friendly Unit to protect', cancelShield); }
@@ -9984,7 +10001,7 @@ function leapClick(c){
     // T49 (0b, Option B): widen the human target set to include non-ghost Gandhamadana units from ANYWHERE (excluding the
     // leaper itself) — mirrors the engine bestLeap pattern so the human path matches the AI. UI-only; doLeap/bestLeap untouched.
     const P=G.players[ME], gandh=P.units.filter(u=>!u.ghost && u.id==='gandhamadana' && u!==c);
-    const adj=new Set(adjacentUnits(P, c).filter(u=>!u.ghost).concat(gandh).map(u=>u.uid));
+    const adj=new Set(Q.adjacentUnits(P, c).filter(u=>!u.ghost).concat(gandh).map(u=>u.uid));
     if (!adj.size){ showActionBar(`${c.n} has no adjacent ally — pick another`, cancelLeap); return; }
     leapMode={ leaper:c, adj }; render(); showActionBar(`${c.n} leaps onto which neighbour?`, cancelLeap);
   } else if (leapMode && leapMode.leaper && leapMode.adj.has(c.uid)){
@@ -10009,7 +10026,7 @@ $('unbindbtn').onclick=()=>{
   if(!(G.turn===ME && !G.players[ME].passed && !G.over)) return;
   const bound=G.players[ME].units.filter(u=>u.bound && !u.ghost);
   if(!bound.length) return;
-  const t=bound.reduce((a,b)=>effPower(G,ME,a)>=effPower(G,ME,b)?a:b);
+  const t=bound.reduce((a,b)=>Q.effPower(G,ME,a)>=Q.effPower(G,ME,b)?a:b);
   runAction(()=>{ t.bound=false; log(G,`You wrench ${t.n} free of the Nagapasha noose.`); afterAction(G,ME); });
 };
 $('passbtn').onclick=()=>{ if(G.turn===ME&&!G.players[ME].passed&&!G.over && !choreoActive){ if (Wire){ wireSend({ type:'pass' }); return; } runAction(()=>pass(G,ME)); } };
@@ -10055,10 +10072,21 @@ function wireBoot(){   // R5 — ?wire=1: no intro, no landing; wait for the Hal
 function onWireMessage(ev){
   if (!wireFromParent(ev)) { wireRefuse('wrong origin or sender', ev && ev.origin); return; }
   const m = ev.data || {};
+  // BW3b (R2) — THE WALL on the staked road: a view reaches the frame WITHOUT the seat names (on the table server they
+  //   are wallet short forms); the Hall strips them, and a view that still carries either key is refused, loudly.
+  if (m.view && typeof m.view === 'object' && ('myName' in m.view || 'oppName' in m.view)) { wireRefuse('a view carried a seat name (the wall)', m.type); return; }
   if (m.type === 'wire:start') { startWireMatch(m); return; }
   if (!Wire) { wireRefuse('no match yet', m.type); return; }
   if (String(m.matchId) !== Wire.matchId) { wireRefuse('foreign matchId', m.matchId); return; }
+  if (m.type === 'wire:view') {   // BW3b — the STAKED road's ordered stream: one server view per applied move, numbered by the Hall
+    if (Wire.road !== 'staked') { wireRefuse('a view on the free road', m.seq); return; }
+    if (m.seq !== Wire.seq + 1) { wireRefuse('out-of-order seq', { got:m.seq, expected:Wire.seq+1 }); return; }
+    if (!m.view || m.view.seat !== ME) { wireRefuse('a view for another seat', m.view && m.view.seat); return; }
+    Wire.seq = m.seq; Wire.queue.push(m.view); if (m.view.lastMove && m.view.lastMove.seat === ME) Wire.pending = false;
+    pump(); return;
+  }
   if (m.type === 'wire:move') {
+    if (Wire.road === 'staked') { wireRefuse('a move on the staked road', m.seq); return; }
     if (m.seq !== Wire.seq + 1) { wireRefuse('out-of-order seq', { got:m.seq, expected:Wire.seq+1 }); return; }
     Wire.seq = m.seq; Wire.queue.push(m.move); if (m.move && m.move.seat === ME) Wire.pending = false;
     pump(); return;
@@ -10075,15 +10103,125 @@ function onWireMessage(ev){
   }
   wireRefuse('unknown message', m.type);
 }
+/* BW3b — THE VIEW ADAPTER. viewToState(view, prev) presents a G-shaped READ model of the server's per-seat view
+   (web3 redactedview.js): the viewer's full hand (cards from the game's own data by id, uids from myHandUids), the
+   opponent's hand as a count (identities only under the game's own sight: oppHand.revealed), both boards with the
+   server-computed powers and the ghost cells re-inserted at their row positions, heroes, artifacts, discards (the view
+   carries no discard uids — a card that left a board passes its uid on to the matching discard entry), deck counts,
+   realm, round, turn, totals, roundHistory, over/winner. It is REPLACED on every view, never mutated.
+   The events accumulate (prev + view.events), so runAction's own `G.events.slice(evStart)` yields exactly this view's
+   events. Seat names arrive as {p0}/{p1} and read as You / Opponent by ME. The log is built from lastMove + events
+   (the client builds its own log line — §5). Two public facts the first view shipped without are read WHEN CARRIED
+   (W3-VIEW-2) and derived otherwise: passed (from lastMove passes, reset each round — unknown after a resync) and a
+   per-unit flags row (base · ward · asleep · stolenBy · lockedRound — absent: printed power, no badges). */
+let DEF_BY_ID = null;
+function defById(id, n){
+  if (!DEF_BY_ID){ DEF_BY_ID = {}; for (const f in DECKS) for (const d of DECKS[f]) if (!DEF_BY_ID[d.id]) DEF_BY_ID[d.id] = d; }
+  return (id && DEF_BY_ID[id]) || (n && CARD_BY_NAME[n]) || null;
+}
+function viewToState(v, prev){
+  const s = v.seat === 1 ? 1 : 0, o = 1 - s, flags = (v.flags && typeof v.flags === 'object') ? v.flags : null;
+  const who = (seat) => seat === ME ? 'You' : 'Opponent';
+  const named = (t) => typeof t === 'string' ? t.replace(/\{p([01])\}/g, (_, i) => who(Number(i))) : t;
+  const card = (row, extra) => {
+    const d = defById(row.id, row.n) || {}, f = (flags && row.uid != null) ? flags[row.uid] : null;
+    return Object.assign({}, d, {
+      uid: row.uid != null ? row.uid : null, id: row.id, n: row.n != null ? row.n : d.n,
+      power: row.power != null ? row.power : (d.p || 0), base: (f && f.base != null) ? f.base : (d.p != null ? d.p : (row.power || 0)),
+      venom: row.venom || 0, bound: !!row.bound, ghost: false, ward: !!(f && f.ward), asleep: !!(f && f.asleep),
+      stolenBy: (f && f.stolenBy != null) ? f.stolenBy : -1, lockedRound: (f && f.lockedRound) || 0,
+    }, extra || {});
+  };
+  const ghostCard = (gc) => ({ uid: gc.uid, id: 'ghost', n: 'Ghost', sub: 'Yama\u2019s token', t: 'unit', p: 1, r: 'C', power: 1, base: 1, ghost: true, venom: 0, bound: false, ward: false, asleep: false, stolenBy: -1, lockedRound: 0, txt: '' });
+  const rowOf = (units, ghosts) => { const out = (units || []).map(u => card(u)); (ghosts || []).slice().sort((a, b) => a.index - b.index).forEach(gc => out.splice(Math.min(gc.index, out.length), 0, ghostCard(gc))); return out; };
+  const evs = (v.events || []).map(e => Object.assign({}, e, { targetUids: (e.targetUids || []).slice(), text: named(e.text) }));
+  const lookup = Object.assign({}, prev ? prev._lookup : {});
+  const lm = v.lastMove || null;
+  // the played card: an Astra or Mantra goes straight to a discard that carries no uid — remember it by the play event
+  evs.forEach(e => { if (e.type === 'play' && e.sourceUid != null && lm && lm.type === 'play' && lm.id) lookup[e.sourceUid] = card({ uid: e.sourceUid, id: lm.id, n: lm.n }); });
+  const P = [null, null];
+  [[s, 'my', 'mine'], [o, 'opp', 'opp']].forEach(([seat, pre, side]) => {
+    const units = rowOf(v[pre + 'Units'], v.ghosts && v.ghosts[side]);
+    const heroes = (v[pre + 'Heroes'] || []).map(u => card(u));
+    const artifact = v.artifacts && v.artifacts[side] ? card(v.artifacts[side]) : null;
+    const nowUids = new Set(units.concat(heroes).concat(artifact ? [artifact] : []).map(c => c.uid));
+    const prevP = prev ? prev.players[seat] : null;
+    const gone = prevP ? prevP.units.concat(prevP.heroes).concat(prevP.artifact ? [prevP.artifact] : []).filter(c => c && c.uid != null && !c.ghost && !nowUids.has(c.uid)) : [];
+    const discard = (v[pre + 'Discard'] || []).map((r, i) => {
+      let uid = null; const pd = prevP ? prevP.discard[i] : null;
+      if (pd && pd.id === r.id && pd.uid != null) uid = pd.uid;
+      else { const k = gone.findIndex(c => c.id === r.id); if (k >= 0) { uid = gone[k].uid; gone.splice(k, 1); } else { const pu = Object.keys(lookup).find(u => lookup[u].id === r.id && !(prevP && prevP.discard.some(x => String(x.uid) === u))); if (pu != null) uid = Number(pu); } }
+      return card({ uid: uid, id: r.id, n: r.n });
+    });
+    let hand;
+    if (seat === s) hand = (v.myHand || []).map((h, k) => card({ uid: v.myHandUids ? v.myHandUids[k] : null, id: h.id, n: h.n, power: h.p }, { t: h.t, p: h.p }));
+    else if (v.oppHand && v.oppHand.revealed) hand = v.oppHand.cards.map(c => card({ uid: null, id: c.id, n: c.n, power: c.p }, { t: c.t, p: c.p }));
+    else hand = Array.from({ length: (v.oppHand && v.oppHand.count) || 0 }, () => ({ uid: null, id: null, n: '', hidden: true }));
+    const deckN = v.deckCounts ? (seat === s ? v.deckCounts.mine : v.deckCounts.opp) : 0;
+    P[seat] = { _view: true, name: who(seat), faction: seat === s ? v.myFaction : v.oppFaction, hand, units, heroes, artifact, discard,
+      deck: Array.from({ length: deckN }, () => ({ uid: null, hidden: true })), roundWins: (v.roundWins || [0, 0])[seat],
+      mulliganed: seat === s ? !!v.myMulliganed : !!v.oppMulliganed, shieldUids: ((v.shielded && v.shielded[side]) || []).slice(),
+      seesOppHand: (seat === s && v.oppHand && v.oppHand.revealed) ? v.round : false, manualShield: false, leapsUsed: 0, venomStrike: 0,
+      removedHeroes: [], heroPlayedThisRound: false, passed: false };
+  });
+  // passed — carried (W3-VIEW-2) or derived from this view's lastMove, reset when the round turns
+  let passed;
+  if (Array.isArray(v.passed)) passed = [!!v.passed[0], !!v.passed[1]];
+  else { passed = (prev && prev.round === v.round) ? prev._passed.slice() : [false, false]; if (lm && lm.type === 'pass' && prev && prev.round === v.round) passed[lm.seat] = true; }
+  P[0].passed = passed[0]; P[1].passed = passed[1];
+  // the log, built from what the view carries (never G.log — there is none)
+  const lines = [];
+  if (lm && lm.type === 'pass') lines.push({ round: v.round, msg: who(lm.seat) + ' passes.' });
+  evs.forEach(e => { if (e.text && e.type !== 'buff' && e.type !== 'damage' && e.type !== 'venom' && e.type !== 'token') lines.push({ round: e.round, msg: e.type === 'play' ? e.text : (e.abilityName && e.text.indexOf(e.abilityName) < 0 ? e.abilityName + ' — ' + e.text : e.text) }); });
+  const rh = v.roundHistory || [], prh = prev ? prev.roundHistory : [];
+  for (let k = prh.length; k < rh.length; k++) lines.push({ round: rh[k].round, msg: 'Round ' + rh[k].round + ' ends — ' + who(0) + ' ' + rh[k].t0 + ' vs ' + who(1) + ' ' + rh[k].t1 + '.' });
+  if (v.over && !(prev && prev.over)) lines.push({ round: v.round, msg: v.winner == null ? 'The match is a stalemate.' : '⚔ ' + who(v.winner) + ' WINS THE MATCH' });
+  const sumOf = (pl) => pl.units.concat(pl.heroes).filter(u => !u.ghost && !u.bound).reduce((a, u) => a + (u.power || 0), 0);
+  return {
+    _view: v, round: v.round, turn: v.turn, over: !!v.over, winner: v.over ? (v.winner == null ? null : v.winner) : null, realm: v.realm || 'mrityulok',
+    roundHistory: rh.slice(), mulliganCount: v.mulliganCount != null ? v.mulliganCount : 3, winTarget: v.winTarget,
+    totals: Array.isArray(v.totals) ? v.totals.slice() : [sumOf(P[0]), sumOf(P[1])], _legal: v.legal || null,
+    _shielded: [new Set(P[0].shieldUids), new Set(P[1].shieldUids)], _passed: passed, players: P,
+    events: (prev ? prev.events : []).concat(evs), log: (prev ? prev.log : []).concat(lines), _lookup: lookup,
+  };
+}
+// the facade's staked answers that need more than a field
+function viewTargetSpec(g, pi, c){
+  if (pi !== ME || !g._legal || !c) return null;
+  const hand = g.players[ME].hand; let hi = hand.indexOf(c); if (hi < 0 && c.uid != null) hi = hand.findIndex(x => x.uid === c.uid);
+  const pe = g._legal.playable.find(p => p.i === hi); if (!pe || !pe.needsTarget || !pe.targets) return null;
+  const onBoard = (uid) => [0, 1].some(s => g.players[s].units.concat(g.players[s].heroes).some(u => u.uid === uid));
+  const options = pe.targets.map(t => ({ uid: t.uid, n: t.label, t: '', p: null }));
+  return { kind: (options.length && options.every(o => !onBoard(o.uid))) ? 'oppHandCard' : 'server', options };   // Narada's targets are hand cards
+}
+function viewAdjacent(P, c){
+  const g = G; if (!isViewState(g) || !g._legal || P !== g.players[ME]) return [];
+  const li = P.units.indexOf(c);
+  return (g._legal.leapPairs || []).filter(p => p.leaperIndex === li).map(p => P.units[p.targetIndex]).filter(Boolean);
+}
+// apply ONE server view: the same choreography road as every act — the "mutate" is the swap of the read model
+function applyView(v){
+  if (v.myMulliganed && !G.players[ME].mulliganed) $('mulligan').classList.add('hidden');
+  runAction(() => { G = viewToState(v, G); }, { actor: v.lastMove ? v.lastMove.seat : ME });
+}
 function startWireMatch(st){
   const seat = st.seat === 1 ? 1 : 0;
+  const hasSeed = st.seed != null, hasView = !!(st.view && typeof st.view === 'object');
+  if (hasSeed === hasView) { wireRefuse('wire:start needs exactly one of seed (free) or view (staked)', st.matchId); return; }   // 11d
   resetChoreo();
   Story = null; setSeats(seat);
-  Wire = { matchId: String(st.matchId), seq: 0, queue: [], pending: false, refused: [], result: null };
+  Wire = { matchId: String(st.matchId), seq: 0, queue: [], pending: false, refused: (Wire && Wire.matchId === String(st.matchId)) ? Wire.refused : [], result: null, road: hasView ? 'staked' : 'free' };
+  if (hasView) {
+    // BW3b — THE STAKED ROAD: no seed exists, and the frame builds NO engine state. G is a read model of the server's
+    //   view (viewToState), replaced on every wire:view. A resync / re-seat arrives here too (events: [] — render state).
+    if (st.view.seat !== ME) { wireRefuse('a view for another seat', st.view.seat); Wire = null; return; }
+    G = viewToState(st.view, null);
+  } else {
   // THE MIRROR — match.js:19-23, nothing added. Names are the frame's OWN labels (no address ever enters the frame);
   // they are log text only and touch no state and no rng.
   G = newGame({ p0: ME===0 ? 'You' : 'Opponent', p1: ME===1 ? 'You' : 'Opponent',
                 p0Faction: st.p0Faction, p1Faction: st.p1Faction, rng: wireSeeded(st.seed) });
+  }
   seenLog = 0;
   currentFactions = { p0: G.players[ME].faction, p1: G.players[OPP].faction };   // "p" = the half drawn below = ME
   matchRecorded = true;   // R7 — the second lock: even a stray showGameOver can never record a wire match
@@ -10098,7 +10236,8 @@ function startWireMatch(st){
   Audio2.playTrack('battle'); conchPending=true; showRealmIntro(); render();
   VFX.init(); VFX.resize(); VFX.preloadSprites(); applyVfxQuality(); VFX.loadMatchSheets(currentFactions.p0, currentFactions.p1);
   $('mullconfirm').disabled = false;
-  beginMulligan();
+  if (!isViewState(G) || !G.players[ME].mulliganed) beginMulligan();   // a staked resync past the mulligan draws the board, not the modal
+  else pump();
 }
 // apply ONE relayed move — the server's index-based descriptor (match.js apply), identical in meaning to
 // mp/matchclient.js applyRelayed: every index resolves to THIS mirror's own uids.
@@ -10107,7 +10246,7 @@ function wireApply(mv){
   if (mv.type === 'mulligan') { mulligan(G, pi, (mv.indices||[]).map(ix=>pl.hand[ix].uid)); return; }
   if (mv.type === 'play') {
     const card = pl.hand[mv.handIndex]; let t = null;
-    if (mv.targetIndex != null) { const sp = targetSpec(G, pi, card); if (sp && sp.options) t = sp.options[mv.targetIndex].uid; }
+    if (mv.targetIndex != null) { const sp = Q.targetSpec(G, pi, card); if (sp && sp.options) t = sp.options[mv.targetIndex].uid; }
     playCard(G, pi, mv.handIndex, t, mv.position != null ? mv.position : null, mv.movePosition != null ? mv.movePosition : null); return;
   }
   if (mv.type === 'pass') { pass(G, pi); return; }
@@ -10118,6 +10257,7 @@ function wireApply(mv){
 // drain the relay queue one move at a time, each through the SAME choreography road as every other act.
 function wireDrain(){
   if (!Wire || choreoActive || !Wire.queue.length || G.over) return;
+  if (Wire.road === 'staked') { applyView(Wire.queue.shift()); return; }
   const mv = Wire.queue.shift();
   if (mv.type === 'mulligan') { if (mv.seat === ME) $('mulligan').classList.add('hidden'); }
   runAction(() => { try { wireApply(mv); } catch (e) { wireRefuse('relayed move would not apply', mv); } }, { actor: mv.seat });
