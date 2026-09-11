@@ -30,11 +30,12 @@ async function main() {
   const { createRoom } = require(path.join(MS, "src/match")); const { makeMatchStore } = require(path.join(MS, "src/matchstore"));
   const { makeEscrowReader } = require(path.join(MS, "src/escrow")); const rng = require(path.join(MS, "src/rng"));
   const servers = [];
-  async function server() {
+  async function server(over) {   // S-HALL-STRIPS-1 — `over` shortens the server's own clocks for the strip proofs
     const D = 10n ** 18n;
     const cfg = { PORT: 0, ALLOW_ORIGIN: "*", DEV_ADDRESS_MODE: true, NONCE_TTL_MS: 300000, TIERS: [0, 10, 50, 200, 1000],
       TIER_STAKES: { 10: 10n * D, 50: 50n * D, 200: 200n * D, 1000: 1000n * D }, STAKE_MIN: 10n * D, STAKE_MAX: 10000n * D,
       MATCH_RPC_URL: H.RPC, STAKE_ESCROW_ADDRESS: c.escAddr, DYC_ADDRESS: c.dycAddr, STAKING_ENABLED: true, FRIEND_TABLES_WITHHELD: false };
+    Object.assign(cfg, over || {});
     const srv = makeServer(cfg);
     makeHub(srv, cfg, makeLobby(cfg.TIERS), () => {}, { E: loadGuardedEngine().engine, rng, createRoom,
       store: makeMatchStore({ file: path.join(os.tmpdir(), "dy_freedoor.jsonl") }),
@@ -121,10 +122,11 @@ async function main() {
     await H.until(() => st(A.w).matchView && st(B.w).matchView, 30000, "both tabs in the match");
     ok("F8 · BOTH Hall tabs enter the match", !!st(A.w).matchView && !!st(B.w).matchView);
     await H.until(() => (st(A.w).wire || {}).mounted && (st(B.w).wire || {}).mounted, 20000, "the frame mounted on both screens");
-    await H.until(() => !A.w.document.querySelector(".hall-dealing") && !B.w.document.querySelector(".hall-dealing"), 8000, "the matched moment passes");
-    ok("F9 · the battle FRAME is mounted on BOTH screens — and the text battle is not drawn for a free match",
-       !!A.w.document.querySelector("#hall-frame-host iframe.hall-frame") && !!B.w.document.querySelector("#hall-frame-host iframe.hall-frame") &&
-       !A.w.document.querySelector(".hall-mhead, .hall-board") && !B.w.document.querySelector(".hall-mhead, .hall-board") &&
+    ok("F38 · the matched moment on a FREE table says \"dealing…\" alone — a free table never says stakes are locked (C3)",
+       (A.w.document.querySelector(".hall-dealing-line") || {}).textContent === "dealing…", (A.w.document.querySelector(".hall-dealing-line") || {}).textContent);
+    await H.sleep(2600);   // past the 2s beat; the frames have NOT said wire:ready
+    ok("F39 · the beat HOLDS past its 2s while the frame is not ready — the frame loads full-size but unseen beneath it (R5)",
+       !!A.w.document.querySelector(".hall-dealing") && A.w.document.getElementById("hall-frame-host").classList.contains("dealing") &&
        !A.w.document.getElementById("hall-frame-host").hidden);
     ok("F10 · the engine is loaded now — and it is the site's own copy (R6: the Hall's mirror stays beside the frame)",
        typeof A.w.newGame === "function" && typeof B.w.newGame === "function");
@@ -139,12 +141,24 @@ async function main() {
     const mid = String(st(A.w).matchView.matchId);
     ok("F20 · nothing reaches a frame before it says it is ready", FA.rec.length === 0 && FB.rec.length === 0);
     FA.say({ type: "wire:ready" }); FB.say({ type: "wire:ready" });
-    await H.sleep(150);
+    await H.until(() => !A.w.document.querySelector(".hall-dealing") && !B.w.document.querySelector(".hall-dealing"), 3000, "the beat ends on wire:ready");
+    ok("F9 · the beat ends on wire:ready: the battle FRAME shows on BOTH screens — and the text battle is not drawn for a free match",
+       !!A.w.document.querySelector("#hall-frame-host iframe.hall-frame") && !!B.w.document.querySelector("#hall-frame-host iframe.hall-frame") &&
+       !A.w.document.querySelector(".hall-mhead, .hall-board") && !B.w.document.querySelector(".hall-mhead, .hall-board") &&
+       !A.w.document.getElementById("hall-frame-host").hidden && !A.w.document.getElementById("hall-frame-host").classList.contains("dealing"));
     const startA = FA.sent("wire:start")[0], startB = FB.sent("wire:start")[0];
     ok("F21 · wire:start carries EXACTLY { matchId, seat, seed, p0Faction, p1Faction } — no names, no address",
        !!startA && !!startB && Object.keys(startA.m).sort().join(",") === WIRE_KEYS["wire:start"] && Object.keys(startB.m).sort().join(",") === WIRE_KEYS["wire:start"] &&
        startA.m.seat === st(A.w).matchView.seat && startB.m.seat === st(B.w).matchView.seat && startA.m.seed === startB.m.seed && startA.m.matchId === mid,
        JSON.stringify(startA && startA.m));
+    // THE STRIP SLOT (R4): statusStrip's clock line from the SERVER's own {clock}, above the frame, in the Hall's root
+    await H.until(() => A.w.document.querySelector(".hall-frame-strip .hall-mclock"), 5000, "the clock line on the frame road");
+    const slot = A.w.document.querySelector("#hall-root .hall-frame-strip"), line = slot && slot.querySelector(".hall-mclock");
+    ok("F40 · the strip slot sits in #hall-root ABOVE the frame host, carrying statusStrip's clock line: \"mulligan clock\" from the server's {clock}",
+       !!slot && !!line && /^mulligan clock:/.test(line.querySelector(".state-line").textContent) && /^\d+$/.test(line.querySelector("#hall-clockcd").textContent) &&
+       !!(slot.compareDocumentPosition(A.w.document.getElementById("hall-frame-host")) & A.w.Node.DOCUMENT_POSITION_FOLLOWING), slot && slot.textContent);
+    ok("F41 · §8b on the frame road: with ~" + line.querySelector("#hall-clockcd").textContent + "s left the countdown is NOT shown — its line holds its space, hidden (C1)",
+       !line.classList.contains("show") && Number(line.querySelector("#hall-clockcd").textContent) > 30);
     ok("F22 · posted to THIS origin only — never '*'", FA.rec.concat(FB.rec).every((r) => r.o === "https://divyayuddha.games"));
 
     // THE BRIDGE REFUSES: three forged deliveries into A's Hall, none of which may reach the socket
@@ -176,6 +190,23 @@ async function main() {
     await H.sleep(150);
     ok("F27 · a {reject} the frame did not cause is NOT relayed to it", FB.sent("wire:reject").length === 1 && FA.sent("wire:reject").length === 0);
 
+    // A REAL VANISH AND RETURN (C2): B's socket dies; matchclient's own auto-reconnect brings the seat back
+    //   (W3-PRESENCE-1 / M-P6 resync). A's strip must show the vanish line, then clear it; A's frame is told nothing.
+    const seen = [];
+    const mo = new A.w.MutationObserver(() => { const t = (A.w.document.getElementById("hall-root").textContent || ""); if (seen[seen.length - 1] !== t) seen.push(t); });
+    mo.observe(A.w.document.getElementById("hall-root"), { childList: true, subtree: true, characterData: true });
+    const aRecBefore = FA.rec.length;
+    B.net.sever();
+    await H.until(() => seen.some((t) => t.indexOf("opponent reconnecting…") >= 0), 10000, "the vanish line on A's strip");
+    await H.until(() => { const t = A.w.document.getElementById("hall-root").textContent; return t.indexOf("opponent reconnecting") < 0 && /mulligan clock:|your move:|opponent's move:/.test(t); }, 15000, "the vanish line clears and the clock resumes");
+    mo.disconnect();
+    ok("F42 · a REAL vanish: \"opponent reconnecting…\" rose in A's strip above the frame, with its countdown, while B's socket was gone",
+       seen.some((t) => /opponent reconnecting… \d+s left to reconnect/.test(t)), seen.filter((t) => t.indexOf("reconnecting") >= 0).slice(0, 2).join(" | "));
+    ok("F43 · the return: the vanish line CLEARS and the clock resumes — no new line (C2)",
+       A.w.document.getElementById("hall-root").textContent.indexOf("opponent reconnecting") < 0 && !!A.w.document.querySelector(".hall-frame-strip .hall-mclock"));
+    ok("F44 · A's frame was told NOTHING through the vanish and the return (the reserved words stay unsent)", FA.rec.length === aRecBefore, FA.rec.slice(aRecBefore).map((r) => r.m.type).join(","));
+    await H.until(() => (st(B.w).wire || {}).started && (FB.sent("wire:start").length >= 2), 10000, "B's frame re-dealt on its return");
+
     // play it to a result THROUGH THE FRAMES: each stub acts only on its own turn, the way the game does
     for (let i = 0; i < 200; i++) {
       for (const [h, F] of [[A, FA], [B, FB]]) {
@@ -190,7 +221,8 @@ async function main() {
        JSON.stringify(st(A.w).matchView));
     await H.sleep(300);
     const applies = FA.tap.filter((m) => m.type === "apply");
-    const movesA = FA.sent("wire:move").map((r) => r.m), movesB = FB.sent("wire:move").map((r) => r.m);
+    const afterLastStart = (F) => { const i = F.rec.map((r) => r.m.type).lastIndexOf("wire:start"); return F.rec.slice(i + 1).filter((r) => r.m.type === "wire:move").map((r) => r.m); };
+    const movesA = FA.sent("wire:move").map((r) => r.m), movesB = afterLastStart(FB);   // B's frame was re-dealt on its return (R6): count from its last wire:start
     ok("F28 · the move stream: seq 1..N, monotonic, each once — EQUAL to the server's {apply} seq and move, on BOTH frames",
        applies.length > 0 && movesA.length === applies.length && movesB.length === applies.length &&
        movesA.every((m, i) => m.seq === i + 1 && m.seq === applies[i].seq && JSON.stringify(m.move) === JSON.stringify(applies[i].move)) &&
@@ -205,6 +237,8 @@ async function main() {
        every.every((r) => WIRE_KEYS[r.m.type] && Object.keys(r.m).sort().join(",") === WIRE_KEYS[r.m.type]));
     ok("F31 · THE WALL: no address, key, stake or escrow id in any of them", every.every((r) => !WALL.test(JSON.stringify(r.m))),
        (every.find((r) => WALL.test(JSON.stringify(r.m))) || {}).m);
+    ok("F45 · and no RESERVED word ever reached a frame: only wire:start / move / reject / result (BW2 draws; the frame does not mirror)",
+       every.every((r) => ["wire:start", "wire:move", "wire:reject", "wire:result"].indexOf(r.m.type) >= 0), [...new Set(every.map((r) => r.m.type))].join(","));
     // the send road, read as code: every toFrame(...) builds its message from the deal, the stream or a reason — never
     // from identity or money. Comments stripped first: count code, never prose.
     const hallCode = fs.readFileSync(path.join(H.SITE, "mp/hall.js"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/.*$/gm, "$1");
@@ -227,6 +261,58 @@ async function main() {
        st(B.w).matchView == null && st(B.w).wire == null && !B.w.document.querySelector("#hall-frame-host iframe") &&
        B.w.document.getElementById("hall-frame-host").hidden);
     H.teardown(A); H.teardown(B);
+  }
+
+  // ═══ §8b ON THE FRAME ROAD, AND A REAL ABANDONMENT (S-HALL-STRIPS-1) ═══
+  // The server's own clocks, shortened: a 12s turn warning at 6s left, a 2.5s vanish grace. The proof-only
+  // dyhall::clockShowMs stands in for §8b's 30s so the "shown from N left" edge is reachable in seconds.
+  console.log("\n── the strips: the clock by §8b, and an abandonment ──");
+  {
+    const s4 = await server({ THINK_MS: 12000, THINK_WARN_MS: 6000, VANISH_MS: 2500 });
+    const { A, B } = await twoHalls(s4.url, { ls: { "dyhall::clockShowMs": "9000" } });
+    const t = await openFree(A, B);
+    B.w.document.querySelector('[data-act="seat"][data-tid="' + t.id + '"]').click(); await H.sleep(250);
+    B.w.document.querySelector('[data-faction="nagas"]').click(); await H.sleep(100);
+    B.w.document.querySelector("[data-join-do]").click();
+    await H.until(() => (st(A.w).wire || {}).mounted && (st(B.w).wire || {}).mounted, 20000, "frames mounted");
+    const FA = stubFrame(A), FB = stubFrame(B);
+    FA.say({ type: "wire:ready" }); FB.say({ type: "wire:ready" });
+    await H.until(() => A.w.document.querySelector(".hall-frame-strip .hall-mclock"), 8000, "the strip");
+    const L = () => A.w.document.querySelector(".hall-frame-strip .hall-mclock"), secs = () => Number((L().querySelector("#hall-clockcd") || {}).textContent);
+    const hiddenAt = secs(), wasHidden = !L().classList.contains("show");
+    await H.until(() => L() && L().classList.contains("show"), 8000, "the countdown shown");
+    const shownAt = secs(), shownNotWarn = !L().classList.contains("warn");
+    await H.until(() => L() && L().classList.contains("warn"), 8000, "amber at the warn");
+    const warnAt = secs();
+    ok("F46 · §8b: the countdown is HIDDEN with more than the show-mark left (" + hiddenAt + "s), SHOWN inside it (" + shownAt + "s), not yet amber",
+       wasHidden && hiddenAt > 9 && shownAt <= 9 && shownNotWarn);
+    ok("F47 · §8b: AMBER at the server's warn (" + warnAt + "s left of a 12s turn, warn at 6) — the class on the LINE, where .hall-mclock.warn reaches it",
+       warnAt <= 6 && L().classList.contains("warn") && !L().querySelector("#hall-clockcd").classList.contains("warn"));
+    // the REAL abandonment: B's socket dies and cannot come back; the grace runs out; the server says {abandoned}
+    B.net.block(); B.net.sever();
+    await H.until(() => (st(A.w).matchView || {}).over, 15000, "the abandonment");
+    await H.sleep(300);
+    const strip = A.w.document.querySelector(".hall-free-result"), spans = strip ? strip.querySelectorAll(".hall-settle-line > span") : [];
+    ok("F48 · a REAL abandonment lands in the FREE RESULT strip above the frame: \"match abandoned - opponent did not return\" + the free line",
+       !!strip && spans.length === 2 && spans[0].textContent === "match abandoned - opponent did not return" && spans[1].textContent === FREE_LINE, strip && strip.textContent);
+    const wr = FA.sent("wire:result");
+    ok("F49 · and the frame is told as ruled (WIRE-1 R2): wire:result { winner: null, roundWins, forfeit: true }, once",
+       wr.length === 1 && wr[0].m.winner === null && wr[0].m.forfeit === true && Array.isArray(wr[0].m.roundWins), JSON.stringify(wr[0] && wr[0].m));
+    A.w.document.querySelector(".hall-free-result [data-leave]").click(); await H.sleep(200);
+    ok("F50 · the leave law from the strip's own door: out of the match, the frame unmounted", st(A.w).matchView == null && st(A.w).wire == null);
+    H.teardown(A); H.teardown(B);
+  }
+  // P4 — the staked text battle is untouched: statusStrip is byte-identical to the commit before this rung, and the
+  //   staked matched-moment line is the ruled one. A pin names a COMMIT, never a ref.
+  {
+    const PRE_STRIPS = "0476c74";
+    const fnOf = (src, name) => { const i = src.indexOf("function " + name + "("); if (i < 0) return null; let d = 0; for (let k = src.indexOf("{", i); k < src.length; k++) { if (src[k] === "{") d++; else if (src[k] === "}" && --d === 0) return src.slice(i, k + 1); } return null; };
+    const pre = execFileSync("git", ["show", PRE_STRIPS + ":mp/hall.js"], { cwd: H.SITE, maxBuffer: 8 << 20 }).toString();
+    const now = fs.readFileSync(path.join(H.SITE, "mp/hall.js"), "utf8");
+    if (fnOf(pre, "statusStrip") == null) { console.log("  ✖ the pin " + PRE_STRIPS + " has no statusStrip"); process.exit(1); }
+    ok("F51 · the staked text battle's strip is BYTE-IDENTICAL: statusStrip unchanged since " + PRE_STRIPS + ", the staked beat still \"the stakes are locked - dealing…\"",
+       fnOf(pre, "statusStrip") === fnOf(now, "statusStrip") && now.indexOf('v.redacted ? "the stakes are locked - dealing…" : "dealing…"') >= 0 &&
+       /else cc\.classList\.toggle\("warn", warn\);/.test(now));
   }
 
   // ═══ THE READINESS GUARD (R4): a frame that never answers — that match plays on in the Hall's table ═══

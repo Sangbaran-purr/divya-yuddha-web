@@ -1081,13 +1081,16 @@
       ? (v.outcome.winner == null ? "the match is a draw" : (v.outcome.winner === v.seat ? "you win the match" : "you lose the match")) + " - rounds " + v.outcome.roundWins.join("-")
       : "match abandoned - " + v.outcome.reason;
   }
+  //  B2 — the matched moment: one beat before the battle. S-HALL-STRIPS-1 (C3): a FREE table never says stakes are
+  //  locked — it shows "dealing…" alone, cut from the ruled line (no new words); the staked line is unchanged.
+  function dealingHTML(v) {
+    return '<div class="hall-dealing" role="status">' +
+      '<div class="hall-dealing-opp">' + factionSigilSmall(v.oppFaction) + '<span class="hall-plaque-addr">' + shortAddr(v.opponent || v.oppName) + '</span></div>' +
+      '<div class="hall-dealing-line">' + (v.redacted ? "the stakes are locked - dealing…" : "dealing…") + '</div></div>';
+  }
   function matchScreenHTML(v) {
     // B2 — the matched moment: one beat before the battle, on first entry to a match.
-    if (!dealtMatches[v.matchId]) {
-      return '<div class="hall-dealing" role="status">' +
-        '<div class="hall-dealing-opp">' + factionSigilSmall(v.oppFaction) + '<span class="hall-plaque-addr">' + shortAddr(v.opponent || v.oppName) + '</span></div>' +
-        '<div class="hall-dealing-line">the stakes are locked - dealing…</div></div>';
-    }
+    if (!dealtMatches[v.matchId]) return dealingHTML(v);
     var h = (wireF && wireF.fallback && wireF.matchId === String(v.matchId) ? '<div class="hall-mstatus warn">' + FRAME_FALLBACK_LINE + '</div>' : "") +
       statusStrip(v) + settlementStrip(slipForMatch(v));
     // header
@@ -1129,6 +1132,7 @@
     if (isFrameMatch(matchView)) {   // S-HALL-WIRE-1 — a FREE match plays in the game's own screen, beneath
       root.innerHTML = frameMatchHTML(matchView);
       var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { leaveMatch(matchView); };
+      paintClocks();                 // S-HALL-STRIPS-1 — the strip is rewritten on every update; paint it now, not a tick later
       syncFrameHost(); return;
     }
     root.innerHTML = matchScreenHTML(matchView);
@@ -1187,8 +1191,14 @@
   function refuseWire(why, data) { wireRefused.push(why); try { console.warn("[hall wire] refused:", why, data == null ? "" : data); } catch (e) {} }
   function isFrameMatch(v) { return !!(v && !v.redacted && wireF && !wireF.fallback && wireF.matchId === String(v.matchId)); }
   function frameMatchHTML(v) {
-    if (!dealtMatches[v.matchId]) return matchScreenHTML(v);             // B2 — the matched moment, unchanged; the frame loads beneath it
-    if (!v.outcome) return "";
+    // R5 — the matched moment ends when BOTH its 2s and the frame's wire:ready have happened (it used to end at 2s
+    //   regardless, and a slow frame then showed its own "waiting for the table…" plate in the battle's place). No
+    //   wire:ready at all: the beat holds until WIRE-1's readiness fallback hands the match to the Hall's table.
+    if (!dealtMatches[v.matchId] || !wireF.ready) return dealingHTML(v);
+    // R4 — THE STRIP SLOT: the same statusStrip the text battle draws (one emitter — reconnecting, the vanish line,
+    //   the thinking clock whose label says whose move it is), in a fixed one-line slot so a line coming or going
+    //   never re-lays out the frame mid-turn. The frame road paints the clock by §8b (see paintClocks).
+    if (!v.outcome) return '<div class="hall-frame-strip">' + statusStrip(v) + '</div>';
     // R3 — THE FREE RESULT: the result line + FREE_LINE (§11 8c), two existing strings in one strip; the frame's own
     //   face sits beneath (N3); the Hall owns the exit.
     return '<div class="hall-settle hall-free-result"><div class="hall-settle-line"><span class="hall-mresult">' + outcomeLine(v) +
@@ -1243,7 +1253,7 @@
     if (!wireF.el) mountFrame();
     host = frameHost(); if (!host) return;
     host.hidden = false;
-    host.classList.toggle("dealing", !dealtMatches[matchView.matchId]);   // loads, unseen, behind the matched moment
+    host.classList.toggle("dealing", !dealtMatches[matchView.matchId] || !wireF.ready);   // loads, unseen, behind the matched moment (R5: until BOTH)
   }
   // every message to the frame: built from the ruled field list, walled, then posted to OUR origin only.
   function toFrame(type, fields) {
@@ -1314,7 +1324,7 @@
     if (!m || typeof m.type !== "string" || m.type.indexOf("wire:") !== 0) return;   // not the bridge's word
     if (!wireF || !wireF.el || ev.source !== wireF.el.contentWindow) return refuseWire("wrong sender", m.type);
     if (ev.origin !== location.origin) return refuseWire("wrong origin", ev.origin);
-    if (m.type === "wire:ready") { wireF.ready = true; clearTimeout(wireF.readyTimer); startFrame(); return; }
+    if (m.type === "wire:ready") { wireF.ready = true; clearTimeout(wireF.readyTimer); startFrame(); if (matchView && dealtMatches[matchView.matchId]) renderCurrent(); return; }   // R5 — the ready may be the second of the two
     if (String(m.matchId) !== wireF.matchId) return refuseWire("foreign matchId", m.matchId);
     if (m.type === "wire:act") {
       if (!m.action || typeof m.action.type !== "string") return refuseWire("malformed act", m.action);
@@ -1335,13 +1345,26 @@
   var l3TickStarted = false;
   function startL3Tick() {
     if (l3TickStarted) return; l3TickStarted = true;
-    setInterval(function () {
-      if (!lastView) return;
-      var cc = $("hall-clockcd");
-      if (cc && lastView.clock) { var rem = Math.max(0, lastView.clock.deadline - Date.now()); cc.textContent = Math.ceil(rem / 1000); cc.classList.toggle("warn", rem <= (lastView.clock.thinkMs - lastView.clock.warnMs)); }
-      var vc = $("hall-vanishcd");
-      if (vc && lastView.vanish) { vc.textContent = Math.max(0, Math.ceil((lastView.vanish.deadline - Date.now()) / 1000)) + "s left to reconnect"; }
-    }, 250);
+    setInterval(paintClocks, 250);
+  }
+  //  S-HALL-STRIPS-1 (C1) — the frame road paints the thinking clock by LOBBY_DESIGN §8b as written: the countdown
+  //  is SHOWN from 30s remaining and turns AMBER at the server's warn (both on the .hall-mclock line itself). The
+  //  staked text battle keeps today's paint byte-for-byte (P4) — including its two known deviations from §8b (the
+  //  countdown shows for the whole turn; `warn` lands on the <b>, so it turns crimson, never amber). BW3 fixes those
+  //  when the staked road enters the frame.
+  var CLOCK_SHOW_MS = Number(lsGet("dyhall::clockShowMs")) || 30000;   // §8b's 30s (the override is proof-only, like dyhall::devAccess)
+  function paintClocks() {
+    if (!lastView) return;
+    var cc = $("hall-clockcd");
+    if (cc && lastView.clock) {
+      var rem = Math.max(0, lastView.clock.deadline - Date.now()), warn = rem <= (lastView.clock.thinkMs - lastView.clock.warnMs);
+      cc.textContent = Math.ceil(rem / 1000);
+      var line = cc.closest(".hall-frame-strip .hall-mclock");
+      if (line) { line.classList.toggle("show", rem <= CLOCK_SHOW_MS); line.classList.toggle("warn", warn); }
+      else cc.classList.toggle("warn", warn);
+    }
+    var vc = $("hall-vanishcd");
+    if (vc && lastView.vanish) { vc.textContent = Math.max(0, Math.ceil((lastView.vanish.deadline - Date.now()) / 1000)) + "s left to reconnect"; }
   }
 
   // ── RENDER ───────────────────────────────────────────────────────────────

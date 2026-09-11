@@ -608,6 +608,15 @@ body:has(.hall-frame-host:not([hidden])) > .hall-wrap { flex: 1 0 auto; padding-
     margin-left: calc(clamp(0px, calc(52.5vw - var(--fw) / 2), calc(100vw - var(--fw))) - 52.5vw + 378px); }
 }
 .hall-free-result .hall-settle-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+/* S-HALL-STRIPS-1 (R4) — THE STRIP SLOT above the frame: statusStrip's lines (reconnecting, the vanish line, the
+   thinking clock) in a FIXED one-line slot, so a line coming or going never changes the frame's height and the game
+   never re-lays out mid-turn (the frame fills everything below it — FRAME-SIZE-1). It grows only for the rare two-line
+   case (our own reconnect while the clock runs). The clock line keeps its space while hidden (visibility, not
+   display): §8b shows the countdown from 30s remaining (.show) and turns it amber at the warn (.warn on the line,
+   where the existing .hall-mclock.warn rule reaches it). */
+.hall-frame-strip { min-height: 34px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; text-align: center; }
+.hall-frame-strip .hall-mclock { visibility: hidden; }
+.hall-frame-strip .hall-mclock.show { visibility: visible; }
 
 @media (prefers-reduced-motion: reduce) {
   .hall-busy::before { animation: none; opacity: .8; }

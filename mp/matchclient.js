@@ -31,6 +31,7 @@
     var onRelay = deps.onRelay || null;
     function relay(e) { if (!onRelay || redacted) return; try { onRelay(e); } catch (err) { log("relay host threw: " + (err && err.message ? err.message : err)); } }
     var heldMirror = [];           // S-HALL-WIRE-1 — mirror-road frames that land while the engine is still loading
+    var HELD_WHILE_ENGINE = { apply: 1, resync: 1, result: 1, abandoned: 1, clock: 1, turn: 1, phase: 1, "opponent-vanished": 1, "opponent-returned": 1 };
     var ws = null, nonce = null, devMode = false, chain = null;
     var me = null;                 // my address
     var tables = [];
@@ -224,7 +225,10 @@
       if (m.type === "view") { serverView = m; redacted = true; reconnecting = false; if (m.over && !outcome) { /* {result} carries the canonical outcome */ } push(); return; }
       if (m.type === "phase") { phase = m.phase; push(); return; }
       if (m.type === "turn") { turn = m.seat; phase = m.phase || phase; push(); return; }
-      if (enginePending && (m.type === "apply" || m.type === "resync" || m.type === "result" || m.type === "abandoned")) { heldMirror.push(m); return; }
+      // S-HALL-STRIPS-1 — the match-state frames too: the server sends {match} then {clock}; with {match} held for the
+      //   engine, a {clock} (or {turn}/{phase}/vanish word) handled first was WIPED when the replayed {match} reset the
+      //   state — the FREE road lost its mulligan clock until the next broadcast. Hold them all; replay in arrival order.
+      if (enginePending && HELD_WHILE_ENGINE[m.type]) { heldMirror.push(m); return; }
       if (m.type === "resync") {
         // M-P6 reconnect: the fresh {match} already rebuilt the mirror; replay the authoritative move log to catch up.
         lastSeq = 0; (m.moves || []).forEach(function (mv) { try { applyRelayed(mv); lastSeq++; } catch (e) { log("resync apply error: " + e.message); } });
