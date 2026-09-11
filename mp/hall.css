@@ -561,18 +561,51 @@ body > * { position: relative; z-index: 1; }
 
 /* S-HALL-WIRE-1 — THE BATTLE FRAME. A FREE match plays in the game's own screen: a same-origin iframe in its own
    host beside #hall-root (the match screen rewrites #hall-root on every update; the frame must survive that).
-   Phone: the frame bleeds to the viewport edges so the game gets the full 390 it was drawn for. Wider: a centred
-   520px column (the game is mobile-first; its own column is 520). Height: the viewport under the Hall's nav and
-   title. While the matched moment plays, the frame loads unseen beneath it (visibility, not display, so the game
-   measures a real viewport). */
+   While the matched moment plays, the frame loads unseen beneath it (visibility, not display, so the game
+   measures a real viewport).
+   S-HALL-FRAME-SIZE-1 — THE FRAME GETS THE GAME'S OWN LAYOUT. The game picks its layout from the FRAME's width:
+   its battle screen goes DESKTOP at >=1024 (T71: #app widens to min(1000px, 90vw)); below, it is the PORTRAIT
+   520 column. So the frame is sized to the layout, not to the Hall's column (820px wide at >=900, 756 of it
+   content; 383 of content at 768):
+     <600       full-bleed (the game gets the whole phone).
+     600-899    min(520px, 100vw - 32px) — the portrait layout's full column, broken out of the Hall's narrow one.
+     900-1023   520 inside the column (the column already holds it).
+     >=1024     clamp(1024px, 100vw - 64px, 1120px) — the DESKTOP layout; wider adds nothing (#app caps at 1000).
+   Both break-outs are centred on the corridor (52.5%, the column's own centre) and clamped to the viewport.
+   HEIGHT: the game fits itself to any height (measured: no clip down to 520, PASS ROUND in view), so the frame
+   takes EVERYTHING below the Hall's chrome, whatever that chrome measures (the nav wraps to two lines on a
+   phone — a fixed offset put PASS ROUND under the fold at 390): while a frame is mounted the page is a
+   100dvh flex column (nav, then the column), the column's 96px foot drops to 12, and the host and the frame
+   grow into the rest. The old calc(100dvh - 150px) ran 5px past the floor at 1280x900 — PASS ROUND clipped,
+   the Hall scrolled. No Hall scroll during play also means no classic scrollbar stealing width from a 1024
+   frame at exactly 1024. The 520 minimum stands (below it the Hall scrolls rather than squeeze the board). */
 .hall-frame-host { width: 100%; max-width: 520px; margin: 0 auto; }
 .hall-frame-host[hidden] { display: none; }
-.hall-frame-host.dealing { visibility: hidden; height: 0; overflow: hidden; }
-.hall-frame { display: block; width: 100%; height: calc(100dvh - 150px); min-height: 560px; max-height: 900px;
-  border: 1px solid var(--gold-dim-25); border-radius: 12px; background: var(--ink); }
+.hall-frame-host.dealing { visibility: hidden; overflow: hidden; }
+/* the gold edge is an OUTLINE, not a border: a border takes 2px from the frame's own viewport, and at exactly
+   1024 that left the game 1022 wide — one step under its desktop breakpoint (and the portrait column 518 of 520). */
+.hall-frame { display: block; width: 100%; min-height: 520px; border: 0;
+  outline: 1px solid var(--gold-dim-25); outline-offset: -1px; border-radius: 12px; background: var(--ink); }
+body:has(.hall-frame-host:not([hidden])) { min-height: 100dvh; display: flex; flex-direction: column; }
+body:has(.hall-frame-host:not([hidden])) > .hall-nav { flex: none; }
+body:has(.hall-frame-host:not([hidden])) > .hall-wrap { flex: 1 0 auto; padding-bottom: 12px; }
+.hall-wrap > .hall-frame-host:not([hidden]) { flex: 1 0 auto; display: flex; flex-direction: column; }
+.hall-wrap > .hall-frame-host:not([hidden]) > .hall-frame { flex: 1 0 auto; }
 @media (max-width: 599.98px) {
+  /* in the flex page a centred (margin:auto) column would shrink to its content; hold it at its phone width */
+  body:has(.hall-frame-host:not([hidden])) > .hall-wrap { width: 100%; }
   .hall-frame-host { width: calc(100% + 32px); max-width: none; margin: 0 -16px; }
-  .hall-frame { border-radius: 0; border-left: 0; border-right: 0; }
+  .hall-frame { border-radius: 0; outline: 0; border-top: 1px solid var(--gold-dim-25); border-bottom: 1px solid var(--gold-dim-25); }
+}
+@media (min-width: 600px) and (max-width: 899.98px) {
+  /* the column's content box starts at 52.5vw - min(215px, 27vw) + 16px (the .hall-wrap rule above) */
+  .hall-frame-host { --fw: min(520px, calc(100vw - 32px)); width: var(--fw); max-width: none; margin-right: 0;
+    margin-left: calc(clamp(16px, calc(52.5vw - var(--fw) / 2), calc(100vw - var(--fw) - 16px)) - 52.5vw + min(215px, 27vw) - 16px); }
+}
+@media (min-width: 1024px) {
+  /* the column's content box starts at 52.5vw - 410px + 32px (the .hall-wrap rule above) */
+  .hall-frame-host { --fw: clamp(1024px, calc(100vw - 64px), 1120px); width: var(--fw); max-width: none; margin-right: 0;
+    margin-left: calc(clamp(0px, calc(52.5vw - var(--fw) / 2), calc(100vw - var(--fw))) - 52.5vw + 378px); }
 }
 .hall-free-result .hall-settle-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 
