@@ -286,10 +286,18 @@ async function main() {
     H.teardown(A3); H.teardown(B3);
   }
   // the strip diff against HEAD's bytes: statusStrip itself is UNTOUCHED; only paintClocks' line lookup moved.
-  const HEAD_HALL = execFileSync("git", ["show", "HEAD:mp/hall.js"], { cwd: H.SITE, maxBuffer: 8 << 20 }).toString();
+  // A PIN NAMES A COMMIT, NEVER A MOVING REF (the slipscope lesson, learned twice now). This read was written as
+  //   "HEAD:mp/hall.js" while S-HALL-STAKED-1 was still uncommitted — and DEFEATED ITSELF the moment the rung landed,
+  //   because HEAD then carried the K5 fix and the "differs from HEAD" check went red. a296f68 is the last commit
+  //   before S-HALL-STAKED-1 (1415a21).
+  const PRE_K5_REF = "a296f68";
+  const HEAD_HALL = execFileSync("git", ["show", PRE_K5_REF + ":mp/hall.js"], { cwd: H.SITE, maxBuffer: 8 << 20 }).toString();
+  if (HEAD_HALL.indexOf('cc.closest(".hall-frame-strip .hall-mclock")') < 0) {
+    console.log("  ✖ the pre-K5 pin " + PRE_K5_REF + " does not carry the pre-fix paint — the comparison would pass emptily"); process.exit(1);
+  }
   const NOW_HALL = fs.readFileSync(path.join(H.SITE, "mp/hall.js"), "utf8");
   const fn = (src, name) => { const i = src.indexOf("function " + name + "("); let d = 0; for (let k = src.indexOf("{", i); k < src.length; k++) { if (src[k] === "{") d++; else if (src[k] === "}") { d--; if (!d) return src.slice(i, k + 1); } } return ""; };
-  ok("P4d · the text battle's strip differs from HEAD in EXACTLY the two K5 ways: statusStrip is byte-identical, and paintClocks' line lookup lost its .hall-frame-strip scope",
+  ok("P4d · the text battle's strip differs from the pre-K5 pin (a296f68) in EXACTLY the two K5 ways: statusStrip is byte-identical, and paintClocks' line lookup lost its .hall-frame-strip scope",
      fn(HEAD_HALL, "statusStrip") === fn(NOW_HALL, "statusStrip") &&
      HEAD_HALL.indexOf('cc.closest(".hall-frame-strip .hall-mclock")') >= 0 &&
      NOW_HALL.indexOf('cc.closest(".hall-frame-strip .hall-mclock")') < 0 &&

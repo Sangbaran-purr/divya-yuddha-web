@@ -56,12 +56,17 @@ window.DY_CONFIG = {
   },
 
   // S-HALL-L2 — the StakeEscrow the Hall casts against (approve/openMatch/joinMatch/cancelMatch from the player's own
-  // wallet; the server only READS this escrow to gate). Address read from the web3 repo docs/MAINNET_STACK_2026-08-15.md
-  // (row 6, exact_match) and VERIFIED on-chain 2026-08-28: referee()==0x42FF116e0EecC431186D4fA2CA3964bC999b42e2 (the
-  // seated referee). For the LOCAL anvil proof, localStorage["dyhall::stakeEscrowAddress"] wins (mirrors the
-  // matchServerUrl override idiom). The rig (wire.html) casts with its own throwaway keys and is never touched.
+  // wallet; the server only READS this escrow to gate). For the LOCAL anvil proof,
+  // localStorage["dyhall::stakeEscrowAddress"] wins (mirrors the matchServerUrl override idiom). The rig (wire.html)
+  // casts with its own throwaway keys and is never touched.
+  //   W3-RAKE-1 (2026-09-12) — SWAPPED. The original 0x8e2645aB6bd2c13d57E3efBc3Edad19DfF181534 took its rake sink as
+  //   `address public immutable treasury` and was deployed with the throwaway deployer 0x30b0AE2A… (key shredded), so
+  //   every 5%-of-pot rake it took is unspendable — 3 DYC lost there, and no setter exists. The replacement is the
+  //   SAME bytecode (runtime compared byte-for-byte, immutables masked) with treasury = the master wallet; owner = the
+  //   48h Timelock; columnLedger = HolderStaking; referee()==0x42FF116e0EecC431186D4fA2CA3964bC999b42e2, re-read from
+  //   chain 2026-09-12. Every tx and proof: the W3-RAKE-1 addendum in the web3 repo's MAINNET_STACK_2026-08-15.md.
   stakeEscrow: {
-    address: "0x8e2645aB6bd2c13d57E3efBc3Edad19DfF181534", // W3-MAINNET StakeEscrow (mainnet); overridable per-browser for local proof
+    address: "0x3A1c002762C7CFb59DDA45E0c9798f9f4f8E1Cb8", // W3-RAKE-1 StakeEscrow (mainnet, block 93667455); overridable per-browser for local proof
   },
 
   // S-TREASURY-SHELF-1 — the fresh RE-FREEZE NFT-stack deploy block on Amoy (chain truth: AccessNFT landed here;
