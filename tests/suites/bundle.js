@@ -43,6 +43,7 @@ const P6 = "The store is closed for now.";
 const P6B = "The store is sold out for now.";
 const P8 = "The store could not take this order - refresh and try again.";
 const P7 = (sym, sum) => "Not enough " + sym + " in this wallet - " + sum + " buys the bundle.";
+const P9 = "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours.";
 const P4 = (cap, when) => "You have topped up " + cap + " DYC this week - the window frees " + when + ".";
 
 async function connect(w) {
@@ -79,7 +80,13 @@ async function main() {
        q(w, ".b-art img").getAttribute("src") === "assets/tokens/Access_Torana_720.jpg" &&
        q(w, ".b-art img").getAttribute("loading") === "lazy" && !!q(w, ".b-art .torana-ph"),
        q(w, ".b-art img") ? q(w, ".b-art img").getAttribute("src") : "no img");
-    ok("the price and the + 500 DYC are on the face", /USD 20/.test(tile(w)) && /\+ 500 DYC/.test(tile(w)));
+    // S-BUNDLE-3 — the price is a HERO number beside the DYC figure, not body text under the sales line
+    ok("the hero pair carries both numbers at the same weight, the assets beneath the price",
+       !!q(w, ".b-heroes .b-hero-dyc") && !!q(w, ".b-heroes .b-hero-price .b-hero-n") &&
+       q(w, ".b-hero-dyc").textContent === "+ 500 DYC" &&
+       q(w, ".b-hero-price .b-hero-n").textContent === "USD 20" &&
+       q(w, ".b-hero-price .b-hero-s").textContent === "USDC or USDT");
+    ok("the old body-text price line is gone from the face", !/USD 20 — USDC or USDT/.test(tile(w)));
     await waitFor("the public stock read landed (no wallet needed)", () => /In stock/.test(tile(w)));
     ok("THE STOCK LINE CARRIES NO COUNT — 'In stock', never 'N bundles'",
        /In stock/.test(tile(w)) && !/bundle[s]? left|998|4500|5000/.test(tile(w)), tile(w).slice(0, 200));
@@ -89,6 +96,11 @@ async function main() {
     await connect(w);
     ok("connected NON-holder: the commitment line and the buy control",
        tile(w).indexOf(P2) >= 0 && !!q(w, ".b-buy") && !q(w, ".b-topup"));
+    ok("the bundle face has EXACTLY ONE hero price, and its only other USD 20 is inside ruled P2",
+       w.document.querySelectorAll(".b-hero-price").length === 1 &&
+       (tile(w).match(/USD 20/g) || []).length === 2 && tile(w).indexOf(P2) >= 0,
+       "USD 20 x" + (tile(w).match(/USD 20/g) || []).length);
+    ok("P9 is not on the bundle face", tile(w).indexOf(P9) < 0);
     // S-BUNDLE-2 (F1) — the chip is a CHOICE with its balance as small print, never a price-shaped "USDC · 3.35"
     ok("both assets are offered as CHOICES, the balance beneath, never price-shaped",
        w.document.querySelectorAll(".b-asset").length === 2 &&
@@ -242,9 +254,18 @@ async function main() {
     await waitFor("the holder's face", () => !!q(w, ".b-topup"));
 
     // F2 — the holder's face is priced by P3 alone
-    ok("F2 · no USD 20 anywhere on the holder's face", !/USD 20/.test(tile(w)), tile(w).slice(0, 240));
-    ok("F2 · P3 carries the price, and no second price line was added",
-       tile(w).indexOf(P3) >= 0 && (tile(w).match(/USD 5/g) || []).length === 1);
+    // S-BUNDLE-3 F2 — the holder's face is headed TOP UP and priced by its own LIVE hero
+    ok("F2 · the holder's heading is TOP UP, not the card's name",
+       q(w, ".b-title").textContent === "TOP UP");
+    ok("F2 · the holder's hero is USD 5 at x1, with the DYC figure beside it",
+       q(w, ".b-hero-price .b-hero-n").textContent === "USD 5" &&
+       q(w, ".b-hero-dyc").textContent === "+ 500 DYC");
+    ok("F2 · P9 stands on the holder's face, above P3",
+       tile(w).indexOf(P9) >= 0 && tile(w).indexOf(P9) < tile(w).indexOf(P3));
+    ok("F2 · the ONLY USD 20 on the holder's face is inside ruled P9",
+       (tile(w).match(/USD 20/g) || []).length === 1);
+    ok("F2 · P3 carries the weekly price once, and no second price line was added",
+       tile(w).indexOf(P3) >= 0 && (tile(w).match(/USD 5,/g) || []).length === 1);
     // ruling (2) — P1 is the bundle face's line
     ok("ruling 2 · P1 is NOT on the holder's face", tile(w).indexOf(P1) < 0);
 
@@ -257,6 +278,10 @@ async function main() {
     // ×2 costs USD 10 — the same wallet, the same chip, now short
     w.document.querySelectorAll(".b-pack")[1].click();
     await waitFor("x2 chosen", () => /Top up 1,000 DYC/.test(tile(w)));
+    ok("S-BUNDLE-3 · BOTH hero numbers follow the picker: x2 -> USD 10 and + 1,000 DYC",
+       q(w, ".b-hero-price .b-hero-n").textContent === "USD 10" &&
+       q(w, ".b-hero-dyc").textContent === "+ 1,000 DYC",
+       q(w, ".b-hero-dyc").textContent + " / " + q(w, ".b-hero-price .b-hero-n").textContent);
     ok("F1 · at x2 the SAME chip dims, because the face now costs USD 10",
        q(w, ".b-asset").className.indexOf("short") >= 0 && q(w, ".b-asset").disabled === true);
     ok("F1 · a dimmed chip cannot be chosen (the click does nothing)",
@@ -270,8 +295,10 @@ async function main() {
     await deal(c2, "usdc", c2.player.address, 25n * DEC6);
     const h2 = await H.storePage(c2, c2.player);
     await connect(h2.w);
-    ok("the bundle face keeps P1 and its USD 20 line",
-       tile(h2.w).indexOf(P1) >= 0 && /USD 20 — USDC or USDT/.test(tile(h2.w)));
+    ok("the bundle face keeps P1 and its USD 20 HERO (the body-text line is retired)",
+       tile(h2.w).indexOf(P1) >= 0 &&
+       q(h2.w, ".b-hero-price .b-hero-n").textContent === "USD 20" &&
+       !/USD 20 — USDC or USDT/.test(tile(h2.w)));
     ok("and the affordable chip is chosen, the empty one dimmed",
        q(h2.w, ".b-asset").className.indexOf("on") >= 0 &&
        h2.w.document.querySelectorAll(".b-asset")[1].className.indexOf("short") >= 0);

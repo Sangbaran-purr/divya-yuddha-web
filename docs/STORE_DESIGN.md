@@ -96,6 +96,13 @@ idiom) - earliest live entry + 7 days. On a busy or incomplete scan the
 sentinel "within 7 days" is used instead. W3-BUNDLE-4 is queued to add
 a topUpWindow(address) view so the page can stop scanning.
 
+DESIGN NOTE, QUEUED (R2, owner, 2026-09-12) - THE HOLDER FACE'S IMAGE. The tile
+serves one image on every face: the Torana card. On the TOP UP face that card is
+the thing the holder already owns, under a heading that no longer names it, so
+the art is doing no work there. THE CARD IS THE BUNDLE'S IMAGE; whether the
+top-up wants an image of its own, or none at all, is the owner's call and is not
+decided here. Nothing is changed until it is.
+
 THE ART CARRIES TWO FALSE LINES - ART-TORANA-1, QUEUED (2026-09-12). The card
 image assets/tokens/Access_Torana_720.jpg has its text BAKED IN, and prints:
 
@@ -164,9 +171,23 @@ The store is sold out for now.
 P7  insufficient funds (caught by the balance read, before any approval)
 Not enough [USDC] in this wallet - [USD 20] buys the bundle.
 
+P9  the holder's face, above P3 (ruled 2026-09-12, S-BUNDLE-3 F2/F3)
+The bundle - a Torana and 500 DYC - is USD 20. You already hold yours.
+
 P8  the generic refusal (AssetNotAllowed / PriceUnset / ZeroPacks - all
     unreachable from the UI, and rendered rather than left a bare revert)
 The store could not take this order - refresh and try again.
+
+THE PRICE IS THE HERO NUMBER (S-BUNDLE-3, dated 2026-09-12): each face carries a
+hero pair - the DYC figure and the price, same size, same gold, the payment assets
+in the muted voice beneath the price. The old body-text line "USD 20 - USDC or
+USDT" is GONE; it was never ruled copy (§11's set is P1-P9), and its words now
+live in the hero block. The bundle face's hero says USD 20; THE HOLDER'S FACE
+HERO IS LIVE - both its numbers follow the pack picker (x1 "+ 500 DYC / USD 5",
+x2 "+ 1,000 DYC / USD 10"), because a fixed DYC figure beside a doubled price
+would be a fresh misread. The holder's heading is TOP UP, not the card's name.
+"USD 20" therefore appears TWICE on the bundle face - the hero and ruled P2's own
+first words - and exactly once on the holder's face, inside ruled P9.
 
 SUBSTITUTIONS, exhaustively:
   P4 [2,000]   capPerWallet(), read from chain
@@ -181,6 +202,8 @@ SUBSTITUTIONS, exhaustively:
   P7 [USDC]    the chosen asset's symbol - USDC or USDT
   P7 [USD 20]  the sum this order needs - USD 20 for a bundle,
                USD 5 x packs for a top-up
+  P9           no slots; it is the holder's face only, and it names the bundle's
+               price so a holder knows what they already own
 
 P1 IS THE LINE FOR ANYONE NOT YET THROUGH THE DOOR (owner ruling 2 of
 2026-09-12, corrected by R4 the same day) - a SCOPE ruling, not a copy change:

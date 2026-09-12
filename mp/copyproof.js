@@ -135,6 +135,7 @@ const STORE_LAW = [
   ["P6b sold out",       "The store is sold out for now."],
   ["P7 insufficient",    "Not enough [USDC] in this wallet - [USD 20] buys the bundle."],
   ["P8 generic refusal", "The store could not take this order - refresh and try again."],
+  ["P9 holder's face",   "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours."],
 ];
 console.log("\n── THE STORE'S LAW · STORE_DESIGN section 11 ruled copy (doc → js/store.js) ──");
 for (const [tag, line] of STORE_LAW) {
@@ -143,6 +144,19 @@ for (const [tag, line] of STORE_LAW) {
 }
 
 console.log("\n── the store's structural guards ──");
+// S-BUNDLE-3 — THE PRICE IS THE HERO NUMBER, on both faces, and the old body-text line is gone.
+ok("the hero pair is built once and carries the assets in the muted voice",
+   /function heroes\(dycText, priceText\)/.test(STORE) && /"b-hero b-hero-dyc"/.test(STORE) &&
+   /"b-hero-s", "USDC or USDT"/.test(STORE));
+ok("the removed body-text price line is gone (it was never ruled copy)",
+   !/"b-price"/.test(STORE) && !/USD 20 — USDC or USDT/.test(STORE));
+ok("the bundle face's hero is USD 20; the holder's is LIVE, following the picker",
+   /heroes\("\+ 500 DYC", "USD 20"\)/.test(STORE) &&
+   /heroes\(dycFig\(packSize \* BigInt\(packs\)\), unitUsd\)/.test(STORE) &&
+   /packPrice \* BigInt\(packs\)/.test(STORE));
+ok("the holder's heading is TOP UP, and P9 is on that face alone",
+   /txt\("div", "b-title", "TOP UP"\)/.test(STORE) &&
+   (STORE.match(/B_P9/g) || []).length === 2);
 // THE STOCK LINE prints no count: one shared pool makes any "N bundles" a fiction (owner ruling (b)).
 ok("the stock line is In stock / Sold out / unavailable, and NEVER a count",
    /function stockLine\(st\)/.test(STORE) && /"In stock"/.test(STORE) &&

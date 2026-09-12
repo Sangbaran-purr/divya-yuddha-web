@@ -880,6 +880,7 @@ window.DYStore = (function () {
   var B_P6 = "The store is closed for now.";
   var B_P6B = "The store is sold out for now.";
   var B_P8 = "The store could not take this order - refresh and try again.";
+  var B_P9 = "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours.";
   // P4's fill carries its own preposition. With an exact date the sentence is the ruled one word for word ("...the
   // window frees on 19 Sep 2026."); with the sentinel it reads "...the window frees within 7 days." Keeping "on" in
   // the frame produced "frees on within 7 days" — the ruling's two halves did not compose (reported at S-BUNDLE-1).
@@ -1166,6 +1167,25 @@ window.DYStore = (function () {
     return wrap;
   }
 
+  // S-BUNDLE-3 — THE PRICE IS THE HERO NUMBER. It was a line of body text under the sales line, in the muted voice,
+  //   while "+ 500 DYC" carried the heading size — so the tile shouted what you GET and whispered what it COSTS.
+  //   Now the two stand together at the same weight: the DYC figure and the price, the payment assets in the muted
+  //   voice beneath the price. On a narrow screen they stack PRICE FIRST (css column-reverse).
+  //   BOTH NUMBERS FOLLOW THE PACK PICKER on the holder's face: a fixed "+ 500 DYC" beside "USD 10" at x2 would be
+  //   a fresh misread of exactly the kind this rung exists to kill.
+  function heroes(dycText, priceText) {
+    var row = el("div", "b-heroes");
+    row.appendChild(txt("div", "b-hero b-hero-dyc", dycText));
+    if (priceText) {
+      var pr = el("div", "b-hero b-hero-price");
+      pr.appendChild(txt("div", "b-hero-n", priceText));
+      pr.appendChild(txt("div", "b-hero-s", "USDC or USDT"));
+      row.appendChild(pr);
+    }
+    return row;
+  }
+  function dycFig(wei) { return "+ " + Number(wei / 1000000000000000000n).toLocaleString("en-US") + " DYC"; }
+
   // THE STOCK LINE (owner ruling (b)) — no count, ever: one shared pool makes any
   // "N bundles" a fiction. In stock / Sold out / unavailable, nothing more.
   function stockLine(st) {
@@ -1215,11 +1235,9 @@ window.DYStore = (function () {
     var card = el("div", "b-card");
     card.appendChild(toranaFigure());
     var body = el("div", "b-body");
-    body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
-    body.appendChild(txt("div", "b-plus", "+ 500 DYC"));
-    // S-BUNDLE-2 (F2 + owner ruling 2, 2026-09-12): P1 and the USD 20 line belong to the BUNDLE FACE ONLY. A holder
-    //   already walked through the door, so the sales line is not theirs; and the top-up face is priced by P3 alone
-    //   ("500 DYC for USD 5, up to 2,000 a week") — a second price line would say twice what §11 says once.
+    // S-BUNDLE-2 (F2 + rulings 2 and R4, 2026-09-12): P1 belongs to anyone NOT YET THROUGH THE DOOR (disconnected and
+    //   connected non-holder); only the HOLDER's face drops it, and that face is priced by P3 + its own hero, never by
+    //   a second price line — §11 says it once.
     var stk = stockLine(st);
     var stockEl = txt("div", stk.cls, stk.text);   // appended by each face, UNDER its own price (S-BUNDLE-2)
     var msg = el("div", "st-msg"); msg.id = "b-msg";
@@ -1227,6 +1245,8 @@ window.DYStore = (function () {
 
     // the receipt wins the tile once a buy lands
     if (bReceipt) {
+      body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
+      body.appendChild(heroes(bReceipt.dyc != null ? dycFig(bReceipt.dyc) : "+ 500 DYC", null));
       body.appendChild(stockEl);
       var rc = el("div", "b-receipt");
       rc.appendChild(txt("div", "b-rc-h", bReceipt.mine ? "Torana #" + bReceipt.tokenId + " is yours." : "The purchase landed."));
@@ -1245,8 +1265,9 @@ window.DYStore = (function () {
     if (!st || !connectedOk() || !st.me) {
       // P1 IS FOR ANYONE NOT YET THROUGH THE DOOR (owner ruling 2, corrected by R4 2026-09-12): the disconnected face
       //   and the connected non-holder face both carry it; ONLY the holder's face drops it.
+      body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
+      body.appendChild(heroes("+ 500 DYC", "USD 20"));
       body.appendChild(txt("p", "b-line", B_P1));
-      body.appendChild(txt("div", "b-price", "USD 20 — USDC or USDT"));
       body.appendChild(stockEl);
       var cta = el("button", "st-btn b-connect"); cta.type = "button"; cta.textContent = "Connect wallet";
       cta.onclick = function () { cta.disabled = true; window.DYWallet.connect().catch(function () {}).then(function () { cta.disabled = false; }); };
@@ -1256,6 +1277,8 @@ window.DYStore = (function () {
 
     var holder = st.torana == null ? null : st.torana > 0n;
     if (holder === null) {
+      body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
+      body.appendChild(heroes("+ 500 DYC", "USD 20"));
       body.appendChild(stockEl);
       body.appendChild(txt("div", "b-stock busy", "your Torana could not be read - refresh to retry"));
       body.appendChild(msg); card.appendChild(body); host.appendChild(card); return;
@@ -1273,8 +1296,9 @@ window.DYStore = (function () {
     var pick = assetPicker(st, unitOf, function () { paintBundle(host); });
 
     if (!holder) {
+      body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
+      body.appendChild(heroes("+ 500 DYC", "USD 20"));
       body.appendChild(txt("p", "b-line", B_P1));
-      body.appendChild(txt("div", "b-price", "USD 20 — USDC or USDT"));
       body.appendChild(stockEl);
       body.appendChild(pick.row);
       body.appendChild(txt("p", "b-commit", B_P2));
@@ -1284,6 +1308,12 @@ window.DYStore = (function () {
       buy.onclick = function () { bundleBuy(pick.chosen, host, msg, buy); };
       body.appendChild(buy);
     } else {
+      var packs = Math.max(1, Math.min(bPacks, maxPacksNow >= 1 ? maxPacksNow : 1));
+      var unitUsd = st.asset[pick.chosen] && st.asset[pick.chosen].packPrice != null
+        ? "USD " + String(Number(st.asset[pick.chosen].packPrice * BigInt(packs)) / 1000000) : null;
+      body.appendChild(txt("div", "b-title", "TOP UP"));
+      body.appendChild(heroes(dycFig(packSize * BigInt(packs)), unitUsd));
+      body.appendChild(txt("p", "b-line b-p9", B_P9));
       body.appendChild(txt("p", "b-commit", B_P3));
       body.appendChild(stockEl);
       body.appendChild(pick.row);

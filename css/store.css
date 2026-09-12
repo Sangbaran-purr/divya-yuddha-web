@@ -191,7 +191,18 @@
 
 .b-body { display: flex; flex-direction: column; gap: .55rem; min-width: 0; }
 .b-title { font-family: "Cinzel", Georgia, serif; font-size: 1rem; letter-spacing: .06em; color: var(--gold, #e8c874); }
-.b-plus { font-family: "Cinzel", Georgia, serif; font-size: 1.5rem; line-height: 1; color: var(--hi, #f4e3ab); }
+
+/* S-BUNDLE-3 (F1/F2) — THE TWO HERO NUMBERS: what you get and what it costs, at the same weight and the same gold.
+   The price used to be body text in the muted voice under the sales line, so the tile shouted the DYC and whispered
+   the price. On a narrow screen they STACK PRICE FIRST (column-reverse); from 560px they stand side by side, the DYC
+   figure first. */
+.b-heroes { display: flex; flex-direction: column-reverse; gap: .35rem; align-items: flex-start; }
+@media (min-width: 560px) { .b-heroes { flex-direction: row; align-items: baseline; gap: 1.6rem; } }
+.b-hero { font-family: "Cinzel", Georgia, serif; font-size: 1.5rem; line-height: 1; color: var(--hi, #f4e3ab); }
+.b-hero-price { display: flex; flex-direction: column; gap: .15rem; }
+.b-hero-n { font: inherit; }
+.b-hero-s { font-family: var(--text, "EB Garamond", serif); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: rgba(240, 232, 214, .6); }
+.b-p9 { color: rgba(240, 232, 214, .72); font-size: .88rem; }
 .b-line { margin: .2rem 0 .1rem; font-size: .95rem; line-height: 1.5; color: rgba(240, 232, 214, .9); }
 .b-price { font-size: .9rem; letter-spacing: .04em; color: rgba(240, 232, 214, .72); }
 .b-commit { margin: .3rem 0 .1rem; font-size: .86rem; line-height: 1.5; color: rgba(240, 232, 214, .68); }
