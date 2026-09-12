@@ -231,7 +231,11 @@ window.DYWallet = (function () {
   //     invoke this inside loadEthers().then). ---
   function readProvider() {
     var e = window.ethers;
-    var url = (CFG.chain.readRpcUrls && CFG.chain.readRpcUrls[0]) || CFG.chain.rpcUrls[0];
+    // S-BUNDLE-1 (owner ruling (c), 2026-09-12) — one anvil override, shared by every read surface, mirroring the
+    // Hall's dyhall::readRpcUrl idiom. ABSENT IN PRODUCTION: with the key unset this resolves exactly as before,
+    // so every page's read road is byte-identical. Proof-only, like dyhall::devAccess.
+    var over = null; try { over = window.localStorage.getItem("dy::readRpcUrl"); } catch (x) {}
+    var url = over || (CFG.chain.readRpcUrls && CFG.chain.readRpcUrls[0]) || CFG.chain.rpcUrls[0];
     var req = new e.FetchRequest(url);
     req.timeout = 10000; // 10s hard cap per request (ethers default is 300s)
     req.setThrottleParams({ maxAttempts: 2 }); // fail fast — no exponential-backoff retry storm

@@ -164,3 +164,49 @@
   .st-zoom-info { flex: 0 0 auto; align-items: center; text-align: center; }
   .st-zoom-close { top: 2px; right: 2px; }
 }
+
+/* ============================================================================
+   S-BUNDLE-1 — THE BUNDLE TILE (the Torana + 500 DYC). Reuses the page's own
+   vocabulary: .st-act for the doors, .st-msg / .ok / .bad for act voice,
+   .torana-ph (rite.html's) as the art's onerror placeholder. Mobile-first: the
+   card stacks under 560px and sits art-left from there up.
+   ========================================================================= */
+.b-sec { max-width: 46rem; margin: 0 auto 3vh; }
+.b-head-row { display: flex; align-items: center; justify-content: center; gap: .7rem; margin-bottom: 1.4vh; }
+.b-sec-title { font-family: "Cinzel", Georgia, serif; font-size: clamp(1.05rem, 3.6vw, 1.4rem); letter-spacing: .1em; text-transform: uppercase; margin: 0; color: var(--gold, #e8c874); }
+.b-host { min-height: 6rem; }
+
+/* The card sits BESIDE its words at every width: full-bleed art on a 390px phone pushed the price, the stock line
+   and the buy control below the fold (seen in the 390 shot), which is the one thing a store tile must never do. */
+.b-card { display: grid; grid-template-columns: minmax(104px, 38%) 1fr; gap: 1rem; align-items: start; padding: 1rem; border: 1px solid rgba(232, 200, 116, .28); border-radius: 10px; background: rgba(8, 5, 3, .5); backdrop-filter: blur(3px); }
+@media (min-width: 560px) { .b-card { grid-template-columns: minmax(160px, 32%) 1fr; gap: 1.6rem; padding: 1.4rem; } }
+
+.b-art { position: relative; aspect-ratio: 2 / 3; max-width: 190px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(232, 200, 116, .22); background: rgba(4, 3, 1, .6); }
+@media (min-width: 560px) { .b-art { max-width: 240px; } }
+.b-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.b-art .torana-ph { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; }
+
+.b-body { display: flex; flex-direction: column; gap: .55rem; min-width: 0; }
+.b-title { font-family: "Cinzel", Georgia, serif; font-size: 1rem; letter-spacing: .06em; color: var(--gold, #e8c874); }
+.b-plus { font-family: "Cinzel", Georgia, serif; font-size: 1.5rem; line-height: 1; color: var(--hi, #f4e3ab); }
+.b-line { margin: .2rem 0 .1rem; font-size: .95rem; line-height: 1.5; color: rgba(240, 232, 214, .9); }
+.b-price { font-size: .9rem; letter-spacing: .04em; color: rgba(240, 232, 214, .72); }
+.b-commit { margin: .3rem 0 .1rem; font-size: .86rem; line-height: 1.5; color: rgba(240, 232, 214, .68); }
+
+.b-stock { font-size: .82rem; letter-spacing: .06em; text-transform: uppercase; }
+.b-stock.ok { color: #7fbf8a; }
+.b-stock.bad { color: #d98c8c; }
+.b-stock.busy { color: rgba(240, 232, 214, .55); text-transform: none; letter-spacing: 0; font-style: italic; }
+.b-head { font-size: .86rem; color: rgba(240, 232, 214, .8); }
+.b-cap { margin: .2rem 0; font-size: .88rem; line-height: 1.5; color: #d9b98c; }
+
+.b-assets, .b-packs { display: flex; gap: .5rem; flex-wrap: wrap; }
+.b-asset, .b-pack { font: inherit; font-size: .82rem; padding: .35rem .7rem; border-radius: 6px; cursor: pointer; color: rgba(240, 232, 214, .8); background: rgba(0, 0, 0, .35); border: 1px solid rgba(232, 200, 116, .22); }
+.b-asset.on, .b-pack.on { color: #120c04; background: var(--gold, #e8c874); border-color: var(--gold, #e8c874); }
+.b-pack { min-width: 2.6rem; text-align: center; }
+
+.b-buy, .b-topup, .b-connect, .b-door { align-self: start; margin-top: .35rem; }
+.b-receipt { display: flex; flex-direction: column; gap: .45rem; padding: .9rem; border-radius: 8px; border: 1px solid rgba(127, 191, 138, .35); background: rgba(20, 40, 24, .3); }
+.b-rc-h { font-family: "Cinzel", Georgia, serif; font-size: 1.05rem; color: #a8dcae; }
+.b-rc-l { font-size: .9rem; color: rgba(240, 232, 214, .85); }
+.b-rc-tx { font-size: .8rem; color: rgba(232, 200, 116, .8); }

@@ -35,6 +35,12 @@ function preflight() {
     [path.join(MS, "node_modules", "ws"), "the match-server's own node_modules (run `npm install` in services/match-server)"],
     [path.join(OUT, "StakeEscrow.sol", "StakeEscrow.json"), "the forge build artifacts (run `forge build` in contracts/)"],
     [path.join(OUT, "MockDYC.sol", "MockDYC.json"), "the MockDYC artifact (same `forge build`)"],
+    // S-BUNDLE-1 — the bundle suite deploys the REAL PlayStore behind a REAL ERC1967Proxy, against a REAL AccessNFT
+    // and two MockStables. Each artifact is named: a guard that passes emptily is worse than no guard.
+    [path.join(OUT, "PlayStore.sol", "PlayStore.json"), "the PlayStore artifact (same `forge build`)"],
+    [path.join(OUT, "ERC1967Proxy.sol", "ERC1967Proxy.json"), "the ERC1967Proxy artifact (same `forge build`)"],
+    [path.join(OUT, "AccessNFT.sol", "AccessNFT.json"), "the AccessNFT artifact (same `forge build`)"],
+    [path.join(OUT, "MockStable.sol", "MockStable.json"), "the MockStable artifact (same `forge build`)"],
   ];
   need.forEach(function (n) { if (!fs.existsSync(n[0])) miss.push("  MISSING: " + n[1] + "\n           expected at " + n[0]); });
   let anvil = false;
@@ -78,6 +84,90 @@ async function server(escAddr, dycAddr) {
     { E: loadGuardedEngine().engine, rng, createRoom, store: makeMatchStore({ file: "/tmp/l3fix_store.jsonl" }), escrow: makeEscrowReader({ rpcUrl: RPC, escrowAddress: escAddr }) });
   await new Promise((r) => srv.listen(0, r));
   return { srv, url: "ws://127.0.0.1:" + srv.address().port, logLines };
+}
+
+// ── S-BUNDLE-1 — THE STORE'S CHAIN. The REAL PlayStore (impl + ERC1967Proxy, its real initializer), the REAL
+//    AccessNFT, two MockStables at 6 decimals, MockDYC as the inventory. The fork rehearsal's own sequence, on anvil:
+//    deploy -> grant the minter -> fund -> (already open, since the harness has no 48h to wait out).
+const DEC6 = 1000000n;
+async function chainStore(opts) {
+  opts = opts || {};
+  const provider = new ethers.JsonRpcProvider(RPC);
+  const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
+  const player = new ethers.Wallet(K.p1, provider);
+  const ownerAddr = await owner.getAddress();
+  const F = (n) => { const a = art(n); return new ethers.ContractFactory(a.abi, a.bytecode, owner); };
+
+  const dyc = await (F("MockDYC")).deploy(); await dyc.waitForDeployment();
+  const usdc = await (F("MockStable")).deploy("USD Coin", "USDC", 6); await usdc.waitForDeployment();
+  const usdt = await (F("MockStable")).deploy("Tether USD", "USDT", 6); await usdt.waitForDeployment();
+  const nft = await (F("AccessNFT")).deploy(ownerAddr, "ipfs://torana/"); await nft.waitForDeployment();
+
+  const impl = await (F("PlayStore")).deploy(); await impl.waitForDeployment();
+  const psArt = art("PlayStore");
+  const init = new ethers.Interface(psArt.abi).encodeFunctionData("initialize", [
+    [ownerAddr, await dyc.getAddress(), await nft.getAddress(), ownerAddr,
+     500n * DEC, 500n * DEC, 2000n * DEC, 604800n],
+    [await usdc.getAddress(), await usdt.getAddress()],
+    [20n * DEC6, 20n * DEC6],
+    [5n * DEC6, 5n * DEC6],
+  ]);
+  const pxArt = art("ERC1967Proxy");
+  const proxy = await (new ethers.ContractFactory(pxArt.abi, pxArt.bytecode, owner)).deploy(await impl.getAddress(), init);
+  await proxy.waitForDeployment();
+  const psAddr = await proxy.getAddress();
+  const ps = new ethers.Contract(psAddr, psArt.abi, owner);
+
+  await (await nft.setMinter(psAddr, true)).wait();                                  // the pre-open act
+  await (await dyc.mint(psAddr, (opts.inventory != null ? opts.inventory : 5000n * DEC))).wait();  // the tranche
+  if (opts.open !== false) await (await ps.setSaleOpen(true)).wait();
+
+  return {
+    provider, owner, player, ps, dyc, nft, usdc, usdt, impl,
+    addrs: { ps: psAddr, dyc: await dyc.getAddress(), nft: await nft.getAddress(),
+             usdc: await usdc.getAddress(), usdt: await usdt.getAddress(), owner: ownerAddr },
+  };
+}
+
+// ── S-BUNDLE-1 — THE STORE'S PAGE, in jsdom: store.html's REAL markup plus the REAL scripts in page order, then the
+//    two mounts its inline script makes. The chain is anvil; the harness declares anvil's own chain id in the config
+//    it hands the page (it does not lie about eth_chainId), and points every read at anvil through dy::readRpcUrl.
+async function storePage(c, player, opts) {
+  opts = opts || {};
+  const html = fs.readFileSync(path.join(SITE, "store.html"), "utf8");
+  const body = (html.split(/<body[^>]*>/)[1] || "").split("</body>")[0];
+  const dom = new JSDOM(`<!doctype html><body class="treasury">${body}</body>`,
+    { url: "https://divyayuddha.games/store.html", pretendToBeVisual: true, runScripts: "outside-only" });
+  const w = dom.window;
+  w.ethers = ethers;
+  const eth = makeEthereum(player, c.provider);
+  w.ethereum = eth;
+  w.TextEncoder = TextEncoder;
+  w.fetch = function (u) { return Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve("") }); };
+  const chainId = Number((await c.provider.getNetwork()).chainId);
+  w.localStorage.setItem("dy::readRpcUrl", RPC);
+  w.localStorage.setItem("dystore::playStoreAddress", c.addrs.ps);
+  w.localStorage.setItem("dystore::usdcAddress", c.addrs.usdc);
+  w.localStorage.setItem("dystore::usdtAddress", c.addrs.usdt);
+  w.localStorage.setItem("dystore::accessAddress", c.addrs.nft);
+  w.localStorage.setItem("dystore::waitMs", String(opts.waitMs || 20000));
+  for (const [k, v] of Object.entries(opts.ls || {})) w.localStorage.setItem(k, v);
+  const run = (p) => w.eval(fs.readFileSync(p, "utf8"));
+  run(path.join(SITE, "config.js"));
+  w.DY_CONFIG.chain.id = chainId;                       // the harness's chain, declared not faked
+  w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
+  w.DY_CONFIG.contracts.dycoin = c.addrs.dyc;           // the inventory coin under test
+  w.DY_CONFIG.contracts.waveCardSale = null;            // the wave-card tabs are OUT of scope here: dark, not busy
+  w.DY_CONFIG.contracts.waveCardMarket = null;
+  run(path.join(SITE, "js/wallet.js"));
+  run(path.join(SITE, "js/cards.js"));
+  run(path.join(SITE, "js/wave-registry.js"));
+  run(path.join(SITE, "js/store.js"));
+  w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
+  w.DYStore.mountStore();
+  w.DYStore.mountBundle();
+  w.DYWallet.init();
+  return { dom, w, eth };
 }
 
 // an EIP-1193 shim: reads/writes forwarded to anvil (the account is unlocked), personal_sign signed locally.
@@ -185,4 +275,4 @@ function teardown(h) {
   // deliberately NOT window.close() — closing is the race itself. The window dies with the process.
 }
 
-module.exports = { chain, server, hall, click, text, until, sleep, teardown, preflight, DEC, S10, RPC, SITE, W3, MS, OUT };
+module.exports = { chain, chainStore, server, hall, storePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };

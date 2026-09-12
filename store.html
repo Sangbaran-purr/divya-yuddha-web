@@ -18,8 +18,8 @@
     <link rel="stylesheet" href="css/threshold.css?v=s1g" />
     <link rel="stylesheet" href="css/pages.css?v=s1i" />
     <link rel="stylesheet" href="css/explore.css?v=2" />
-    <link rel="stylesheet" href="css/store.css?v=s2" />
-    <script src="config.js?v=s14"></script>
+    <link rel="stylesheet" href="css/store.css?v=s3" />
+    <script src="config.js?v=s16"></script>
   </head>
   <body class="treasury">
     <script src="js/ornament.js?v=s1j"></script>
@@ -62,6 +62,19 @@
     <main>
       <section class="section tight wrap" aria-label="The Store">
         <div class="lintel"><span></span><span class="display">The Store</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
+        <!-- ===== S-BUNDLE-1 — THE BUNDLE (PlayStore): the Torana + 500 DYC for USD 20, and the holder top-up.
+             FIRST on the page and in its own section: the Buy/Market tabs below are wave-card commerce against two
+             other contracts, and the Torana is neither. #bundle is the anchor the rite page and the Hall's gate
+             screen link to (RULINGS_2026-08-27 amendment 2026-09-12). Every word inside is ruled by
+             docs/STORE_DESIGN.md §11 and proven by mp/copyproof.js. ===== -->
+        <section id="bundle" class="b-sec" aria-label="The Torana bundle">
+          <div class="b-head-row">
+            <h2 class="b-sec-title">The Torana</h2>
+            <button type="button" id="b-refresh" class="st-refresh" title="Refresh" aria-label="Refresh the bundle">↻</button>
+          </div>
+          <div id="bundle-body" class="b-host" aria-live="polite"></div>
+        </section>
+
         <p class="prose" style="text-align:center;max-width:46ch;margin:0 auto 2.4vh">Buy wave cards outright from the Store, or trade them hand to hand in the Market. Priced in DYC. Every purchase and every trade is signed by your own wallet — never by ours.</p>
 
         <!-- connect (disconnected) + refresh (connected) + wallet plate -->
@@ -161,10 +174,10 @@
     </footer>
 
     <script src="js/light.js?v=s1e"></script>
-    <script src="js/wallet.js?v=s1m"></script>
+    <script src="js/wallet.js?v=s1n"></script>
     <script src="js/cards.js?v=s1e"></script>
     <script src="js/wave-registry.js?v=w3"></script>
-    <script src="js/store.js?v=s9"></script>
+    <script src="js/store.js?v=s10"></script>
     <script>
       (function () {
         var npTop = document.getElementById("nameplate-top");
@@ -174,6 +187,7 @@
           if (s.connected) addrTop.textContent = window.DYWallet.shortAddr(s.address);
         });
         window.DYStore.mountStore();
+        window.DYStore.mountBundle();   // S-BUNDLE-1 — the Torana tile, first on the page
         window.DYWallet.init();
       })();
     </script>

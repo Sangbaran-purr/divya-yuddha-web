@@ -821,8 +821,490 @@ window.DYStore = (function () {
     selectTab("buy");
   }
 
+  // =========================================================================
+  // S-BUNDLE-1 — THE BUNDLE (PlayStore): the Torana + 500 DYC for USD 20, and
+  // the holder top-up. Authority: docs/STORE_DESIGN.md (its §11 IS the copy,
+  // machine-proven by mp/copyproof.js) + MARKET_DESIGN_v1 §5 (12b) + GATES 12e.
+  //
+  // THE CEREMONY (owner ruling (a), 2026-09-12): this file's own inline road —
+  // signerRoad -> staticCall -> DYWallet.feeOverrides() -> send -> BOUNDED wait —
+  // plus resume-by-read. NO pending ledger, and the reason matters: the Hall
+  // persists pending records because a stake locks in escrow and the table may
+  // fail to open, so money can strand between two transactions. Here buyBundle
+  // and topUp are ATOMIC (the Torana and the DYC land together or nothing moves)
+  // and the store never custodies a stablecoin, so the only survivor of a page
+  // death is a standing ALLOWANCE: not stranded money, readable in one call, and
+  // resumed by re-rendering the tile. S-CEREMONY-1 is queued to make one module
+  // of the copies.
+  //
+  // THE PRE-FLIGHT RUNS BEFORE ANY APPROVE (GATES 12e). A MetaMask smart account
+  // (EIP-7702) HAS CODE, so AccessNFT's _safeMint calls onERC721Received on it and
+  // a delegate without that hook reverts the whole purchase. Simulating first —
+  // free, an eth_call — is what lets P5 say "Nothing was signed" and be true.
+  // =========================================================================
+  var PS_ABI = [
+    "function quote(address wallet) view returns (bool canBundle, uint256 topUpHeadroom, uint256 stock)",
+    "function inventory() view returns (uint256)",
+    "function topUpUsed(address) view returns (uint256)",
+    "function topUpRemaining(address) view returns (uint256)",
+    "function capPerWallet() view returns (uint256)",
+    "function capWindow() view returns (uint256)",
+    "function packSize() view returns (uint256)",
+    "function dycPerBundle() view returns (uint256)",
+    "function saleOpen() view returns (bool)",
+    "function allowedAsset(address) view returns (bool)",
+    "function bundlePrice(address) view returns (uint256)",
+    "function packPrice(address) view returns (uint256)",
+    "function buyBundle(address payAsset) returns (uint256)",
+    "function topUp(address payAsset, uint256 packs)",
+    "event Bundled(address indexed buyer, address indexed payAsset, uint256 price, uint256 dyc, uint256 tokenId)",
+    "event ToppedUp(address indexed buyer, address indexed payAsset, uint256 packs, uint256 dyc, uint256 paid)",
+  ];
+  var STABLE_ABI = [
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function approve(address spender, uint256 amount)",
+  ];
+  var BNFT_ABI = [
+    "function balanceOf(address) view returns (uint256)",
+    "function ownerOf(uint256) view returns (address)",
+  ];
+
+  // ── §11, VERBATIM. A [slot] in the doc is a concatenation break here; nothing else differs. ──
+  var B_P1 = "A Torana and 500 DYC - fifty Bronze tables' worth - for a wallet that came to play.";
+  var B_P2 = "USD 20 goes to the house now. Your Torana and 500 DYC land in the same transaction, or nothing moves.";
+  var B_P3 = "500 DYC for USD 5, up to 2,000 a week. Play money, delivered now.";
+  var B_P5 = "This wallet is a smart account and cannot receive the Torana yet. Switch to a standard account (MetaMask: 'switch back to regular account') and try again. Nothing was signed.";
+  var B_P6 = "The store is closed for now.";
+  var B_P6B = "The store is sold out for now.";
+  var B_P8 = "The store could not take this order - refresh and try again.";
+  // P4's fill carries its own preposition. With an exact date the sentence is the ruled one word for word ("...the
+  // window frees on 19 Sep 2026."); with the sentinel it reads "...the window frees within 7 days." Keeping "on" in
+  // the frame produced "frees on within 7 days" — the ruling's two halves did not compose (reported at S-BUNDLE-1).
+  function bP4(cap, when) { return "You have topped up " + cap + " DYC this week - the window frees " + when + "."; }
+  function bWhen(exact) { return exact && !/^within /.test(exact) ? "on " + exact : (exact || "within 7 days"); }
+  function bP7(sym, sum) { return "Not enough " + sym + " in this wallet - " + sum + " buys the bundle."; }
+
+  function bLs(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function psAddr() { return bLs("dystore::playStoreAddress") || (CFG.contracts && CFG.contracts.playStore); }
+  function usdcAddr() { return bLs("dystore::usdcAddress") || (CFG.contracts && CFG.contracts.usdc); }
+  function usdtAddr() { return bLs("dystore::usdtAddress") || (CFG.contracts && CFG.contracts.usdt); }
+  function accessAddr() { return bLs("dystore::accessAddress") || (CFG.contracts && CFG.contracts.accessNFT); }
+  function bundleConfigured() { return !!(psAddr() && usdcAddr() && usdtAddr() && accessAddr()); }
+  var BUNDLE_WAIT_MS = Number(bLs("dystore::waitMs")) || 60000;   // the bounded wait (the Hall's OPEN_WAIT_MS shape)
+  var TORANA_ART = "assets/tokens/Access_Torana_720.jpg";
+  var ASSETS = [{ key: "usdc", label: "USDC", addr: usdcAddr }, { key: "usdt", label: "USDT", addr: usdtAddr }];
+
+  var bState = null;      // the last read; null until the first read lands
+  var bChosen = null;     // the asset key the player picked (null = auto by balance)
+  var bPacks = 1;         // the top-up's pack count, 1..4
+  var bReceipt = null;    // the receipt card, once a road completes
+  // THE FLASH (defect found by tests/suites/bundle.js): a road's closing line was written into #b-msg and then
+  // destroyed a beat later by the repaint that follows the re-read — the top-up succeeded in SILENCE, the headroom
+  // quietly dropping with no word to the player. A flash is carried THROUGH the repaint and cleared when the player
+  // next acts.
+  var bFlash = null;      // { kind: "ok" | "bad", text }
+  var bGen = 0;           // read generation — a stale read never paints over a newer one
+
+  // ── THE READS. Every one catches to null; null means BUSY and is rendered as
+  //    "unavailable", never as a false Sold out and never as a false non-holder. ──
+  function readBundle() {
+    var gen = ++bGen;
+    if (!bundleConfigured()) return Promise.resolve(null);
+    return loadE().then(function (ethers) {
+      var p = readProvider();
+      var ps = new ethers.Contract(psAddr(), PS_ABI, p);
+      var nft = new ethers.Contract(accessAddr(), BNFT_ABI, p);
+      var me = (window.DYWallet.state && window.DYWallet.state.address) || null;
+      var nul = function () { return null; };
+      var jobs = [
+        ps.saleOpen().catch(nul),
+        ps.inventory().catch(nul),
+        ps.capPerWallet().catch(nul),
+        ps.packSize().catch(nul),
+        me ? nft.balanceOf(me).catch(nul) : Promise.resolve(null),
+        me ? ps.topUpRemaining(me).catch(nul) : Promise.resolve(null),
+      ];
+      ASSETS.forEach(function (a) {
+        var t = new ethers.Contract(a.addr(), STABLE_ABI, p);
+        jobs.push(ps.bundlePrice(a.addr()).catch(nul));
+        jobs.push(ps.packPrice(a.addr()).catch(nul));
+        jobs.push(me ? t.balanceOf(me).catch(nul) : Promise.resolve(null));
+        jobs.push(me ? t.allowance(me, psAddr()).catch(nul) : Promise.resolve(null));
+      });
+      return Promise.all(jobs).then(function (r) {
+        if (gen !== bGen) return null;    // a newer read won
+        var st = { ethers: ethers, me: me, open: r[0], stock: r[1], cap: r[2], packSize: r[3], torana: r[4], headroom: r[5], asset: {} };
+        var i = 6;
+        ASSETS.forEach(function (a) {
+          st.asset[a.key] = { label: a.label, addr: a.addr(), bundlePrice: r[i], packPrice: r[i + 1], balance: r[i + 2], allowance: r[i + 3] };
+          i += 4;
+        });
+        bState = st;
+        return st;
+      });
+    }).catch(function () { return null; });
+  }
+
+  // ── THE WINDOW'S DATE (owner ruling (d)) — exact from the wallet's OWN ToppedUp
+  //    logs; "within 7 days" whenever the scan is busy or incomplete. ──
+  function windowFreesOn(st) {
+    var fallback = "within 7 days";
+    if (!st || !st.me) return Promise.resolve(fallback);
+    return loadE().then(function (ethers) {
+      var p = readProvider();
+      var ps = new ethers.Contract(psAddr(), PS_ABI, p);
+      var from = Number(CFG.bundleDeployBlock || CFG.marketDeployBlock || CFG.deployBlock || 0);
+      return p.getBlockNumber().then(function (tip) {
+        var span = Number(bLs("dystore::scanSpan")) || 18000;
+        var start = Math.max(from, tip - 6 * 24 * 60 * 30);   // 7 days of Polygon blocks, generously bounded
+        return ps.queryFilter(ps.filters.ToppedUp(st.me), start, tip).then(function (evs) {
+          if (!evs || !evs.length) return fallback;
+          var win = st.cap && st.packSize ? 604800 : 604800;
+          return Promise.all(evs.slice(-8).map(function (e) { return p.getBlock(e.blockNumber).catch(function () { return null; }); }))
+            .then(function (blocks) {
+              var now = Math.floor(Date.now() / 1000), live = [];
+              blocks.forEach(function (b) { if (b && b.timestamp > now - win) live.push(b.timestamp); });
+              if (!live.length) return fallback;
+              var frees = new Date((Math.min.apply(null, live) + win) * 1000);
+              return frees.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+            });
+        }).catch(function () { return fallback; });
+      }).catch(function () { return fallback; });
+    }).catch(function () { return fallback; });
+  }
+
+  // ── the ruled refusal lines, from a revert ──
+  function bundleErr(e, ctx) {
+    var s = (e && (e.shortMessage || e.reason || e.message)) || "";
+    if (/user rejected|denied|ACTION_REJECTED/i.test(s)) return "Cancelled in your wallet.";
+    if (/ERC721InvalidReceiver/.test(s)) return B_P5;
+    if (/\bClosed\b/.test(s)) return B_P6;
+    if (/InventoryShort/.test(s)) return B_P6B;
+    if (/CapExceeded/.test(s)) return bP4(fmtCap(), bWhen(ctx && ctx.when));
+    if (/AlreadyHoldsTorana/.test(s)) return "This wallet already holds a Torana - the top-up is yours instead.";
+    if (/NotToranaHolder/.test(s)) return "The top-up is for Torana holders - buy the bundle first.";
+    if (/ERC20InsufficientBalance|transfer amount exceeds balance/.test(s)) return bP7((ctx && ctx.sym) || "USDC", (ctx && ctx.sum) || "USD 20");
+    if (/AssetNotAllowed|PriceUnset|ZeroPacks|BadParams/.test(s)) return B_P8;
+    return B_P8;
+  }
+  function fmtCap() {
+    var c = bState && bState.cap;
+    if (c == null) return "2,000";
+    return Number(c / 1000000000000000000n).toLocaleString("en-US");
+  }
+  function usd6(v) { return "USD " + String(Number(v) / 1000000); }
+
+  // ── CAN THIS WALLET EVEN HOLD A TORANA? (GATES 12e; the defect P2 found)
+  //    buyBundle pulls the stablecoin BEFORE it mints, so a staticCall with no allowance reverts on the ERC20 leg and
+  //    hides the receiver problem entirely — the wallet would be asked to approve first, which would break P5's
+  //    "Nothing was signed" in the very case P5 exists for. So the hook is probed DIRECTLY, allowance-free, exactly
+  //    as OpenZeppelin's _checkOnERC721Received does it: call onERC721Received on the wallet and require the magic
+  //    value. A plain EOA has no code and is served without a probe; an EIP-7702 smart account has code and answers
+  //    for itself. No approval exists at this point, and none is offered if the answer is no.
+  var ERC721_MAGIC = "0x150b7a02";
+  function canReceiveTorana(ethers, provider, me) {
+    return provider.getCode(me).then(function (code) {
+      if (!code || code === "0x") return true;                       // a plain EOA — nothing to ask
+      var i = new ethers.Interface(["function onERC721Received(address,address,uint256,bytes) returns (bytes4)"]);
+      var data = i.encodeFunctionData("onERC721Received", [psAddr(), ethers.ZeroAddress, 0, "0x"]);
+      return provider.call({ to: me, data: data })
+        .then(function (ret) { return typeof ret === "string" && ret.slice(0, 10).toLowerCase() === ERC721_MAGIC; })
+        .catch(function () { return false; });
+    }).catch(function () { return true; });   // a read that FAILED is not a refusal — the road's own gates still stand
+  }
+
+  // ── the bounded wait: a confirmation that never hangs the tile ──
+  function boundedWait(tx) {
+    var done = false, timer = null;
+    return Promise.race([
+      tx.wait().then(function (r) { done = true; return { receipt: r }; }),
+      new Promise(function (res) { timer = setTimeout(function () { if (!done) res({ slow: true }); }, BUNDLE_WAIT_MS); }),
+    ]).then(function (o) { if (timer) clearTimeout(timer); return o; });
+  }
+
+  // =========================== THE ROADS ===========================
+  // approve is EXACT (never max); the pre-flight precedes it; the receipt is read from chain.
+  function bundleBuy(assetKey, host, msg, btn) {
+    var a = bState && bState.asset[assetKey];
+    if (!a) return;
+    var sym = a.label, sum = usd6(a.bundlePrice);
+    bFlash = null;
+    btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet can be served…";
+    // P7 lands here, from a READ, before any approval is offered
+    if (a.balance != null && a.bundlePrice != null && a.balance < a.bundlePrice) {
+      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = bP7(sym, sum); return;
+    }
+    var dycBefore = null;
+    signerRoad().then(function (r) {
+      var ps = new r.ethers.Contract(psAddr(), PS_ABI, r.signer);
+      var stable = new r.ethers.Contract(a.addr, STABLE_ABI, r.signer);
+      // THE RECEIVER PROBE — first, free, and before any approval exists
+      return canReceiveTorana(r.ethers, r.provider, bState.me).then(function (canHold) {
+        if (!canHold) { var e = new Error("ERC721InvalidReceiver"); e.__receiver = true; throw e; }
+        return r;
+      }).then(function () { return { r: r, ps: ps, stable: stable }; });
+    }).then(function (k) {
+      var r = k.r, ps = k.ps, stable = k.stable;
+      // ── THE SECOND GATE, still before any approve: a full simulation. With no
+      //    allowance yet it CANNOT see the receiver problem (buyBundle pulls the
+      //    stablecoin before it mints — that is what the probe above is for), but it
+      //    does catch Closed, InventoryShort and AlreadyHoldsTorana for free.
+      return ps.buyBundle.staticCall(a.addr).catch(function (e) {
+        var s = (e && (e.shortMessage || e.reason || e.message)) || "";
+        if (/ERC721InvalidReceiver/.test(s)) throw e;                 // P5 — stop, nothing signed
+        if (/\bClosed\b|InventoryShort|AlreadyHoldsTorana/.test(s)) throw e;
+        return null;                                                   // allowance-short: expected here, continue
+      }).then(function () {
+        var need = a.allowance != null && a.allowance >= a.bundlePrice;
+        if (need) return null;
+        msg.textContent = "Approve exactly " + sum + " in your wallet…";
+        return window.DYWallet.feeOverrides().then(function (fee) { return stable.approve(psAddr(), a.bundlePrice, fee); })
+          .then(function (tx) { msg.textContent = "Approving… waiting for confirmation."; return boundedWait(tx); });
+      }).then(function () {
+        msg.textContent = "Simulating the purchase…";
+        return ps.buyBundle.staticCall(a.addr);                        // the real pre-flight, allowance in place
+      }).then(function () {
+        var dyc = new r.ethers.Contract(CFG.contracts.dycoin, ["function balanceOf(address) view returns (uint256)"], r.provider);
+        return dyc.balanceOf(bState.me).catch(function () { return null; }).then(function (b) {
+          dycBefore = b;
+          msg.textContent = "Confirm the purchase in your wallet…";
+          return window.DYWallet.feeOverrides().then(function (fee) { return ps.buyBundle(a.addr, fee); });
+        });
+      }).then(function (tx) {
+        msg.textContent = "Buying… waiting for confirmation.";
+        return boundedWait(tx).then(function (o) { return { r: r, o: o, tx: tx }; });
+      });
+    }).then(function (w) {
+      if (w.o.slow) { msg.className = "st-msg"; msg.textContent = "Still confirming on chain. Nothing is lost — refresh when it lands."; btn.disabled = false; return; }
+      return bundleReceipt(w.r, w.o.receipt, dycBefore, host);
+    }).catch(function (e) {
+      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = bundleErr(e, { sym: sym, sum: sum });
+    });
+  }
+
+  function bundleTopUp(assetKey, packs, host, msg, btn) {
+    var a = bState && bState.asset[assetKey];
+    if (!a) return;
+    var sym = a.label, total = a.packPrice == null ? null : a.packPrice * BigInt(packs);
+    var sum = total == null ? "USD 5" : usd6(total);
+    bFlash = null;
+    btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet can be served…";
+    if (a.balance != null && total != null && a.balance < total) {
+      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = bP7(sym, sum); return;
+    }
+    signerRoad().then(function (r) {
+      var ps = new r.ethers.Contract(psAddr(), PS_ABI, r.signer);
+      var stable = new r.ethers.Contract(a.addr, STABLE_ABI, r.signer);
+      return ps.topUp.staticCall(a.addr, BigInt(packs)).catch(function (e) {
+        var s = (e && (e.shortMessage || e.reason || e.message)) || "";
+        if (/\bClosed\b|InventoryShort|CapExceeded|NotToranaHolder/.test(s)) throw e;
+        return null;                                                   // allowance-short: expected
+      }).then(function () {
+        var have = a.allowance != null && total != null && a.allowance >= total;
+        if (have) return null;
+        msg.textContent = "Approve exactly " + sum + " in your wallet…";
+        return window.DYWallet.feeOverrides().then(function (fee) { return stable.approve(psAddr(), total, fee); })
+          .then(function (tx) { msg.textContent = "Approving… waiting for confirmation."; return boundedWait(tx); });
+      }).then(function () {
+        msg.textContent = "Simulating the top-up…";
+        return ps.topUp.staticCall(a.addr, BigInt(packs));
+      }).then(function () {
+        msg.textContent = "Confirm the top-up in your wallet…";
+        return window.DYWallet.feeOverrides().then(function (fee) { return ps.topUp(a.addr, BigInt(packs), fee); });
+      }).then(function (tx) {
+        msg.textContent = "Topping up… waiting for confirmation.";
+        return boundedWait(tx).then(function (o) { return { r: r, o: o }; });
+      });
+    }).then(function (w) {
+      if (w.o.slow) { msg.className = "st-msg"; msg.textContent = "Still confirming on chain. Nothing is lost — refresh when it lands."; btn.disabled = false; return; }
+      bFlash = { kind: "ok", text: "Topped up — the DYC is in your wallet." };   // survives the repaint below
+      return readBundle().then(function () { paintBundle(host); });
+    }).catch(function (e) {
+      btn.disabled = false; msg.className = "st-msg bad";
+      windowFreesOn(bState).then(function (when) {
+        bFlash = { kind: "bad", text: bundleErr(e, { sym: sym, sum: sum, when: when }) };   // `when` already carries its preposition via bWhen
+        msg.textContent = bFlash.text;
+      });
+    });
+  }
+
+  // ── THE RECEIPT: the tokenId from the buy's OWN Bundled event, verified by ownerOf ──
+  function bundleReceipt(r, receipt, dycBefore, host) {
+    var ethers = r.ethers, iface = new ethers.Interface(PS_ABI), tokenId = null, dyc = null;
+    (receipt && receipt.logs ? receipt.logs : []).forEach(function (l) {
+      try { var d = iface.parseLog({ topics: l.topics, data: l.data }); if (d && d.name === "Bundled") { tokenId = d.args.tokenId; dyc = d.args.dyc; } } catch (e) {}
+    });
+    var nft = new ethers.Contract(accessAddr(), BNFT_ABI, r.provider);
+    var dycC = new ethers.Contract(CFG.contracts.dycoin, ["function balanceOf(address) view returns (uint256)"], r.provider);
+    return Promise.all([
+      tokenId == null ? Promise.resolve(null) : nft.ownerOf(tokenId).catch(function () { return null; }),
+      dycC.balanceOf(bState.me).catch(function () { return null; }),
+    ]).then(function (x) {
+      bReceipt = {
+        tokenId: tokenId, owner: x[0], mine: !!(x[0] && bState.me && x[0].toLowerCase() === bState.me.toLowerCase()),
+        dyc: dyc, delta: (x[1] != null && dycBefore != null) ? x[1] - dycBefore : null,
+        hash: receipt && receipt.hash,
+      };
+      return readBundle().then(function () { paintBundle(host); });
+    });
+  }
+
+  // =========================== THE TILE ===========================
+  function toranaFigure() {
+    var wrap = el("div", "b-art");
+    var img = document.createElement("img");
+    img.setAttribute("src", TORANA_ART); img.setAttribute("width", "340"); img.setAttribute("height", "510");
+    img.setAttribute("loading", "lazy"); img.setAttribute("decoding", "async");
+    img.setAttribute("alt", "TORANA — The Access Card");
+    var ph = el("div", "torana-ph", '<span class="torana-ph-t">TORANA</span><span class="torana-ph-s">The Access Card</span>');
+    ph.style.display = "none";
+    img.onerror = function () { img.style.display = "none"; ph.style.display = "flex"; };
+    wrap.appendChild(img); wrap.appendChild(ph);
+    return wrap;
+  }
+
+  // THE STOCK LINE (owner ruling (b)) — no count, ever: one shared pool makes any
+  // "N bundles" a fiction. In stock / Sold out / unavailable, nothing more.
+  function stockLine(st) {
+    if (!st || st.stock == null || st.open == null) return { cls: "b-stock busy", text: "stock unavailable - refresh to retry" };
+    if (st.open === false) return { cls: "b-stock bad", text: B_P6 };
+    if (st.packSize != null && st.stock < st.packSize) return { cls: "b-stock bad", text: B_P6B };
+    return { cls: "b-stock ok", text: "In stock" };
+  }
+
+  function assetPicker(st, onPick) {
+    var row = el("div", "b-assets");
+    var auto = bChosen;
+    if (!auto) {
+      ASSETS.forEach(function (a) {
+        var s = st.asset[a.key];
+        if (!auto && s && s.balance != null && s.bundlePrice != null && s.balance >= s.bundlePrice) auto = a.key;
+      });
+      auto = auto || "usdc";
+    }
+    ASSETS.forEach(function (a) {
+      var s = st.asset[a.key];
+      var b = el("button", "b-asset" + (auto === a.key ? " on" : ""));
+      b.type = "button";
+      b.textContent = a.label + (s && s.balance != null ? " · " + (Number(s.balance) / 1000000).toFixed(2) : " · —");
+      b.onclick = function () { bChosen = a.key; onPick(); };
+      row.appendChild(b);
+    });
+    return { row: row, chosen: auto };
+  }
+
+  function paintBundle(host) {
+    var st = bState;
+    host.innerHTML = "";
+    if (!bundleConfigured()) { register(host, "The bundle is not yet open", "The Torana bundle opens with the store's own contract. Nothing is for sale here yet."); return; }
+    var card = el("div", "b-card");
+    card.appendChild(toranaFigure());
+    var body = el("div", "b-body");
+    body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
+    body.appendChild(txt("div", "b-plus", "+ 500 DYC"));
+    body.appendChild(txt("p", "b-line", B_P1));
+    body.appendChild(txt("div", "b-price", "USD 20 — USDC or USDT"));
+    var stk = stockLine(st);
+    body.appendChild(txt("div", stk.cls, stk.text));
+    var msg = el("div", "st-msg"); msg.id = "b-msg";
+    if (bFlash) { msg.className = "st-msg " + (bFlash.kind || ""); msg.textContent = bFlash.text; }
+
+    // the receipt wins the tile once a buy lands
+    if (bReceipt) {
+      var rc = el("div", "b-receipt");
+      rc.appendChild(txt("div", "b-rc-h", bReceipt.mine ? "Torana #" + bReceipt.tokenId + " is yours." : "The purchase landed."));
+      rc.appendChild(txt("div", "b-rc-l", bReceipt.dyc != null ? "+ " + (bReceipt.dyc / 1000000000000000000n).toString() + " DYC, liquid, in your wallet." : "+ 500 DYC, liquid, in your wallet."));
+      if (bReceipt.hash) {
+        var lk = el("a", "b-rc-tx"); lk.href = ((CFG.chain.blockExplorerUrls || [])[0] || "https://polygonscan.com") + "/tx/" + bReceipt.hash;
+        lk.target = "_blank"; lk.rel = "noopener noreferrer"; lk.textContent = "the transaction";
+        rc.appendChild(lk);
+      }
+      var door = el("a", "st-act b-door"); door.href = "mp/hall.html"; door.textContent = "Sit at a table";  // UNSTAMPED (ENTRY-1 R2)
+      rc.appendChild(door);
+      body.appendChild(rc); body.appendChild(msg);
+      card.appendChild(body); host.appendChild(card); return;
+    }
+
+    if (!st || !connectedOk() || !st.me) {
+      var cta = el("button", "st-act b-connect"); cta.type = "button"; cta.textContent = "Connect wallet";
+      cta.onclick = function () { cta.disabled = true; window.DYWallet.connect().catch(function () {}).then(function () { cta.disabled = false; }); };
+      body.appendChild(cta); body.appendChild(msg);
+      card.appendChild(body); host.appendChild(card); return;
+    }
+
+    var holder = st.torana == null ? null : st.torana > 0n;
+    if (holder === null) {
+      body.appendChild(txt("div", "b-stock busy", "your Torana could not be read - refresh to retry"));
+      body.appendChild(msg); card.appendChild(body); host.appendChild(card); return;
+    }
+
+    var pick = assetPicker(st, function () { paintBundle(host); });
+    body.appendChild(pick.row);
+
+    if (!holder) {
+      body.appendChild(txt("p", "b-commit", B_P2));
+      var buy = el("button", "st-act b-buy"); buy.type = "button"; buy.textContent = "Buy the bundle";
+      var closed = st.open === false || (st.packSize != null && st.stock != null && st.stock < st.packSize) || st.stock == null;
+      buy.disabled = !!closed;
+      buy.onclick = function () { bundleBuy(pick.chosen, host, msg, buy); };
+      body.appendChild(buy);
+    } else {
+      body.appendChild(txt("p", "b-commit", B_P3));
+      var head = st.headroom;
+      if (head == null) {
+        body.appendChild(txt("div", "b-stock busy", "your weekly headroom could not be read - refresh to retry"));
+      } else if (head === 0n) {
+        var capped = txt("p", "b-cap", bP4(fmtCap(), bWhen(null)));
+        body.appendChild(capped);
+        windowFreesOn(st).then(function (when) { capped.textContent = bP4(fmtCap(), bWhen(when)); });
+      } else {
+        // the separator matches P4's own [2,000] — the two numbers sit inches apart on the same tile
+        body.appendChild(txt("div", "b-head", "you can top up " + Number(head / 1000000000000000000n).toLocaleString("en-US") + " more DYC this week"));
+        var maxPacks = Number(head / (st.packSize || 500000000000000000000n));
+        if (maxPacks > 4) maxPacks = 4;
+        var pk = el("div", "b-packs");
+        for (var n = 1; n <= Math.max(1, maxPacks); n++) {
+          (function (n) {
+            var b = el("button", "b-pack" + (bPacks === n ? " on" : "")); b.type = "button"; b.textContent = "×" + n;
+            b.onclick = function () { bPacks = n; paintBundle(host); };
+            pk.appendChild(b);
+          })(n);
+        }
+        body.appendChild(pk);
+        if (bPacks > Math.max(1, maxPacks)) bPacks = 1;
+        var tu = el("button", "st-act b-topup"); tu.type = "button";
+        tu.textContent = "Top up " + Number((st.packSize || 500000000000000000000n) / 1000000000000000000n * BigInt(bPacks)).toLocaleString("en-US") + " DYC";
+        tu.disabled = st.open === false;
+        tu.onclick = function () { bundleTopUp(pick.chosen, bPacks, host, msg, tu); };
+        body.appendChild(tu);
+      }
+    }
+    body.appendChild(msg);
+    card.appendChild(body);
+    host.appendChild(card);
+  }
+
+  // ── MOUNT. Resume-by-read: every mount, wallet change and refresh re-reads the
+  //    chain, so a standing allowance from a dead page simply reappears as state. ──
+  function mountBundle() {
+    var host = document.getElementById("bundle-body");
+    if (!host) return;
+    function refresh() { return readBundle().then(function () { paintBundle(host); }); }
+    window.DYWallet.onChange(function () { bReceipt = null; bFlash = null; refresh(); });
+    var rb = document.getElementById("b-refresh");
+    if (rb) rb.addEventListener("click", function () { bReceipt = null; bFlash = null; refresh(); });
+    paintBundle(host);
+    refresh();
+    return refresh;
+  }
+
   return {
     mountStore: mountStore,
+    mountBundle: mountBundle,
+    bundleConfigured: bundleConfigured,
     saleConfigured: saleConfigured,
     marketConfigured: marketConfigured,
     openListDialog: openListDialog,

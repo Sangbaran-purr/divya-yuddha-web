@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="css/pages.css?v=s1i" />
     <link rel="stylesheet" href="css/plates.css?v=s1h2" />
     <link rel="preload" as="image" href="assets/plates/rite.webp" type="image/webp" fetchpriority="high" />
-    <script src="config.js?v=s14"></script>
+    <script src="config.js?v=s16"></script>
     <style>
       /* THE THRESHOLD NOTICE — one parchment interstitial before the door (S2) */
       #thresh {
@@ -225,6 +225,12 @@
         padding: 0.7rem 0.9rem 0;
         border-top: 1px solid rgba(138, 111, 58, 0.4);
       }
+      /* S-BUNDLE-1 — A PRE-EXISTING DEFECT, found by this rung's browser walk: css/threshold.css's `p { display:
+         block }` (the game-repo law block) OVERRIDES the UA [hidden] rule, so the ruled door line has been visible in
+         EVERY state since S-GATE-1 shipped — including to a bearer, whose own comment says non-holder only. The page
+         already carries this guard for three other elements (.rite-dyc, .rite-register, #rite-action); this one was
+         missed. One line, and it fixes the ruled line and the second door together. */
+      .rite-doorline[hidden] { display: none; }
       @media (prefers-reduced-motion: reduce) {
         .torana-frame {
           box-shadow:
@@ -377,6 +383,10 @@
           <div id="rite-line" class="state-line" aria-live="polite"></div>
           <!-- S-GATE-1 (G4/P1) — the ruled door line; shown ONLY to a connected non-holder (isHolder === false). Verbatim, never reworded (docs/RULINGS_2026-08-27.md rule 3). -->
           <p id="rite-doorline" class="rite-doorline" hidden>The Torana opens this door. It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage.</p>
+          <!-- S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 — THE SECOND DOOR. Rule 3's sentence above is
+               unchanged; from 2026-09-12 the Torana can also be BOUGHT, so a line naming only the drop is an
+               incomplete truth. Ruled words, reworded never. -->
+          <p id="rite-buyline" class="rite-doorline" hidden><a href="store.html#bundle">Or buy it now: a Torana and 500 DYC for USD 20.</a></p>
           <!-- S-CONSOLE-DYC-1: bearer-only DYC balance (hidden until isHolder); coin is CSS-circle-clipped -->
           <div id="rite-dyc" class="rite-dyc" hidden>
             <img class="rite-dyc-coin" src="assets/dyc_coin_96.png" width="44" height="44" alt="" aria-hidden="true" />
@@ -408,7 +418,7 @@
         <div class="torana-copy">
           <h2 class="torana-title">TORANA — The Access Card</h2>
           <p class="torana-sub">One card. The whole launch set, playable.</p>
-          <p class="torana-status">The Rite is not yet open. Claims begin on the owner's word, and this page will announce it.</p>
+          <p class="torana-status">The Rite is not yet open. The Torana can be bought now in the store - a Torana and 500 DYC for USD 20.</p>
         </div>
       </section>
     </main>
@@ -460,7 +470,7 @@
     </footer>
 
     <script src="js/light.js?v=s1e"></script>
-    <script src="js/wallet.js?v=s1m"></script>
+    <script src="js/wallet.js?v=s1n"></script>
     <script>
       (function () {
         var CFG = window.DY_CONFIG;
@@ -473,6 +483,10 @@
         var reg = document.getElementById("rite-register");
         var buy = document.getElementById("rite-buy");
         var door = document.getElementById("rite-doorline"); // S-GATE-1 — the ruled door line (non-holder only)
+        var buyline = document.getElementById("rite-buyline"); // S-BUNDLE-1 — the second door FOLLOWS it, in visibility too:
+                                                              //   a Torana holder is never invited to buy what they hold
+                                                              //   (and buyBundle would refuse them), and the sentence must
+                                                              //   never stand orphaned without rule 3's above it.
         var npTop = document.getElementById("nameplate-top");
         var addrTop = document.getElementById("addr-top");
 
@@ -686,6 +700,7 @@
           if (reg) reg.hidden = true; // S-DECL-2 — register door defaults hidden; only the no-mark state reveals it
           if (buy) buy.hidden = true; // S-RITE-3 — buy door defaults hidden; only a live-voucher no-mark state reveals it
           if (door) door.hidden = true; // S-GATE-1 — door line defaults hidden; only the connected non-holder state reveals it
+          if (buyline) buyline.hidden = true;
           if (btn) btn.hidden = false; // S-RITE-4 — the action box is visible in EVERY state except the voucher branch (which hides it)
           stopVoucherPoll(); // S-LIVE-FIX-1 (C2) — every state change stops the poll; the no-mark branch restarts it if still unapproved
 
@@ -759,6 +774,7 @@
           // not a bearer yet — a connected wallet with no Torana. S-GATE-1 (G4/P1): the ruled door
           // line stands here, alongside the presale/register road (the honest way in). No pass, no Enter.
           if (door) door.hidden = false;
+          if (buyline) buyline.hidden = false;
           if (CFG.claimOpen) {
             // (future) a real authorized-minter/sale module wires here; on its
             // success it calls window.__celebrateClaim(). Not present in S1.

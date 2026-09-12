@@ -45,6 +45,22 @@ window.DY_CONFIG = {
     // (seeds deferred to W3-MAINNET-SEED). Prices are DYC-native (the `dycoin` money-stack coin above), W-PRICE-1.
     waveCardSale: "0x89f477BEa193956a724f3222fF4DF0f5267F6E92", // W3-REDEPLOY-WAVE — reborn WaveCardSale (priceOf/remainingOf/buy); deploy block 92465315
     waveCardMarket: "0x5Ab2F48Eae60169A4028e7ba8bA3cA664Bea5Fe1", // W3-REDEPLOY-WAVE — reborn WaveCardMarket (listedIds/listingOf/list/buy/delist); deploy block 92465315
+
+    // S-BUNDLE-1 — the PLAYSTORE, live on mainnet 2026-09-12 (W3-BUNDLE-3). The house-sold Torana bundle (USD 20 ->
+    // a Torana + 500 DYC, liquid) and the holder top-up (USD 5 -> 500 DYC, capped 2,000 per rolling 7 days), both
+    // paid in a 6-decimal stablecoin. THIS IS AN ERC1967 PROXY: the address below is the store forever; its
+    // implementation (0xABBA81403BdCfA8Dfa36C12991c920FcD49B5829) is upgradeable only by the 48h Timelock, which also
+    // owns the store. Opened, funded with 499,000 DYC, and proven on a mainnet fork before a single live cast —
+    // every transaction is recorded in the web3 repo's MAINNET_STACK_2026-08-15 (W3-BUNDLE-3 addendum).
+    //   For the LOCAL anvil proof, localStorage["dystore::playStoreAddress"] wins (the dyhall::stakeEscrowAddress
+    //   idiom). Prices are NEVER hardcoded in the page — bundlePrice/packPrice are read from this contract.
+    playStore: "0x3c7181a254ef9A8E77d8766694CeBA5ae103cb40", // S-BUNDLE-1 PlayStore proxy (mainnet, block 93676726)
+
+    // The two stablecoins the store takes. Named here rather than in js/store.js because this file is the single
+    // place an address may live (the config-value-indirection law in store.js's own header). Both are 6-decimal.
+    // Overridable for the anvil proof by dystore::usdcAddress / dystore::usdtAddress (MockStable stands in).
+    usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // USDC-native (Polygon, 6 dec)
+    usdt: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", // USDT0 (Polygon, 6 dec; a void-return transfer — SafeERC20's case)
   },
 
   // S-HALL-L1 (D3) — the DY Match Server (M-P1 lobby / M-P4–M-P6 staked matches). The Hall reads live tables over this

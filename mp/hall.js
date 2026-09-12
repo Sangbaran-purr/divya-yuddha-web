@@ -1483,6 +1483,9 @@
     // S-GATE-1 (G4): the ruled door line, verbatim (docs/RULINGS_2026-08-27.md rule 3). The line ONLY; the rite door is the way in.
     return '<div class="hall-gate">' +
       '<p class="hall-gate-line">The Torana opens this door. It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage.</p>' +
+      // S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 — THE SECOND DOOR. Rule 3's sentence above is unchanged;
+      //   the Torana can now also be BOUGHT (PlayStore, live 2026-09-12), so the gate names both roads. Ruled words.
+      '<p class="hall-gate-line hall-gate-buy"><a href="../store.html#bundle">Or buy it now: a Torana and 500 DYC for USD 20.</a></p>' +
       '<a class="hall-act hall-gate-door" href="../rite.html">To the presale — the Torana follows</a></div>';
   }
 
