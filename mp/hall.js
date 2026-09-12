@@ -1132,6 +1132,8 @@
     if (isFrameMatch(matchView)) {   // S-HALL-WIRE-1 — a FREE match plays in the game's own screen, beneath
       root.innerHTML = frameMatchHTML(matchView);
       var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { leaveMatch(matchView); };
+      var fst = document.querySelector("[data-settle]");   // S-HALL-STAKED-1 (K4) — the cast, from the strip above the frame
+      if (fst && !fst.disabled) fst.onclick = function () { var sl = slipForMatch(matchView); if (sl && sl.slip) ceremonySettle(sl.slip); };
       paintClocks();                 // S-HALL-STRIPS-1 — the strip is rewritten on every update; paint it now, not a tick later
       syncFrameHost(); return;
     }
@@ -1180,16 +1182,31 @@
   var WIRE_READY_MS = Number(lsGet("dyhall::wireReadyMs")) || 15000;   // R4 — no wire:ready in time: that match falls back to the Hall's text table (the override is proof-only, like dyhall::devAccess)
   var FRAME_FALLBACK_LINE = "The battle screen did not answer - this match plays on in the Hall's table.";
   var WIRE_SHAPES = {                 // §2, parent -> frame, exactly
-    "wire:start": ["matchId", "seat", "seed", "p0Faction", "p1Faction"],
+    "wire:start": ["matchId", "seat", "seed", "p0Faction", "p1Faction"],          // FREE (11b)
     "wire:move": ["matchId", "seq", "move"],
+    "wire:view": ["matchId", "seq", "view"],                                      // STAKED (11d) — events ride INSIDE view.events
     "wire:reject": ["matchId", "reason"],
     "wire:result": ["matchId", "winner", "roundWins", "forfeit"],
   };
-  var WALL_RE = /0x[0-9a-fA-F]{40}|"(?:address|opponent|stake|escrow[A-Za-z]*|key|privateKey|signature|slip|p0|p1)"\s*:/;
-  var wireF = null;                   // { matchId, deal, el, ready, started, moves{seq:move}, sent, actPending, result, resultSent, fallback, readyTimer }
+  var WIRE_START_STAKED = ["matchId", "seat", "view", "p0Faction", "p1Faction"];  // STAKED (11d) — a view, and never a seed
+  //  S-HALL-STAKED-1 (R3) — THE WALL WIDENS. The 40-hex form was blind to the server's own seat names, which are wallet
+  //  SHORT forms (shortName: 0x7099…79C8). Four hex after 0x catches both, and matches nothing the frame legitimately
+  //  carries: a matchId ("t2-15365fdf"), an escrow id ("12"), a card name — all measured in the suite.
+  var WALL_RE = /0x[0-9a-fA-F]{4}|"(?:address|opponent|stake|escrow[A-Za-z]*|key|privateKey|signature|slip|p0|p1)"\s*:/;
+  var wireF = null;                   // { matchId, road, deal, el, ready, started, moves{seq:move}, sent, views[], viewSeq, actPending, result, resultSent, fallback, readyTimer }
+  //  S-HALL-STAKED-1 (R2) — the Hall strips the seat names (wallet short forms) from every view before it leaves. The
+  //  frame refuses a view that still carries either key (BW3b R2) — the second lock, in the other repo.
+  function hallView(v) { var c = {}, k; for (k in v) if (k !== "myName" && k !== "oppName") c[k] = v[k]; return c; }
   var wireRefused = [];               // every refusal, loud (the suites count them)
   function refuseWire(why, data) { wireRefused.push(why); try { console.warn("[hall wire] refused:", why, data == null ? "" : data); } catch (e) {} }
-  function isFrameMatch(v) { return !!(v && !v.redacted && wireF && !wireF.fallback && wireF.matchId === String(v.matchId)); }
+  function newWireF(mid, road, deal) {
+    return { matchId: mid, road: road, deal: deal, el: null, ready: false, started: false, moves: {}, sent: 0, views: [], viewSeq: 0,
+             actPending: false, result: null, resultSent: false, fallback: false, readyTimer: null };
+  }
+  function isFrameMatch(v) {          // S-HALL-STAKED-1 (R4) — road-aware: the staked road's view IS redacted
+    if (!(v && wireF && !wireF.fallback && wireF.matchId === String(v.matchId))) return false;
+    return wireF.road === "staked" ? !!v.redacted : !v.redacted;
+  }
   function frameMatchHTML(v) {
     // R5 — the matched moment ends when BOTH its 2s and the frame's wire:ready have happened (it used to end at 2s
     //   regardless, and a slow frame then showed its own "waiting for the table…" plate in the battle's place). No
@@ -1199,6 +1216,14 @@
     //   the thinking clock whose label says whose move it is), in a fixed one-line slot so a line coming or going
     //   never re-lays out the frame mid-turn. The frame road paints the clock by §8b (see paintClocks).
     if (!v.outcome) return '<div class="hall-frame-strip">' + statusStrip(v) + '</div>';
+    // S-HALL-STAKED-1 (K4) — THE STAKED RESULT: the dressed settlement strip, re-homed from the text battle exactly as
+    //   it is drawn there (the same outcome line, the same settlementStrip — every ruled variant, the cast button,
+    //   §11 byte-identical). The frame's own result face sits beneath (N3); the Hall owns the cast and the exit.
+    if (wireF.road === "staked") {
+      return '<div class="hall-frame-settle"><div class="hall-mresult">' + outcomeLine(v) + '</div>' +
+        settlementStrip(slipForMatch(v)) +
+        '<div class="hall-controls-act"><button class="hall-act hall-mleave" data-leave="1">back to the Hall</button></div></div>';
+    }
     // R3 — THE FREE RESULT: the result line + FREE_LINE (§11 8c), two existing strings in one strip; the frame's own
     //   face sits beneath (N3); the Hall owns the exit.
     return '<div class="hall-settle hall-free-result"><div class="hall-settle-line"><span class="hall-mresult">' + outcomeLine(v) +
@@ -1246,7 +1271,13 @@
   function syncFrameHost() {
     var host = $("hall-frame-host");
     if (!(matchView && isFrameMatch(matchView))) {
-      if (wireF && (!matchView || wireF.matchId !== String(matchView.matchId))) unmountFrame();
+      //  S-HALL-STAKED-1 — ONLY A DIFFERENT MATCH TAKES THE FRAME DOWN. Two instants have no match on screen while one
+      //  is very much alive: the staked deal reaches the host through the relay BEFORE matchclient pushes the view that
+      //  makes it the match on screen (measured: the staked frame never mounted at all), and a dropped socket re-auths
+      //  through a lobby-shaped frame before the server re-seats it (measured: the frame was torn down and REMOUNTED
+      //  mid-match — in a browser that is the game reloading under the player). The frame now outlives both; the exits
+      //  are explicit: leaveMatch on the way out, and the relay itself when a new match is dealt.
+      if (wireF && matchView && wireF.matchId !== String(matchView.matchId)) unmountFrame();
       if (host) host.hidden = true;
       return;
     }
@@ -1256,10 +1287,10 @@
     host.classList.toggle("dealing", !dealtMatches[matchView.matchId] || !wireF.ready);   // loads, unseen, behind the matched moment (R5: until BOTH)
   }
   // every message to the frame: built from the ruled field list, walled, then posted to OUR origin only.
-  function toFrame(type, fields) {
+  function toFrame(type, fields, shape) {
     if (!wireF || !wireF.el || !wireF.el.contentWindow) return false;
     var msg = { type: type };
-    WIRE_SHAPES[type].forEach(function (k) { msg[k] = fields[k]; });
+    (shape || WIRE_SHAPES[type]).forEach(function (k) { msg[k] = fields[k]; });
     if (WALL_RE.test(JSON.stringify(msg))) { refuseWire("the wall: a " + type + " would have carried money or identity", type); return false; }
     try { wireF.el.contentWindow.postMessage(msg, location.origin); } catch (e) { return false; }
     return true;
@@ -1267,18 +1298,34 @@
   function startFrame() {
     if (!wireF || !wireF.ready || !wireF.deal) return;
     var d = wireF.deal;
+    if (wireF.road === "staked") {     // S-HALL-STAKED-1 (R2) — wire:start needs the FIRST view; until one arrives, nothing is posted
+      if (!wireF.views.length) return;
+      if (!toFrame("wire:start", { matchId: wireF.matchId, seat: d.seat, view: hallView(wireF.views[0]), p0Faction: d.p0Faction, p1Faction: d.p1Faction }, WIRE_START_STAKED)) return;
+      wireF.views.shift(); wireF.started = true; wireF.viewSeq = 0; wireF.resultSent = false;
+      flushFrame(); return;
+    }
     toFrame("wire:start", { matchId: wireF.matchId, seat: d.seat, seed: d.seed, p0Faction: d.p0Faction, p1Faction: d.p1Faction });
     wireF.started = true; wireF.sent = 0; wireF.resultSent = false;
     flushFrame();
   }
   function flushFrame() {              // the ordered stream: seq 1..N, each exactly once, never ahead of the deal
-    if (!wireF || !wireF.ready || !wireF.started) return;
-    while (wireF.moves[wireF.sent + 1]) {
-      var seq = wireF.sent + 1;
-      toFrame("wire:move", { matchId: wireF.matchId, seq: seq, move: wireF.moves[seq] });
-      wireF.sent = seq;
+    if (!wireF || !wireF.ready) return;
+    if (wireF.road === "staked") {     // one wire:view per server view, seq numbered HERE, monotonic (11d)
+      if (!wireF.started) { startFrame(); return; }   // startFrame flushes what it does not send
+      while (wireF.views.length) {
+        var vseq = wireF.viewSeq + 1;
+        if (!toFrame("wire:view", { matchId: wireF.matchId, seq: vseq, view: hallView(wireF.views[0]) })) break;   // refused (the wall): nothing leaves, nothing is counted
+        wireF.views.shift(); wireF.viewSeq = vseq;
+      }
+    } else {
+      if (!wireF.started) return;
+      while (wireF.moves[wireF.sent + 1]) {
+        var seq = wireF.sent + 1;
+        toFrame("wire:move", { matchId: wireF.matchId, seq: seq, move: wireF.moves[seq] });
+        wireF.sent = seq;
+      }
     }
-    if (wireF.result && !wireF.resultSent) {
+    if (wireF.result && !wireF.resultSent) {   // N3 — the frame's own result face, on BOTH roads
       toFrame("wire:result", { matchId: wireF.matchId, winner: wireF.result.winner, roundWins: wireF.result.roundWins, forfeit: wireF.result.forfeit });
       wireF.resultSent = true;
     }
@@ -1290,13 +1337,31 @@
       var mid = String(e.matchId);
       if (wireF && wireF.matchId !== mid) unmountFrame();
       var deal = { seat: e.seat, seed: e.seed, p0Faction: e.p0Faction, p1Faction: e.p1Faction };
-      if (!wireF) { wireF = { matchId: mid, deal: deal, el: null, ready: false, started: false, moves: {}, sent: 0, actPending: false, result: null, resultSent: false, fallback: false, readyTimer: null }; return; }
+      if (!wireF) { wireF = newWireF(mid, "free", deal); return; }
       // the same match dealt again (a reconnect or a re-seat): the frame starts over from the deal; the resync follows
-      wireF.deal = deal; wireF.moves = {}; wireF.sent = 0; wireF.actPending = false; wireF.result = null;
+      wireF.road = "free"; wireF.deal = deal; wireF.moves = {}; wireF.sent = 0; wireF.actPending = false; wireF.result = null;
       if (wireF.ready) startFrame();
       return;
     }
+    if (e.kind === "match-redacted") {  // S-HALL-STAKED-1 (R1/R2) — the STAKED deal: no seed; the board rides the first view
+      var smid = String(e.matchId);
+      if (wireF && wireF.matchId !== smid) unmountFrame();
+      var sdeal = { seat: e.seat, p0Faction: e.p0Faction, p1Faction: e.p1Faction };
+      if (!wireF) { wireF = newWireF(smid, "staked", sdeal); return; }
+      //  R2 — A RESYNC / RE-SEAT NEEDS NO SPECIAL CASE. The server re-seats by sending {match-redacted} and then its
+      //  current view built with no events (events: [] — W3-VIEW-1 R5). Clearing `started` here makes the next view
+      //  re-post wire:start with that resync view, which is exactly what 11d asks for; the queue is dropped so a stale
+      //  view can never ride in front of it.
+      wireF.road = "staked"; wireF.deal = sdeal; wireF.started = false; wireF.views = []; wireF.viewSeq = 0;
+      wireF.actPending = false; wireF.result = null; wireF.resultSent = false;
+      return;
+    }
     if (!wireF || String(e.matchId) !== wireF.matchId) return;
+    if (e.kind === "view") {           // S-HALL-STAKED-1 — one server view in, one wire:view out (the first becomes wire:start)
+      if (!e.view) return;
+      if (e.view.lastMove && e.view.lastMove.seat === wireF.deal.seat) wireF.actPending = false;   // our act (or the clock's, for us) landed
+      wireF.views.push(e.view); flushFrame(); return;
+    }
     if (e.kind === "apply") {
       wireF.moves[e.seq] = e.move;
       if (e.move && e.move.seat === wireF.deal.seat) wireF.actPending = false;   // our act (or the clock's, for us) landed
@@ -1349,9 +1414,10 @@
   }
   //  S-HALL-STRIPS-1 (C1) — the frame road paints the thinking clock by LOBBY_DESIGN §8b as written: the countdown
   //  is SHOWN from 30s remaining and turns AMBER at the server's warn (both on the .hall-mclock line itself). The
-  //  staked text battle keeps today's paint byte-for-byte (P4) — including its two known deviations from §8b (the
-  //  countdown shows for the whole turn; `warn` lands on the <b>, so it turns crimson, never amber). BW3 fixes those
-  //  when the staked road enters the frame.
+  //  S-HALL-STAKED-1 (K5) — and now the TEXT battle too. STRIPS-1 left it deviating from §8b in exactly two ways (the
+  //  countdown showed for the whole turn; `warn` landed on the <b>, so it turned crimson, never amber) because the line
+  //  lookup was scoped to .hall-frame-strip. The scope is dropped: one paint, one law, both roads. P4 is re-ruled to
+  //  "the text battle's strip differs from HEAD in exactly these two ways".
   var CLOCK_SHOW_MS = Number(lsGet("dyhall::clockShowMs")) || 30000;   // §8b's 30s (the override is proof-only, like dyhall::devAccess)
   function paintClocks() {
     if (!lastView) return;
@@ -1359,7 +1425,7 @@
     if (cc && lastView.clock) {
       var rem = Math.max(0, lastView.clock.deadline - Date.now()), warn = rem <= (lastView.clock.thinkMs - lastView.clock.warnMs);
       cc.textContent = Math.ceil(rem / 1000);
-      var line = cc.closest(".hall-frame-strip .hall-mclock");
+      var line = cc.closest(".hall-mclock");
       if (line) { line.classList.toggle("show", rem <= CLOCK_SHOW_MS); line.classList.toggle("warn", warn); }
       else cc.classList.toggle("warn", warn);
     }

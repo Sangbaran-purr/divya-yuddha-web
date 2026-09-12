@@ -615,8 +615,13 @@ body:has(.hall-frame-host:not([hidden])) > .hall-wrap { flex: 1 0 auto; padding-
    display): §8b shows the countdown from 30s remaining (.show) and turns it amber at the warn (.warn on the line,
    where the existing .hall-mclock.warn rule reaches it). */
 .hall-frame-strip { min-height: 34px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; text-align: center; }
-.hall-frame-strip .hall-mclock { visibility: hidden; }
-.hall-frame-strip .hall-mclock.show { visibility: visible; }
+.hall-mclock { visibility: hidden; }          /* S-HALL-STAKED-1 (K5): §8b's "shown from 30s" — BOTH roads, not the frame's alone */
+.hall-mclock.show { visibility: visible; }
+/* S-HALL-STAKED-1 (K4) — the dressed settlement strip above the real board: the text battle's own strip, re-homed.
+   The frame host sits beneath it, so the strip keeps the battle's width and the settle act stays reachable. */
+.hall-frame-settle { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; text-align: center; }
+.hall-frame-settle .hall-settle { padding: 8px 0 0; }
+.hall-frame-settle .hall-settle-act, .hall-frame-settle .hall-controls-act { justify-content: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .hall-busy::before { animation: none; opacity: .8; }

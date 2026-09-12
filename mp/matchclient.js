@@ -26,10 +26,16 @@
     var onUpdate = deps.onUpdate || function () {};
     //  S-HALL-WIRE-1 (R7) — THE RELAY HOOK, additive. A host that shows the match in the GAME'S OWN SCREEN (the Hall's
     //  battle frame) needs the ordered stream itself, not view snapshots: the deal, each {apply} in seq order, the
-    //  refusals, a resync, the end. FREE (mirror) road only — the staked road is redacted and never relays. A host
-    //  without the hook (wire.html, the frozen rig) is unaffected; a host that throws cannot break the client.
+    //  refusals, a resync, the end. A host without the hook (wire.html, the frozen rig) is unaffected; a host that
+    //  throws cannot break the client.
+    //  S-HALL-STAKED-1 (R1) — THE GATE LIFTS FOR THE STAKED ROAD. The relay used to return early while `redacted`, so
+    //  the staked road could never reach a frame at all. It now relays two more kinds — {match-redacted} (the deal,
+    //  NO seed, ever) and {view} (the server's message UNTOUCHED, because normalizeServerView is a lossy render shape:
+    //  it folds heroes into units and drops events / shielded / ghosts / discards / artifacts / totals / the W3-VIEW-2
+    //  fields). {reject}, {result} and {abandoned} simply start reaching the host on this road too. The mirror road's
+    //  stream and normalizeServerView are untouched.
     var onRelay = deps.onRelay || null;
-    function relay(e) { if (!onRelay || redacted) return; try { onRelay(e); } catch (err) { log("relay host threw: " + (err && err.message ? err.message : err)); } }
+    function relay(e) { if (!onRelay) return; try { onRelay(e); } catch (err) { log("relay host threw: " + (err && err.message ? err.message : err)); } }
     var heldMirror = [];           // S-HALL-WIRE-1 — mirror-road frames that land while the engine is still loading
     var HELD_WHILE_ENGINE = { apply: 1, resync: 1, result: 1, abandoned: 1, clock: 1, turn: 1, phase: 1, "opponent-vanished": 1, "opponent-returned": 1 };
     var ws = null, nonce = null, devMode = false, chain = null;
@@ -220,9 +226,12 @@
         redacted = true; g = null; serverView = null; outcome = null; lastReject = null; clock = null; vanish = null; reconnecting = false;
         settlement = null;         // S-HALL-SLIP-SCOPE-1 — same law on the staked road.
         log("staked match " + m.matchId + " (redacted) — you are seat " + m.seat + " (" + (m.seat === 0 ? m.p0Faction : m.p1Faction) + ")");
+        relay({ kind: "match-redacted", matchId: m.matchId, seat: m.seat, p0Faction: m.p0Faction, p1Faction: m.p1Faction });   // S-HALL-STAKED-1 (R1) — the deal; NO seed on this road
         push(); return;
       }
-      if (m.type === "view") { serverView = m; redacted = true; reconnecting = false; if (m.over && !outcome) { /* {result} carries the canonical outcome */ } push(); return; }
+      if (m.type === "view") { serverView = m; redacted = true; reconnecting = false; if (m.over && !outcome) { /* {result} carries the canonical outcome */ }
+        relay({ kind: "view", matchId: m.matchId, view: m });   // S-HALL-STAKED-1 (R1) — the server message UNTOUCHED; the Hall strips the seat names before it leaves
+        push(); return; }
       if (m.type === "phase") { phase = m.phase; push(); return; }
       if (m.type === "turn") { turn = m.seat; phase = m.phase || phase; push(); return; }
       // S-HALL-STRIPS-1 — the match-state frames too: the server sends {match} then {clock}; with {match} held for the

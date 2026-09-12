@@ -32,6 +32,7 @@ const SUITES = [
   { name: "ceremony",      file: path.join(__dirname, "suites", "ceremony.js"), chain: true, expect: 19 },
   { name: "takeover",      file: path.join(__dirname, "suites", "takeover.js"), chain: true, expect: 25 },
   { name: "freedoor",      file: path.join(__dirname, "suites", "freedoor.js"), chain: true, expect: 51 },
+  { name: "stakedframe",   file: path.join(__dirname, "suites", "stakedframe.js"), chain: true, expect: 26 },
 ];
 
 function freePort() {
@@ -55,14 +56,29 @@ function anvilUp(port) {
   const r = spawnSync("cast", ["block-number", "--rpc-url", "http://127.0.0.1:" + port], { stdio: "ignore" });
   return r.status === 0;
 }
+// S-HALL-STAKED-1 (R6) — THE WATCHDOG LAW, AT THE RUNNER. A suite's own waits are bounded (tests/lib.js until()
+//   carries a budget and names what it awaited), but bounded waits CHAIN: a condition that can never become true —
+//   S-HALL-STAKED-1 waited on state.matchView.outcome, a field _state() does not publish (its matchView is a five-key
+//   summary) — burns every budget in turn and the runner waits for all of them. No suite may hang the runner again:
+//   each one gets a hard cap, is killed at it, and is reported RED with the last line it printed.
+const SUITE_CAP_MS = Number(process.env.DY_SUITE_CAP_MS || 240000);
 function runOne(suite, rpc) {
   return new Promise(function (res) {
     const env = Object.assign({}, process.env, rpc ? { DY_RPC: rpc } : {});
     const p = spawn(process.execPath, [suite.file], { env: env });
-    let out = "";
+    const capMs = suite.capMs || SUITE_CAP_MS;
+    let out = "", capped = false;
+    const cap = setTimeout(function () { capped = true; try { p.kill("SIGKILL"); } catch (e) {} }, capMs);
     p.stdout.on("data", function (d) { out += d; });
     p.stderr.on("data", function (d) { out += d; });
-    p.on("close", function (code) { res({ code: code, out: out }); });
+    p.on("close", function (code) {
+      clearTimeout(cap);
+      if (capped) {
+        const lines = out.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+        out += "\n✖ SUITE CAP (" + (capMs / 1000) + "s): KILLED — it hung. Last line: " + (lines[lines.length - 1] || "(no output at all)");
+      }
+      res({ code: capped ? 124 : code, out: out, capped: capped });
+    });
   });
 }
 function countOf(out) {
@@ -110,7 +126,7 @@ function countOf(out) {
       console.log("  ✓ " + suite.name.padEnd(14) + String(n).padStart(3) + " checks   " + secs + "s" + note);
     } else {
       red++;
-      console.log("  ✖ " + suite.name.padEnd(14) + " FAILED (exit " + r.code + ")   " + secs + "s");
+      console.log("  ✖ " + suite.name.padEnd(14) + (r.capped ? " CAPPED (killed at " + (SUITE_CAP_MS / 1000) + "s)   " : " FAILED (exit " + r.code + ")   ") + secs + "s");
       r.out.split("\n").filter(function (l) { return /✖|Error|FAILURES|REFUS/.test(l); }).slice(0, 6)
         .forEach(function (l) { console.log("      " + l.trim()); });
     }
