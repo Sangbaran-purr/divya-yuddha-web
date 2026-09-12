@@ -33,7 +33,7 @@ const SUITES = [
   { name: "takeover",      file: path.join(__dirname, "suites", "takeover.js"), chain: true, expect: 25 },
   { name: "freedoor",      file: path.join(__dirname, "suites", "freedoor.js"), chain: true, expect: 51 },
   { name: "stakedframe",   file: path.join(__dirname, "suites", "stakedframe.js"), chain: true, expect: 26 },
-  { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 51 },
+  { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 64 },
 ];
 
 function freePort() {

@@ -43,10 +43,24 @@ lazily at ~340px, with the existing .torana-ph text placeholder on
 onerror. "+ 500 DYC" sits beside it; the price reads USD 20, and the
 payment assets are named.
 
+THE ASSET CHIP IS A CHOICE, NOT A PRICE (S-BUNDLE-2 F1, 2026-09-12): the chip
+reads "Pay with USDC" with "balance 3.35" beneath in the muted voice. It used to
+read "USDC · 3.35" and was read as a price, because it was shaped like one. A
+chip the wallet cannot afford FOR THE FACE IT IS ON is dimmed, unselectable, and
+says "not enough" - affordance text, unruled (owner ruling 3); P7 remains the
+ruled refusal if a tap happens anyway.
+
+THE PRICE IS THE FACE'S PRICE (the same rung's second bug): every balance was
+compared against bundlePrice on BOTH faces, so a holder was judged against
+USD 20 when the order was USD 5. The picker and the dim take bundlePrice on the
+bundle face and packPrice x packs on the top-up face.
+
 FOUR FACES, one tile:
-  disconnected        the ruled tile line + Connect wallet
-  connected, non-holder   the BUY road (§2)
-  connected, holder       the TOP-UP road (§3)
+  disconnected        P1 + "USD 20 - USDC or USDT" + Connect wallet (not yet
+                      through the door, so the sales line is theirs - R4)
+  connected, non-holder   the BUY road (§2) - P1 and "USD 20 - USDC or USDT"
+  connected, holder       the TOP-UP road (§3) - NEITHER of those two; P3 prices
+                          it, and the chips name the asset
   any read failed     the busy sentinel - never a false Sold out and
                       never a false "you hold no Torana"
 
@@ -81,6 +95,19 @@ recovered from the wallet's OWN ToppedUp logs (the scanLogsResumable
 idiom) - earliest live entry + 7 days. On a busy or incomplete scan the
 sentinel "within 7 days" is used instead. W3-BUNDLE-4 is queued to add
 a topUpWindow(address) view so the page can stop scanning.
+
+THE ART CARRIES TWO FALSE LINES - ART-TORANA-1, QUEUED (2026-09-12). The card
+image assets/tokens/Access_Torana_720.jpg has its text BAKED IN, and prints:
+
+  One per hand, bound to the bearer, never sold, yours to burn. It admits you. It buys no advantage.
+  The door is free. What lies beyond is earned.
+
+The first carries the "never sold" clause that R7 corrected on the homepage the
+same day. The SECOND is the line RULINGS_2026-08-27 rule 3 RETIRED as false in
+August ("that line is false and retired") - so the card the store now sells, and
+the rite page displays, still carries a sentence the rulings killed. No code can
+fix either: it is pixels. ART-TORANA-1 is a regeneration item for the art
+pipeline; until it lands, both pages serve the file as it is.
 
 =====================================================
 ## 4. THE RECEIPT
@@ -154,6 +181,13 @@ SUBSTITUTIONS, exhaustively:
   P7 [USDC]    the chosen asset's symbol - USDC or USDT
   P7 [USD 20]  the sum this order needs - USD 20 for a bundle,
                USD 5 x packs for a top-up
+
+P1 IS THE LINE FOR ANYONE NOT YET THROUGH THE DOOR (owner ruling 2 of
+2026-09-12, corrected by R4 the same day) - a SCOPE ruling, not a copy change:
+the words are untouched and copyproof is unchanged. P1 stands on the
+DISCONNECTED face and on the connected NON-HOLDER face, because both are people
+the sales line is for. ONLY THE HOLDER'S FACE DROPS IT: a holder has already
+walked through the door, and their face opens with P3.
 
 FIFTY BRONZE TABLES IS ARITHMETIC, not flourish: the Hall's BRONZE tier
 stakes 10 DYC a table, so 500 DYC is fifty of them. If the tier moves,

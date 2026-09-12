@@ -1175,22 +1175,34 @@ window.DYStore = (function () {
     return { cls: "b-stock ok", text: "In stock" };
   }
 
-  function assetPicker(st, onPick) {
+  // S-BUNDLE-2 (F1) — THE CHIP IS THE CHOICE, THE BALANCE IS THE SMALL PRINT. It used to read "USDC · 3.35" — a
+  //   label, a middot and a number, in a gold pill beside a price line — and the owner read it as a price, because it
+  //   was shaped like one. Now: "Pay with USDC" as the label, "balance 3.35" beneath in the muted voice, and a chip
+  //   the wallet cannot afford is DIMMED, unselectable, and says "not enough" — P7's reason shown BEFORE the tap
+  //   (P7 itself stays the ruled refusal if a tap happens anyway).
+  //   AND THE PRICE IS THE FACE'S PRICE (the second bug, fixed with the first): this compared every balance against
+  //   bundlePrice on BOTH faces, so a holder was judged against USD 20 when the order was USD 5. `unit` is the price
+  //   of the face being drawn — bundlePrice on the bundle face, packPrice x packs on the top-up face.
+  function assetPicker(st, unitOf, onPick) {
     var row = el("div", "b-assets");
-    var auto = bChosen;
+    var afford = function (k) {
+      var s = st.asset[k], u = unitOf(k);
+      return !(s && s.balance != null && u != null && s.balance < u);   // an unread balance is never a refusal
+    };
+    var auto = bChosen && afford(bChosen) ? bChosen : null;
     if (!auto) {
-      ASSETS.forEach(function (a) {
-        var s = st.asset[a.key];
-        if (!auto && s && s.balance != null && s.bundlePrice != null && s.balance >= s.bundlePrice) auto = a.key;
-      });
-      auto = auto || "usdc";
+      ASSETS.forEach(function (a) { if (!auto && afford(a.key)) auto = a.key; });
+      auto = auto || bChosen || "usdc";   // nothing affordable: keep a choice so the tap can render P7
     }
     ASSETS.forEach(function (a) {
-      var s = st.asset[a.key];
-      var b = el("button", "b-asset" + (auto === a.key ? " on" : ""));
+      var s = st.asset[a.key], ok = afford(a.key);
+      var b = el("button", "b-asset" + (auto === a.key ? " on" : "") + (ok ? "" : " short"));
       b.type = "button";
-      b.textContent = a.label + (s && s.balance != null ? " · " + (Number(s.balance) / 1000000).toFixed(2) : " · —");
-      b.onclick = function () { bChosen = a.key; onPick(); };
+      b.appendChild(txt("span", "b-asset-l", "Pay with " + a.label));
+      var bal = s && s.balance != null ? "balance " + (Number(s.balance) / 1000000).toFixed(2) : "balance unavailable";
+      b.appendChild(txt("span", "b-asset-b", ok ? bal : bal + " · not enough"));
+      if (ok) b.onclick = function () { bChosen = a.key; onPick(); };
+      else { b.disabled = true; b.title = "not enough " + a.label + " in this wallet"; }
       row.appendChild(b);
     });
     return { row: row, chosen: auto };
@@ -1205,15 +1217,17 @@ window.DYStore = (function () {
     var body = el("div", "b-body");
     body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
     body.appendChild(txt("div", "b-plus", "+ 500 DYC"));
-    body.appendChild(txt("p", "b-line", B_P1));
-    body.appendChild(txt("div", "b-price", "USD 20 — USDC or USDT"));
+    // S-BUNDLE-2 (F2 + owner ruling 2, 2026-09-12): P1 and the USD 20 line belong to the BUNDLE FACE ONLY. A holder
+    //   already walked through the door, so the sales line is not theirs; and the top-up face is priced by P3 alone
+    //   ("500 DYC for USD 5, up to 2,000 a week") — a second price line would say twice what §11 says once.
     var stk = stockLine(st);
-    body.appendChild(txt("div", stk.cls, stk.text));
+    var stockEl = txt("div", stk.cls, stk.text);   // appended by each face, UNDER its own price (S-BUNDLE-2)
     var msg = el("div", "st-msg"); msg.id = "b-msg";
     if (bFlash) { msg.className = "st-msg " + (bFlash.kind || ""); msg.textContent = bFlash.text; }
 
     // the receipt wins the tile once a buy lands
     if (bReceipt) {
+      body.appendChild(stockEl);
       var rc = el("div", "b-receipt");
       rc.appendChild(txt("div", "b-rc-h", bReceipt.mine ? "Torana #" + bReceipt.tokenId + " is yours." : "The purchase landed."));
       rc.appendChild(txt("div", "b-rc-l", bReceipt.dyc != null ? "+ " + (bReceipt.dyc / 1000000000000000000n).toString() + " DYC, liquid, in your wallet." : "+ 500 DYC, liquid, in your wallet."));
@@ -1222,14 +1236,19 @@ window.DYStore = (function () {
         lk.target = "_blank"; lk.rel = "noopener noreferrer"; lk.textContent = "the transaction";
         rc.appendChild(lk);
       }
-      var door = el("a", "st-act b-door"); door.href = "mp/hall.html"; door.textContent = "Sit at a table";  // UNSTAMPED (ENTRY-1 R2)
+      var door = el("a", "st-btn b-door"); door.href = "mp/hall.html"; door.textContent = "Sit at a table";  // UNSTAMPED (ENTRY-1 R2)
       rc.appendChild(door);
       body.appendChild(rc); body.appendChild(msg);
       card.appendChild(body); host.appendChild(card); return;
     }
 
     if (!st || !connectedOk() || !st.me) {
-      var cta = el("button", "st-act b-connect"); cta.type = "button"; cta.textContent = "Connect wallet";
+      // P1 IS FOR ANYONE NOT YET THROUGH THE DOOR (owner ruling 2, corrected by R4 2026-09-12): the disconnected face
+      //   and the connected non-holder face both carry it; ONLY the holder's face drops it.
+      body.appendChild(txt("p", "b-line", B_P1));
+      body.appendChild(txt("div", "b-price", "USD 20 — USDC or USDT"));
+      body.appendChild(stockEl);
+      var cta = el("button", "st-btn b-connect"); cta.type = "button"; cta.textContent = "Connect wallet";
       cta.onclick = function () { cta.disabled = true; window.DYWallet.connect().catch(function () {}).then(function () { cta.disabled = false; }); };
       body.appendChild(cta); body.appendChild(msg);
       card.appendChild(body); host.appendChild(card); return;
@@ -1237,22 +1256,37 @@ window.DYStore = (function () {
 
     var holder = st.torana == null ? null : st.torana > 0n;
     if (holder === null) {
+      body.appendChild(stockEl);
       body.appendChild(txt("div", "b-stock busy", "your Torana could not be read - refresh to retry"));
       body.appendChild(msg); card.appendChild(body); host.appendChild(card); return;
     }
 
-    var pick = assetPicker(st, function () { paintBundle(host); });
-    body.appendChild(pick.row);
+    // the face is known before the picker is drawn, because the picker prices itself by the face
+    var packSize = st.packSize || 500000000000000000000n;
+    var headNow = st.headroom;
+    var maxPacksNow = headNow == null ? 4 : Number(headNow / packSize);
+    if (maxPacksNow > 4) maxPacksNow = 4;
+    if (holder && maxPacksNow >= 1 && bPacks > maxPacksNow) bPacks = 1;
+    var unitOf = holder
+      ? function (k) { var a = st.asset[k]; return a && a.packPrice != null ? a.packPrice * BigInt(bPacks) : null; }
+      : function (k) { var a = st.asset[k]; return a && a.bundlePrice != null ? a.bundlePrice : null; };
+    var pick = assetPicker(st, unitOf, function () { paintBundle(host); });
 
     if (!holder) {
+      body.appendChild(txt("p", "b-line", B_P1));
+      body.appendChild(txt("div", "b-price", "USD 20 — USDC or USDT"));
+      body.appendChild(stockEl);
+      body.appendChild(pick.row);
       body.appendChild(txt("p", "b-commit", B_P2));
-      var buy = el("button", "st-act b-buy"); buy.type = "button"; buy.textContent = "Buy the bundle";
+      var buy = el("button", "st-btn b-buy"); buy.type = "button"; buy.textContent = "Buy the bundle";
       var closed = st.open === false || (st.packSize != null && st.stock != null && st.stock < st.packSize) || st.stock == null;
       buy.disabled = !!closed;
       buy.onclick = function () { bundleBuy(pick.chosen, host, msg, buy); };
       body.appendChild(buy);
     } else {
       body.appendChild(txt("p", "b-commit", B_P3));
+      body.appendChild(stockEl);
+      body.appendChild(pick.row);
       var head = st.headroom;
       if (head == null) {
         body.appendChild(txt("div", "b-stock busy", "your weekly headroom could not be read - refresh to retry"));
@@ -1263,8 +1297,7 @@ window.DYStore = (function () {
       } else {
         // the separator matches P4's own [2,000] — the two numbers sit inches apart on the same tile
         body.appendChild(txt("div", "b-head", "you can top up " + Number(head / 1000000000000000000n).toLocaleString("en-US") + " more DYC this week"));
-        var maxPacks = Number(head / (st.packSize || 500000000000000000000n));
-        if (maxPacks > 4) maxPacks = 4;
+        var maxPacks = maxPacksNow;
         var pk = el("div", "b-packs");
         for (var n = 1; n <= Math.max(1, maxPacks); n++) {
           (function (n) {
@@ -1274,8 +1307,7 @@ window.DYStore = (function () {
           })(n);
         }
         body.appendChild(pk);
-        if (bPacks > Math.max(1, maxPacks)) bPacks = 1;
-        var tu = el("button", "st-act b-topup"); tu.type = "button";
+        var tu = el("button", "st-btn b-topup"); tu.type = "button";
         tu.textContent = "Top up " + Number((st.packSize || 500000000000000000000n) / 1000000000000000000n * BigInt(bPacks)).toLocaleString("en-US") + " DYC";
         tu.disabled = st.open === false;
         tu.onclick = function () { bundleTopUp(pick.chosen, bPacks, host, msg, tu); };

@@ -49,7 +49,9 @@ async function connect(w) {
   await waitFor("wallet provider detected", () => w.DYWallet.state.hasProvider);
   await w.DYWallet.connect();
   await waitFor("connected + chainOk", () => w.DYWallet.state.connected && w.DYWallet.state.chainOk);
-  return waitFor("the tile painted its connected face", () => tile(w).indexOf(P1) >= 0 && !/Connect wallet/.test(tile(w)));
+  // the connected face is P1 + the price for a non-holder, P3 for a holder (S-BUNDLE-2 ruling 2) — either counts
+  return waitFor("the tile painted its connected face",
+    () => !/Connect wallet/.test(tile(w)) && (tile(w).indexOf(P1) >= 0 || tile(w).indexOf(P3) >= 0));
 }
 async function deal(c, which, to, amount) { await (await c[which].mint(to, amount)).wait(); }
 
@@ -87,8 +89,22 @@ async function main() {
     await connect(w);
     ok("connected NON-holder: the commitment line and the buy control",
        tile(w).indexOf(P2) >= 0 && !!q(w, ".b-buy") && !q(w, ".b-topup"));
-    ok("both assets are offered, each with the wallet's own balance",
-       w.document.querySelectorAll(".b-asset").length === 2 && /USDC · 0.00/.test(tile(w)));
+    // S-BUNDLE-2 (F1) — the chip is a CHOICE with its balance as small print, never a price-shaped "USDC · 3.35"
+    ok("both assets are offered as CHOICES, the balance beneath, never price-shaped",
+       w.document.querySelectorAll(".b-asset").length === 2 &&
+       q(w, ".b-asset .b-asset-l").textContent === "Pay with USDC" &&
+       /^balance /.test(q(w, ".b-asset .b-asset-b").textContent) &&
+       !/USDC · |USDT · /.test(tile(w)), tile(w).slice(0, 220));
+    ok("a penniless wallet sees BOTH chips dimmed, unselectable, and told why before any tap",
+       w.document.querySelectorAll(".b-asset.short").length === 2 &&
+       w.document.querySelectorAll(".b-asset[disabled]").length === 2 &&
+       /not enough/.test(tile(w)));
+    ok("the buy control is still live, so a tap renders the RULED refusal (P7), not a dead button",
+       q(w, ".b-buy").disabled === false);
+    // S-BUNDLE-2 (F3) — .st-act was defined in no stylesheet; every control wears the store's own .st-btn
+    ok("the bundle's controls wear the store's dress (.st-btn), and .st-act is gone",
+       q(w, ".b-buy").className.indexOf("st-btn") === 0 &&
+       w.document.querySelectorAll(".st-act").length === 0);
     H.teardown(h);
   }
 
@@ -211,6 +227,55 @@ async function main() {
     ok("the store still custodied nothing across four casts",
        (await c.usdc.balanceOf(c.addrs.ps)) === 0n);
     H.teardown(h);
+  }
+
+  // ══════════════════════════ P7 · THE TILE'S THREE MISREADS (S-BUNDLE-2) ══════════════════════════
+  console.log("\n── P7 · the chips name the asset, the face names the price, the controls are dressed ──");
+  {
+    const c = await H.chainStore();
+    await (await c.nft.setMinter(c.addrs.owner, true)).wait();
+    await (await c.nft.mint(c.player.address)).wait();          // a HOLDER
+    await deal(c, "usdc", c.player.address, 6n * DEC6);          // 6 USDC: enough for ONE pack (5), not for two (10)
+    const h = await H.storePage(c, c.player);
+    const w = h.w;
+    await connect(w);
+    await waitFor("the holder's face", () => !!q(w, ".b-topup"));
+
+    // F2 — the holder's face is priced by P3 alone
+    ok("F2 · no USD 20 anywhere on the holder's face", !/USD 20/.test(tile(w)), tile(w).slice(0, 240));
+    ok("F2 · P3 carries the price, and no second price line was added",
+       tile(w).indexOf(P3) >= 0 && (tile(w).match(/USD 5/g) || []).length === 1);
+    // ruling (2) — P1 is the bundle face's line
+    ok("ruling 2 · P1 is NOT on the holder's face", tile(w).indexOf(P1) < 0);
+
+    // F1's second bug — the dim takes the price OF THE FACE, not the bundle's
+    ok("F1 · at x1 the 6-USDC wallet is NOT dimmed (the face costs USD 5, not USD 20)",
+       q(w, ".b-asset").className.indexOf("short") < 0 && /balance 6.00/.test(tile(w)),
+       q(w, ".b-asset").className + " | " + tile(w).slice(0, 200));
+    ok("F1 · USDT, with nothing in it, IS dimmed and says so",
+       w.document.querySelectorAll(".b-asset")[1].className.indexOf("short") >= 0 && /not enough/.test(tile(w)));
+    // ×2 costs USD 10 — the same wallet, the same chip, now short
+    w.document.querySelectorAll(".b-pack")[1].click();
+    await waitFor("x2 chosen", () => /Top up 1,000 DYC/.test(tile(w)));
+    ok("F1 · at x2 the SAME chip dims, because the face now costs USD 10",
+       q(w, ".b-asset").className.indexOf("short") >= 0 && q(w, ".b-asset").disabled === true);
+    ok("F1 · a dimmed chip cannot be chosen (the click does nothing)",
+       (() => { const before = q(w, ".b-asset").className; q(w, ".b-asset").click(); return q(w, ".b-asset").className === before; })());
+    // F3 — the top-up control is dressed too
+    ok("F3 · the top-up control wears .st-btn", q(w, ".b-topup").className.indexOf("st-btn") === 0);
+    H.teardown(h);
+
+    // and the BUNDLE face still carries both of its own lines
+    const c2 = await H.chainStore();
+    await deal(c2, "usdc", c2.player.address, 25n * DEC6);
+    const h2 = await H.storePage(c2, c2.player);
+    await connect(h2.w);
+    ok("the bundle face keeps P1 and its USD 20 line",
+       tile(h2.w).indexOf(P1) >= 0 && /USD 20 — USDC or USDT/.test(tile(h2.w)));
+    ok("and the affordable chip is chosen, the empty one dimmed",
+       q(h2.w, ".b-asset").className.indexOf("on") >= 0 &&
+       h2.w.document.querySelectorAll(".b-asset")[1].className.indexOf("short") >= 0);
+    H.teardown(h2);
   }
 
   // ══════════════════════════ P5 · THE RULED REFUSALS, FROM FORCED STATE ══════════════════════════

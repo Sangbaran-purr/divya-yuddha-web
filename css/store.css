@@ -167,7 +167,10 @@
 
 /* ============================================================================
    S-BUNDLE-1 — THE BUNDLE TILE (the Torana + 500 DYC). Reuses the page's own
-   vocabulary: .st-act for the doors, .st-msg / .ok / .bad for act voice,
+   vocabulary: .st-btn for every control (the class the wave-card Buy/List/Delist
+   already wear — S-BUNDLE-1 wrote .st-act, which is defined in no stylesheet, so
+   all four bundle controls rendered as raw browser buttons), .st-msg / .ok / .bad
+   for act voice,
    .torana-ph (rite.html's) as the art's onerror placeholder. Mobile-first: the
    card stacks under 560px and sits art-left from there up.
    ========================================================================= */
@@ -205,7 +208,20 @@
 .b-asset.on, .b-pack.on { color: #120c04; background: var(--gold, #e8c874); border-color: var(--gold, #e8c874); }
 .b-pack { min-width: 2.6rem; text-align: center; }
 
-.b-buy, .b-topup, .b-connect, .b-door { align-self: start; margin-top: .35rem; }
+/* S-BUNDLE-2 (F1) — the chip is the CHOICE ("Pay with USDC"), the balance is small print beneath it. A chip the
+   wallet cannot afford for THIS FACE is dimmed, unselectable, and says so before the tap. */
+.b-asset { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; text-align: left; line-height: 1.25; }
+.b-asset-l { font-size: .82rem; letter-spacing: .02em; }
+.b-asset-b { font-size: .68rem; opacity: .68; }
+.b-asset.on .b-asset-b { opacity: .8; }
+.b-asset.short { opacity: .5; cursor: default; }
+.b-asset.short .b-asset-b { color: var(--vermilion, #b33a1f); opacity: 1; }
+
+/* S-BUNDLE-2 (F3) — .st-btn is built for the card grid's flex row (flex: 1 1 auto); the bundle's controls stand
+   alone, and one of them is an anchor. */
+.b-buy, .b-topup, .b-connect, .b-door { flex: 0 0 auto; display: inline-block; text-decoration: none; padding: 9px 14px; font-size: .78rem; }
+
+.b-buy, .b-topup, .b-connect, .b-door { align-self: start; margin-top: .45rem; }
 .b-receipt { display: flex; flex-direction: column; gap: .45rem; padding: .9rem; border-radius: 8px; border: 1px solid rgba(127, 191, 138, .35); background: rgba(20, 40, 24, .3); }
 .b-rc-h { font-family: "Cinzel", Georgia, serif; font-size: 1.05rem; color: #a8dcae; }
 .b-rc-l { font-size: .9rem; color: rgba(240, 232, 214, .85); }
