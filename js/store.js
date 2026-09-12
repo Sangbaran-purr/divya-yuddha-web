@@ -881,6 +881,8 @@ window.DYStore = (function () {
   var B_P6B = "The store is sold out for now.";
   var B_P8 = "The store could not take this order - refresh and try again.";
   var B_P9 = "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours.";
+  // S-BUNDLE-4 — the heading NAMES THE BUNDLE (affordance text, not ruled copy: §11's set is P1-P9)
+  var BUNDLE_HEADING = "TORANA + 500 DYC — THE BUNDLE";
   // P4's fill carries its own preposition. With an exact date the sentence is the ruled one word for word ("...the
   // window frees on 19 Sep 2026."); with the sentinel it reads "...the window frees within 7 days." Keeping "on" in
   // the frame produced "frees on within 7 days" — the ruling's two halves did not compose (reported at S-BUNDLE-1).
@@ -1154,6 +1156,31 @@ window.DYStore = (function () {
   }
 
   // =========================== THE TILE ===========================
+  // S-BUNDLE-4 — THE PICTURE SHOWS THE WHOLE BUNDLE: the Torana card, and beneath it the site's own DYC mark with the
+  //   figure beside it. The coin is assets/dyc_coin_96.png, the same 96px mark rite.html already serves at 44px beside
+  //   a bearer's balance (the 1254px master is 2.1 MB and is the source, not a tile asset). The DYC figure LEAVES the
+  //   text column and lives here, under the card; on the holder's face it follows the pack picker.
+  function coinLine(dycWei) {
+    var row = el("div", "b-coinline");
+    row.appendChild(txt("span", "b-coin-plus", "+"));
+    var img = document.createElement("img");
+    img.className = "b-coin";
+    img.setAttribute("src", "assets/dyc_coin_96.png");
+    img.setAttribute("width", "30"); img.setAttribute("height", "30");
+    img.setAttribute("loading", "lazy"); img.setAttribute("decoding", "async");
+    img.setAttribute("alt", "");
+    img.setAttribute("aria-hidden", "true");
+    row.appendChild(img);
+    row.appendChild(txt("span", "b-coin-n", Number(dycWei / 1000000000000000000n).toLocaleString("en-US") + " DYC"));
+    return row;
+  }
+  function picture(dycWei) {
+    var col = el("div", "b-pic");
+    col.appendChild(toranaFigure());
+    col.appendChild(coinLine(dycWei));
+    return col;
+  }
+
   function toranaFigure() {
     var wrap = el("div", "b-art");
     var img = document.createElement("img");
@@ -1173,18 +1200,13 @@ window.DYStore = (function () {
   //   voice beneath the price. On a narrow screen they stack PRICE FIRST (css column-reverse).
   //   BOTH NUMBERS FOLLOW THE PACK PICKER on the holder's face: a fixed "+ 500 DYC" beside "USD 10" at x2 would be
   //   a fresh misread of exactly the kind this rung exists to kill.
-  function heroes(dycText, priceText) {
-    var row = el("div", "b-heroes");
-    row.appendChild(txt("div", "b-hero b-hero-dyc", dycText));
-    if (priceText) {
-      var pr = el("div", "b-hero b-hero-price");
-      pr.appendChild(txt("div", "b-hero-n", priceText));
-      pr.appendChild(txt("div", "b-hero-s", "USDC or USDT"));
-      row.appendChild(pr);
-    }
-    return row;
+  // S-BUNDLE-4 — the text column's hero is the PRICE ALONE; the DYC figure moved under the card (coinLine).
+  function priceHero(priceText) {
+    var pr = el("div", "b-hero b-hero-price");
+    pr.appendChild(txt("div", "b-hero-n", priceText));
+    pr.appendChild(txt("div", "b-hero-s", "USDC or USDT"));
+    return pr;
   }
-  function dycFig(wei) { return "+ " + Number(wei / 1000000000000000000n).toLocaleString("en-US") + " DYC"; }
 
   // THE STOCK LINE (owner ruling (b)) — no count, ever: one shared pool makes any
   // "N bundles" a fiction. In stock / Sold out / unavailable, nothing more.
@@ -1233,7 +1255,6 @@ window.DYStore = (function () {
     host.innerHTML = "";
     if (!bundleConfigured()) { register(host, "The bundle is not yet open", "The Torana bundle opens with the store's own contract. Nothing is for sale here yet."); return; }
     var card = el("div", "b-card");
-    card.appendChild(toranaFigure());
     var body = el("div", "b-body");
     // S-BUNDLE-2 (F2 + rulings 2 and R4, 2026-09-12): P1 belongs to anyone NOT YET THROUGH THE DOOR (disconnected and
     //   connected non-holder); only the HOLDER's face drops it, and that face is priced by P3 + its own hero, never by
@@ -1245,8 +1266,8 @@ window.DYStore = (function () {
 
     // the receipt wins the tile once a buy lands
     if (bReceipt) {
+      card.appendChild(picture(bReceipt.dyc != null ? bReceipt.dyc : 500000000000000000000n));
       body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
-      body.appendChild(heroes(bReceipt.dyc != null ? dycFig(bReceipt.dyc) : "+ 500 DYC", null));
       body.appendChild(stockEl);
       var rc = el("div", "b-receipt");
       rc.appendChild(txt("div", "b-rc-h", bReceipt.mine ? "Torana #" + bReceipt.tokenId + " is yours." : "The purchase landed."));
@@ -1265,8 +1286,9 @@ window.DYStore = (function () {
     if (!st || !connectedOk() || !st.me) {
       // P1 IS FOR ANYONE NOT YET THROUGH THE DOOR (owner ruling 2, corrected by R4 2026-09-12): the disconnected face
       //   and the connected non-holder face both carry it; ONLY the holder's face drops it.
-      body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
-      body.appendChild(heroes("+ 500 DYC", "USD 20"));
+      card.appendChild(picture(500000000000000000000n));
+      body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
+      body.appendChild(priceHero("USD 20"));
       body.appendChild(txt("p", "b-line", B_P1));
       body.appendChild(stockEl);
       var cta = el("button", "st-btn b-connect"); cta.type = "button"; cta.textContent = "Connect wallet";
@@ -1277,8 +1299,9 @@ window.DYStore = (function () {
 
     var holder = st.torana == null ? null : st.torana > 0n;
     if (holder === null) {
-      body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
-      body.appendChild(heroes("+ 500 DYC", "USD 20"));
+      card.appendChild(picture(500000000000000000000n));
+      body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
+      body.appendChild(priceHero("USD 20"));
       body.appendChild(stockEl);
       body.appendChild(txt("div", "b-stock busy", "your Torana could not be read - refresh to retry"));
       body.appendChild(msg); card.appendChild(body); host.appendChild(card); return;
@@ -1296,8 +1319,9 @@ window.DYStore = (function () {
     var pick = assetPicker(st, unitOf, function () { paintBundle(host); });
 
     if (!holder) {
-      body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
-      body.appendChild(heroes("+ 500 DYC", "USD 20"));
+      card.appendChild(picture(500000000000000000000n));
+      body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
+      body.appendChild(priceHero("USD 20"));
       body.appendChild(txt("p", "b-line", B_P1));
       body.appendChild(stockEl);
       body.appendChild(pick.row);
@@ -1311,8 +1335,9 @@ window.DYStore = (function () {
       var packs = Math.max(1, Math.min(bPacks, maxPacksNow >= 1 ? maxPacksNow : 1));
       var unitUsd = st.asset[pick.chosen] && st.asset[pick.chosen].packPrice != null
         ? "USD " + String(Number(st.asset[pick.chosen].packPrice * BigInt(packs)) / 1000000) : null;
+      card.appendChild(picture(packSize * BigInt(packs)));
       body.appendChild(txt("div", "b-title", "TOP UP"));
-      body.appendChild(heroes(dycFig(packSize * BigInt(packs)), unitUsd));
+      if (unitUsd) body.appendChild(priceHero(unitUsd));
       body.appendChild(txt("p", "b-line b-p9", B_P9));
       body.appendChild(txt("p", "b-commit", B_P3));
       body.appendChild(stockEl);

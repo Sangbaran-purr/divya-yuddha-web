@@ -145,14 +145,24 @@ for (const [tag, line] of STORE_LAW) {
 
 console.log("\n── the store's structural guards ──");
 // S-BUNDLE-3 — THE PRICE IS THE HERO NUMBER, on both faces, and the old body-text line is gone.
-ok("the hero pair is built once and carries the assets in the muted voice",
-   /function heroes\(dycText, priceText\)/.test(STORE) && /"b-hero b-hero-dyc"/.test(STORE) &&
+// S-BUNDLE-4 — the PICTURE carries the bundle (card + the site's own coin), the text column carries the price alone.
+ok("the coin line is the site's own 96px DYC mark, the one rite.html serves",
+   /"src", "assets\/dyc_coin_96\.png"/.test(STORE) && /"b-coinline"/.test(STORE) &&
+   /"b-coin-plus", "\+"/.test(STORE) && !/dyc_coin_master/.test(STORE));
+ok("the picture is card + coin, built once and used by every face",
+   /function picture\(dycWei\)/.test(STORE) &&
+   (STORE.match(/card\.appendChild\(picture\(/g) || []).length === 5);
+ok("the DYC figure LEFT the text column: the hero is the price alone",
+   /function priceHero\(priceText\)/.test(STORE) && !/b-hero-dyc/.test(STORE) &&
    /"b-hero-s", "USDC or USDT"/.test(STORE));
+ok("the heading names the bundle (affordance text - §11's set is P1-P9)",
+   /BUNDLE_HEADING = "TORANA \+ 500 DYC — THE BUNDLE"/.test(STORE) &&
+   /txt\("div", "b-title", BUNDLE_HEADING\)/.test(STORE));
 ok("the removed body-text price line is gone (it was never ruled copy)",
    !/"b-price"/.test(STORE) && !/USD 20 — USDC or USDT/.test(STORE));
-ok("the bundle face's hero is USD 20; the holder's is LIVE, following the picker",
-   /heroes\("\+ 500 DYC", "USD 20"\)/.test(STORE) &&
-   /heroes\(dycFig\(packSize \* BigInt\(packs\)\), unitUsd\)/.test(STORE) &&
+ok("the bundle face's hero is USD 20; the holder's price AND its coin figure are LIVE",
+   /priceHero\("USD 20"\)/.test(STORE) &&
+   /card\.appendChild\(picture\(packSize \* BigInt\(packs\)\)\)/.test(STORE) &&
    /packPrice \* BigInt\(packs\)/.test(STORE));
 ok("the holder's heading is TOP UP, and P9 is on that face alone",
    /txt\("div", "b-title", "TOP UP"\)/.test(STORE) &&

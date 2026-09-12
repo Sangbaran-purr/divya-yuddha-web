@@ -43,6 +43,31 @@ lazily at ~340px, with the existing .torana-ph text placeholder on
 onerror. "+ 500 DYC" sits beside it; the price reads USD 20, and the
 payment assets are named.
 
+THE PICTURE SHOWS THE WHOLE BUNDLE (S-BUNDLE-4, 2026-09-12): the image column
+carries the Torana card AND, beneath it, the site's own DYC mark with the figure
+beside it - "+ [coin] 500 DYC". THE COIN IS assets/dyc_coin_96.png, the same 96px
+mark rite.html serves at 44px beside a bearer's balance; dyc_coin_master.png
+(1254px, 2.1 MB) is its source, never a tile asset. The DYC figure therefore LEFT
+the text column, whose hero is the price alone, and the heading NAMES the bundle:
+"TORANA + 500 DYC - THE BUNDLE" on the bundle face, "TOP UP" on the holder's
+(affordance text - §11's ruled set is P1-P9 and holds no heading). On the holder's
+face the coin figure is LIVE with the picker, exactly as the price is.
+
+THE HEADING IS UPPERCASE (R1, owner, 2026-09-12): .b-title carries
+text-transform: uppercase, in the store's own Cinzel manner - on every face,
+THE RECEIPT'S HEADING INCLUDED, which therefore reads TORANA - THE ACCESS CARD
+rather than mixed case. The casing is presentation only; textContent is
+untouched, so no proof depends on it.
+
+THE FOLD, MEASURED at 390 (owner's rule: if the card pushes the price below
+667px, THE CARD SCALES - the price never moves). Measured on the rig: card bottom
+507, coin line 546, heading 586, PRICE BOTTOM 633 - clear of the fold by 34px,
+with the card capped at 160px wide (its 132px first cut cleared by 76px, so the
+spare went to the card, not to empty space). Raise the card past 160px at 390 and
+the price crosses the fold; the cap is the price's guarantee. THE 160px CAP AND
+THIS ARITHMETIC ARE THE RULE FOR THIS TILE (R2, owner, 2026-09-12) - anyone who
+wants a larger card at 390 must move the fold figure first, not the price.
+
 THE ASSET CHIP IS A CHOICE, NOT A PRICE (S-BUNDLE-2 F1, 2026-09-12): the chip
 reads "Pay with USDC" with "balance 3.35" beneath in the muted voice. It used to
 read "USDC · 3.35" and was read as a price, because it was shaped like one. A

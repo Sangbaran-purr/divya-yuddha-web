@@ -179,25 +179,34 @@
 .b-sec-title { font-family: "Cinzel", Georgia, serif; font-size: clamp(1.05rem, 3.6vw, 1.4rem); letter-spacing: .1em; text-transform: uppercase; margin: 0; color: var(--gold, #e8c874); }
 .b-host { min-height: 6rem; }
 
-/* The card sits BESIDE its words at every width: full-bleed art on a 390px phone pushed the price, the stock line
-   and the buy control below the fold (seen in the 390 shot), which is the one thing a store tile must never do. */
-.b-card { display: grid; grid-template-columns: minmax(104px, 38%) 1fr; gap: 1rem; align-items: start; padding: 1rem; border: 1px solid rgba(232, 200, 116, .28); border-radius: 10px; background: rgba(8, 5, 3, .5); backdrop-filter: blur(3px); }
-@media (min-width: 560px) { .b-card { grid-template-columns: minmax(160px, 32%) 1fr; gap: 1.6rem; padding: 1.4rem; } }
+/* S-BUNDLE-4 — TWO COLUMNS: the PICTURE (the Torana card, then the coin line) and the words. On a phone the picture
+   goes FIRST and the words beneath it, centred; the card is CAPPED so the price still clears the fold (the card
+   scales, the price never moves — owner's rule). From 560px they stand side by side. */
+.b-card { display: grid; grid-template-columns: 1fr; gap: 1rem; align-items: start; padding: 1rem; border: 1px solid rgba(232, 200, 116, .28); border-radius: 10px; background: rgba(8, 5, 3, .5); backdrop-filter: blur(3px); }
+@media (min-width: 560px) { .b-card { grid-template-columns: minmax(160px, 32%) 1fr; gap: 1.6rem; padding: 1.4rem; align-items: start; } }
 
-.b-art { position: relative; aspect-ratio: 2 / 3; max-width: 190px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(232, 200, 116, .22); background: rgba(4, 3, 1, .6); }
+.b-pic { display: flex; flex-direction: column; align-items: center; gap: .55rem; }
+@media (min-width: 560px) { .b-pic { align-items: flex-start; } }
+
+.b-art { position: relative; width: 100%; aspect-ratio: 2 / 3; max-width: 160px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(232, 200, 116, .22); background: rgba(4, 3, 1, .6); }
 @media (min-width: 560px) { .b-art { max-width: 240px; } }
+
+/* the coin line: "+ [the DYC mark] 500 DYC" — the site's own 96px coin, the one rite.html serves */
+.b-coinline { display: flex; align-items: center; gap: .4rem; font-family: "Cinzel", Georgia, serif; font-size: 1.15rem; line-height: 1; color: var(--hi, #f4e3ab); }
+.b-coin-plus { font-size: 1.25rem; opacity: .85; }
+.b-coin { width: 30px; height: 30px; display: block; }
+.b-coin-n { white-space: nowrap; }
+@media (min-width: 560px) { .b-coinline { font-size: 1.3rem; } .b-coin { width: 34px; height: 34px; } }
 .b-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .b-art .torana-ph { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; }
 
 .b-body { display: flex; flex-direction: column; gap: .55rem; min-width: 0; }
-.b-title { font-family: "Cinzel", Georgia, serif; font-size: 1rem; letter-spacing: .06em; color: var(--gold, #e8c874); }
+.b-title { font-family: "Cinzel", Georgia, serif; font-size: 1rem; letter-spacing: .06em; color: var(--gold, #e8c874); text-transform: uppercase; }
 
 /* S-BUNDLE-3 (F1/F2) — THE TWO HERO NUMBERS: what you get and what it costs, at the same weight and the same gold.
    The price used to be body text in the muted voice under the sales line, so the tile shouted the DYC and whispered
    the price. On a narrow screen they STACK PRICE FIRST (column-reverse); from 560px they stand side by side, the DYC
    figure first. */
-.b-heroes { display: flex; flex-direction: column-reverse; gap: .35rem; align-items: flex-start; }
-@media (min-width: 560px) { .b-heroes { flex-direction: row; align-items: baseline; gap: 1.6rem; } }
 .b-hero { font-family: "Cinzel", Georgia, serif; font-size: 1.5rem; line-height: 1; color: var(--hi, #f4e3ab); }
 .b-hero-price { display: flex; flex-direction: column; gap: .15rem; }
 .b-hero-n { font: inherit; }

@@ -80,13 +80,21 @@ async function main() {
        q(w, ".b-art img").getAttribute("src") === "assets/tokens/Access_Torana_720.jpg" &&
        q(w, ".b-art img").getAttribute("loading") === "lazy" && !!q(w, ".b-art .torana-ph"),
        q(w, ".b-art img") ? q(w, ".b-art img").getAttribute("src") : "no img");
-    // S-BUNDLE-3 — the price is a HERO number beside the DYC figure, not body text under the sales line
-    ok("the hero pair carries both numbers at the same weight, the assets beneath the price",
-       !!q(w, ".b-heroes .b-hero-dyc") && !!q(w, ".b-heroes .b-hero-price .b-hero-n") &&
-       q(w, ".b-hero-dyc").textContent === "+ 500 DYC" &&
+    // S-BUNDLE-4 — the PICTURE shows the bundle: the card, then the site's own coin with the figure beside it
+    ok("the coin line sits UNDER the card, in the picture column, with the site's own DYC mark",
+       !!q(w, ".b-pic .b-art") && !!q(w, ".b-pic .b-coinline") &&
+       q(w, ".b-pic .b-coinline img.b-coin").getAttribute("src") === "assets/dyc_coin_96.png" &&
+       q(w, ".b-coin-plus").textContent === "+" && q(w, ".b-coin-n").textContent === "500 DYC" &&
+       !!(q(w, ".b-art").compareDocumentPosition(q(w, ".b-coinline")) & 4));
+    // "+ 500 DYC" leaves the text column AS A NUMBER; it survives inside the heading, which names the bundle
+    ok("the text column's hero is the PRICE ALONE - the DYC figure left it",
        q(w, ".b-hero-price .b-hero-n").textContent === "USD 20" &&
-       q(w, ".b-hero-price .b-hero-s").textContent === "USDC or USDT");
-    ok("the old body-text price line is gone from the face", !/USD 20 — USDC or USDT/.test(tile(w)));
+       q(w, ".b-hero-price .b-hero-s").textContent === "USDC or USDT" &&
+       !q(w, ".b-hero-dyc") &&
+       !/\+ 500 DYC/.test(q(w, ".b-body").textContent.replace(q(w, ".b-title").textContent, "")));
+    ok("S-BUNDLE-4 · the heading names the bundle",
+       q(w, ".b-title").textContent === "TORANA + 500 DYC — THE BUNDLE");
+    ok("the old body-text price line is still gone", !/USD 20 — USDC or USDT/.test(tile(w)));
     await waitFor("the public stock read landed (no wallet needed)", () => /In stock/.test(tile(w)));
     ok("THE STOCK LINE CARRIES NO COUNT — 'In stock', never 'N bundles'",
        /In stock/.test(tile(w)) && !/bundle[s]? left|998|4500|5000/.test(tile(w)), tile(w).slice(0, 200));
@@ -257,9 +265,10 @@ async function main() {
     // S-BUNDLE-3 F2 — the holder's face is headed TOP UP and priced by its own LIVE hero
     ok("F2 · the holder's heading is TOP UP, not the card's name",
        q(w, ".b-title").textContent === "TOP UP");
-    ok("F2 · the holder's hero is USD 5 at x1, with the DYC figure beside it",
+    ok("F2 · the holder's hero is USD 5 at x1, and its coin figure is under the card",
        q(w, ".b-hero-price .b-hero-n").textContent === "USD 5" &&
-       q(w, ".b-hero-dyc").textContent === "+ 500 DYC");
+       q(w, ".b-pic .b-coin-n").textContent === "500 DYC" && !q(w, ".b-hero-dyc") &&
+       !/\+ 500 DYC/.test(q(w, ".b-body").textContent.replace(q(w, ".b-title").textContent, "")));
     ok("F2 · P9 stands on the holder's face, above P3",
        tile(w).indexOf(P9) >= 0 && tile(w).indexOf(P9) < tile(w).indexOf(P3));
     ok("F2 · the ONLY USD 20 on the holder's face is inside ruled P9",
@@ -278,10 +287,10 @@ async function main() {
     // ×2 costs USD 10 — the same wallet, the same chip, now short
     w.document.querySelectorAll(".b-pack")[1].click();
     await waitFor("x2 chosen", () => /Top up 1,000 DYC/.test(tile(w)));
-    ok("S-BUNDLE-3 · BOTH hero numbers follow the picker: x2 -> USD 10 and + 1,000 DYC",
+    ok("S-BUNDLE-4 · the price AND the coin figure follow the picker: x2 -> USD 10 and 1,000 DYC under the card",
        q(w, ".b-hero-price .b-hero-n").textContent === "USD 10" &&
-       q(w, ".b-hero-dyc").textContent === "+ 1,000 DYC",
-       q(w, ".b-hero-dyc").textContent + " / " + q(w, ".b-hero-price .b-hero-n").textContent);
+       q(w, ".b-pic .b-coin-n").textContent === "1,000 DYC",
+       q(w, ".b-coin-n").textContent + " / " + q(w, ".b-hero-price .b-hero-n").textContent);
     ok("F1 · at x2 the SAME chip dims, because the face now costs USD 10",
        q(w, ".b-asset").className.indexOf("short") >= 0 && q(w, ".b-asset").disabled === true);
     ok("F1 · a dimmed chip cannot be chosen (the click does nothing)",
@@ -295,9 +304,10 @@ async function main() {
     await deal(c2, "usdc", c2.player.address, 25n * DEC6);
     const h2 = await H.storePage(c2, c2.player);
     await connect(h2.w);
-    ok("the bundle face keeps P1 and its USD 20 HERO (the body-text line is retired)",
+    ok("the bundle face keeps P1, its USD 20 hero and the coin under the card",
        tile(h2.w).indexOf(P1) >= 0 &&
        q(h2.w, ".b-hero-price .b-hero-n").textContent === "USD 20" &&
+       q(h2.w, ".b-pic .b-coin-n").textContent === "500 DYC" &&
        !/USD 20 — USDC or USDT/.test(tile(h2.w)));
     ok("and the affordable chip is chosen, the empty one dimmed",
        q(h2.w, ".b-asset").className.indexOf("on") >= 0 &&
