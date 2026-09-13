@@ -28,7 +28,9 @@ NS_PREFIX="dyw::"
 # M-P2 (owner-ruled D1): src/engine.js is archived as a STANDALONE byte-identical copy (game/src/engine.js) — the
 # multiplayer wrapper in mp/ (which lives OUTSIDE game/ and survives this sync) loads it. Same archive commit as the
 # inlined engine in index.html, so the two are byte-identical; refreshed every sync; guarded below (never silently skip).
-ARCHIVE_PATHS="index.html src/chapters.js src/engine.js assets/vendor"
+# SYNC-NARRATOR-1: src/narrator.js is archived too — the battle-log narrator (game GL-1..3). index.html loads it; without it
+# the recorder switches itself off and the Hall's wire faces carry no VIEW BATTLE LOG. Guarded below, like the engine copy.
+ARCHIVE_PATHS="index.html src/chapters.js src/engine.js src/narrator.js assets/vendor"
 
 if [ ! -f "$GAME_REPO/index.html" ] || [ ! -d "$GAME_REPO/assets/cards" ]; then
   echo "error: GAME_REPO does not look like the game ($GAME_REPO)" >&2
@@ -54,6 +56,12 @@ fi
 # M-P2 (owner-ruled D1) — the standalone engine copy for the mp/ wrapper MUST be present. Fail loudly, never skip.
 if [ ! -f "$DEST/src/engine.js" ]; then
   echo "error: archive did not produce src/engine.js (the M-P2 wrapper engine copy) — aborting" >&2
+  exit 1
+fi
+# SYNC-NARRATOR-1 — the battle log's narrator MUST be present: the page would still boot without it, but its recorder
+# would switch off in silence and every wire result face would lose VIEW BATTLE LOG. Fail loudly, never skip.
+if [ ! -f "$DEST/src/narrator.js" ]; then
+  echo "error: archive did not produce src/narrator.js (the battle-log narrator) — aborting" >&2
   exit 1
 fi
 # S-HALL-FREE-1 (R2) — THE PIN, beside the copy. The Hall lazy-loads this engine to play a FREE (mirror) match, and
@@ -235,6 +243,7 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - index.html (+ gate preamble AND the S3 economy-suppression block, injected between the DYW-GATE markers)
 - src/chapters.js (Story Mode data)
 - src/engine.js (M-P2 D1 — STANDALONE byte-identical engine copy for the mp/ multiplayer wrapper; same commit as the inlined engine, so byte-identical; guarded — the sync aborts if the archive did not carry it)
+- src/narrator.js (SYNC-NARRATOR-1 — the battle-log narrator index.html loads: the recorder and the VIEW BATTLE LOG panel on the result faces read it; guarded — the sync aborts if the archive did not carry it)
 - assets/vendor (pixi runtime, ~780KB — the only heavy dir still copied)
 
 ## Excluded / transformed

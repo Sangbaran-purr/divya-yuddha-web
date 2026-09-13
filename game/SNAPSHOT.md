@@ -1,14 +1,15 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `19ae83644e815f0e20ce60fe021a1023d77a9b3f` (19ae836)
-- Source committed: 2026-09-11 21:15:05 +0530
+- Source commit: `e2f4c196609ca654dc933c16897705d4d40fb7e8` (e2f4c19)
+- Source committed: 2026-09-13 15:03:01 +0530
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
 - index.html (+ gate preamble AND the S3 economy-suppression block, injected between the DYW-GATE markers)
 - src/chapters.js (Story Mode data)
 - src/engine.js (M-P2 D1 — STANDALONE byte-identical engine copy for the mp/ multiplayer wrapper; same commit as the inlined engine, so byte-identical; guarded — the sync aborts if the archive did not carry it)
+- src/narrator.js (SYNC-NARRATOR-1 — the battle-log narrator index.html loads: the recorder and the VIEW BATTLE LOG panel on the result faces read it; guarded — the sync aborts if the archive did not carry it)
 - assets/vendor (pixi runtime, ~780KB — the only heavy dir still copied)
 
 ## Excluded / transformed
@@ -28,14 +29,14 @@
 - Return-to-gate gem-mark (bottom-left, safe-area aware). Skipped when the page is framed with ?wire=1 (the Hall's battle frame): a tap there would navigate the battle away mid-match (S-HALL-WIRE-1 R5).
 
 ## Notes at sync time
-- Source working tree dirty files: 5 (ignored by the archive method).
-- game/ in-repo size: 2024 KB.
+- Source working tree dirty files: 7 (ignored by the archive method).
+- game/ in-repo size: 2056 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2) are stamped game/index.html?v=19ae836 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
+- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2) are stamped game/index.html?v=e2f4c19 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
 
 ## STAMP (S-HALL-WIRE-1 R4)
-- game/STAMP holds the source short sha (19ae836), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
+- game/STAMP holds the source short sha (e2f4c19), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh

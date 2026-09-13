@@ -53,6 +53,22 @@ const txt = (el) => (el ? el.textContent.replace(/\s+/g, " ").trim() : "");
 const WALL = /0x[0-9a-fA-F]{4}|"(?:address|opponent|stake|escrow[A-Za-z]*|key|privateKey|signature|slip|p0|p1)"\s*:/;
 
 async function main() {
+  // ═══ K0 · SYNC-NARRATOR-1 — the synced copy the staked frame loads carries the battle log (mirrors freedoor F52–F54) ═══
+  {
+    const snap = fs.readFileSync(path.join(H.SITE, "game/SNAPSHOT.md"), "utf8"), gi = fs.readFileSync(path.join(H.SITE, "game/index.html"), "utf8");
+    const narr = path.join(H.SITE, "game/src/narrator.js"), nsrc = fs.existsSync(narr) ? fs.readFileSync(narr, "utf8") : "";
+    ok("K0a · the staked frame's copy carries the battle-log narrator: game/src/narrator.js present (the UMD NARRATOR), named in the SNAPSHOT",
+       nsrc.indexOf("root.NARRATOR = OUT;") >= 0 && snap.indexOf("- src/narrator.js (SYNC-NARRATOR-1") >= 0);
+    const fnBody = (src, name) => { const i = src.indexOf("function " + name + "("); if (i < 0) return ""; let d = 0;
+      for (let k = src.indexOf("{", src.indexOf(")", i)); k < src.length; k++) { if (src[k] === "{") d++; else if (src[k] === "}") { d--; if (!d) return src.slice(i, k + 1); } } return ""; };
+    const NTAG = '<script src="src/narrator.js?v=1"></script>';
+    ok("K0b · the three markers on the staked road: the narrator tag (once), the #battlelog panel (once), syncBattleLogButton() inside showWireResult — the face a staked result (and a staked forfeit) is drawn on",
+       gi.split(NTAG).length === 2 && (gi.match(/id="battlelog"/g) || []).length === 1 && fnBody(gi, "showWireResult").indexOf("syncBattleLogButton();") >= 0 &&
+       /function showGameOver\(\)\{\s*if\(Wire\)\{ showWireResult\(\); return; \}/.test(gi) && fnBody(gi, "blogStart").indexOf("road === 'staked'") >= 0);
+    const gS = gi.indexOf("<!-- DYW-GATE-START"), gE = gi.indexOf("<!-- DYW-GATE-END -->");
+    ok("K0c · the injected gate preamble leaves the narrator tag intact: byte-for-byte after DYW-GATE-END, between chapters.js and the battle script, never touched by the preamble",
+       gS >= 0 && gE > gS && gi.indexOf(NTAG) > gE && gi.slice(gS, gE).indexOf("narrator") < 0 && gi.indexOf('<script src="src/chapters.js?v=1"></script>\n' + NTAG + "\n<script>") >= 0);
+  }
   // ── chain: our own referee, so the server signs REAL slips and a cast can reach the escrow ──
   const provider = new ethers.JsonRpcProvider(RPC);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));

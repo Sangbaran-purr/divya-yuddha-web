@@ -315,8 +315,8 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 #logdrawer.open #loglast{ display:none; }
 #logbody{ max-height:0; overflow-y:auto; transition:max-height .25s ease; padding:0 12px; font-size:12px; line-height:1.5; color:var(--ink-dim); }
 #logdrawer.open #logbody{ max-height:32vh; padding:2px 12px 8px; }
-#logbody .me{ color:#e8d49a; } #logbody .foe{ color:#c9a88a; } #logbody .sys{ color:#a68c3c; font-style:italic; }
-#logbody::-webkit-scrollbar{ width:4px; } #logbody::-webkit-scrollbar-thumb{ background:#33280f; }
+#logbody .me, #bl-body .me{ color:#e8d49a; } #logbody .foe, #bl-body .foe{ color:#c9a88a; } #logbody .sys, #bl-body .sys{ color:#a68c3c; font-style:italic; }
+#logbody::-webkit-scrollbar, #bl-body::-webkit-scrollbar{ width:4px; } #logbody::-webkit-scrollbar-thumb, #bl-body::-webkit-scrollbar-thumb{ background:#33280f; }
 
 /* controls */
 #controls{ display:flex; gap:10px; align-items:center; z-index:5; position:relative;
@@ -438,6 +438,19 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 #gameover h2{ font-family:Cinzel,serif; color:var(--gold); font-size:22px; letter-spacing:2px; margin-bottom:6px; }
 #gameover p{ color:var(--ink-dim); font-size:13px; margin-bottom:14px; }
 #gameover button{ background:#241a08; color:var(--gold); border:1.5px solid var(--gold-dim); border-radius:8px; padding:10px 22px; font-size:13px; cursor:pointer; }
+/* GL-3 — THE BATTLE-LOG PANEL over the result face: the .overlay/.modal shell (80vh), #logbody's line colours and thin
+   scrollbar, one scrolling column under a fixed title and a fixed close control — readable at 390px, no motion. */
+#battlelog{ z-index:96; }   /* above the battle HUD's score column (#hudwrap z-95 — the story cutscene's precedent), so no score chip sits on a line */
+#battlelog .modal{ display:flex; flex-direction:column; overflow:hidden; padding:16px 14px 12px; }
+#battlelog h3{ text-align:center; margin-bottom:8px; }
+#bl-body{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scrollbar-color:#33280f transparent;
+  text-align:left; font-size:13px; line-height:1.55; color:var(--ink-dim); padding:0 4px 6px; }
+#bl-body > div{ padding:1px 0; overflow-wrap:anywhere; }
+#bl-body .bl-hdr{ font-family:Cinzel,serif; color:var(--gold); font-size:11px; letter-spacing:2px; text-align:center; font-style:normal; margin:12px 0 4px; }
+#bl-body .bl-hdr:first-child{ margin-top:2px; }
+#bl-body .bl-gap{ text-align:center; font-style:italic; color:var(--ink-dim); margin:10px 0; }
+#bl-body .bl-err{ text-align:center; font-style:italic; font-size:11px; color:var(--ink-dim); border-top:1px solid #33280f; margin-top:12px; padding-top:8px; }
+#battlelog .cancel{ align-self:center; }
 .hidden{ display:none !important; }
 
 /* ===== faction theming — Devas gold / Asuras crimson ===== */
@@ -2238,6 +2251,11 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
     <button onclick="startGame()">REMATCH ⚔</button>
     <button class="go-alt" onclick="showLanding()">MAIN MENU</button>
   </div>
+</div></div>
+<div class="overlay hidden" id="battlelog" role="dialog" aria-modal="true" aria-labelledby="bl-title"><div class="modal">
+  <h3 id="bl-title">BATTLE LOG</h3>
+  <div id="bl-body"></div>
+  <button class="cancel" id="bl-close" type="button">CLOSE</button>
 </div></div>
 
 <div class="overlay hidden" id="mulligan">
@@ -4918,6 +4936,7 @@ if (typeof module!=='undefined'){
 </script>
 <!-- ENGINE:END -->
 <script src="src/chapters.js?v=1"></script>
+<script src="src/narrator.js?v=1"></script>
 <script>
 const $=id=>document.getElementById(id);
 const TYPE_ICON={hero:'👑',unit:'⚔',astra:'🔱',mantra:'🕉',artifact:'🧿'};
@@ -4993,13 +5012,13 @@ function startGame(p0Faction, p1Faction){
   const _wd=buildWaveDeck(currentFactions.p0, currentFactions.p1);   // S-PLAY-1: owned wave cards of the picked faction enter battle (Road B); null → today's plain match, byte-identical
   G = _wd
     ? newGame({p0:'You',p1:'Opponent',p0Faction:currentFactions.p0,p1Faction:currentFactions.p1, p1Difficulty:selectedDifficulty, wave1:true, scenario:{p0Deck:_wd.p0Deck, p1Deck:_wd.p1Deck}})
-    : newGame({p0:'You',p1:'Opponent',p0Faction:currentFactions.p0,p1Faction:currentFactions.p1, p1Difficulty:selectedDifficulty}); seenLog=0;   // D2: only the AI (p1) takes the chosen difficulty; the human (p0) stays advanced
+    : newGame({p0:'You',p1:'Opponent',p0Faction:currentFactions.p0,p1Faction:currentFactions.p1, p1Difficulty:selectedDifficulty}); seenLog=0; blogStart('solo', null, G);   // GL-2: the battle log starts with the match. D2: only the AI (p1) takes the chosen difficulty; the human (p0) stays advanced
   G.players[ME].manualShield=true;   // the human designates Dharma Shield by hand (AI keeps auto-designate)
   applyDiffChip(selectedDifficulty); $('diffchip').classList.remove('hidden');   // in-match tier chip (PvAI); story hides it
   matchRecorded=false;              // arm the one-shot match-result counter for this new match
   goStampDone=false; lastEarn=null; // slice 4: re-arm the earnings-stamp one-shot for the new match
   knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; hideBoardTargetBar();
-  ['gameover','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','mulligan','realmpop'].forEach(id=>$(id).classList.add('hidden'));
+  ['gameover','battlelog','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','mulligan','realmpop'].forEach(id=>$(id).classList.add('hidden'));
   $('hudwrap').classList.remove('hidden');
   $('logbody').innerHTML=''; $('loglast').textContent=''; $('logdrawer').classList.remove('open');
   applyFactionTheme();
@@ -5122,12 +5141,12 @@ $('mullconfirm').onclick=()=>{
     if (wireSend({ type:'mulligan', indices: idx })) { $('mullconfirm').disabled = true; }
     return;
   }
-  const snap=snapshotBoard(); const evStart=G.events.length;
+  const snap=snapshotBoard(); const evStart=G.events.length; const blogBefore=blogCapture(G);   // GL-2 — the solo mulligan resolves outside runAction: record it the same way
   mulligan(G,ME, [...mullMarked]);
   if(!Story) mulligan(G,OPP, aiMulliganPlan(G,OPP));   // story: keep the scripted opponent's opening hand intact
   Audio2.sfx('draw');
   $('mulligan').classList.add('hidden');
-  const evs=G.events.slice(evStart); render();
+  const evs=G.events.slice(evStart); blogRecord(G, blogBefore, evs, ME); render();
   if (reducedMotion() || !evs.length){ pump(); return; }
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=skipChoreo;
@@ -7581,10 +7600,10 @@ function startStoryChapter(id){
   Story = { chapter:ch, mode:ch.mode||'LOCKED', beatIdx:0, scriptIdx:0, handoff:false, lineBeat:-1,
             oppTurns:0, midFired:{}, holdLine:ch.introLine||null, holdInstruct:'', round2Shown:false, asideShown:false };   // SUGGESTED (ch3–5) adds free-play beat/aside/mid state
   currentFactions={ p0:ch.playerFaction, p1:ch.opponentFaction };
-  G=newGame({ p0:'You', p1:'Opponent', p0Faction:ch.playerFaction, p1Faction:ch.opponentFaction, realm:ch.realm||undefined, rng:storyRng(storySeedN++), scenario:ch.scenario }); seenLog=0;
+  G=newGame({ p0:'You', p1:'Opponent', p0Faction:ch.playerFaction, p1Faction:ch.opponentFaction, realm:ch.realm||undefined, rng:storyRng(storySeedN++), scenario:ch.scenario }); seenLog=0; blogStart('story', null, G);   // GL-2 (R3): story is out of the battle log's scope — the recorder is off
   G.players[ME].manualShield=true; matchRecorded=true;   // matchRecorded=true is belt-and-suspenders; showGameOver also early-returns for story (no PvAI telemetry)
   knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; hideBoardTargetBar();
-  ['gameover','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','storyselect','cutscene','storyresult','mulligan','bossvs','realmpop','diffchip'].forEach(id=>$(id).classList.add('hidden'));   // diffchip: story never shows the PvAI difficulty chip
+  ['gameover','battlelog','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','storyselect','cutscene','storyresult','mulligan','bossvs','realmpop','diffchip'].forEach(id=>$(id).classList.add('hidden'));   // diffchip: story never shows the PvAI difficulty chip
   $('hudwrap').classList.remove('hidden');
   $('logbody').innerHTML=''; $('loglast').textContent=''; $('logdrawer').classList.remove('open');
   applyFactionTheme(); applyRealmBoard(G.realm); makeEmbers(); battleStageStart();   // T42
@@ -8278,7 +8297,138 @@ function showRoundBanner(){
 }
 // PASS ANNOUNCEMENT (owner task): a pass emits no engine event, so it's detected UI-side via the players[pi].passed state transition in runAction. Same #banner visual class as the round-finish banner (reuse, no new look); ~1.5s hold; queued so it never stacks; sequenced into the same post-choreography position.
 function showPassBanner(pi){ enqueueBanner(pi===ME?'YOU PASSED':'OPPONENT PASSED', { hold:1500, animDur:1.5 }); }
-function announcePassIfAny(passedBefore){ for(const pi of [0,1]){ if(passedBefore && !passedBefore[pi] && G.players[pi] && G.players[pi].passed) showPassBanner(pi); } }
+// GL-2 — the round-ENDING pass is announced too: endRound resets `passed` inside the same action, so the pass that closes a
+//   round never showed a false→true transition and went unannounced (passedInAction takes the round end as its proof).
+function announcePassIfAny(passedBefore, actor){ for(const pi of [0,1]){ if(passedBefore && G.players[pi] && passedInAction(G, pi, passedBefore, roundCountAtActionStart, actor)) showPassBanner(pi); } }
+
+/* ── GL-2 (GAME-LOG-1) — THE BATTLE-LOG RECORDER. src/narrator.js (window.NARRATOR) speaks; this listens. ──
+   ONE HOOK, THREE ROADS. runAction captures the public names before its mutate and records the batch right after the
+   slice — so every card is named while it is still where the viewer saw it, never at result time (a bounce re-mints a
+   uid, a ghost is filtered, a staked Astra's discard carries no uid). Solo, the free wire (the mirror) and the staked
+   wire (the adapter's read model) all present the same G shape to it. The solo mulligan resolves outside runAction and
+   records the same way; on both wires the mulligan is a relayed act and passes through runAction.
+   NAMES: players are 'You' / 'Opponent' by ME on every road — the staked view never carries a seat name (the wall) and
+   this recorder never reads one. Cards resolve from the public zones only (both boards, heroes, discards, artifacts,
+   removed heroes, the viewer's OWN hand — never the other hand, never a deck), after then before the action; then the
+   staked adapter's played-card lookup (G._lookup); then a played card remembered with its seat from its play event.
+   PASSES from the pass transition INCLUDING the round-ender; ROUND ENDS from roundHistory growth; the RESULT when `over`
+   turns; the FORFEIT (or a result the board cannot reach) in showWireResult.
+   R4 — the staked road persists the lines in sessionStorage by matchId. A resume shows the restored lines THEN the gap
+   line, unless continuity is PROVEN. The view carries no move counter, so the one provable case is a view at the opening
+   (round 1, no round ended, neither seat mulliganed — nothing can have happened yet). Empty storage past the opening →
+   the gap line alone. Never a silent hole. Story is out of scope (R3): the recorder is off there. */
+let BLog = null;
+const BLOG_PREFIX = 'dy_blog:';
+function blogStart(road, matchId, g){
+  BLog = null;
+  if (road === 'story' || typeof NARRATOR === 'undefined' || !NARRATOR || !g) return;
+  BLog = { road: road, key: road === 'staked' ? BLOG_PREFIX + matchId : null, lines: [], played: {}, closed: false, errors: 0 };
+  if (road !== 'staked') return;
+  let stored = null;
+  try { const o = JSON.parse(sessionStorage.getItem(BLog.key) || 'null'); if (o && Array.isArray(o.lines)) stored = o.lines; } catch (e) { stored = null; }
+  const opening = g.round === 1 && !g.roundHistory.length && !g.over && !g.players.some(p => p.mulliganed);
+  BLog.lines = opening ? (stored || []).slice() : NARRATOR.resume(stored, { round: g.round });
+  blogPersist();
+}
+function blogPersist(){
+  if (!BLog || !BLog.key) return;
+  try { sessionStorage.setItem(BLog.key, JSON.stringify({ v: 1, lines: BLog.lines })); } catch (e) {}   // a full or blocked store costs only the restore: the resume's gap line still marks the hole
+}
+// uid → { n, seat } for every card the viewer can see in g at this instant (ghosts are named by the event's own text)
+function blogNames(g){
+  const m = {};
+  g.players.forEach((pl, seat) => {
+    const zones = [pl.units, pl.heroes, pl.discard, pl.removedHeroes || [], pl.artifact ? [pl.artifact] : []];
+    if (seat === ME) zones.push(pl.hand);
+    zones.forEach(z => (z || []).forEach(c => { if (c && !c.ghost && c.uid != null && c.n) m[c.uid] = { n: c.n, seat: seat }; }));
+  });
+  return m;
+}
+function blogCapture(g){
+  if (!BLog || BLog.closed || !g) return null;
+  return { names: blogNames(g), passed: g.players.map(p => !!p.passed), rh: g.roundHistory.length, round: g.round, over: !!g.over };
+}
+// did seat pi pass in this action? A false→true transition — or a round that ended inside it, whose closing pass
+// endRound has already reset. (Both seats unpassed at a round end only happens after a staked resync on a server that
+// carries no `passed`: then only the actor passed.)
+function passedInAction(g, pi, before, rhBefore, actor){
+  if (!before || before[pi] || !g.players[pi]) return false;
+  if (g.players[pi].passed) return true;
+  if (g.roundHistory.length <= rhBefore) return false;
+  return before.some(b => b) || pi === ((actor === ME || actor === OPP) ? actor : ME);
+}
+function blogRecord(g, before, evs, actor){
+  if (!BLog || BLog.closed || !before || !g) return;
+  try {
+    const players = g.players.map(p => p.name);
+    const passes = [];
+    g.players.forEach((pl, pi) => { if (passedInAction(g, pi, before.passed, before.rh, actor)) passes.push({ round: before.round, seat: pi }); });
+    const roundEnds = g.roundHistory.slice(before.rh).map(x => Object.assign({}, x));
+    const result = (g.over && !before.over) ? { round: g.round, winner: g.winner } : null;
+    (evs || []).forEach(e => {   // a played card, remembered with its seat: a staked Astra's discard carries no uid, a returned Mantra sits in a hand
+      if (e.type !== 'play' || e.sourceUid == null || BLog.played[e.sourceUid] || typeof e.text !== 'string') return;
+      const mt = /^(.+?) plays /.exec(e.text), seat = mt ? players.indexOf(mt[1]) : -1;
+      if (seat >= 0) BLog.played[e.sourceUid] = { n: e.abilityName, seat: seat };
+    });
+    const now = blogNames(g), lookup = g._lookup || null, played = BLog.played;
+    const card = (uid) => now[uid] || before.names[uid]
+      || (lookup && lookup[uid] && lookup[uid].n ? { n: lookup[uid].n, seat: played[uid] ? played[uid].seat : null } : null)
+      || (played[uid] && played[uid].n ? played[uid] : null);
+    const recs = NARRATOR.assemble({ passes: passes, events: evs || [], roundEnds: roundEnds, result: result });
+    if (!recs.length) return;
+    NARRATOR.narrate(recs, { me: ME, players: players, card: card }).forEach(l => BLog.lines.push(l));
+    if (result) BLog.closed = true;
+    blogPersist();
+  } catch (e) { BLog.errors++; }   // the match must never stall on its log; the count is there to be asserted and shown
+}
+/* ── GL-3 (GAME-LOG-1) — THE BATTLE-LOG PANEL. The recorder's lines, shown on the result screen. ──
+   A quiet VIEW BATTLE LOG button in #gameover .go-btns on the vs-AI face and the wire face (showWireResult rewrites that
+   container, so both faces call syncBattleLogButton after drawing it); never on story (R3 — no log is kept there). The
+   panel is its own .overlay above the result face; closing it only hides the panel, so the face and its buttons are
+   exactly as they were. Lines are shown AS RECORDED under the narrator's "— Round N —" headers: fixLogGrammar already ran
+   once inside the narrator and must never run again (a second pass turns "You pass." into "You pas."). Banner events
+   stay as recorded (sealed with GL-1). A non-zero recorder error count adds one quiet foot line; nothing else is hidden. */
+function syncBattleLogButton(){
+  const btns = document.querySelector('#gameover .go-btns'); if (!btns) return;
+  let b = document.getElementById('go-log');
+  if (!BLog || Story){ if (b) b.remove(); return; }
+  if (!b){ b = document.createElement('button'); b.id = 'go-log'; b.type = 'button'; b.className = 'go-alt'; b.textContent = 'VIEW BATTLE LOG'; b.onclick = openBattleLog; }
+  if (btns.lastElementChild !== b) btns.appendChild(b);
+}
+function renderBattleLog(){
+  const body = $('bl-body'); if (!body) return;
+  body.textContent = '';
+  const raw = (BLog && Array.isArray(BLog.lines)) ? BLog.lines : [];
+  let errors = BLog ? (BLog.errors || 0) : 0, lines = raw;
+  try { lines = NARRATOR.withRoundHeaders(raw); } catch (e) { errors++; }
+  lines.forEach(l => {
+    if (!l) return;
+    const d = document.createElement('div');
+    d.className = l.kind === 'header' ? 'bl-hdr' : l.kind === 'gap' ? 'bl-gap' : (l.side === 'me' || l.side === 'foe') ? l.side : 'sys';
+    d.textContent = String(l.text);   // AS RECORDED — no second grammar pass
+    body.appendChild(d);
+  });
+  if (errors > 0){ const e = document.createElement('div'); e.className = 'bl-err'; e.textContent = 'Some moments could not be recorded.'; body.appendChild(e); }
+}
+function openBattleLog(){
+  try { renderBattleLog(); } catch (e) {}
+  const ov = $('battlelog'); if (!ov) return;
+  ov.classList.remove('hidden');
+  const body = $('bl-body'); if (body) body.scrollTop = 0;   // read from the first round down
+  const c = $('bl-close'); if (c) { try { c.focus({ preventScroll: true }); } catch (e) {} }
+}
+function closeBattleLog(){
+  const ov = $('battlelog'); if (ov) ov.classList.add('hidden');
+  const b = document.getElementById('go-log'); if (b) { try { b.focus({ preventScroll: true }); } catch (e) {} }
+}
+if ($('bl-close')) $('bl-close').onclick = closeBattleLog;   // closing only hides the panel: the result face beneath is untouched
+// the closing line for a board that cannot reach its own end: a forfeit (either seat's shape), or a result with moves missing
+function blogClose(g, r){
+  if (!BLog || BLog.closed || !r || !g || g.over) return;
+  const rec = r.forfeit ? { kind: 'forfeit', round: g.round, winner: r.winner } : { kind: 'result', round: g.round, winner: r.winner };
+  try { NARRATOR.narrate([rec], { me: ME }).forEach(l => BLog.lines.push(l)); } catch (e) { BLog.errors++; }
+  BLog.closed = true; blogPersist();
+}
 
 /* ================= GAME FEEL: pacing speed, audio, helpers ================= */
 const SPEEDS={ relaxed:1.4, normal:1.0, fast:0.6 };
@@ -9800,12 +9950,14 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
 }
 function runAction(mutate, opts={}){
   const snap = snapshotBoard();
-  const passedBefore=[G.players[ME].passed, G.players[OPP].passed];   // PASS ANNOUNCEMENT: detect a passed:false→true transition after this action resolves (pass emits no event)
+  const passedBefore=G.players.map(p=>!!p.passed);   // PASS ANNOUNCEMENT: detect a passed:false→true transition after this action resolves (pass emits no event). GL-2: ABSOLUTE seats — announcePassIfAny reads it back by absolute seat (the [ME, OPP] order it had misread every pass for seat 1)
+  const blogBefore=blogCapture(G);   // GL-2 — the public names BEFORE the mutate: a card that leaves the board in this action is still named where it was seen
   roundCountAtActionStart = G.roundHistory.length;
   const evStart = G.events.length;
   venomStrikeNpAtAction = (G.players[ME].venomStrike===G.round) ? 0 : (G.players[OPP].venomStrike===G.round) ? 1 : -1;   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
   mutate();
   const evs = G.events.slice(evStart);
+  blogRecord(G, blogBefore, evs, opts.actor);   // GL-2 — record this batch NOW, names resolved at this instant (never at result time); before any choreography, on every road
   if (Story && Story.mode==='SUGGESTED' && opts.actor!==OPP) storyAfterPlayerAction(evs);   // SUGGESTED: advance the beat / arm the aside on each player commit
   if (Story && Story.mode==='FREE' && opts.actor!==OPP){ Story.holdLine=null; Story.holdInstruct=''; Story.shimmerDone=true; }   // FREE: dismiss the intro line + Artifact shimmer once the player acts
   resetPowerBeat();   // new event beat — power-change blips coalesce within this batch
@@ -9816,7 +9968,7 @@ function runAction(mutate, opts={}){
     if (evs.some(e=>e.type==='destroy')) Audio2.fileSfx('sfx_unit_destroy');
     render();
     if (G.roundHistory.length>roundCountAtActionStart && !G.over){ const h=G.roundHistory[G.roundHistory.length-1]; snapTo(h['t'+ME],h['t'+OPP]); }   // ITEMS 2+3 reduced-motion: statically show the round's TRUE final scores (not the reset board) so they never contradict the winner banner
-    showResultSummary(evs); announcePassIfAny(passedBefore); afterChoreo(); return;   // pass banner (if a pass just landed) enqueued BEFORE afterChoreo's round banner → pass shows first, round after
+    showResultSummary(evs); announcePassIfAny(passedBefore, opts.actor); afterChoreo(); return;   // pass banner (if a pass just landed) enqueued BEFORE afterChoreo's round banner → pass shows first, round after
   }
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=skipChoreo;
@@ -9843,7 +9995,7 @@ function runAction(mutate, opts={}){
       // GUARANTEE: no thrown/skipped/hung step can leave the choreo locked — always release the lock and resume the match
       clearVictims();   // T97: drop any victim-showcase clone whose strike beat was skipped/broke, so it never persists past the action
       choreoActive=false; choreoStartedAt=0; choreoForce=[]; layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML='';
-      try{ render(); showResultSummary(evs); announcePassIfAny(passedBefore); if (G.roundHistory.length>roundCountAtActionStart && !G.over) showRoundBanner(); }catch(e){}
+      try{ render(); showResultSummary(evs); announcePassIfAny(passedBefore, opts.actor); if (G.roundHistory.length>roundCountAtActionStart && !G.over) showRoundBanner(); }catch(e){}
       pump();
     }
   })();
@@ -10224,11 +10376,12 @@ function startWireMatch(st){
                 p0Faction: st.p0Faction, p1Faction: st.p1Faction, rng: wireSeeded(st.seed) });
   }
   seenLog = 0;
+  blogStart(Wire.road, Wire.matchId, G);   // GL-2 — free: a fresh log (a resync replays every move from seq 1); staked: restored by matchId, the gap marked (R4)
   currentFactions = { p0: G.players[ME].faction, p1: G.players[OPP].faction };   // "p" = the half drawn below = ME
   matchRecorded = true;   // R7 — the second lock: even a stray showGameOver can never record a wire match
   goStampDone = true; lastEarn = null;
   knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; hideBoardTargetBar();
-  ['gameover','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','mulligan','realmpop'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hidden'); });
+  ['gameover','battlelog','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','mulligan','realmpop'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hidden'); });
   const ww=$('wirewait'); if(ww) ww.remove();
   $('diffchip').classList.add('hidden');
   $('hudwrap').classList.remove('hidden');
@@ -10273,6 +10426,7 @@ function wireSend(action){
 // N3 — the result face inside the frame: no rewards, no MAIN MENU; the Hall owns the exit.
 function showWireResult(){
   const r = Wire && Wire.result, w = G.over ? G.winner : (r ? r.winner : null);
+  blogClose(G, r);   // GL-2 — a forfeit never reaches G.over: its closing line is written here, once
   $('goh').textContent = w===ME ? '⚔ VICTORY ⚔' : w===OPP ? 'DEFEAT' : 'STALEMATE';
   const rw = G.over ? [G.players[ME].roundWins, G.players[OPP].roundWins] : (r && r.roundWins ? [r.roundWins[ME], r.roundWins[OPP]] : [0,0]);
   $('gop').textContent = (r && r.forfeit && !G.over) ? 'Your opponent left the table.' : `Final: ${rw[0]}–${rw[1]}.`;
@@ -10280,6 +10434,7 @@ function showWireResult(){
   const btns = document.querySelector('#gameover .go-btns');
   if (btns) btns.innerHTML = '<button id="wire-leave">RETURN TO THE HALL</button>';
   const lv = $('wire-leave'); if (lv) lv.onclick = () => wirePost({ type:'wire:leave', matchId: Wire.matchId });
+  syncBattleLogButton();   // GL-3 — the rewrite above removed it: add the battle-log button back
   $('gameover').classList.remove('hidden');
   Audio2.setRound3(false); Audio2.stopMusic(2);
   if (w===ME) Audio2.fileSfx('sfx_victory'); else if (w===OPP) Audio2.fileSfx('sfx_defeat'); else Audio2.sfx('roundloss');
@@ -10327,6 +10482,7 @@ function showGameOver(){
   if(!goStampDone){ goStampDone=true;   // slice 4: earnings stamp — the ACTUAL awards from recordMatchResult, once per match
     if(lastEarn) renderEarnStamp($('go-earn'), $('go-extra'), lastEarn);
   }
+  syncBattleLogButton();   // GL-3 — VIEW BATTLE LOG on the vs-AI face (story never reaches here: R3)
   $('gameover').classList.remove('hidden');
   Audio2.setRound3(false);
   Audio2.stopMusic(2);   // fade battle music to SILENCE (no crossfade to menu) — result screen plays over silence; menu resumes on return to faction-select
