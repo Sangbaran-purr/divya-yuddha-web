@@ -128,18 +128,21 @@ the art is doing no work there. THE CARD IS THE BUNDLE'S IMAGE; whether the
 top-up wants an image of its own, or none at all, is the owner's call and is not
 decided here. Nothing is changed until it is.
 
-THE ART CARRIES TWO FALSE LINES - ART-TORANA-1, QUEUED (2026-09-12). The card
-image assets/tokens/Access_Torana_720.jpg has its text BAKED IN, and prints:
+ART-TORANA-1 - CLOSED 2026-09-13. The card image
+assets/tokens/Access_Torana_720.jpg had its text BAKED IN, and printed two
+sentences that had gone false:
 
   One per hand, bound to the bearer, never sold, yours to burn. It admits you. It buys no advantage.
   The door is free. What lies beyond is earned.
 
-The first carries the "never sold" clause that R7 corrected on the homepage the
-same day. The SECOND is the line RULINGS_2026-08-27 rule 3 RETIRED as false in
-August ("that line is false and retired") - so the card the store now sells, and
-the rite page displays, still carries a sentence the rulings killed. No code can
-fix either: it is pixels. ART-TORANA-1 is a regeneration item for the art
-pipeline; until it lands, both pages serve the file as it is.
+The first carried the "never sold" clause that R7 corrected on the homepage on
+2026-09-12. The SECOND was the line RULINGS_2026-08-27 rule 3 RETIRED as false in
+August ("that line is false and retired") - so the card the store sells, and the
+rite page displays, carried a sentence the rulings had killed. No code could fix
+either: it was pixels. THE ART WAS REGENERATED AND THE FILE REPLACED - see the
+dated section ART-TORANA-1 (2026-09-13) at the foot of this doc for the ruled
+replacement line and the verification. Both quotations above are kept as the
+record of what was removed.
 
 =====================================================
 ## 4. THE RECEIPT
@@ -240,3 +243,38 @@ walked through the door, and their face opens with P3.
 FIFTY BRONZE TABLES IS ARITHMETIC, not flourish: the Hall's BRONZE tier
 stakes 10 DYC a table, so 500 DYC is fifty of them. If the tier moves,
 P1 moves with it.
+
+=====================================================
+## ART-TORANA-1 (2026-09-13) - THE CARD'S TEXT, CORRECTED
+=====================================================
+THE RULING (owner, 2026-09-13, standing):
+
+- The card's text band carries EXACTLY ONE LINE:
+
+    The access card to the whole Divya Yuddha universe.
+
+- The TITLE BAND (TORANA / THE THRESHOLD) carries the name; the line does not
+  repeat it.
+- The ITALIC FLAVOR ZONE IS EMPTY. The gold divider stays, as ornament.
+- The corrected master PNG lives OUTSIDE this repo (approved_masters); this repo
+  carries only the 720 JPEG.
+
+WHAT LANDED. The owner regenerated the art and saved it over
+assets/tokens/Access_Torana_720.jpg. Verified before this was written, not taken
+on trust: a valid baseline JPEG, 720x1080, 454,024 bytes (was 482,818), and the
+card READ BY EYE - the title band shows TORANA / THE THRESHOLD, the text band
+carries the one ruled line above and nothing else, the divider remains, and the
+zone beneath it is empty.
+
+THE TWO RETIRED SENTENCES ARE GONE FROM THE CARD IMAGE. Neither "...never sold,
+yours to burn..." nor "The door is free. What lies beyond is earned." appears on
+it any more. With RULINGS_2026-08-27's 2026-09-12 amendment (the second door, and
+R7's correction of the Law of the Gate), rule 3's retired sentence now survives
+NOWHERE in this repo except as the quotation, in that amendment and in §3 above,
+of what it replaced.
+
+SCOPE: one file changed on the art side, and it is the only file this rung
+touches besides this doc. The image serves TWO pages from the one place -
+rite.html's TORANA presentation piece and the store tile's picture column - so
+the swap corrects both at once, and neither page needed an edit. No test reads
+the JPEG's pixels; the suites are unchanged and green.
