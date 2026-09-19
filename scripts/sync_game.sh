@@ -28,6 +28,9 @@ NS_PREFIX="dyw::"
 # M-P2 (owner-ruled D1): src/engine.js is archived as a STANDALONE byte-identical copy (game/src/engine.js) — the
 # multiplayer wrapper in mp/ (which lives OUTSIDE game/ and survives this sync) loads it. Same archive commit as the
 # inlined engine in index.html, so the two are byte-identical; refreshed every sync; guarded below (never silently skip).
+# HALL-SYNC-1: assets/manifest/ (~73MB — the export premium effects + the 20 Hero actors at both rungs, registry.json,
+# factionfx.json) joins the heavy-dir cross-link loop, NOT the archive. The game builds every manifest URL from ONE base
+# (FX.base) via new URL(rel, base), so rewriting that base cross-links the whole tree; asserted exactly once below.
 # SYNC-NARRATOR-1: src/narrator.js is archived too — the battle-log narrator (game GL-1..3). index.html loads it; without it
 # the recorder switches itself off and the Hall's wire faces carry no VIEW BATTLE LOG. Guarded below, like the engine copy.
 ARCHIVE_PATHS="index.html src/chapters.js src/engine.js src/narrator.js assets/vendor"
@@ -105,13 +108,13 @@ if [ "$(grep -c "'assets/vfx/" "$DEST/index.html")" != "0" ]; then
   exit 1
 fi
 
-# ── M-F4e HEAVY-DIR CROSS-LINK (cards/img/audio/thumbs/board/story) ──
+# ── M-F4e HEAVY-DIR CROSS-LINK (cards/img/audio/thumbs/board/story + manifest, HALL-SYNC-1) ──
 # These dirs are no longer archived; their base paths are rewritten to the free game's live Pages origin so they
 # stream same-origin. The bases appear in mixed contexts (single/double quotes AND backtick templates, e.g.
 # cardArtSrc and cutImgUrl), so we rewrite the BARE substring "assets/<dir>/" — catching every context. The
 # trailing slash + the "assets/" prefix keep the rewrites disjoint (assets/img/board_x.jpg is NOT assets/board/).
 # Each is guarded: at least one relative ref must exist and EVERY one must become absolute, else fail loudly.
-for B in cards img audio thumbs board story; do
+for B in cards img audio thumbs board story manifest; do
   REL="$(grep -oF "assets/$B/" "$DEST/index.html" | wc -l | tr -d ' ')"
   if [ "$REL" = "0" ]; then
     echo "error: no relative assets/$B/ references to cross-link (game asset wiring changed)" >&2
@@ -126,6 +129,14 @@ for B in cards img audio thumbs board story; do
   fi
   echo "sync_game: cross-linked assets/$B/ -> ${ASSET_URL}$B/ ($REL refs)"
 done
+# HALL-SYNC-1 — THE MANIFEST BASE: every export URL (registry, faction effects, effect + actor specs and atlases) resolves
+# against the ONE FX.base declaration. Assert it is exactly one and absolute to the free game's origin; if the game ever
+# moves or renames the base, fail loudly rather than ship a base that 404s into the classic fallback in silence.
+if [ "$(grep -oF "base:'${ASSET_URL}manifest/'" "$DEST/index.html" | wc -l | tr -d ' ')" != "1" ]; then
+  echo "error: expected exactly one base:'${ASSET_URL}manifest/' after the rewrite (game moved its manifest base)" >&2
+  exit 1
+fi
+echo "sync_game: manifest base -> ${ASSET_URL}manifest/ (exactly one)"
 # re-run / nesting safety: no doubled origin anywhere
 if [ "$(grep -c "${ASSET_URL}${ASSET_URL}" "$DEST/index.html")" != "0" ]; then
   echo "error: an asset base was double-prefixed (URL nesting) — aborting" >&2
@@ -249,6 +260,7 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 ## Excluded / transformed
 - assets/video/ (~47MB) — NOT copied. The VIDEO_BASE web branch is rewritten to the free game's live same-origin URL ($VIDEO_URL); the intro streams from there and fails open to the landing if unavailable (the game's own law).
 - assets/vfx/ (~285MB, S8 WORD 1) — NOT copied. The FIVE 'assets/vfx/ refs (3 sheet-URL builders mvURL/sheetURL/stillURL + 2 reduced-motion layer PNGs, ramanaam_wash + kishkindhaoath_ring) are rewritten from 'assets/vfx/ to the free game's live Pages URL ($VFX_URL); VFX sheets + layers stream same-origin. Guarded: the sync fails if the ref count is not exactly 5.
+- assets/manifest (~73MB, HALL-SYNC-1) — NOT copied. The export premium effects (Vajra, Sudarshana chain, Pashupatastra, Brahmastra) and the 20 Hero actors at both rungs, plus registry.json + factionfx.json. Every manifest URL resolves against the game's single FX.base, rewritten to ${ASSET_URL}manifest/ in the heavy-dir loop below; guarded: exactly one absolute base after the rewrite, else the sync aborts. The free game's Pages serves CORS (access-control-allow-origin: *), so the fetches decode cleanly; a missing asset fails open to the classic sprite (the game's own law).
 - assets/cards (~73MB) + assets/img (~80MB) + assets/audio (~2MB) + assets/thumbs (~4MB) + assets/board (~12MB) + assets/story (~13MB) — NOT copied (M-F4e). ~184MB of asset copies pushed the Pages artifact to 262MB and timed the deploy out at ~11min. Each base path (assets/<dir>/) is rewritten — every context, quoted or backtick-templated — to the free game's live Pages origin ($ASSET_URL<dir>/) so the assets stream same-origin. Guarded per dir: at least one relative ref must exist and EVERY one must become absolute; a double-prefix aborts. Gameplay is byte-faithful — only asset origins change.
 - .DS_Store — not in the commit; never copied.
 
@@ -315,4 +327,4 @@ if [ "$LINKS_STAMPED" != "20" ]; then
 fi
 echo "sync_game: stamped 20 entry links -> game/index.html?v=$SRC_SHORT"
 
-echo "sync_game: done. game/ = ${GAME_BYTES} KB (video + vfx cross-linked, not copied)."
+echo "sync_game: done. game/ = ${GAME_BYTES} KB (video + vfx + heavy dirs + manifest cross-linked, not copied)."

@@ -148,7 +148,11 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 #realmboard{ position:absolute; inset:0; z-index:0; background:center center/cover no-repeat; opacity:0; transition:opacity .45s ease; pointer-events:none; }   /* per-realm board, crossfaded in over the base once its image loads */
 #field::after{ content:''; position:absolute; inset:0; z-index:1; background:rgba(6,4,2,var(--board-overlay,.30)); pointer-events:none; }   /* dark overlay for readability; per-realm strength via --board-overlay */
 #vfxcanvas{ position:absolute; inset:0; z-index:5; pointer-events:none; }
-#vfxflash{ position:absolute; inset:0; z-index:6; pointer-events:none; opacity:0; background:radial-gradient(circle at 50% 50%, rgba(255,251,235,.92), rgba(255,235,175,.5) 42%, transparent 74%); }
+#effectclip{ position:absolute; inset:0; z-index:6; pointer-events:none; width:100%; height:100%; }
+#actorunder{ position:absolute; inset:0; z-index:8; pointer-events:none; width:100%; height:100%; }   /* EXPORT-2: the Hero manifestations — the portal glow and contact shadow */
+#actorcanvas, #actorgpu{ position:absolute; inset:0; z-index:9; pointer-events:none; width:100%; height:100%; }   /* the actor itself (Canvas 2D; #actorgpu is the stage's unused GPU slot) */
+#actorover{ position:absolute; inset:0; z-index:10; pointer-events:none; width:100%; height:100%; }   /* the contact flash */   /* EXPORT-1: the premium effect clips (Vajra, Sudarshana, Pashupatastra) — additive, drawn on the game's own beats; the flash moved up to z7 */
+#vfxflash{ position:absolute; inset:0; z-index:7; pointer-events:none; opacity:0; background:radial-gradient(circle at 50% 50%, rgba(255,251,235,.92), rgba(255,235,175,.5) 42%, transparent 74%); }
 #vfxflash.fire{ animation:mythicFlash calc(.5s * var(--vfx-t,1)) ease-out; }
 @keyframes mythicFlash{ 0%{opacity:0;} 8%{opacity:.98;} 24%{opacity:.35;} 100%{opacity:0;} }   /* synced to bolt 2: sharp flash → ~200ms afterglow decay */
 /* T66 combat vignette: white screen-edge flash (transparent centre → white edge, opacity-only) */
@@ -2145,6 +2149,11 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
     <div id="embers"></div>
     <div id="victimlayer"></div><!-- T97b: hosts victim-showcase clones ABOVE the board rows (.half z-3) but BELOW #vfxcanvas z-5, so the strike renders OVER the held card. Static #field child → survives render() (which only fillRow()s the row containers). -->
     <canvas id="vfxcanvas"></canvas>
+    <canvas id="effectclip"></canvas>
+    <canvas id="actorunder"></canvas>
+    <canvas id="actorcanvas"></canvas>
+    <canvas id="actorgpu"></canvas>
+    <canvas id="actorover"></canvas>
     <div id="vfxflash"></div>
     <div id="oppthinking" class="hidden"><span class="think-emblem">🌀</span><span class="think-txt">Opponent is thinking<span class="td">.</span><span class="td">.</span><span class="td">.</span></span></div>
     <div class="half opp">
@@ -4938,6 +4947,1690 @@ if (typeof module!=='undefined'){
 <script src="src/chapters.js?v=1"></script>
 <script src="src/narrator.js?v=1"></script>
 <script>
+/* ===== EFFECTCLIP VERBATIM BEGIN · EXPORT-1 (the premium effects track) ===== */
+/* lib/effectclip.js — LAB-19. THE ADDITIVE EFFECT CLIP: the premium effects track's first stage (owner amendment, LAB-19).
+   An effect clip is NOT an actor: no matte, no rungs, no pivot, no phases, no per-actor memory ladder, no director grammar. It is black-ground
+   emissive footage played ADDITIVELY on top of the board, slotted into the live game's existing effect contract for its card:
+     VAJRA (index.html playEvent): the cast ('play') plays sfx_astra, then the spectacle tier holds 110 ms of hit-stop + 1000 ms; the strike
+     is keyed off the RESOLUTION event ('destroy', abilityName 'Vajra') — sfx_unit_destroy, the target-anchored strike on the card's centre,
+     40 ms, the card cracks, 600 ms dwell. Every beat × vfxT (speed × CHOREO_SPEED 1.3). The strike sprite is never awaited.
+   So the clip STARTS inside the cast beat's hold, exactly its lead before the destroy beat, and its impact cell lands ON the destroy beat.
+   Its aftermath outlives the beat, un-awaited, as the current sprite does: the wire-clock cost is max(0, lead − cast beat) = 0.
+   DRAWING (the game's T72 contract): the RGB atlas gets a luminance alpha at load (alpha = max(R, G, B), the game's bakeAlpha — the black
+   ground becomes fully transparent), and every cell is drawn with 'lighter'.
+   BUDGET E1 (owner ruling, LAB-19, beside A5): an effect clip is capped at the effect layer's hi-rung class (~18 MB decoded); loaded on
+   play, released after; at most ONE effect clip decoded at once, coexisting with at most the one decoded actor A5 allows.
+   LAB-20 · THE CHAIN: an effect may be two clips — an INVOCATION on the caster's half centre (the game's own throw origin) handed off to
+   a STRIKE on the target, whose impact lands on the contract's bite. The clips decode ONE AFTER THE OTHER (E1): the invocation at the cast,
+   released at the handoff, then the strike. The contract generalises: a removal (Sudarshana) keys off a 'passive' event, flies for
+   flightMs before its bite, and exits the Hero cleanly (no crack) — Vajra's contract is the same shape with no flight.
+   THE IMPACT PIN (LAB-20, retro-applied to Vajra): on the frame the impact beat fires, the impact cell is drawn, whatever the clock says —
+   a timed clip at Fast on a 30 Hz device (a cell shorter than a frame) could otherwise skip exactly that cell.
+   LAB-20a · FAILS OPEN (see createPlayer): the timeline never waits on a decode.
+   LAB-20b · THE CHAKRA TRAVELS, AND THE EFFECT ROTATION RULE. A strike that carries a travel block flies the game's own throw path: its layer
+   starts on the invocation's anchor (the caster's half centre) and reaches the target's centre where its trail dies, on the trail's own
+   integral curve, starting on the FIRST DRAWN cell (a slow decode shortens the flight, never jumps it), scaled from the invocation disc's
+   size to its own. RULE: actors never rotate (the upright law stands); a directional effect may rotate its layer to align its motion feature
+   with its board path — from the actual caster-to-target vector, only while in motion, easing back to its authored orientation before its
+   impact frame. The LAB-20 arrive-from-centre mirror is retired.
+   Browser: window.EffectClip. Node: require. */
+(function (root) {
+  'use strict';
+  var CHOREO_SPEED = 1.3;
+  var E1 = { capClass: 'the effect layer hi rung (the game sheet vfx_vajra hi: 3072x1536 RGBA)', capBytes: 3072 * 1536 * 4, oneAtATime: true };
+  var num = function (x) { return typeof x === 'number' && isFinite(x); };
+
+  function validate(m) {
+    var e = [];
+    if (!m || typeof m !== 'object') return { ok: false, errors: ['not an object'] };
+    if (m.class !== 'effect-clip') e.push('class must be "effect-clip"');
+    if (m.blend !== 'add') e.push('blend must be "add"');
+    if (m.alpha !== 'luminance') e.push('alpha must be "luminance" (baked at load)');
+    if (m.channels !== 'rgb') e.push('channels must be "rgb" (no matte)');
+    if (!(m.fps > 0)) e.push('fps missing');
+    ['rungs', 'phases', 'pivot', 'refHeight', 'mirror', 'contactRule'].forEach(function (k) { if (m[k] !== undefined) e.push('an effect clip carries no actor-class field "' + k + '"'); });
+    var cells = m.cells;
+    if (!Array.isArray(cells) || !cells.length) e.push('cells missing');
+    else cells.forEach(function (c, i) {
+      if (!(num(c.x) && num(c.y) && c.w > 0 && c.h > 0)) e.push('cell ' + i + ' has no rectangle');
+      else if (m.atlasSize && (c.x + c.w > m.atlasSize.w || c.y + c.h > m.atlasSize.h)) e.push('cell ' + i + ' falls outside the atlas');
+    });
+    var member = m.role === 'invoke' || m.role === 'strike';
+    if (m.role !== undefined && !member) e.push('role must be "invoke" or "strike"');
+    if (m.role === 'invoke') { if (m.impact !== null) e.push('an invocation has no impact cell'); }
+    else if (!(Number.isInteger(m.impact) && cells && m.impact >= 0 && m.impact < cells.length)) e.push('impact must name a cell');
+    if (!(m.anchor && num(m.anchor.x) && num(m.anchor.y))) e.push('anchor missing');
+    else if (m.cellSize && (m.anchor.x < 0 || m.anchor.y < 0 || m.anchor.x > m.cellSize.w || m.anchor.y > m.cellSize.h)) e.push('anchor falls outside the cell');
+    var sr = m.scaleRule; if (!(sr && (sr.ringDiameterCell > 0 || sr.spanCell > 0) && sr.cardWidths > 0)) e.push('scaleRule missing');
+    else if (sr.halfFraction != null && !(sr.halfFraction > 0 && sr.halfFraction <= 1.2)) e.push('halfFraction out of range');
+    else if (sr.heightCap != null && !(sr.heightCap > 0 && sr.heightCap <= 1)) e.push('heightCap out of range');
+    else if (sr.cardFloorOfHalfH != null && !(sr.cardFloorOfHalfH > 0 && sr.cardFloorOfHalfH < 1)) e.push('cardFloorOfHalfH out of range');
+    if (!member) e = e.concat(contractErrors(m.contract));
+    else if (m.contract !== undefined) e.push('a chain member carries no contract (the chain does)');
+    if (m.atlasSize && m.atlasSize.w * m.atlasSize.h * 4 > E1.capBytes) e.push('the atlas decodes past the E1 cap');
+    return { ok: e.length === 0, errors: e };
+  }
+  function contractErrors(k) {
+    var e = [];
+    if (!(k && k.trigger && k.abilityName && k.castSound && (k.impactSound === null || typeof k.impactSound === 'string') && num(k.castHitStopMs) && num(k.castHoldMs) && num(k.crackAfterMs) && num(k.destroyDwellMs))) e.push('contract missing');
+    if (k && k.awaited !== false) e.push('the strike is never awaited (the current contract)');
+    if (k && k.flightMs !== undefined && !(k.flightMs >= 0)) e.push('flightMs must be 0 or more');
+    return e;
+  }
+  // a chain: its contract, and exactly an invocation then a strike (validated clip manifests)
+  function validateChain(chain, clips) {
+    var e = [];
+    if (!chain || chain.class !== 'effect-chain') e.push('class must be "effect-chain"');
+    if (!(chain && typeof chain.cardName === 'string')) e.push('cardName missing (the cast event carries the card name)');
+    e = e.concat(contractErrors(chain && chain.contract));
+    if (!(Array.isArray(clips) && clips.length === 2 && clips[0].role === 'invoke' && clips[1].role === 'strike')) e.push('a chain is an invocation then a strike');
+    (clips || []).forEach(function (m, i) { var v = validate(m); if (!v.ok) e.push('clip ' + i + ': ' + v.errors.join('; ')); if (chain && m.cardId !== chain.cardId) e.push('clip ' + i + ' is another card'); });
+    return { ok: e.length === 0, errors: e };
+  }
+  var contractOf = function (spec) { return spec.class === 'effect-chain' ? spec.chain.contract : spec.contract; };
+  var clipsOf = function (spec) { return spec.class === 'effect-chain' ? spec.clips : [spec]; };
+
+  // the cast and the strike this batch carries: the play of the card, and its resolution event (null when the card found no mark)
+  function fromBatch(batch, spec) {
+    var ev = (batch && batch.events) || [], k = contractOf(spec);
+    var name = spec.class === 'effect-chain' ? spec.chain.cardName : null;   // a chain's cast is named by its card (Sudarshana Chakra), its resolution by the ability (Sudarshana)
+    var cast = ev[0] && ev[0].type === 'play' && (ev[0].abilityName === k.abilityName || (name && ev[0].abilityName === name)) ? ev[0] : null;
+    var strike = ev.filter(function (x) { return x.type === k.trigger && x.abilityName === k.abilityName; })[0] || null;
+    return { cast: cast, strike: strike, targetUid: strike && strike.targetUids && strike.targetUids.length ? strike.targetUids[0] : null };
+  }
+
+  // the contract's beats at a speed (the game's speedMult: Normal 1, Fast 0.6): the cast beat, then the resolution beat; the impact is its
+  // flight after it (Vajra: no flight — the impact IS the destroy beat), the exit its crackAfterMs after the impact, the beat's end its dwell after
+  function beats(k, vfxT) {
+    var castBeatMs = (k.castHitStopMs + k.castHoldMs) * vfxT, impactAt = castBeatMs + (k.flightMs || 0) * vfxT;
+    return { castBeatMs: castBeatMs, destroyAt: castBeatMs, impactAt: impactAt, crackAt: impactAt + k.crackAfterMs * vfxT,
+             calloutAt: k.calloutAfterMs != null ? impactAt + (k.crackAfterMs + k.calloutAfterMs) * vfxT : null,
+             beatEnd: impactAt + (k.crackAfterMs + k.destroyDwellMs) * vfxT };
+  }
+  var vfxOf = function (speed, choreo) { return (speed > 0 ? speed : 1) * (choreo > 0 ? choreo : CHOREO_SPEED); };
+  // one clip (LAB-19): its impact cell lands on the impact beat
+  function timeline(m, speed, choreo) {
+    var vfxT = vfxOf(speed, choreo), B = beats(m.contract, vfxT), frameMs = 1000 / m.fps * vfxT, leadMs = m.impact * frameMs, totalMs = m.cells.length * frameMs;
+    var clipStart = B.impactAt - leadMs;
+    return { vfxT: vfxT, frameMs: frameMs, leadMs: leadMs, totalMs: totalMs, castBeatMs: B.castBeatMs, destroyAt: B.destroyAt, clipStart: clipStart, impactAt: clipStart + m.impact * frameMs,
+             crackAt: B.crackAt, beatEnd: B.beatEnd, clipEnd: clipStart + totalMs, waitCostMs: Math.max(0, -clipStart) };
+  }
+  // the chain (LAB-20): the strike's impact cell on the bite; the invocation ends exactly where the strike begins (the handoff), and starts
+  // its own length before — no dead time, no overlap, by construction. The wire-clock cost is whatever the chain would need before the cast
+  function chainTimeline(chain, clips, speed, choreo) {
+    var vfxT = vfxOf(speed, choreo), B = beats(chain.contract, vfxT), inv = clips[0], str = clips[1];
+    var frameMs = 1000 / str.fps * vfxT, invFrameMs = 1000 / inv.fps * vfxT;
+    var strikeStart = B.impactAt - str.impact * frameMs, invokeStart = strikeStart - inv.cells.length * invFrameMs;
+    return { vfxT: vfxT, frameMs: frameMs, invokeFrameMs: invFrameMs, castBeatMs: B.castBeatMs, beatStart: B.castBeatMs, impactAt: strikeStart + str.impact * frameMs,
+             crackAt: B.crackAt, calloutAt: B.calloutAt, beatEnd: B.beatEnd, invokeStart: invokeStart, handoffAt: strikeStart, strikeStart: strikeStart,
+             strikeEnd: strikeStart + str.cells.length * frameMs, leadMs: str.impact * frameMs, waitCostMs: Math.max(0, -invokeStart) };
+  }
+
+  var SPEED = { full: 1, fast: 0.6, reduced: 1 };
+  // spec: a clip manifest (one clip) or { class: 'effect-chain', chain, clips: [invoke, strike] }
+  function plan(batch, spec, opts) {
+    opts = opts || {};
+    var mode = SPEED[opts.mode] != null ? opts.mode : 'full', chained = spec.class === 'effect-chain', k = contractOf(spec), b = fromBatch(batch, spec);
+    var T = chained ? chainTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : timeline(spec, SPEED[mode], opts.choreoSpeed);
+    var clip = !!(b.cast && b.strike) && mode !== 'reduced', segments = [], cues = [];
+    if (clip && chained) segments.push({ role: 'invoke', clip: 0, start: T.invokeStart, end: T.handoffAt, frameMs: T.invokeFrameMs, place: 'caster-half' },
+                                       { role: 'strike', clip: 1, start: T.strikeStart, end: T.strikeEnd, frameMs: T.frameMs, place: 'target', impact: spec.clips[1].impact });
+    else if (clip) segments.push({ role: 'strike', clip: 0, start: T.clipStart, end: T.clipEnd, frameMs: T.frameMs, place: k.anchor === 'enemy-half-centre' ? 'enemy-half' : k.anchor === 'enemy-half-top' ? 'enemy-half-top' : 'target', impact: spec.impact });   // LAB-21: a BOARD-WIDE astra anchors on the caster's enemy half (the game's own row-plate anchor), not on one card
+    if (b.cast) cues.push({ t: 0, cue: 'cast', sound: k.castSound });
+    if (b.strike) {
+      if (clip && chained) { cues.push({ t: T.invokeStart, cue: 'invoke-start' }); cues.push({ t: T.handoffAt, cue: 'handoff' }); }
+      else if (clip) cues.push({ t: T.clipStart, cue: 'clip-start' });
+      cues.push({ t: T.impactAt, cue: 'impact', sound: k.impactSound, uid: b.targetUid });
+      cues.push({ t: T.crackAt, cue: k.exitKind === 'removal' ? 'removal' : 'crack', uid: b.targetUid, ms: (k.exitKind === 'removal' ? k.exitMs : 520) * T.vfxT });
+      if (T.calloutAt != null) cues.push({ t: T.calloutAt, cue: 'callout', uid: b.targetUid, text: chained ? spec.chain.cardName : null });
+      cues.push({ t: T.beatEnd, cue: 'settle' });
+      if (clip) cues.push({ t: chained ? T.strikeEnd : T.clipEnd, cue: 'clip-end' });
+    } else cues.push({ t: T.castBeatMs, cue: 'settle' });
+    cues.forEach(function (c) { if (c.sound === null) delete c.sound; });
+    cues.sort(function (x, y) { return x.t - y.t; });
+    return { mode: mode, chained: chained, clip: clip, strike: !!b.strike, targetUid: b.targetUid, casterSeat: opts.casterSeat != null ? opts.casterSeat : null,
+             timeline: T, segments: segments, cues: cues, end: cues[cues.length - 1].t };
+  }
+
+  var spanOf = function (m) { return m.scaleRule.spanCell || m.scaleRule.ringDiameterCell; };
+  // where a clip draws: its anchor on a point, sized so its scale feature spans cardWidths card widths
+  function place(m, card) {
+    var sr = m.scaleRule, s;
+    if (sr.halfFraction) {
+      // LAB-22 (owner ruling 3): a plate recorded as a FRACTION OF THE ENEMY HALF is sized off the half's own width;
+      // EXPORT-4 (ruling 1) THE FITTED LAW: clamped so the plate is never taller than heightCap x the half (landscape halves are wide and short)
+      s = sr.halfFraction * card.halfW / m.cellSize.w;
+      if (sr.heightCap && card.halfH > 0 && s * m.cellSize.h > sr.heightCap * card.halfH) s = sr.heightCap * card.halfH / m.cellSize.h;
+    } else {
+      // every other clip by card widths; EXPORT-4 (ruling 2) THE CARD FLOOR: where the field outgrows the cards (portrait tablets), a card
+      // counts as at least cardFloorOfHalfH x the half's height wide — a single-target strike still scales with its target
+      var w = card.w; if (sr.cardFloorOfHalfH && card.halfH > 0) w = Math.max(w, sr.cardFloorOfHalfH * card.halfH);
+      s = sr.cardWidths * w / spanOf(m);
+    }
+    return { scale: s, x: card.cx - m.anchor.x * s, y: card.cy - m.anchor.y * s, w: m.cellSize.w * s, h: m.cellSize.h * s };
+  }
+  // LAB-20b · the travel curve: the manifest's table (the trail's integral) linearly interpolated at u in [0, 1]
+  function lut(table, u) {
+    if (!(u > 0)) return table[0]; if (u >= 1) return table[table.length - 1];
+    var x = u * (table.length - 1), i = Math.floor(x), f = x - i; return table[i] + (table[i + 1] - table[i]) * f;
+  }
+  var easeOutQuad = function (u) { u = Math.max(0, Math.min(1, u)); return 1 - (1 - u) * (1 - u); };
+  // the layer rotation for a travelling effect: the source's motion (+x) turned onto the caster-to-target vector, in radians
+  function travelAngle(from, to) { return Math.atan2(to.y - from.y, to.x - from.x); }
+  // the strike layer's pose at time t: position, scale factor, rotation — given its travel (t0 = the first drawn cell, or null before it)
+  function travelPose(m, tv, t) {
+    var t0 = tv.t0 == null ? t : tv.t0, span = tv.arriveT - t0, u = span > 0 ? Math.min(1, Math.max(0, (t - t0) / span)) : 1;
+    var p = lut(m.travel.table, u), rot;
+    if (t < tv.arriveT) rot = tv.angle;
+    else { var v = tv.zeroT > tv.arriveT ? Math.min(1, Math.max(0, (t - tv.arriveT) / (tv.zeroT - tv.arriveT))) : 1; rot = tv.angle * (1 - lut(m.travel.table, v)); }
+    return { u: u, p: p, x: tv.from.x + (tv.to.x - tv.from.x) * p, y: tv.from.y + (tv.to.y - tv.from.y) * p, scale: tv.scaleFrom + (1 - tv.scaleFrom) * p, rot: rot };
+  }
+
+  // the cell on screen at time t (ms from the play's start), or null before the clip starts and from its end on
+  function frameIndex(m, T, t) {
+    if (t < T.clipStart || t >= T.clipEnd) return null;
+    return Math.min(m.cells.length - 1, Math.floor((t - T.clipStart) / T.frameMs + 1e-9));
+  }
+  function segIndex(m, seg, t) {
+    if (t < seg.start || t >= seg.end) return null;
+    return Math.min(m.cells.length - 1, Math.max(0, Math.floor((t - seg.start) / seg.frameMs + 1e-9)));
+  }
+
+  // the game's T72 bakeAlpha, on raw RGBA bytes: alpha = the brightest channel
+  function bake(d) { for (var i = 0; i < d.length; i += 4) { var r = d[i], g = d[i + 1], b = d[i + 2]; d[i + 3] = r > g ? (r > b ? r : b) : (g > b ? g : b); } return d; }
+
+  // THE PLAYER. env: now(), canvas, dpr, cardOf(uid) → {cx, cy, w}, halfOf(seat) → {cx, cy, top, w, h}, fieldCentreX(), loadAtlas(m) → atlas or Promise,
+  // render(board), crack(uid, ms), removal(uid, ms), callout(uid, text), sound(name), onDone(result), onError(e), diag(step, detail)
+  // LAB-20a · FAILS OPEN: the beats are never hostage to a decoration's decode. play() starts the timeline AT ONCE — the board drawn, the
+  // cast cue at 0 ms, every beat on schedule — and each clip decodes ALONGSIDE; a clip that is not ready (or failed) simply does not draw.
+  // A draw error lands the board on the engine's AFTER, as Skip does. E1 is unchanged: an atlas is accepted only while its segment is
+  // current, the invocation is released at the handoff before the strike decodes, and a decode arriving too late is closed on arrival.
+  function createPlayer(env) {
+    var st = { run: null, loaded: null, loadedRole: null, decodedBytes: 0, peak: 0, loads: 0, releases: 0, peakClips: 0, live: 0, last: null };
+    var diag = function (step, detail) { if (env.diag) { try { env.diag(step, detail || null); } catch (e) {} } };
+    function release() {
+      if (!st.loaded) return;
+      try { st.loaded.close(); } catch (e) {}
+      diag('release', { role: st.loadedRole });
+      st.loaded = null; st.loadedRole = null; st.decodedBytes = 0; st.releases++; st.live = 0;
+    }
+    function accept(a, role, t0) {
+      if (st.loaded) release();                                  // E1: never two effect clips decoded at once
+      st.loaded = a; st.loadedRole = role; st.loads++; st.live = 1; st.decodedBytes = a.bytes; st.peak = Math.max(st.peak, a.bytes); st.peakClips = Math.max(st.peakClips, st.live);
+      st.decodeMs = Date.now() - t0;
+    }
+    function clear() { var c = env.canvas; if (!c) return; var g = c.getContext('2d'); if (!g) return; g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, c.width, c.height); }
+    // decode segment k's clip alongside the running timeline; accept it only if the run is live and the segment is still current
+    function loadSegment(run, k) {
+      var sg = run.plan.segments[k], m = run.clips[sg.clip], t0 = Date.now(), tStart = env.now() - run.t0;
+      run.current = k; diag('load-start', { role: sg.role, at: Math.round(tStart) });
+      var h = sg.role === 'strike' && k > 0 ? run.log.handoff : null;
+      var ready = function (x) {
+        if (!x) return fail(new Error('the ' + sg.role + ' atlas loader returned nothing'));
+        var t = env.now() - run.t0;
+        if (run.done || run.current !== k) { try { x.close(); } catch (e) {} run.log.late.push({ role: sg.role, at: t }); diag('load-discarded', { role: sg.role, at: Math.round(t), why: run.done ? 'the play ended' : 'its segment is over' }); return; }
+        accept(x, sg.role, t0); run.log.ready[sg.role] = t;
+        if (h) { h.readyAt = t; h.decodeMs = Date.now() - t0; h.cellsBeforeReady = Math.max(0, Math.floor((t - sg.start) / sg.frameMs)); }
+        diag('load-ready', { role: sg.role, at: Math.round(t), ms: Date.now() - t0, bytes: x.bytes });
+      };
+      var fail = function (e) { var t = env.now() - run.t0; run.log.loadErrors.push({ role: sg.role, at: t, error: String(e && (e.message || e)) }); diag('load-failed', { role: sg.role, at: Math.round(t), error: String(e && (e.message || e)) }); if (env.onError) env.onError(e); };
+      var a;
+      try { a = env.loadAtlas(m); } catch (e) { fail(e); return; }
+      if (a && typeof a.then === 'function') { run.pending = a; a.then(ready, fail); }
+      else ready(a);
+    }
+    // play: starts the timeline at once (always synchronous); the clips decode alongside
+    function play(batch, spec, boards, opts) {
+      opts = opts || {};
+      if (st.run && !st.run.done) skip();
+      var p = plan(batch, spec, opts), clips = clipsOf(spec);
+      var target = p.targetUid != null && env.cardOf ? env.cardOf(p.targetUid) : null;
+      var hE = env.halfOf && p.casterSeat != null ? env.halfOf(1 - p.casterSeat) : null;   // EXPORT-4: the enemy half's height, for the card floor
+      var withHalf = function (c, h) { return { cx: c.cx, cy: c.cy, w: c.w, halfW: h && h.w, halfH: h && h.h }; };
+      var places = p.segments.map(function (sg) {
+        var m = clips[sg.clip];
+        if (sg.place === 'target') return target ? place(m, withHalf(target, hE)) : null;
+        var seat = (sg.place === 'enemy-half' || sg.place === 'enemy-half-top') ? (p.casterSeat != null ? 1 - p.casterSeat : null) : p.casterSeat;   // LAB-21: the enemy half is the caster's opposite seat
+        var hh = seat != null && env.halfOf ? env.halfOf(seat) : null;
+        // LAB-22: TOP-FLUSH — the plate's anchor (its top-centre) on the enemy half's TOP edge; a half that reports no top plays no clip (fail-open)
+        // EXPORT-4: a height-capped plate needs the half's height (no height, no clip — it could not be kept inside the half)
+        if (sg.place === 'enemy-half-top') return hh && target && hh.top != null && (!m.scaleRule.halfFraction || hh.w > 0) && (!m.scaleRule.heightCap || hh.h > 0) ? place(m, { cx: hh.cx, cy: hh.top, w: target.w, halfW: hh.w, halfH: hh.h }) : null;
+        return hh && target ? place(m, { cx: hh.cx, cy: hh.cy, w: target.w, halfW: hh.w, halfH: hh.h }) : null;   // the card width still sets the scale (cardWidths), the half sets the centre
+      });
+      if (st.loaded) release();
+      env.render(boards.before);
+      // EXPORT-5 · THE BEAT GATE (opt-in: the live game passes beatGate; the lab plays its plans as before). The plan stays the schedule;
+      // the game's REAL beat is the trigger for the impact cell: a beat that has not come by the planned impact holds the clip on the
+      // pre-impact cell (the weapon at maximum tension) until it does; past the cap the clip stands down and the classic sprite takes the beat
+      var ic = p.cues.filter(function (c) { return c.cue === 'impact'; })[0], isg = p.segments[p.segments.length - 1];
+      var gate = opts.beatGate && ic && p.clip ? { impactT: ic.t, deadMs: isg ? isg.frameMs : 0, capMs: opts.beatCapMs || 1500, state: 'wait', shift: 0, holdFrom: null, late: null } : null;
+      var run = { plan: p, spec: spec, clips: clips, boards: boards, target: target, places: places, t0: env.now(), next: 0, done: false, pin: opts.impactPin !== false, pending: null, current: -1, gate: gate, beatAt: null,
+                  manifest: clips[p.segments.length ? p.segments[p.segments.length - 1].clip : 0],
+                  place: places[places.length - 1] || null,
+                  log: { cues: [], drawn: [], bySegment: {}, composite: [], impactDrawnAt: null, impactPinned: false, destroyCueAt: null, settledAt: null, crackAt: null, handoff: null, mirror: null,
+                         ready: {}, late: [], loadErrors: [], drawError: null, travel: [], travelPlan: null, beat: null, beatLateCap: null } };
+      p.segments.forEach(function (sg) { run.log.bySegment[sg.role] = []; });
+      // LAB-20b: a travelling strike flies from the caster's half centre to the target's centre
+      var ks = p.segments.map(function (sg) { return sg.role; }).indexOf('strike'), sm = ks >= 0 ? clips[p.segments[ks].clip] : null, hh2 = env.halfOf && p.casterSeat != null ? env.halfOf(p.casterSeat) : null;
+      if (sm && sm.travel && target && hh2) {
+        var sg2 = p.segments[ks], from = { x: hh2.cx, y: hh2.cy }, to = { x: target.cx, y: target.cy };
+        run.travel = { from: from, to: to, angle: travelAngle(from, to), scaleFrom: (spec.chain && spec.chain.travel && spec.chain.travel.scaleFrom) || 1,
+                       arriveT: sg2.start + sm.travel.arriveCell * sg2.frameMs, zeroT: sg2.start + sm.impact * sg2.frameMs, t0: null };
+        run.log.travelPlan = { from: from, to: to, angleDeg: run.travel.angle * 180 / Math.PI, scaleFrom: run.travel.scaleFrom, plannedStart: sg2.start, arriveAt: run.travel.arriveT, rotationZeroAt: run.travel.zeroT, firstDrawAt: null };
+      }
+      st.run = run; st.last = run;
+      diag('play', { mode: p.mode, clip: p.clip, chained: p.chained, strike: p.strike, cues: p.cues.length, end: Math.round(p.end) });
+      if (p.clip) loadSegment(run, 0);                             // alongside — the cast cue does not wait for it
+      return run;
+    }
+    function handoff(run, t) {
+      release();                                                   // the invocation lets go FIRST — then the strike decodes (E1)
+      run.log.handoff = { at: t, releasedAt: t, readyAt: null, decodeMs: null, cellsBeforeReady: null, firstDrawnCell: null };
+      diag('handoff', { at: Math.round(t) });
+      loadSegment(run, 1);
+    }
+    function fire(run, c, t) {
+      run.log.cues.push({ cue: c.cue, planned: c.t, at: t });
+      if (c.sound && env.sound) env.sound(c.sound);
+      if (c.cue === 'impact') { run.log.destroyCueAt = t; run.impactFrame = true; }
+      if (c.cue === 'handoff') handoff(run, t);
+      if (c.cue === 'crack') { run.log.crackAt = t; if (env.crack) env.crack(c.uid, c.ms); }
+      if (c.cue === 'removal') { run.log.crackAt = t; if (env.removal) env.removal(c.uid, c.ms); }
+      if (c.cue === 'callout' && env.callout) env.callout(c.uid, c.text);
+      if (c.cue === 'settle') { run.log.settledAt = t; env.render(run.boards.after); }
+      if (c.cue === 'clip-end') { clear(); release(); run.current = -1; }
+      if (c.cue === 'cast' || c.cue === 'impact' || c.cue === 'settle') diag('cue', { cue: c.cue, at: Math.round(t) });
+    }
+    function finish(run, skipped) {
+      run.done = true; clear(); release();
+      var res = { skipped: !!skipped, plan: run.plan, log: run.log };
+      diag('finish', { skipped: !!skipped, drawn: run.log.drawn.length, errors: run.log.loadErrors.length + (run.log.drawError ? 1 : 0) });
+      if (env.onDone) env.onDone(res);
+    }
+    function draw(run, t, tr) {
+      var drew = false; if (tr == null) tr = t;   // EXPORT-5: t = the plan clock (cells, pose); tr = the real clock (logs)
+      run.plan.segments.forEach(function (sg, k) {
+        if (drew || !st.loaded || st.loadedRole !== sg.role || !run.places[k]) return;
+        var m = run.clips[sg.clip], ix = segIndex(m, sg, t);
+        if (run.pin && run.impactFrame && sg.impact != null) { if (ix !== sg.impact) run.log.impactPinned = true; ix = sg.impact; }   // THE IMPACT PIN
+        if (ix == null) return;
+        var c = env.canvas, g = c.getContext('2d'), d = env.dpr || 1, cell = m.cells[ix], r = run.places[k];
+        g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, c.width, c.height);
+        g.globalCompositeOperation = 'lighter'; g.globalAlpha = 1;
+        if (sg.role === 'strike' && run.travel) {
+          // LAB-20b: the flight — the first DRAWN cell starts it; the pose rides the trail's integral; rotation only while travelling
+          var tv = run.travel; if (tv.t0 == null) { tv.t0 = t; run.log.travelPlan.firstDrawAt = tr; diag('travel', { from: tv.from, to: tv.to, angleDeg: Math.round(tv.angle * 1800 / Math.PI) / 10, scaleFrom: tv.scaleFrom, firstDrawAt: Math.round(t), arriveAt: Math.round(tv.arriveT) }); }
+          var pose = travelPose(m, tv, t), kk = r.scale * pose.scale * d, cs = Math.cos(pose.rot) * kk, sn = Math.sin(pose.rot) * kk;
+          g.setTransform(cs, sn, -sn, cs, pose.x * d, pose.y * d);
+          g.drawImage(st.loaded.source, cell.x, cell.y, cell.w, cell.h, -m.anchor.x, -m.anchor.y, cell.w, cell.h);
+          g.setTransform(1, 0, 0, 1, 0, 0);
+          run.log.travel.push({ t: tr, cell: ix, x: pose.x, y: pose.y, rot: pose.rot, scale: pose.scale, u: pose.u });
+        }
+        else g.drawImage(st.loaded.source, cell.x, cell.y, cell.w, cell.h, r.x * d, r.y * d, r.w * d, r.h * d);
+        g.globalCompositeOperation = 'source-over';
+        var seq = run.log.bySegment[sg.role]; if (!seq.length) { diag('first-draw', { role: sg.role, at: Math.round(tr), cell: ix }); if (sg.role === 'strike' && run.log.handoff) run.log.handoff.firstDrawnCell = ix; }   // the TRUE loss at the handoff: cells before the first one drawn
+        if (seq[seq.length - 1] !== ix) seq.push(ix);
+        if (sg.role === 'strike' && run.log.drawn[run.log.drawn.length - 1] !== ix) run.log.drawn.push(ix);
+        run.log.composite.push('lighter'); drew = true;
+        if (sg.impact != null && ix === sg.impact && run.log.impactDrawnAt == null) run.log.impactDrawnAt = tr;
+      });
+    }
+    function frame(now) {
+      var run = st.run; if (!run || run.done) return;
+      var t = now - run.t0, cues = run.plan.cues, tc = t, G = run.gate; run.impactFrame = false;
+      if (G) {
+        if (G.state === 'wait' && t >= G.impactT - 1e-6) {
+          if (run.beatAt != null) G.state = 'go';                                         // the beat is already in: today's schedule, untouched
+          else { G.state = 'hold'; G.holdFrom = t; diag('beat-hold', { at: Math.round(t), impactAt: Math.round(G.impactT) }); }
+        }
+        if (G.state === 'hold' && run.beatAt != null) {
+          G.late = run.beatAt - G.impactT; G.shift = G.late > G.deadMs ? G.late : 0; G.state = 'go';   // within one clip frame: the post-impact schedule stays as planned
+          run.log.beat = { at: run.beatAt, late: G.late, shift: G.shift, heldFor: t - G.holdFrom }; diag('beat-late', { late: Math.round(G.late), shift: Math.round(G.shift) });
+        }
+        if (G.state === 'hold' && t - G.impactT > G.capMs) {                               // PAST THE CAP: stand down; the classic sprite takes the beat
+          run.log.beatLateCap = t; diag('beat-late-cap', { at: Math.round(t), heldFor: Math.round(t - G.holdFrom) });
+          if (env.onBeatLateCap) env.onBeatLateCap(run);
+          finish(run, true); return;
+        }
+        tc = G.state === 'hold' ? G.impactT - 1e-3 : t - G.shift;                           // HOLD: the pre-impact cell (impact − 1), the travel pose at arrival
+      }
+      try { while (run.next < cues.length && cues[run.next].t <= tc + 1e-6) { fire(run, cues[run.next], t); run.next++; } }
+      catch (e) { if (env.onError) env.onError(e); diag('cue-error', { at: Math.round(t), error: String(e && (e.message || e)) }); env.render(run.boards.after); finish(run, true); return; }
+      try { if (run.plan.clip) draw(run, tc, t); }
+      catch (e) {
+        // a DRAW error costs the decoration, never the beats: the clip is dropped, the timeline plays on to AFTER
+        if (!run.log.drawError) { run.log.drawError = { at: t, error: String(e && (e.message || e)) }; diag('draw-error', { at: Math.round(t), error: run.log.drawError.error }); if (env.onError) env.onError(e); }
+        release(); run.current = -2;
+      }
+      if (run.next >= cues.length) finish(run, false);
+    }
+    // EXPORT-5: the game's real beat for this cast (once). Returns false if there is no live run to hear it (the caller then owns the moment)
+    function beat() {
+      var run = st.run; if (!run || run.done || run.beatAt != null) return false;
+      run.beatAt = env.now() - run.t0; diag('beat', { at: Math.round(run.beatAt) }); return true;
+    }
+    function skip() {
+      var run = st.run; if (!run || run.done) return;
+      env.render(run.boards.after); run.log.settledAt = run.log.settledAt == null ? -1 : run.log.settledAt; finish(run, true);
+    }
+    return { play: play, frame: frame, skip: skip, beat: beat, release: release,
+             stats: function () { return { decodedBytes: st.decodedBytes, peak: st.peak, loads: st.loads, releases: st.releases, peakClips: st.peakClips, loaded: !!st.loaded, loadedRole: st.loadedRole, playing: !!(st.run && !st.run.done), decodeMs: st.decodeMs, last: st.last }; } };
+  }
+
+  var OUT = { validate: validate, validateChain: validateChain, fromBatch: fromBatch, beats: beats, timeline: timeline, chainTimeline: chainTimeline, plan: plan, place: place, lut: lut, easeOutQuad: easeOutQuad, travelAngle: travelAngle, travelPose: travelPose, frameIndex: frameIndex, segIndex: segIndex, bake: bake, createPlayer: createPlayer, E1: E1, CHOREO_SPEED: CHOREO_SPEED, SPEED: SPEED };
+  root.EffectClip = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== EFFECTCLIP VERBATIM END ===== */
+</script>
+<script>
+/* ===== ACTOR MODULES · EXPORT-2 (the Hero manifestations) — each module between its own VERBATIM markers, in dependency order ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · boarddiff ===== */
+/* lib/boarddiff.js — VFX-LAB-1. The board difference: what changed between two board snapshots. Pure, no DOM, no engine.
+   Ruling A1: the animation is the statement, the BOARD is the truth. Meghnad's strike on a Hero emits no event
+   (src/engine.js — the on-play case changes the Hero's power and logs; nothing is emitted), so the outcome a
+   manifestation hands back to the board must come from here, not from the event stream.
+   A snapshot is { seats: [{ units:[card], heroes:[card], artifact:card|null, ... }, …] }, a card { uid, id, n, power, eff, venom, bound, ghost }.
+   boardDiff(before, after) → { entered:[…], left:[…], changed:[…] } over cards ON THE BOARD (units, heroes, artifact);
+   ghosts are left out (a ghost is a cell, not a card). Loaded in the browser as window.BoardDiff, in node via require. */
+(function (root) {
+  'use strict';
+  var ZONES = ['units', 'heroes'];
+  function index(snap) {
+    var m = {};
+    (snap.seats || []).forEach(function (st, seat) {
+      ZONES.forEach(function (zone) { (st[zone] || []).forEach(function (c, i) { if (c && !c.ghost && c.uid != null) m[c.uid] = { seat: seat, zone: zone, slot: i, card: c }; }); });
+      if (st.artifact && st.artifact.uid != null) m[st.artifact.uid] = { seat: seat, zone: 'artifact', slot: 0, card: st.artifact };
+    });
+    return m;
+  }
+  function brief(x) { return { uid: x.card.uid, id: x.card.id, n: x.card.n, seat: x.seat, zone: x.zone, power: x.card.power, eff: x.card.eff }; }
+  function boardDiff(before, after) {
+    var A = index(before), B = index(after), out = { entered: [], left: [], changed: [] };
+    Object.keys(B).forEach(function (u) { if (!A[u]) out.entered.push(brief(B[u])); });
+    Object.keys(A).forEach(function (u) { if (!B[u]) out.left.push(brief(A[u])); });
+    Object.keys(B).forEach(function (u) {
+      var a = A[u], b = B[u]; if (!a) return;
+      var ch = { uid: b.card.uid, id: b.card.id, n: b.card.n, seat: b.seat, zone: b.zone };
+      var any = false;
+      ['power', 'eff', 'venom'].forEach(function (k) { if (a.card[k] !== b.card[k]) { ch[k] = { from: a.card[k], to: b.card[k], delta: b.card[k] - a.card[k] }; any = true; } });
+      if (!!a.card.bound !== !!b.card.bound) { ch.bound = { from: !!a.card.bound, to: !!b.card.bound }; any = true; }
+      if (a.seat !== b.seat || a.zone !== b.zone) { ch.moved = { from: [a.seat, a.zone], to: [b.seat, b.zone] }; any = true; }
+      if (any) out.changed.push(ch);
+    });
+    var bySlot = function (x, y) { return (x.seat - y.seat) || String(x.zone).localeCompare(String(y.zone)) || (x.uid - y.uid); };
+    out.entered.sort(bySlot); out.left.sort(bySlot); out.changed.sort(bySlot);
+    return out;
+  }
+  var OUT = { boardDiff: boardDiff };
+  root.BoardDiff = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · boarddiff ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · clashcontext ===== */
+/* lib/clashcontext.js — VFX-LAB-2. The ClashContext adapter: one play's event batch + the board before and after → the
+   honest facts a manifestation may use. Pure, no DOM, no engine.
+   HONEST FIELDS ONLY (STEP-0): who played what, from which seat, and what the board did. There is no "action" (the engine
+   emits no attack), no "lethal" for Heroes (Hero power floors at 0; the death sweep reads Units only), no "shielded" (Dharma
+   Shield covers Units only, and emits nothing when it prevents). A1: the board is the truth.
+   THE SPLIT that keeps the board honest and the queue un-swallowed: every board change is split into the part the batch's own
+   later events already carry (buff / damage / venom amounts on their targets) and the part no event carries. The SETTLE
+   lands only the un-evented part; the queued events land theirs after it. For Meghnad: Indra −2 has no event → it lands at
+   SETTLE; Meghnad's +1 is the Chaos Surge buff event → it lands when that queued event plays. The final board equals the
+   engine's AFTER snapshot exactly.
+   Browser: window.ClashContext (needs window.BoardDiff). Node: require. */
+(function (root) {
+  'use strict';
+  var BD = (typeof module !== 'undefined' && module.exports) ? require('./boarddiff.js') : root.BoardDiff;
+  var SCOPE = { hero: true, unit: true };                     // A2 — Hero and Unit plays manifest; everything else keeps its effect VFX
+  var EVENTED = { buff: true, damage: true, venom: true };    // events that carry a power delta (amount) on their targets
+  var clone = function (x) { return JSON.parse(JSON.stringify(x)); };
+
+  function locate(snap, uid) {
+    if (!snap) return null;
+    for (var s = 0; s < snap.seats.length; s++) {
+      var st = snap.seats[s], zones = ['units', 'heroes', 'hand'];
+      for (var z = 0; z < zones.length; z++) { var row = st[zones[z]] || [];
+        for (var i = 0; i < row.length; i++) if (row[i] && row[i].uid === uid) return { seat: s, zone: zones[z], index: i, card: row[i] }; }
+      if (st.artifact && st.artifact.uid === uid) return { seat: s, zone: 'artifact', index: 0, card: st.artifact };
+    }
+    return null;
+  }
+
+  function fromBatch(batch) {
+    var events = (batch && batch.events) || [], before = batch && batch.before, after = batch && batch.after;
+    var play = events[0] && events[0].type === 'play' ? events[0] : null;
+    if (!play || !before || !after) return null;
+    var hit = locate(after, play.sourceUid) || locate(before, play.sourceUid);
+    if (!hit) return null;
+    var rest = events.slice(1), evented = {};
+    rest.forEach(function (e) { if (EVENTED[e.type] && e.amount != null) (e.targetUids || []).forEach(function (u) { evented[u] = (evented[u] || 0) + Number(e.amount); }); });
+    var d = BD.boardDiff(before, after), diff = [];
+    d.entered.forEach(function (x) { var ev = evented[x.uid] || 0;
+      diff.push({ kind: 'enter', uid: x.uid, id: x.id, n: x.n, seat: x.seat, zone: x.zone, to: x.eff, evented: ev, settleTo: x.eff - ev }); });
+    d.changed.forEach(function (x) {
+      var ev = evented[x.uid] || 0;
+      if (x.eff) diff.push({ kind: 'power', uid: x.uid, id: x.id, n: x.n, seat: x.seat, zone: x.zone, from: x.eff.from, to: x.eff.to, delta: x.eff.delta, evented: ev, settleDelta: x.eff.delta - ev });
+      var status = {}; var any = false;
+      ['venom', 'bound', 'moved'].forEach(function (k) { if (x[k]) { status[k] = x[k]; any = true; } });
+      if (any) diff.push({ kind: 'status', uid: x.uid, id: x.id, n: x.n, seat: x.seat, zone: x.zone, status: status });
+    });
+    d.left.forEach(function (x) {
+      var grew = (after.seats[x.seat].discard || []).filter(function (id) { return id === x.id; }).length > (before.seats[x.seat].discard || []).filter(function (id) { return id === x.id; }).length;
+      diff.push({ kind: 'left', uid: x.uid, id: x.id, n: x.n, seat: x.seat, zone: x.zone, from: x.eff, toDiscard: grew });
+    });
+    var c = hit.card;
+    return {
+      sourceUid: play.sourceUid, cardId: c.id, cardName: c.n, cardType: c.t, rarity: c.r || null,
+      faction: after.seats[hit.seat].faction, seat: hit.seat, scope: SCOPE[c.t] ? 'manifest' : 'out',
+      boardDiff: diff, rest: rest,
+    };
+  }
+
+  // the three boards a manifestation shows: ENTRY (the card is down, nothing has happened), SETTLE (the un-evented changes
+  // landed), FINAL (the engine's AFTER). Each is a snapshot of the same shape as before/after.
+  function boards(ctx, before, after) {
+    var settle = clone(after);
+    ctx.boardDiff.forEach(function (e) {
+      if ((e.kind === 'enter' || e.kind === 'power') && e.evented) { var h = locate(settle, e.uid); if (h) { h.card.eff -= e.evented; h.card.power -= e.evented; } }
+    });
+    var entry = clone(settle);
+    ctx.boardDiff.forEach(function (e) {
+      if (e.kind === 'power' && e.settleDelta) { var h = locate(entry, e.uid); if (h) { h.card.eff -= e.settleDelta; h.card.power -= e.settleDelta; } }
+      if (e.kind === 'left') { var b = locate(before, e.uid); if (b && entry.seats[b.seat][b.zone]) entry.seats[b.seat][b.zone].splice(Math.min(b.index, entry.seats[b.seat][b.zone].length), 0, clone(b.card)); }
+    });
+    return { entry: entry, settle: settle, final: clone(after) };
+  }
+
+  // apply one queued event's evented power to a working board (the same arithmetic the split subtracted)
+  function applyEvent(board, ev) {
+    if (!EVENTED[ev.type] || ev.amount == null) return [];
+    var floats = [];
+    (ev.targetUids || []).forEach(function (u) { var h = locate(board, u); if (h) { h.card.eff += Number(ev.amount); h.card.power += Number(ev.amount); floats.push({ uid: u, delta: Number(ev.amount) }); } });
+    return floats;
+  }
+
+  // the board as the eye reads it: per seat, the cards on the board with their power
+  function project(board) {
+    return board.seats.map(function (st) { return ['heroes', 'units'].map(function (z) { return (st[z] || []).filter(function (c) { return c && !c.ghost; }).map(function (c) { return [c.uid, c.id, c.eff]; }); }); });
+  }
+
+  var OUT = { fromBatch: fromBatch, boards: boards, applyEvent: applyEvent, project: project, locate: locate, SCOPE: SCOPE };
+  root.ClashContext = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · clashcontext ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · director ===== */
+/* lib/director.js — VFX-LAB-2. The Manifestation Director: a ClashContext → a DETERMINISTIC timed plan. Pure, card-agnostic.
+   GRAMMAR (A1 — single actor, nothing depicted on the target): AWAKEN → EMERGE → ACT → FIZZLE → SETTLE, then the rest of the
+   batch, queued. SETTLE is where floating numbers land from the board difference — no cue before it carries a number.
+   DURATION: the rarity ladder (C 1.8 s · U/R 2.5 s · E/L 3.5 s · M 4.5 s) for every card; a card the registry marks
+   ladderExempt (ruling A3: the pilot, Meghnad) plays the full grammar in 3.2 s. Fast = half of Full. Reduced = no actor:
+   a card pulse, then SETTLE.
+   NATIVE TIMING (LAB-4): when a ladder-exempt card's actor manifest supplies native timing — opts.timing = { fps, emerge,
+   act, contact } (cell counts, and the contact cell's index inside ACT) — EMERGE and ACT last exactly as long as their cells
+   at the clip's own frame rate, and contact lands on the contact cell. AWAKEN, FIZZLE and SETTLE keep the grammar's times.
+   Fast halves everything (the cells play at twice their rate). Without native timing, the grammar table applies.
+   LAB-4a: a native plan's actor-phase cues carry cellFps (the cells' own rate: native in Full, twice native in Fast) — the stage
+   steps its cells on that clock, not on a phase length — and the contact cue carries contactCell and lands at the first ms the
+   contact cell is on stage (the stage fires it on the frame that cell is drawn).
+   TEMPO AND FIZZLE (LAB-4c, the lab's tuning sliders): opts.tempo (default 1) scales the whole manifestation — the clip's cells
+   play at fps × tempo, and AWAKEN, EMERGE, ACT and SETTLE stretch with them — while opts.fizzleMs (default 600) sets FIZZLE on its
+   own. Fast keeps its 2× relation to whatever Full is. A native actor-phase cue also carries cellStep: how many cells the stage
+   may advance in one frame (1 in Full — never a skipped cell, at any tempo; 2 in Fast). Unset, both are today's plan exactly.
+   PHASE LENGTHS (LAB-4d): opts.timing may also carry emergeMs / actMs — how long EMERGE and ACT last at tempo 1 whatever their
+   cell count. The cells then play at count ÷ length × tempo (EMERGE and ACT each at their own rate), so a repack with more cells
+   plays smoother in the same time. The defaults a play starts from (the manifest's tempo, the preset's fizzle_ms, the
+   registry's defaults block) are resolved by ActorManifest.defaultsFor — the director only takes numbers.
+   LAB-6 (a template gap): native timing applies to ANY card whose manifest supplies it, not only the ladder-exempt pilot — the
+   second character (Indra, Legendary) plays its clip at the owner's tuned defaults. The plan still reports what the rarity ladder
+   would give (ladderMs); whether the ladder should govern native actors from the expansion on is the owner's ruling (A3).
+   THE REPEAT RULE: a card's second and later manifestations in a match play Fast (Reduced stays Reduced). The caller passes
+   how many times this card has already manifested (createMemory() keeps that count per match).
+   LAB-8 · THE NATIVE EXIT: opts.exit === 'native' (with native timing) drops FIZZLE — no fizzle phase, no exit-fx cue: the clip carries its
+   own exit and the actor holds its last cell until SETTLE. Without native timing the grammar keeps its FIZZLE.
+   A2: a play outside Hero/Unit gets no actor phases — SETTLE and the queue only (its existing effect VFX is not the lab's).
+   Browser: window.Director. Node: require. */
+(function (root) {
+  'use strict';
+  var GRAMMAR = [['AWAKEN', 400], ['EMERGE', 600], ['ACT', 1200], ['FIZZLE', 600], ['SETTLE', 400]];   // the pilot's 3.2 s, in proportion
+  var PILOT_MS = 3200;
+  var LADDER_MS = { C: 1800, U: 2500, R: 2500, E: 3500, L: 3500, M: 4500 };
+  var FAST = 0.5;
+  var CONTACT = 0.58;                                                                            // contact lands 58% into ACT
+  var HIT = { full: { hitstopMs: 60, flashMs: 90, impulseMs: 180, impulsePx: 5 }, fast: { hitstopMs: 50, flashMs: 70, impulseMs: 140, impulsePx: 4 } };
+  var REDUCED = [['PULSE', 300], ['SETTLE', 300]];
+  var EFFECT_ONLY = [['SETTLE', 300]];
+  var QUEUE_GAP = { full: 450, fast: 250, reduced: 200, effect: 250 };
+
+  function phasesOf(spec, total) {
+    var sum = spec.reduce(function (a, p) { return a + p[1]; }, 0), t = 0, out = [];
+    spec.forEach(function (p, i) { var d = i === spec.length - 1 ? total - t : Math.round(p[1] * total / sum); out.push({ name: p[0], t0: t, t1: t + d }); t += d; });
+    return out;
+  }
+  function settleOf(ctx) {
+    var changes = [], floats = [];
+    ctx.boardDiff.forEach(function (e) {
+      if (e.kind === 'enter') changes.push({ kind: 'enter', uid: e.uid, n: e.n, to: e.settleTo });
+      else if (e.kind === 'power' && e.settleDelta) { changes.push({ kind: 'power', uid: e.uid, n: e.n, from: e.from, to: e.from + e.settleDelta, delta: e.settleDelta }); floats.push({ uid: e.uid, delta: e.settleDelta }); }
+      else if (e.kind === 'left') changes.push({ kind: 'left', uid: e.uid, n: e.n, toDiscard: e.toDiscard });
+      else if (e.kind === 'status') changes.push({ kind: 'status', uid: e.uid, n: e.n, status: e.status });
+    });
+    return { changes: changes, floats: floats };
+  }
+
+  function plan(ctx, opts) {
+    if (!ctx) return null;
+    opts = opts || {};
+    var requested = opts.mode === 'fast' || opts.mode === 'reduced' ? opts.mode : 'full';
+    var inScope = ctx.scope === 'manifest';
+    var prior = Math.max(0, opts.prior | 0);
+    var mode, repeat = false;
+    if (!inScope) mode = requested === 'reduced' ? 'reduced' : 'effect';
+    else if (requested === 'reduced') mode = 'reduced';
+    else { repeat = prior >= 1; mode = repeat ? 'fast' : requested; }
+    var actor = inScope && (mode === 'full' || mode === 'fast');
+    var ladder = opts.ladderExempt ? 'exempt (A3 pilot)' : 'rarity ' + (ctx.rarity || '?');
+    var full = opts.ladderExempt ? PILOT_MS : (LADDER_MS[ctx.rarity] || LADDER_MS.R);
+    var phases, total;
+    var native = opts.timing && opts.timing.fps > 0 && opts.timing.emerge > 0 && opts.timing.act > 0 ? opts.timing : null;
+    var contactFrac = CONTACT, cellFps = null, cellFpsEmerge = null, contactMs = null, exit = 'procedural';
+    var tempo = opts.tempo > 0 ? Math.min(4, Math.max(0.25, +opts.tempo)) : 1, fizzleMs = opts.fizzleMs > 0 ? Math.round(+opts.fizzleMs) : null, tuned = tempo !== 1 || fizzleMs != null;
+    if ((mode === 'full' || mode === 'fast') && native) {
+      var k = mode === 'fast' ? FAST : 1, rate = native.fps * tempo;
+      var rateE = native.emergeMs > 0 ? native.emerge * 1000 / native.emergeMs * tempo : rate, rateA = native.actMs > 0 ? native.act * 1000 / native.actMs * tempo : rate;
+      var ms = function (n) { return Math.round(n * 1000 / rate * k); }, beat = function (g) { return Math.round(g / tempo * k); };
+      var spec = [['AWAKEN', beat(GRAMMAR[0][1])], ['EMERGE', native.emergeMs > 0 ? beat(native.emergeMs) : ms(native.emerge)], ['ACT', native.actMs > 0 ? beat(native.actMs) : ms(native.act)], ['FIZZLE', Math.round((fizzleMs != null ? fizzleMs : GRAMMAR[3][1]) * k)], ['SETTLE', beat(GRAMMAR[4][1])]];
+      if (opts.exit === 'native') { exit = 'native'; spec = spec.filter(function (x) { return x[0] !== 'FIZZLE'; }); }   // LAB-8
+      phases = []; var t0 = 0; spec.forEach(function (x) { phases.push({ name: x[0], t0: t0, t1: t0 + x[1] }); t0 += x[1]; }); total = t0;
+      if (native.contact != null) contactFrac = Math.min(1, Math.max(0, native.contact / native.act));
+      cellFps = rateA / k; cellFpsEmerge = rateE / k;                                            // the cells' own rates (ACT, EMERGE): × tempo in Full, twice that in Fast
+      if (native.contact != null) contactMs = Math.ceil(native.contact * 1000 / cellFps);          // the first ms of ACT at which the contact cell is on stage
+      ladder = (opts.ladderExempt ? 'exempt (A3 pilot)' : 'rarity ' + (ctx.rarity || '?') + ' (the ladder would give ' + (LADDER_MS[ctx.rarity] || LADDER_MS.R) + ' ms)') + ' · native ' + native.fps + ' fps';
+    }
+    else if ((mode === 'full' || mode === 'fast') && tuned) {
+      var kk = mode === 'fast' ? FAST : 1, sc = full / PILOT_MS * kk / tempo, t1 = 0; phases = [];
+      GRAMMAR.forEach(function (g) { var d = g[0] === 'FIZZLE' && fizzleMs != null ? Math.round(fizzleMs * kk) : Math.round(g[1] * sc); phases.push({ name: g[0], t0: t1, t1: t1 + d }); t1 += d; });
+      total = t1;
+    }
+    else if (mode === 'full' || mode === 'fast') { total = Math.round(mode === 'fast' ? full * FAST : full); phases = phasesOf(GRAMMAR, total); }
+    else if (mode === 'reduced') { total = 600; phases = phasesOf(REDUCED, total); }
+    else { total = 300; phases = phasesOf(EFFECT_ONLY, total); }
+    var at = function (name) { return phases.filter(function (p) { return p.name === name; })[0]; };
+    var cues = [], seq = 0;
+    var cue = function (t, name, o) { var c = { t: t, cue: name, seq: seq++ }; for (var k in (o || {})) c[k] = o[k]; cues.push(c); };
+    var towardSeat = 1 - ctx.seat;
+    cue(0, 'board-entry', { state: true });
+    if (actor) {
+      var A = at('AWAKEN'), E = at('EMERGE'), C = at('ACT'), Z = at('FIZZLE'), S = at('SETTLE'), hit = HIT[mode];
+      cue(A.t0, 'portal-open', { faction: ctx.faction, dur: A.t1 - A.t0 + (E.t1 - E.t0) });
+      var nat = function (o) { if (cellFps) { o.cellFps = o.phase === 'emerge' ? cellFpsEmerge : cellFps; o.cellStep = mode === 'fast' ? 2 : 1; } return o; };
+      cue(E.t0, 'actor-phase', nat({ phase: 'emerge', dur: E.t1 - E.t0 }));
+      cue(C.t0, 'actor-phase', nat({ phase: 'act', dur: C.t1 - C.t0, contactFrac: contactFrac, towardSeat: towardSeat }));
+      var hitCue = { towardSeat: towardSeat, hitstopMs: hit.hitstopMs, flashMs: hit.flashMs, impulseMs: hit.impulseMs, impulsePx: hit.impulsePx };
+      if (contactMs != null) hitCue.contactCell = native.contact;
+      cue(contactMs != null ? C.t0 + Math.min(C.t1 - C.t0 - 1, contactMs) : C.t0 + Math.round((C.t1 - C.t0) * contactFrac), 'contact', hitCue);
+      if (Z) { cue(Z.t0, 'actor-phase', nat({ phase: 'fizzle', dur: Z.t1 - Z.t0 })); cue(Z.t0, 'exit-fx', { faction: ctx.faction }); }   // LAB-8: none on a native exit
+      cue(S.t0, 'actor-gone', { state: true });
+      var st = settleOf(ctx); cue(S.t0, 'settle', { state: true, changes: st.changes, floats: st.floats });
+    } else if (mode === 'reduced' && inScope) {
+      var Pp = at('PULSE'), Sr = at('SETTLE');
+      cue(Pp.t0, 'card-pulse', { dur: Pp.t1 - Pp.t0 });
+      var sr = settleOf(ctx); cue(Sr.t0, 'settle', { state: true, changes: sr.changes, floats: sr.floats });
+    } else {
+      var se = settleOf(ctx); cue(at('SETTLE').t0, 'settle', { state: true, changes: se.changes, floats: se.floats });
+    }
+    var gap = QUEUE_GAP[mode];
+    ctx.rest.forEach(function (ev, i) { cue(total + i * gap, 'queue', { state: true, index: i, event: ev }); });
+    var end = total + ctx.rest.length * gap;
+    cue(end, 'done', { state: true });
+    cues.sort(function (a, b) { return (a.t - b.t) || (a.seq - b.seq); });
+    var span = function (n) { var x = at(n); return x ? x.t1 - x.t0 : 0; }, hitAt = cues.filter(function (c) { return c.cue === 'contact'; })[0];
+    var timeline = actor ? { awaken: span('AWAKEN'), emerge: span('EMERGE'), act: span('ACT'), contact: hitAt ? hitAt.t - at('ACT').t0 : null, contactAt: hitAt ? hitAt.t : null,
+                             fizzle: span('FIZZLE'), settle: span('SETTLE'), total: total } : null;
+    return { version: 1, timing: native ? 'native' : 'grammar', exit: actor ? exit : null, ladderMs: LADDER_MS[ctx.rarity] || LADDER_MS.R, cellFps: cellFps, cellFpsEmerge: cellFpsEmerge, tempo: tempo, fizzleMs: actor ? span('FIZZLE') : null, timeline: timeline, cardId: ctx.cardId, cardName: ctx.cardName, seat: ctx.seat, towardSeat: towardSeat, faction: ctx.faction,
+             requestedMode: requested, mode: mode, repeat: repeat, prior: prior, actor: actor, ladder: ladder, total: total, end: end, phases: phases, cues: cues };
+  }
+
+  function formatPlan(p) {
+    if (!p) return '(no plan)';
+    var head = p.cardName + ' · seat ' + p.seat + ' → toward seat ' + p.towardSeat + ' · mode ' + p.mode + (p.repeat ? ' (repeat rule: ' + p.prior + ' earlier)' : '') +
+      (p.requestedMode !== p.mode ? ' · asked ' + p.requestedMode : '') + ' · ' + (p.actor ? 'actor' : 'no actor') + ' · ladder ' + p.ladder + ' · manifestation ' + p.total + ' ms · batch ends ' + p.end + ' ms';
+    var ph = p.phases.map(function (x) { return x.name + ' ' + x.t0 + '–' + x.t1; }).join('  ·  ');
+    var lines = p.cues.map(function (c) {
+      var extra = c.cue === 'settle' ? ' ' + c.changes.map(function (x) { return x.kind === 'power' ? x.n + ' ' + x.from + '→' + x.to + ' (' + (x.delta > 0 ? '+' : '−') + Math.abs(x.delta) + ')' : x.kind === 'enter' ? x.n + ' enters at ' + x.to : x.kind + ' ' + x.n; }).join(', ')
+        : c.cue === 'queue' ? ' ' + c.event.type + (c.event.abilityName ? ' · ' + c.event.abilityName : '') + (c.event.amount != null ? ' ' + (c.event.amount > 0 ? '+' : '') + c.event.amount : '') + (c.event.text ? ' "' + c.event.text + '"' : '')
+        : c.cue === 'actor-phase' ? ' ' + c.phase + ' (' + c.dur + ' ms' + (c.cellFps ? ' · ' + c.cellFps + ' cells/s' : '') + ')' : c.cue === 'contact' ? (c.contactCell != null ? ' on ACT cell ' + c.contactCell + ' ·' : '') + ' hit-stop ' + c.hitstopMs + ' ms · flash ' + c.flashMs + ' ms · impulse ' + c.impulsePx + ' px toward seat ' + c.towardSeat
+        : c.cue === 'portal-open' || c.cue === 'exit-fx' ? ' ' + c.faction : c.cue === 'card-pulse' ? ' ' + c.dur + ' ms' : '';
+      return ('     ' + c.t).slice(-5) + ' ms  ' + c.cue + extra;
+    });
+    var tl = p.timeline;
+    var tline = 'Timeline (ms): ' + (tl ? 'AWAKEN ' + tl.awaken + ' · EMERGE ' + tl.emerge + ' · ACT ' + tl.act + ' · contact +' + tl.contact + ' (at ' + tl.contactAt + ') · ' + (p.exit === 'native' ? 'no FIZZLE (native exit)' : 'FIZZLE ' + tl.fizzle) + ' · SETTLE ' + tl.settle + ' · total ' + tl.total
+      : p.phases.map(function (x) { return x.name + ' ' + (x.t1 - x.t0); }).join(' · ') + ' · total ' + p.total) + ' · tempo ' + (p.tempo != null ? p.tempo : 1).toFixed(2) + '×' + (p.cellFps ? ' · ' + (p.cellFpsEmerge && Math.abs(p.cellFpsEmerge - p.cellFps) > 1e-6 ? 'EMERGE ' + Math.round(p.cellFpsEmerge * 100) / 100 + ' · ACT ' + Math.round(p.cellFps * 100) / 100 : Math.round(p.cellFps * 100) / 100) + ' cells/s' : '');
+    return [head, ph, tline].concat(lines).join('\n');
+  }
+
+  function createMemory() {
+    var seen = {};
+    return { count: function (id) { return seen[id] || 0; }, record: function (id) { seen[id] = (seen[id] || 0) + 1; return seen[id]; }, reset: function () { seen = {}; } };
+  }
+
+  var OUT = { plan: plan, formatPlan: formatPlan, createMemory: createMemory, GRAMMAR: GRAMMAR, PILOT_MS: PILOT_MS, LADDER_MS: LADDER_MS, FAST: FAST, CONTACT: CONTACT };
+  root.Director = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · director ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · runner ===== */
+/* lib/runner.js — VFX-LAB-2. Plays a Director plan against a clock: dispatches cues in order, and guarantees cleanup.
+   Pure (the clock and the handlers are injected). Cues marked state:true change what the board shows (board-entry, settle,
+   queue, actor-gone, done); the rest are visuals.
+     start({ from, to })  from > 0 applies every earlier STATE cue instantly (skipped:true), visuals before it never play;
+                          to ends the run at that time (a single-phase replay; a cue AT `to` belongs to the next phase)
+     tick()               advance by the clock × speed and dispatch what is due
+     skip()               apply every remaining STATE cue instantly (skipped:true), never a visual, then clean up
+     fastForward(k)       play the rest at k×
+     finish()             end now and clean up — once, whatever path got here
+   Browser: window.Runner. Node: require. */
+(function (root) {
+  'use strict';
+  function create(plan, handlers, now) {
+    var cues = plan.cues, r = { t: 0, speed: 1, i: 0, last: 0, running: false, done: false, to: null, dispatched: [] };
+    function dispatch(c, skipped) { r.dispatched.push({ cue: c.cue, t: c.t, skipped: !!skipped }); try { handlers.cue(c, { skipped: !!skipped }); } catch (e) { if (handlers.error) handlers.error(e, c); } }
+    r.start = function (o) {
+      o = o || {}; var from = Math.max(0, o.from || 0);
+      r.to = o.to != null ? o.to : null; r.t = from; r.i = 0; r.done = false;
+      while (r.i < cues.length && cues[r.i].t < from) { var c = cues[r.i++]; if (c.state) dispatch(c, true); }
+      r.last = now(); r.running = true; return r;
+    };
+    r.tick = function () {
+      if (!r.running || r.done) return;
+      var n = now(); r.t += (n - r.last) * r.speed; r.last = n;
+      // a cue at exactly a replay's end belongs to the NEXT phase: a single-phase replay stops just short of it
+      while (r.i < cues.length && cues[r.i].t <= r.t && (r.to == null || cues[r.i].t < r.to) && !r.done) dispatch(cues[r.i++], false);
+      if (r.to != null && r.t >= r.to) { r.finish(); return; }
+      if (r.i >= cues.length) r.finish();
+    };
+    r.skip = function () { if (r.done) return; while (r.i < cues.length) { var c = cues[r.i++]; if (c.state) dispatch(c, true); } r.finish(); };
+    r.fastForward = function (k) { r.speed = Math.max(0.05, +k || 1); };
+    r.finish = function () { if (r.done) return; r.done = true; r.running = false; if (handlers.cleanup) { try { handlers.cleanup(); } catch (e) { if (handlers.error) handlers.error(e, null); } } };
+    return r;
+  }
+  var OUT = { create: create };
+  root.Runner = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · runner ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · manifest ===== */
+/* lib/manifest.js — VFX-LAB-3. The ACTOR asset class (ruling A4), validated: real alpha (straight), normal blending, no
+   vignette, trimmed rectangular cells with pivot data, cells at most 512 px, NO motion vectors. One manifest per card:
+   { cardId, class:"actor", atlas, atlasSize{w,h}, alpha:"straight", blend:"normal", mv:false, vignette:false, cellMax:512,
+     fps, facing:"left"|"right", mirror:true | variants:{left,right}, refHeight, cells:[{x,y,w,h,pivot{x,y}}],
+     phases:{ emerge:[cell…], act:[cell…], fizzle:[cell…] }, contact? (index inside act), timing? "native"|"grammar",
+     tempo? (the card's default, 0.25–4 — LAB-4d), phaseMs? { emerge, act } (phase lengths at tempo 1),
+     rungs? [{ cellMax, atlas, atlasSize, refHeight, cells }] (LAB-5: the same cells packed smaller — the quality ladder),
+     aim? "up" (LAB-6: the action points up its frame — descriptive only; every actor is drawn upright on both seats, owner ruling 2026-09-14),
+     exit? "native" (LAB-8: the clip carries its own exit — no fizzle phase, ACT ends on the last cell), contactRule? (LAB-8, runtime: "nova" = a
+     radial contact flash from the actor's centre), cellPx? (LAB-8: the real cell size when a pack needed cells below the 512 ceiling),
+     contactStrength? { flash, impulse } (LAB-9: scales the contact's flash and the camera impulse — a self-cast is not a strike; absent = 1 and 1),
+     travelScale? 0–1 (LAB-10: scales the actor's charge across the board — 0 performs where it stands; absent = 1, the charge as it always was) }
+   validate(m) → { ok, errors[] }. defaultsFor({ manifest, registry, preset, override }) → the tempo and FIZZLE length a play starts
+   from (LAB-4d). forRung(m, cellMax) → the manifest drawn from that rung's atlas; decodedBytes(m) → its RGBA size; pickRung({…})
+   → which rung a device gets (LAB-5). Browser: window.ActorManifest. Node: require. */
+(function (root) {
+  'use strict';
+  var PHASES = ['emerge', 'act', 'fizzle'];
+  function validate(m) {
+    var e = [];
+    var num = function (v) { return typeof v === 'number' && isFinite(v); };
+    if (!m || typeof m !== 'object') return { ok: false, errors: ['not an object'] };
+    if (typeof m.cardId !== 'string' || !m.cardId) e.push('cardId missing');
+    if (m.class !== 'actor') e.push('class must be "actor"');
+    if (typeof m.atlas !== 'string' || !m.atlas) e.push('atlas missing');
+    if (!m.atlasSize || !num(m.atlasSize.w) || !num(m.atlasSize.h) || m.atlasSize.w <= 0 || m.atlasSize.h <= 0) e.push('atlasSize missing');
+    if (m.alpha !== 'straight') e.push('alpha must be "straight" (real alpha — A4; not brightness-to-alpha)');
+    if (m.blend !== 'normal') e.push('blend must be "normal" (source-over — A4)');
+    if (m.mv !== false) e.push('mv must be false (no motion vectors for actors — A4)');
+    if (m.vignette !== false) e.push('vignette must be false (A4)');
+    if (m.cellMax !== 512) e.push('cellMax must be 512 (A4)');
+    if (!num(m.fps) || m.fps < 1 || m.fps > 60) e.push('fps must be 1–60');
+    if (m.facing !== 'left' && m.facing !== 'right') e.push('facing must be "left" or "right"');
+    if (m.mirror !== true && !(m.variants && m.variants.left && m.variants.right)) e.push('needs mirror:true or variants {left, right}');
+    var cells = Array.isArray(m.cells) ? m.cells : null;
+    if (!cells || !cells.length) e.push('cells missing');
+    (cells || []).forEach(function (c, i) {
+      if (!c || !num(c.x) || !num(c.y) || !num(c.w) || !num(c.h) || c.w <= 0 || c.h <= 0) { e.push('cell ' + i + ' rect invalid'); return; }
+      if (c.w > 512 || c.h > 512) e.push('cell ' + i + ' exceeds 512 px (' + c.w + '×' + c.h + ')');
+      if (m.atlasSize && (c.x < 0 || c.y < 0 || c.x + c.w > m.atlasSize.w || c.y + c.h > m.atlasSize.h)) e.push('cell ' + i + ' outside the atlas');
+      if (!c.pivot || !num(c.pivot.x) || !num(c.pivot.y) || c.pivot.x < 0 || c.pivot.y < 0 || c.pivot.x > c.w || c.pivot.y > c.h) e.push('cell ' + i + ' pivot missing or outside its cell');
+    });
+    if (!num(m.refHeight) || m.refHeight <= 0) e.push('refHeight missing');
+    PHASES.forEach(function (p) {
+      var list = m.phases && m.phases[p];
+      if (p === 'fizzle' && m.exit === 'native') { if (list != null) e.push('a native-exit actor has no fizzle phase (the clip carries its own exit)'); return; }   // LAB-8
+      if (!Array.isArray(list) || !list.length) { e.push('phase ' + p + ' missing'); return; }
+      list.forEach(function (ix) { if (!(Number.isInteger(ix) && cells && ix >= 0 && ix < cells.length)) e.push('phase ' + p + ' names cell ' + ix + ', which does not exist'); });
+    });
+    if (m.timing != null && m.timing !== 'native' && m.timing !== 'grammar') e.push('timing must be "native" or "grammar"');
+    if (m.aim != null && m.aim !== 'up') e.push('aim must be "up" or absent');
+    if (m.tempo != null && !(num(m.tempo) && m.tempo >= 0.25 && m.tempo <= 4)) e.push('tempo must be a number 0.25–4');
+    if (m.phaseMs != null && !(m.phaseMs && num(m.phaseMs.emerge) && num(m.phaseMs.act) && m.phaseMs.emerge > 0 && m.phaseMs.act > 0)) e.push('phaseMs must give emerge and act lengths in ms');
+    if (m.rungs != null) {
+      if (!Array.isArray(m.rungs)) e.push('rungs must be a list');
+      else m.rungs.forEach(function (r, k) {
+        var tag = 'rung ' + k;
+        if (!r || !num(r.cellMax) || !(r.cellMax < 512) || r.cellMax < 64) { e.push(tag + ' cellMax must be below 512'); return; }
+        if (typeof r.atlas !== 'string' || !r.atlas) e.push(tag + ' atlas missing');
+        if (!r.atlasSize || !num(r.atlasSize.w) || !num(r.atlasSize.h)) e.push(tag + ' atlasSize missing');
+        if (!num(r.refHeight) || r.refHeight <= 0) e.push(tag + ' refHeight missing');
+        if (!Array.isArray(r.cells) || !cells || r.cells.length !== cells.length) { e.push(tag + ' must hold every cell, in order'); return; }
+        r.cells.forEach(function (c, i) {
+          if (!c || !num(c.x) || !num(c.y) || !num(c.w) || !num(c.h) || c.w <= 0 || c.h <= 0) { e.push(tag + ' cell ' + i + ' rect invalid'); return; }
+          if (c.w > r.cellMax || c.h > r.cellMax) e.push(tag + ' cell ' + i + ' exceeds ' + r.cellMax + ' px');
+          if (r.atlasSize && (c.x < 0 || c.y < 0 || c.x + c.w > r.atlasSize.w || c.y + c.h > r.atlasSize.h)) e.push(tag + ' cell ' + i + ' outside its atlas');
+          if (!c.pivot || !num(c.pivot.x) || !num(c.pivot.y) || c.pivot.x < 0 || c.pivot.y < 0 || c.pivot.x > c.w || c.pivot.y > c.h) e.push(tag + ' cell ' + i + ' pivot missing or outside its cell');
+        });
+      });
+    }
+    if (m.contact != null) { var act = m.phases && m.phases.act; if (!(Number.isInteger(m.contact) && Array.isArray(act) && m.contact >= 0 && m.contact < act.length)) e.push('contact must be a cell index inside the act phase'); }
+    // LAB-8 · the native exit guard, the contact rule, the real cell size
+    if (m.exit != null && m.exit !== 'native') e.push('exit must be "native" or absent (absent = the procedural faction dissolve)');
+    if (m.exit === 'native') { var actL = m.phases && m.phases.act; if (!(Array.isArray(actL) && cells && actL.length && actL[actL.length - 1] === cells.length - 1)) e.push('a native-exit actor must end ACT on its last cell'); }
+    if (m.contactRule != null && ['spear-tip', 'bolt-edge', 'ground-impact', 'nova'].indexOf(m.contactRule) < 0) e.push('contactRule must be spear-tip, bolt-edge, ground-impact or nova');
+    if (m.contactStrength != null && !(typeof m.contactStrength === 'object' && ['flash', 'impulse'].every(function (k) { var v = m.contactStrength[k]; return typeof v === 'number' && isFinite(v) && v >= 0 && v <= 4; })))
+      e.push('contactStrength must give flash and impulse, each a number 0–4');
+    if (m.travelScale != null && !(typeof m.travelScale === 'number' && isFinite(m.travelScale) && m.travelScale >= 0 && m.travelScale <= 1)) e.push('travelScale must be a number 0–1');
+    if (m.cellPx != null && !(Number.isInteger(m.cellPx) && m.cellPx >= 256 && m.cellPx <= 512 && (cells || []).every(function (c) { return !c || (c.w <= m.cellPx && c.h <= m.cellPx); }))) e.push('cellPx must be the real cell size, 256–512, holding every cell');
+    return { ok: e.length === 0, errors: e };
+  }
+  // LAB-8 · THE EXIT A PLAY TAKES: "native" only when the registry entry asks for it AND the manifest is a valid native-exit pack; the lab's
+  // Exit preset preview (override) still plays the procedural dissolve, so the fallback can be compared; anything else is procedural.
+  function exitMode(o) {
+    o = o || {}; var m = o.manifest;
+    if (!(o.entry && o.entry.exit === 'native')) return { exit: 'procedural', why: 'the registry names no native exit' };
+    if (o.override) return { exit: 'procedural', why: 'Exit preset preview: ' + o.override };
+    if (m && m.exit === 'native' && validate(m).ok) return { exit: 'native', why: 'the registry asks for it and the manifest is a native-exit pack' };
+    return { exit: 'procedural', why: 'the registry asks for a native exit but the manifest is not a native-exit pack', error: true };
+  }
+  // LAB-4d · THE DEFAULTS A PLAY STARTS FROM, card-agnostic: tempo = the card's manifest tempo, else the registry's defaults block
+  // (data/manifestations.json), else 1; FIZZLE = the exit preset's fizzle_ms, else the registry's defaults, else 600 ms. A session
+  // override (the lab's sliders) wins over both. `base` is the default without the override; `from` says where each value came from.
+  function defaultsFor(o) {
+    o = o || {};
+    var m = o.manifest || {}, d = (o.registry && o.registry.defaults) || {}, pr = o.preset || {}, ov = o.override || {};
+    var pos = function (v) { return typeof v === 'number' && isFinite(v) && v > 0; };
+    var t = pos(m.tempo) ? [m.tempo, 'manifest'] : pos(d.tempo) ? [d.tempo, 'defaults'] : [1, 'built-in'];
+    var z = pos(pr.fizzle_ms) ? [pr.fizzle_ms, 'preset'] : pos(d.fizzle_ms) ? [d.fizzle_ms, 'defaults'] : [600, 'built-in'];
+    return { tempo: pos(ov.tempo) ? ov.tempo : t[0], fizzleMs: pos(ov.fizzleMs) ? ov.fizzleMs : z[0], base: { tempo: t[0], fizzleMs: z[0] },
+             from: { tempo: pos(ov.tempo) ? 'slider' : t[1], fizzleMs: pos(ov.fizzleMs) ? 'slider' : z[1] } };
+  }
+  // LAB-5 · THE QUALITY LADDER. forRung: the manifest as drawn from one rung (512 = the manifest itself). Cells shrink with the rung and
+  // refHeight with them, so placement keeps the actor the same size on the board.
+  function forRung(m, cellMax) {
+    if (!m || !(cellMax < (m.cellMax || 512)) || !Array.isArray(m.rungs)) return m;
+    var r = m.rungs.filter(function (x) { return x && x.cellMax === cellMax; })[0]; if (!r) return m;
+    var out = {}; for (var k in m) out[k] = m[k];
+    out.atlas = r.atlas; out.atlasSize = r.atlasSize; out.cells = r.cells; out.refHeight = r.refHeight; out.cellMax = r.cellMax; out.rung = r.cellMax;
+    return out;
+  }
+  function rungsOf(m) { return [m && m.cellMax || 512].concat(((m && m.rungs) || []).map(function (r) { return r.cellMax; })); }
+  function decodedBytes(m) { return m && m.atlasSize ? m.atlasSize.w * m.atlasSize.h * 4 : 0; }
+  // which rung a device gets. 512 only for a GPU renderer on a high-density screen with no low-memory hint; 256 otherwise — a DPR-1
+  // screen draws the actor at ~175 px, which 256 px cells already cover, and Canvas 2D takes 256 until a phone proves 512 holds 30 fps.
+  function pickRung(o) {
+    o = o || {}; var avail = o.available || [512], has = function (r) { return avail.indexOf(r) >= 0; };
+    var ov = +o.override;
+    if ((ov === 512 || ov === 256) && has(ov)) return { rung: ov, why: 'lab override' };
+    if (!has(256)) return { rung: 512, why: 'only the 512 rung is packed' };
+    if (o.backend === 'canvas2d' || !o.backend) return { rung: 256, why: 'Canvas 2D — the 256 rung is its default until a phone measures 512 at 30 fps or more' };
+    if (typeof o.deviceMemory === 'number' && o.deviceMemory < 4) return { rung: 256, why: 'memory hint ' + o.deviceMemory + ' GB' };
+    if (!(o.dpr >= 2)) return { rung: 256, why: 'devicePixelRatio ' + (o.dpr || 1) + ' — 256 px cells cover the drawn size' };
+    return { rung: 512, why: 'GPU (' + o.backend + ') · devicePixelRatio ' + o.dpr + (typeof o.deviceMemory === 'number' ? ' · ' + o.deviceMemory + ' GB' : ' · no memory hint') };
+  }
+  // LAB-9 · how hard a contact lands: a card may soften (or sharpen) its flash and impulse; a card that names nothing lands as it always did
+  // LAB-10 · how far the actor charges: a card may perform where it stands (0) or charge as it always did (absent, or 1)
+  function travelScale(m) { return m && typeof m.travelScale === 'number' ? m.travelScale : 1; }
+  function contactStrength(m) { var s = m && m.contactStrength; return { flash: s && typeof s.flash === 'number' ? s.flash : 1, impulse: s && typeof s.impulse === 'number' ? s.impulse : 1 }; }
+  var OUT = { validate: validate, exitMode: exitMode, contactStrength: contactStrength, travelScale: travelScale, defaultsFor: defaultsFor, forRung: forRung, rungsOf: rungsOf, decodedBytes: decodedBytes, pickRung: pickRung, PHASES: PHASES };
+  root.ActorManifest = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · manifest ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · stagemath ===== */
+/* lib/stagemath.js — VFX-LAB-3. Where an actor stands, how big it is, where it travels and which way it faces. Pure: every
+   input is a field-local rectangle, so the same numbers come out in a browser and in a test.
+   place(o) — o = { card:{x,y,w,h} (the played card), side:'me'|'opp' (the attacker's half on screen), fieldW, fieldH,
+                    band:{x,y,w,h}|null (the ENEMY cards' band), refHeight (the manifest's tallest cell), facing:'left'|'right' }
+   → { anchor (the feet), height, scale, travel{x,y} (the ACT's full reach), dirY (-1 up, +1 down), dirX, flipX, shift (px the feet
+       gave way below the card's base) }
+   THE SAME SIZE ON BOTH SEATS (owner ruling 2026-09-14): height = the card's height × WANT on either seat — scale is fixed per card
+   (height ÷ the manifest's tallest cell) and never shrinks for want of room. PLACEMENT GIVES WAY, NEVER SCALE: the feet start at the
+   card's base; a figure that would leave the board's top edge moves DOWN by exactly the overflow (it may overlap its own card and
+   row); a figure that would touch the enemy cards moves by exactly enough not to. The reach toward the enemy then takes what room
+   is left.
+   THE A1 GUARD: the actor never reaches the enemy cards — on the bottom half its top stops short of the enemy band at full reach; on
+   the top half its feet do. When the board edge and A1 cannot both hold, A1 wins. Nothing is depicted on the target.
+   FACING: the actor charges across the board toward the enemy half, leaning toward the open side of the field (a card left
+   of centre charges right). A manifest drawn facing left is mirrored when the charge goes right (mirror:true).
+   UPRIGHT ALWAYS (owner ruling 2026-09-14): an actor stands upright on both seats; a seat swap mirrors it horizontally only. An action
+   that points up its frame (aim:"up" — Indra's bolt) fires up on both seats — on the top seat, up and off the board. The stage's
+   contact flash and camera impulse still point at the true target (dirY: toward the enemy half). */
+(function (root) {
+  'use strict';
+  var GAP = 6, WANT = 2.1, REACH = 0.55;
+  function place(o) {
+    var c = o.card, height = c.h * WANT, reach = c.h * REACH, base = c.y + c.h * 0.94, feet = base, travelY;
+    if (o.side === 'me') {
+      // the enemy is above: the top stops short of the enemy band; standing still would touch it → give way DOWN by exactly enough
+      var limit = o.band ? o.band.y + o.band.h + GAP : GAP;
+      if (feet - height < limit) feet = limit + height;
+      travelY = -Math.max(0, Math.min(reach, (feet - height) - limit));
+    } else {
+      // the enemy is below: a figure that would leave the board's top edge gives way DOWN by exactly the overflow; then A1 keeps the
+      // feet short of the enemy band (by moving, never shrinking — A1 wins over the board edge)
+      var floor = o.band ? o.band.y - GAP : o.fieldH - GAP;
+      if (feet - height < 0) feet = height;
+      if (feet > floor) feet = floor;
+      travelY = Math.max(0, Math.min(reach, floor - feet));
+    }
+    var anchor = { x: c.x + c.w / 2, y: feet };
+    var dirX = anchor.x <= o.fieldW / 2 ? 1 : -1;
+    var open = dirX > 0 ? o.fieldW - anchor.x : anchor.x;
+    var travelX = dirX * Math.max(0, Math.min(c.w * 0.45, open - c.w * 0.8));
+    var flipX = o.facing === 'left' ? dirX > 0 : dirX < 0;
+    return { anchor: anchor, height: height, scale: o.refHeight ? height / o.refHeight : 1, travel: { x: travelX, y: travelY }, dirY: o.side === 'me' ? -1 : 1, dirX: dirX, flipX: flipX, shift: feet - base };
+  }
+  // the actor's vertical extent at a fraction k of its reach (feet at the bottom, top = feet − height)
+  function extentAt(pl, k) { var feet = pl.anchor.y + pl.travel.y * k; return { top: feet - pl.height, feet: feet, bottom: feet }; }
+  // does the actor, at any point of its reach, touch the band?
+  function touchesBand(pl, band) {
+    if (!band) return false;
+    for (var k = 0; k <= 1.0001; k += 0.05) { var ex = extentAt(pl, k); if (ex.top < band.y + band.h && ex.bottom > band.y) return true; }
+    return false;
+  }
+  var OUT = { place: place, extentAt: extentAt, touchesBand: touchesBand, GAP: GAP };
+  root.StageMath = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · stagemath ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · dissolve ===== */
+/* lib/dissolve.js — VFX-LAB-4b. THE DISSOLVE EXIT: the maths, pure and card-agnostic (the stage draws; this file computes).
+   The reference is the Kling clip's own dissolve (frames 89–120; the sheet is frames/meghnad_tail_contact_sheet.jpg): energy in
+   the faction's colour lights up the legs and climbs the figure, the body breaks up from the bottom behind a glowing front, embers
+   rise off the front and fade, faint dark smoke hangs behind it.
+   THE FIELD. Every point (u, v) of the held cell (v = 0 at the head, 1 at the feet) has an erosion value
+       f(u, v) = (1 − v)·(1 − k) + noise(u, v)·k            k = the preset's `noise`
+   Low values go first: the feet first, and a ragged front.
+   THE SWEEP. Over FIZZLE the threshold t = threshold(p) rises monotonically from below 0 to above 1. A point's alpha is
+       keep = clamp((f − t) / soft, 0, 1)
+   which can only fall as t rises: once a pixel is gone it never comes back. Just above the front (f − t < edgeWidth) the band
+   takes the edge colour, hottest at the front (the core colour); further above (f − t < charge) the noise's veins light up in the
+   edge colour — the energy that climbs ahead of the break-up.
+   The GPU path (SHADER: a Pixi filter, GLSL for WebGL and WGSL for WebGPU) and the Canvas 2D path (grid + paint: a half-resolution
+   mask and glow built from the same noise) share this maths. Embers rise from frontAt(). glowCanvas() and puffCanvas() are the
+   only particle images — one soft 64 px disc, one soft 128 px puff — always drawn at or below their own size, so nothing is grainy.
+   Everything here is normal-blended.
+   Presets: data/factionfx.json, one entry per faction ({ name, portal, exit: "dissolve", dissolve: {…} }); DEFAULTS fill whatever a
+   preset leaves out. pick() chooses the faction's entry, or the lab's preview override.
+   THE TUNING KNOBS (LAB-6a, a template gap — one set of preset fields every faction tunes with; every default reproduces the exit as
+   it was, so a preset that does not name them is unchanged):
+     ember_density   motes per second, × the path's base rate          (alias of embers)
+     mote_life       [min, max] ms a mote lives, written for a 1500 ms FIZZLE and scaled with the real one; still ends by FIZZLE's end
+     mote_size · mote_rise · mote_spread · mote_color   radius px · upward px/s · sideways px/s · colour
+     mote_zone       0 = motes rise off the front; > 0 = from the whole body still standing, up to this far above the front (units of f)
+     front_width · front_soft   the glow band above the front · the erosion's own softness   (aliases of edgeWidth · soft)
+     sweep_frac      the share of FIZZLE the erosion takes (1 = all of it); after it the motes and the haze hang and fade in the rest
+     haze            { color, alpha, rate, life, size, rise } — soft bright puffs behind the figure (normal blend), or null
+     canvas_cap · gpu_cap   the most motes alive at once on the Canvas 2D path / the GPU path
+   Browser: window.Dissolve. Node: require. */
+(function (root) {
+  'use strict';
+  var DEFAULTS = {
+    edge: '#ff6ec7', core: '#fff0f8',       // the front's colour, and the hottest line at it
+    edgeWidth: 0.06, soft: 0.02,            // the band above the front, and the erosion's own softness (units of f)
+    charge: 0.24, chargeAlpha: 0.6,         // how far above the front the veins light up, and how strongly
+    noise: 0.4, noiseScale: 6,              // how ragged the front is, and how many noise cells cross the figure
+    embers: 1, emberColor: '#ff9ad8',       // ember density (× the path's base rate) and colour
+    emberSize: [1.1, 2.4], emberRise: [36, 80], emberLife: [380, 640],   // px radius · px/s upward · ms (clamped to FIZZLE's end)
+    smoke: true, smokeColor: '#1c1a1e', smokeAlpha: 0.18,                // faint dark puffs behind the front
+    seed: 7,
+    emberZone: 0, emberSpread: 34, lifeRef: 600,                          // LAB-6a: motes off the front · sideways px/s · the FIZZLE emberLife is written for
+    sweep: 1, haze: null, canvasCap: 120, gpuCap: 400,                    // LAB-6a: the erosion's share of FIZZLE · the haze · live-mote caps
+  };
+  // the tuning names (snake_case, like fizzle_ms) → the fields the stage reads
+  var ALIAS = { ember_density: 'embers', mote_life: 'emberLife', mote_size: 'emberSize', mote_rise: 'emberRise', mote_spread: 'emberSpread', mote_color: 'emberColor',
+                mote_zone: 'emberZone', front_width: 'edgeWidth', front_soft: 'soft', sweep_frac: 'sweep', canvas_cap: 'canvasCap', gpu_cap: 'gpuCap' };
+  var HAZE = { color: '#ffe7a0', alpha: 0.12, rate: 10, life: [600, 900], size: [0.1, 0.18], rise: [6, 18] };
+  var N = 128, GLOW = 64, PUFF = 128;
+
+  function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function rng(seed) {
+    var s = seed >>> 0;
+    return function () { s = (s + 0x6D2B79F5) >>> 0; var t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function rgb(c) {
+    var m = /^#([0-9a-f]{6})$/i.exec(String(c || '').trim());
+    if (m) { var n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
+    m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(String(c || ''));
+    return m ? [+m[1] / 255, +m[2] / 255, +m[3] / 255] : [1, 1, 1];
+  }
+  function tint(c) { var v = rgb(c); return (Math.round(v[0] * 255) << 16) | (Math.round(v[1] * 255) << 8) | Math.round(v[2] * 255); }
+  function resolve(fx) {
+    var src = (fx && fx.dissolve) || {}, d = {};
+    for (var k in DEFAULTS) d[k] = src[k] != null ? src[k] : DEFAULTS[k];
+    for (var a in ALIAS) if (src[a] != null) d[ALIAS[a]] = src[a];
+    if (src.mote_life != null) d.lifeRef = 1500;                          // mote_life is written for a 1500 ms FIZZLE
+    if (d.haze) { var h = {}; for (var hk in HAZE) h[hk] = d.haze[hk] != null ? d.haze[hk] : HAZE[hk]; d.haze = h; }
+    d.name = (fx && fx.name) || 'Default'; d.key = (fx && fx.key) || null;
+    return d;
+  }
+  // the faction's entry, or the preview override when it names one; always carries its key
+  function pick(table, faction, override) {
+    table = table || {};
+    var key = override && table[override] ? override : table[faction] ? faction : 'default', fx = table[key] || {}, out = { key: key };
+    for (var k in fx) out[k] = fx[k];
+    return out;
+  }
+
+  // value noise on a seeded lattice, smooth interpolation; R = two octaves (the erosion), G = ridged (the veins)
+  function lattice(g, r) { var a = new Float32Array((g + 1) * (g + 1)); for (var i = 0; i < a.length; i++) a[i] = r(); return a; }
+  function vnoise(a, g, u, v) {
+    var x = u * g, y = v * g, xi = Math.min(g - 1, Math.floor(x)), yi = Math.min(g - 1, Math.floor(y)), fx = x - xi, fy = y - yi, w = g + 1;
+    fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+    var p = a[yi * w + xi], q = a[yi * w + xi + 1], s = a[(yi + 1) * w + xi], t = a[(yi + 1) * w + xi + 1];
+    return (p + (q - p) * fx) * (1 - fy) + (s + (t - s) * fx) * fy;
+  }
+  function noise(pr) {
+    var r = rng(pr.seed), g = Math.max(2, Math.round(pr.noiseScale)), A = lattice(g, r), B = lattice(g * 3, r), C = lattice(g * 2, r), E = lattice(g * 5, r);
+    var R = new Float32Array(N * N), G = new Float32Array(N * N);
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+      var u = (x + 0.5) / N, v = (y + 0.5) / N, i = y * N + x, w = vnoise(C, g * 2, u, v) * 0.6 + vnoise(E, g * 5, u, v) * 0.4;
+      R[i] = clamp01(vnoise(A, g, u, v) * 0.72 + vnoise(B, g * 3, u, v) * 0.28);
+      G[i] = clamp01(1 - Math.abs(w * 2 - 1) * 2.4);
+    }
+    return { size: N, r: R, g: G, key: pr.seed + ':' + g };
+  }
+  function sample(arr, u, v) {
+    var x = clamp01(u) * N - 0.5, y = clamp01(v) * N - 0.5, x0 = Math.max(0, Math.min(N - 1, Math.floor(x))), y0 = Math.max(0, Math.min(N - 1, Math.floor(y)));
+    var x1 = Math.min(N - 1, x0 + 1), y1 = Math.min(N - 1, y0 + 1), fx = clamp01(x - x0), fy = clamp01(y - y0);
+    return (arr[y0 * N + x0] * (1 - fx) + arr[y0 * N + x1] * fx) * (1 - fy) + (arr[y1 * N + x0] * (1 - fx) + arr[y1 * N + x1] * fx) * fy;
+  }
+  function field(nz, pr, u, v) { return (1 - v) * (1 - pr.noise) + sample(nz.r, u, v) * pr.noise; }
+  // p ∈ [0, 1] over FIZZLE → t, strictly rising: nothing gone at p = 0 (t below every f), everything gone at p = 1 (t above every f)
+  function threshold(p, pr) { p = clamp01(p); var e = p * 0.65 + p * p * (3 - 2 * p) * 0.35; return -(pr.edgeWidth + pr.soft) + e * (1 + pr.edgeWidth + 2 * pr.soft); }
+  function keep(f, t, pr) { return clamp01((f - t) / pr.soft); }
+  // where the front crosses column u (v, from the head), a few fixed-point steps on the field
+  function frontAt(nz, pr, u, t) { var k = pr.noise, v = 1 - t / (1 - k); for (var i = 0; i < 3; i++) v = 1 - (t - sample(nz.r, u, clamp01(v)) * k) / (1 - k); return v; }
+
+  // THE CANVAS 2D PATH — the field and the veins at the mask's resolution (once per cell), then each frame's mask and glow
+  function grid(nz, pr, w, h) {
+    var F = new Float32Array(w * h), V = new Float32Array(w * h);
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) { var u = (x + 0.5) / w, v = (y + 0.5) / h, i = y * w + x, g = sample(nz.g, u, v); F[i] = field(nz, pr, u, v); V[i] = g * g * g; }
+    return { w: w, h: h, f: F, vein: V };
+  }
+  function paint(gr, t, pr, mask, glow) {
+    var e = rgb(pr.edge), c = rgb(pr.core), soft = pr.soft, bw = pr.edgeWidth, ch = pr.charge, ca = pr.chargeAlpha, n = gr.w * gr.h, j = 0;
+    for (var i = 0; i < n; i++, j += 4) {
+      var d = gr.f[i] - t, k = d <= 0 ? 0 : d >= soft ? 1 : d / soft;
+      mask[j] = 255; mask[j + 1] = 255; mask[j + 2] = 255; mask[j + 3] = Math.round(k * 255);
+      var band = d > 0 && d < bw ? 1 - d / bw : 0, chg = d > 0 && d < ch ? Math.min(1, (1 - d / ch) * gr.vein[i] * ca) : 0, hot = band * band;
+      glow[j] = 255 * (e[0] + (c[0] - e[0]) * hot); glow[j + 1] = 255 * (e[1] + (c[1] - e[1]) * hot); glow[j + 2] = 255 * (e[2] + (c[2] - e[2]) * hot);
+      glow[j + 3] = 255 * (band > chg ? band : chg);
+    }
+  }
+  // a cell's silhouette by column (from its alpha): embers only start where the figure is
+  function silhouette(rgba, w, h, cols) {
+    cols = cols || 24; var top = new Float32Array(cols), bottom = new Float32Array(cols);
+    for (var c = 0; c < cols; c++) {
+      var x0 = Math.floor(c * w / cols), x1 = Math.max(x0 + 1, Math.floor((c + 1) * w / cols)), t = -1, b = -1;
+      for (var y = 0; y < h; y++) { var on = false; for (var x = x0; x < x1 && !on; x++) if (rgba[(y * w + x) * 4 + 3] > 96) on = true; if (on) { if (t < 0) t = y; b = y; } }
+      top[c] = t < 0 ? -1 : t / h; bottom[c] = b < 0 ? -1 : (b + 1) / h;
+    }
+    return { cols: cols, top: top, bottom: bottom };
+  }
+
+  // the only particle images, and the noise texture for the filter
+  function canvas(doc, size) { var cv = doc.createElement('canvas'); cv.width = cv.height = size; return cv; }
+  function softDisc(doc, size, color, stops) {
+    var cv = canvas(doc, size), g = cv.getContext('2d'), c = rgb(color), h = size / 2;
+    var col = function (a) { return 'rgba(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ',' + a + ')'; };
+    if (g && g.createRadialGradient) { var gr = g.createRadialGradient(h, h, 0, h, h, h); stops(gr, col); g.fillStyle = gr; g.fillRect(0, 0, size, size); }
+    return cv;
+  }
+  function glowCanvas(doc, color) {
+    var cv = softDisc(doc, GLOW, color, function (gr, col) { gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, col(0.95)); gr.addColorStop(0.5, col(0.32)); gr.addColorStop(1, col(0)); });
+    cv.__labGlow = GLOW; return cv;
+  }
+  function puffCanvas(doc, color) {
+    var cv = softDisc(doc, PUFF, color, function (gr, col) { gr.addColorStop(0, col(0.9)); gr.addColorStop(0.45, col(0.45)); gr.addColorStop(1, col(0)); });
+    cv.__labPuff = PUFF; return cv;
+  }
+  function noiseCanvas(doc, nz) {
+    var cv = canvas(doc, N), g = cv.getContext('2d'), img = g && g.createImageData ? g.createImageData(N, N) : null;
+    if (!img || !img.data) img = { data: new Uint8ClampedArray(N * N * 4), width: N, height: N };
+    for (var i = 0, j = 0; i < N * N; i++, j += 4) { img.data[j] = nz.r[i] * 255; img.data[j + 1] = nz.g[i] * 255; img.data[j + 2] = 0; img.data[j + 3] = 255; }
+    if (g && g.putImageData) g.putImageData(img, 0, 0);
+    return cv;
+  }
+
+  // THE GPU PATH — a Pixi v8 filter on the actor sprite. vUv spans the sprite's bounds (the held cell): v = 0 at the head.
+  // uParams = (t, soft, edgeWidth, charge) · uParams2 = (chargeAlpha, noise, –, –) · uNoise: R = erosion noise, G = veins
+  var SHADER = {
+    glVertex: [
+      'in vec2 aPosition;', 'out vec2 vTextureCoord;', 'out vec2 vUv;',
+      'uniform vec4 uInputSize;', 'uniform vec4 uOutputFrame;', 'uniform vec4 uOutputTexture;',
+      'vec4 filterVertexPosition(void)', '{',
+      '    vec2 position = aPosition * uOutputFrame.zw + uOutputFrame.xy;',
+      '    position.x = position.x * (2.0 / uOutputTexture.x) - 1.0;',
+      '    position.y = position.y * (2.0 * uOutputTexture.z / uOutputTexture.y) - uOutputTexture.z;',
+      '    return vec4(position, 0.0, 1.0);', '}',
+      'void main(void)', '{', '    gl_Position = filterVertexPosition();', '    vTextureCoord = aPosition * (uOutputFrame.zw * uInputSize.zw);', '    vUv = aPosition;', '}',
+    ].join('\n'),
+    glFragment: [
+      'in vec2 vTextureCoord;', 'in vec2 vUv;', 'out vec4 finalColor;',
+      'uniform sampler2D uTexture;', 'uniform sampler2D uNoise;',
+      'uniform vec4 uEdge;', 'uniform vec4 uCore;', 'uniform vec4 uParams;', 'uniform vec4 uParams2;',
+      'void main(void)', '{',
+      '    vec4 src = texture(uTexture, vTextureCoord);',
+      '    vec4 nz = texture(uNoise, vUv);',
+      '    float f = (1.0 - vUv.y) * (1.0 - uParams2.y) + nz.r * uParams2.y;',
+      '    float d = f - uParams.x;',
+      '    float keep = clamp(d / uParams.y, 0.0, 1.0);',
+      '    float band = (1.0 - clamp(d / uParams.z, 0.0, 1.0)) * step(0.0, d);',
+      '    float charge = clamp((1.0 - clamp(d / uParams.w, 0.0, 1.0)) * nz.g * nz.g * nz.g * uParams2.x, 0.0, 1.0) * step(0.0, d);',
+      '    vec3 col = mix(src.rgb, uEdge.rgb * src.a, charge);',
+      '    col = mix(col, mix(uEdge.rgb, uCore.rgb, band * band) * src.a, band);',
+      '    finalColor = vec4(col, src.a) * keep;', '}',
+    ].join('\n'),
+    wgsl: [
+      'struct GlobalFilterUniforms { uInputSize: vec4<f32>, uInputPixel: vec4<f32>, uInputClamp: vec4<f32>, uOutputFrame: vec4<f32>, uGlobalFrame: vec4<f32>, uOutputTexture: vec4<f32>, };',
+      'struct DissolveUniforms { uEdge: vec4<f32>, uCore: vec4<f32>, uParams: vec4<f32>, uParams2: vec4<f32>, };',
+      '@group(0) @binding(0) var<uniform> gfu: GlobalFilterUniforms;',
+      '@group(0) @binding(1) var uTexture: texture_2d<f32>;',
+      '@group(0) @binding(2) var uSampler: sampler;',
+      '@group(1) @binding(0) var<uniform> dissolveUniforms: DissolveUniforms;',
+      '@group(1) @binding(1) var uNoise: texture_2d<f32>;',
+      '@group(1) @binding(2) var uNoiseSampler: sampler;',
+      'struct VSOutput { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) fuv: vec2<f32>, };',
+      'fn filterVertexPosition(aPosition: vec2<f32>) -> vec4<f32> {',
+      '  var position = aPosition * gfu.uOutputFrame.zw + gfu.uOutputFrame.xy;',
+      '  position.x = position.x * (2.0 / gfu.uOutputTexture.x) - 1.0;',
+      '  position.y = position.y * (2.0 * gfu.uOutputTexture.z / gfu.uOutputTexture.y) - gfu.uOutputTexture.z;',
+      '  return vec4<f32>(position, 0.0, 1.0);',
+      '}',
+      '@vertex fn mainVertex(@location(0) aPosition: vec2<f32>) -> VSOutput {',
+      '  return VSOutput(filterVertexPosition(aPosition), aPosition * (gfu.uOutputFrame.zw * gfu.uInputSize.zw), aPosition);',
+      '}',
+      '@fragment fn mainFragment(@location(0) uv: vec2<f32>, @location(1) fuv: vec2<f32>) -> @location(0) vec4<f32> {',
+      '  let src = textureSample(uTexture, uSampler, uv);',
+      '  let nz = textureSample(uNoise, uNoiseSampler, fuv);',
+      '  let P = dissolveUniforms.uParams;',
+      '  let P2 = dissolveUniforms.uParams2;',
+      '  let f = (1.0 - fuv.y) * (1.0 - P2.y) + nz.r * P2.y;',
+      '  let d = f - P.x;',
+      '  let keep = clamp(d / P.y, 0.0, 1.0);',
+      '  let band = (1.0 - clamp(d / P.z, 0.0, 1.0)) * step(0.0, d);',
+      '  let charge = clamp((1.0 - clamp(d / P.w, 0.0, 1.0)) * nz.g * nz.g * nz.g * P2.x, 0.0, 1.0) * step(0.0, d);',
+      '  var col = mix(src.rgb, dissolveUniforms.uEdge.rgb * src.a, vec3<f32>(charge));',
+      '  col = mix(col, mix(dissolveUniforms.uEdge.rgb, dissolveUniforms.uCore.rgb, vec3<f32>(band * band)) * src.a, vec3<f32>(band));',
+      '  return vec4<f32>(col, src.a) * keep;',
+      '}',
+    ].join('\n'),
+  };
+
+  var OUT = { DEFAULTS: DEFAULTS, ALIAS: ALIAS, HAZE: HAZE, N: N, GLOW: GLOW, PUFF: PUFF, rng: rng, rgb: rgb, tint: tint, resolve: resolve, pick: pick, noise: noise, sample: sample, field: field,
+              threshold: threshold, keep: keep, frontAt: frontAt, grid: grid, paint: paint, silhouette: silhouette, glowCanvas: glowCanvas, puffCanvas: puffCanvas,
+              noiseCanvas: noiseCanvas, SHADER: SHADER };
+  root.Dissolve = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · dissolve ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · actorstage ===== */
+/* lib/actorstage.js — VFX-LAB-3. The stage for ACTORS (ruling A4): draws a manifest's cells with real alpha and NORMAL
+   (source-over) blending — never additive, never brightness-to-alpha — above the board and its effect canvases, under the
+   floating numbers. Card-agnostic: it knows cells, pivots and phases, never a card.
+   Three canvases, in layer order: #actorunder (the portal glow and the soft contact shadow) · the actor (Canvas 2D on
+   #actorcanvas, or a Pixi sprite on #actorgpu) · #actorover (the ACT's directional flash). The camera impulse moves the
+   whole #field for a moment, board and all.
+   The clock is injected (lab time): hit-stop freezes the actor's own animation, never the page. clear() is the cleanup
+   guarantee — no actor, no effect, no transform survives it. stats() is the performance readout (real frames).
+   NATIVE CELLS (LAB-4a): when a phase arrives with cellFps (a native-timing actor), the CELLS are the clock — one cell per
+   1/cellFps s of lab time straight through the phase's list, no easing between cells, no hold inside a phase (the hit-stop never
+   freezes a native actor: the clip carries its own contact). A late frame never skips a cell at native rate (the stage catches up
+   one cell per frame, and cells a phase ended before reaching play first in the next — EMERGE → ACT → FIZZLE is one clip); at
+   twice native rate (Fast) it may skip one cell at a time, never two. The director says which: cellStep (LAB-4c) — 1 in Full at any
+   tempo, 2 in Fast. onCell() fires a cue on the frame a
+   given cell is drawn (the contact). Every cell drawn is counted per play: stats().cellsDrawn. warm() uploads an atlas before
+   its first play, so the first frames of a manifestation are not lost to a texture upload.
+   THE DISSOLVE (LAB-4b): dissolve(actor, fx) turns FIZZLE into the faction's dissolve exit (lib/dissolve.js holds the maths and the
+   presets' defaults). The held cell erodes bottom-up behind a glowing front: a Pixi filter on the actor sprite (noise texture +
+   threshold + edge glow) on WebGPU and WebGL, a per-frame noise mask (destination-in) and glow on Canvas 2D. Embers rise off the
+   front: pooled sprites of one 64 px glow texture on the GPU, soft discs on #actorover on Canvas 2D (fewer). Faint smoke hangs
+   behind the front on #actorunder. All of it is normal-blended, every particle ends by FIZZLE's end, and remove()/clear() drop them.
+   A FIZZLE longer than 600 ms (LAB-4c's slider) time-stretches the embers and smoke with the sweep: life ×, speed and spawn rate ÷.
+   LAB-6a: a preset may end the erosion early (sweep_frac) so its motes and haze hang in the rest of FIZZLE, raise its motes from the
+   whole standing body (mote_zone), cap the motes alive (canvas_cap / gpu_cap), and add a soft bright haze (puffs, normal blend).
+   MEMORY (LAB-5, ruling A5): an actor's decoded atlas lives only for its play. loadActor() at play counts its RGBA bytes;
+   unloadActor() after SETTLE destroys the GPU texture, closes the decoded bitmap and drops the mask kits — never under a live actor.
+   decodedBytes() is the live figure (0 between plays); stats().peakDecoded is the most ever held at once.
+   Browser: window.ActorStage. */
+(function (root) {
+  'use strict';
+  var easeOut = function (p) { return 1 - (1 - p) * (1 - p); };
+  var easeIn = function (p) { return p * p; };
+  var perf = function () { return (root.performance && root.performance.now) ? root.performance.now() : Date.now(); };
+
+  function ActorStage(o) {
+    this.o = o; this.field = o.field; this.under = o.under; this.canvas = o.actorCanvas; this.gpuCanvas = o.gpuCanvas; this.over = o.over;
+    this.now = o.now || function () { return Date.now(); };
+    this.backend = 'canvas2d'; this.renderer = 'canvas2d'; this.pixi = null; this.app = null;
+    this.assets = {}; this.actors = []; this.fx = []; this.frozenUntil = -1; this.impulseFx = null; this.nextId = 1;
+    this.parts = []; this.pool = []; this.dz = null; this.cz = {}; this.tex = {}; this.nz = null;      // dissolve: particles, GPU sprite pool, GPU kit, mask kits, images, noise
+    this.dpr = Math.min(2, root.devicePixelRatio || 1);
+    this.stat = { frames: 0, drawMsTotal: 0, drawN: 0, liveFrames: 0, liveRealT0: null, liveRealLast: null, fps: 0, cellPx: 0, drawnPx: 0, lastPlay: null, lastExit: null, warmed: 0, peakDecoded: 0, loads: 0, unloads: 0 };
+    this.resize();
+  }
+  var P = ActorStage.prototype;
+
+  P.resize = function () {
+    var r = this.field.getBoundingClientRect ? this.field.getBoundingClientRect() : { width: 0, height: 0 };
+    this.w = r.width || this.field.clientWidth || 0; this.h = r.height || this.field.clientHeight || 0;
+    var self = this;
+    [this.under, this.canvas, this.over].forEach(function (c) { if (c) { c.width = Math.max(1, Math.round(self.w * self.dpr)); c.height = Math.max(1, Math.round(self.h * self.dpr)); } });
+    if (this.app) { try { this.app.renderer.resize(this.w, this.h); } catch (e) {} }
+  };
+
+  // the actor's renderer: 'canvas' → Canvas 2D; 'webgpu' | 'webgl' → a Pixi app on its own canvas (Canvas 2D if that fails)
+  P.useBackend = async function (pref) {
+    var r = await this.pickBackend(pref), self = this;
+    Object.keys(this.assets).forEach(function (id) { self.warm(id); });
+    return r;
+  };
+  P.pickBackend = async function (pref) {
+    this.teardownGpu();
+    if (pref === 'canvas') { this.backend = 'canvas2d'; this.renderer = 'canvas2d'; return this.renderer; }
+    try {
+      var PIXI = this.pixi || await import(this.o.pixiUrl); this.pixi = PIXI;
+      var fresh = document.createElement('canvas'); fresh.id = this.gpuCanvas.id; fresh.className = this.gpuCanvas.className;
+      this.gpuCanvas.parentNode.replaceChild(fresh, this.gpuCanvas); this.gpuCanvas = fresh;   // a canvas keeps its first context type: every backend gets a fresh one
+      var app = new PIXI.Application();
+      await app.init({ canvas: fresh, backgroundAlpha: 0, antialias: true, autoStart: false, resolution: this.dpr, autoDensity: true, width: this.w, height: this.h, preference: pref });
+      this.app = app; this.backend = 'pixi'; this.renderer = (app.renderer && app.renderer.name) || pref; this.base = {};
+      this.actors.forEach(function (a) { a.sprite = null; });
+      return this.renderer;
+    } catch (e) { this.teardownGpu(); this.backend = 'canvas2d'; this.renderer = 'canvas2d (' + pref + ' unavailable)'; return this.renderer; }
+  };
+  P.teardownGpu = function () {
+    if (this.app) { try { this.app.destroy({ removeView: false }, { children: true, texture: false }); } catch (e) {} }
+    this.app = null; this.base = {}; this.dz = null; this.pool = []; this.parts.forEach(function (pt) { pt.sprite = null; });
+    if (this.gpuCanvas) { try { var g = this.gpuCanvas.getContext && this.gpuCanvas.getContext('2d'); if (g) g.clearRect(0, 0, this.gpuCanvas.width, this.gpuCanvas.height); } catch (e) {} }
+    this.actors.forEach(function (a) { a.sprite = null; });
+  };
+
+  // an actor's art: { manifest, image } (the image already decoded)
+  P.loadActor = function (cardId, art) {
+    this.assets[cardId] = art; art.bytes = art.manifest.atlasSize ? art.manifest.atlasSize.w * art.manifest.atlasSize.h * 4 : 0;
+    this.stat.cellPx = Math.max.apply(null, art.manifest.cells.map(function (c) { return Math.max(c.w, c.h); }));
+    this.stat.loads++; this.stat.peakDecoded = Math.max(this.stat.peakDecoded, this.decodedBytes());
+    this.warm(cardId);
+  };
+  // after SETTLE: the GPU texture destroyed, the decoded bitmap closed, the mask kits dropped (refused while an actor of the card is live)
+  P.unloadActor = function (cardId) {
+    var art = this.assets[cardId]; if (!art) return false;
+    if (this.actors.some(function (a) { return a.cardId === cardId; })) return false;
+    var base = this.base && this.base[cardId];
+    if (base) { try { base.destroy(true); } catch (e) {} delete this.base[cardId]; }
+    if (art.image && typeof art.image.close === 'function') { try { art.image.close(); } catch (e) {} }
+    var cz = this.cz; Object.keys(cz).forEach(function (k) { if (k.indexOf(cardId + '#') === 0) delete cz[k]; });
+    delete this.assets[cardId]; this.stat.unloads++;
+    return true;
+  };
+  P.decodedBytes = function () { var n = 0, A = this.assets; Object.keys(A).forEach(function (k) { n += A[k].bytes || 0; }); return n; };
+  // put the atlas on the GPU (or through the 2D rasteriser) once, invisibly, before any play needs it
+  P.warm = function (cardId) {
+    var art = this.assets[cardId]; if (!art || !art.image) return;
+    try {
+      if (this.backend === 'pixi' && this.app) {
+        var PIXI = this.pixi, base = this.base[cardId] || (this.base[cardId] = PIXI.Texture.from(art.image)), sp = new PIXI.Sprite(base);
+        sp.alpha = 0.001; sp.scale.set(1 / Math.max(1, art.image.width || 1)); sp.position.set(0, 0);
+        this.app.stage.addChild(sp); this.app.renderer.render(this.app.stage); this.app.stage.removeChild(sp); sp.destroy(); this.app.renderer.render(this.app.stage);
+      } else {
+        var g = this.canvas && this.canvas.getContext('2d');
+        if (g) { g.save(); g.globalAlpha = 0.001; g.drawImage(art.image, 0, 0, 1, 1, 0, 0, 1, 1); g.restore(); g.clearRect(0, 0, 1, 1); }
+      }
+      this.stat.warmed = (this.stat.warmed || 0) + 1;
+    } catch (e) {}
+  };
+
+  // spawn = place it (StageMath.place output) at its card, in phase `phase`
+  P.spawn = function (cardId, placement, faction) {
+    var art = this.assets[cardId]; if (!art) return null;
+    this.stat.lastExit = null;   // LAB-9: this play has recorded no exit yet — stats().exit must never report the previous card's dissolve
+    var a = { id: this.nextId++, cardId: cardId, art: art, pl: placement, faction: faction, phase: 'emerge', dur: 1, pt: 0, lastT: this.now(), contact: 0.58, pose: null, sprite: null,
+             cellFps: null, cellIx: -1, backlog: [], rate: null, drawn: [], lastDrawn: -1, watch: null, contactCell: null };
+    this.actors.push(a);
+    if (this.stat.liveRealT0 == null) { this.stat.liveRealT0 = perf(); this.stat.liveFrames = 0; }
+    return a;
+  };
+  P.setPhase = function (a, phase, dur, contactFrac, cellFps, cellStep) {
+    if (!a) return;
+    if (a.watch && a.watch.phase !== phase) this.fireWatch(a);          // the phase ended before its cell was drawn (a very slow frame): the cue still lands
+    if (a.cellFps) a.backlog = a.backlog.concat((a.art.manifest.phases[a.phase] || []).slice(a.cellIx + 1));   // the clip's cells this phase never reached
+    a.phase = phase; a.dur = Math.max(1, dur); a.pt = 0; a.lastT = this.now(); a.cellIx = -1;
+    a.cellFps = cellFps > 0 ? cellFps : null; a.cellStep = cellStep > 0 ? cellStep : null; if (a.cellFps) a.rate = Math.max(a.rate || 0, a.cellFps);
+    if (contactFrac != null) a.contact = contactFrac;
+  };
+  // fire fn on the frame the actor draws cell `index` of `phase` (at once if it already has)
+  P.onCell = function (a, phase, index, fn) {
+    if (!a) return; a.watch = { phase: phase, index: index, fn: fn };
+    if (a.pose && a.phase === phase && a.pose.phase === phase && a.pose.phaseIx >= index) this.fireWatch(a);   // LAB-8: never on a pose left over from the previous phase
+  };
+  P.fireWatch = function (a) { var w = a.watch; a.watch = null; if (!w) return; a.contactCell = a.pose ? a.pose.cellIndex : null; w.fn(); };
+  P.noteCell = function (a, q) { if (!(q.alpha > 0.01)) return; if (q.cellIndex !== a.lastDrawn) {   // a cell counts only when it is visibly drawn
+ a.drawn.push(q.cellIndex); a.lastDrawn = q.cellIndex; } };
+  // one play's cell count: distinct cells drawn of the manifest's total, cells drawn again after another cell (a repeat —
+  // holding a cell across display frames is not one, and neither is the FIZZLE hold of the last ACT cell), cells never drawn
+  P.playOf = function (a, live) {
+    var m = a.art.manifest, seen = {}, repeats = 0, n = 0;
+    a.drawn.forEach(function (ci) { if (seen[ci]) repeats++; else { seen[ci] = true; n++; } });
+    var missing = []; m.cells.forEach(function (c, i) { if (!seen[i]) missing.push(c.name || String(i)); });
+    return { drawn: n, total: m.cells.length, repeats: repeats, missing: missing, contact: a.contactCell != null && m.cells[a.contactCell] ? (m.cells[a.contactCell].name || String(a.contactCell)) : null, cellFps: a.rate, live: !!live };
+  };
+  P.remove = function (a) {
+    if (!a) return;
+    if (this.actors.indexOf(a) >= 0) this.stat.lastPlay = this.playOf(a, false);
+    if (a.dz && this.actors.indexOf(a) >= 0) this.stat.lastExit = this.exitOf(a);
+    var stage = this; this.parts = this.parts.filter(function (pt) { if (pt.owner !== a) return true; stage.dropPart(pt); return false; });
+    if (a.sprite && a.sprite.parent) { try { a.sprite.parent.removeChild(a.sprite); a.sprite.destroy(); } catch (e) {} }
+    this.actors = this.actors.filter(function (x) { return x !== a; });
+    if (!this.actors.length) this.closeLiveWindow();
+  };
+  // LAB-8 · THE NATIVE EXIT ON A SLOW DEVICE: with no FIZZLE after ACT, cells a late device has not reached would be lost at SETTLE (the
+  // fade tail with them). finish(a) keeps such an actor drawing its unreached cells into SETTLE, one per frame — the rule every other
+  // phase already follows — and removes it on the frame after its last cell is drawn. An actor that is not behind, or not native, goes now.
+  P.finish = function (a) {
+    if (!a || !a.cellFps || a.phase === 'fizzle') return false;
+    var list = a.art.manifest.phases[a.phase] || [];
+    if (!a.backlog.length && a.cellIx >= list.length - 1 && a.lastDrawn === list[list.length - 1]) return false;
+    a.finishing = true; a.cellStep = 1; return true;
+  };
+  P.closeLiveWindow = function () {
+    var s = this.stat; if (s.liveRealT0 != null && s.liveRealLast != null && s.liveRealLast > s.liveRealT0) s.fps = Math.round(s.liveFrames * 1000 / (s.liveRealLast - s.liveRealT0));
+    s.liveRealT0 = null; s.liveRealLast = null;
+  };
+
+  P.hitstop = function (ms) { this.frozenUntil = this.now() + ms; };
+  P.portal = function (x, y, radius, color, dur) { this.fx.push({ kind: 'portal', x: x, y: y, r: radius, color: color, t0: this.now(), dur: Math.max(1, dur) }); };
+  P.flash = function (x, y, radius, dirY, dur, shape) { this.fx.push({ kind: 'flash', x: x, y: y, r: radius, dirY: dirY, radial: shape === 'radial', t0: this.now(), dur: Math.max(1, dur) }); };   // LAB-8: shape 'radial' = the nova
+  P.impulse = function (dirY, px, dur) { this.impulseFx = { dirY: dirY, px: px, t0: this.now(), dur: Math.max(1, dur) }; };
+
+  // the pose of one actor at lab time t
+  P.poseOf = function (a, t) {
+    var dt = Math.max(0, t - a.lastT), m = a.art.manifest, cells = m.phases[a.phase] || m.phases.act, ix, ci = null; a.lastT = t;
+    if (a.cellFps) {
+      // NATIVE: the cells are the clock (no hit-stop hold); catch up one cell per frame, or two at twice native rate — never skip more
+      a.pt += dt;
+      var step = a.cellStep || (a.cellFps > m.fps ? 2 : 1);
+      if (a.backlog.length) { ci = a.backlog.splice(0, Math.min(step, a.backlog.length)).pop(); ix = -1; }       // the previous phase's unreached cells first, in order
+      else {
+        var target = Math.min(cells.length - 1, Math.floor(a.pt * a.cellFps / 1000 + 1e-6));
+        ix = a.cellIx < 0 ? 0 : Math.max(a.cellIx, Math.min(target, a.cellIx + step));
+        a.cellIx = ix;
+      }
+    } else {
+      if (t >= this.frozenUntil) a.pt += dt;
+      ix = Math.min(cells.length - 1, Math.floor(Math.min(1, a.pt / a.dur) * cells.length));
+    }
+    if (ci == null) ci = cells[ix];
+    var p = Math.min(1, a.pt / a.dur), cell = m.cells[ci];
+    var pl = a.pl, alpha = 1, sc = 1, rise = 0, k = 0;
+    if (a.phase === 'emerge') { var e = easeOut(Math.max(p, 0.5 / cells.length));   /* LAB-4d: never fully transparent — the first cell is really drawn */ alpha = e; sc = 0.72 + 0.28 * e; rise = (1 - e) * pl.height * 0.35; }
+    else if (a.phase === 'act') { var c = Math.max(0.35, a.contact);   /* LAB-9a: the charge always eases over at least a third of ACT — a contact on cell 0 used to land the whole travel on one frame */ k = p < c ? easeIn(p / c) : 1 - 0.18 * easeOut((p - c) / (1 - c)); }
+    else if (a.phase === 'fizzle') { k = 0.82; if (!a.dz) { alpha = 1 - easeIn(p); sc = 1 + 0.06 * p; rise = -10 * p; } }   // a dissolving actor holds still: the erosion is the exit
+    return { cell: cell, cellIndex: ci, phaseIx: ix, phase: a.phase, x: pl.anchor.x + pl.travel.x * k, feetY: pl.anchor.y + pl.travel.y * k, y: pl.anchor.y + pl.travel.y * k + rise, scale: pl.scale * sc, alpha: alpha, flipX: pl.flipX };
+  };
+
+  P.frame = function (t, realNow) {
+    var t0 = perf(), self = this, s = this.stat;
+    this.fx = this.fx.filter(function (f) { return t - f.t0 < f.dur; });
+    this.actors.filter(function (a) { var l = a.finishing && a.art.manifest.phases[a.phase]; return l && !a.backlog.length && a.cellIx >= l.length - 1 && a.lastDrawn === l[l.length - 1]; }).forEach(function (a) { self.remove(a); });   // LAB-8: finished
+    this.actors.forEach(function (a) { if (a.finishing) { var l = a.art.manifest.phases[a.phase] || []; a.pt = Math.max(a.pt, (Math.min(l.length - 1, a.cellIx + 1)) * 1000 / a.cellFps); } a.pose = self.poseOf(a, t); });
+    this.actors.forEach(function (a) { if (a.watch && a.pose && a.phase === a.watch.phase && a.pose.phase === a.watch.phase && a.pose.phaseIx >= a.watch.index) self.fireWatch(a); });
+    this.actors.forEach(function (a) { if (a.dz && a.pose) self.stepDissolve(a, t); });
+    var u = this.under && this.under.getContext('2d'), o = this.over && this.over.getContext('2d');
+    [u, o].forEach(function (g) { if (g) { g.setTransform(self.dpr, 0, 0, self.dpr, 0, 0); g.clearRect(0, 0, self.w, self.h); } });
+    // UNDER: the portal glow, then each actor's soft contact shadow
+    if (u) this.fx.forEach(function (f) {
+      if (f.kind !== 'portal') return;
+      var p = (t - f.t0) / f.dur, env = p < 0.3 ? p / 0.3 : 1 - (p - 0.3) / 0.7;
+      var g = u.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r); g.addColorStop(0, f.color); g.addColorStop(1, 'rgba(0,0,0,0)');
+      u.globalAlpha = 0.85 * Math.max(0, env); u.fillStyle = g; u.beginPath(); u.ellipse(f.x, f.y, f.r, f.r * 0.55, 0, 0, Math.PI * 2); u.fill(); u.globalAlpha = 1;
+    });
+    if (u) this.actors.forEach(function (a) {
+      var q = a.pose; if (!q) return;
+      var rx = q.cell.w * q.scale * 0.26, ry = Math.max(3, rx * 0.16);
+      var g = u.createRadialGradient(q.x, q.feetY, 0, q.x, q.feetY, rx); g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      u.globalAlpha = q.alpha * (a.dz ? 1 - (a.dz.p || 0) : 1); u.fillStyle = g; u.beginPath(); u.ellipse(q.x, q.feetY, rx, ry, 0, 0, Math.PI * 2); u.fill(); u.globalAlpha = 1;
+    });
+    // the dissolve's smoke, behind the actor
+    if (u) this.parts.forEach(function (pt) {
+      if (pt.kind !== 'smoke' && pt.kind !== 'haze') return;
+      var k01 = Math.min(1, (t - pt.t0) / pt.life), sz = Math.min(128, pt.r * 2 * (1 + 0.5 * k01));   // never above the puff image's own size
+      u.globalAlpha = pt.alpha * Math.min(1, k01 / 0.3) * (1 - k01); u.drawImage(self.imageOf('puff', pt.color), pt.x - sz / 2, pt.y - sz / 2, sz, sz); u.globalAlpha = 1;
+    });
+    // THE ACTOR — normal blending, real alpha
+    if (this.backend === 'pixi' && this.app) this.drawPixi(); else this.drawCanvas();
+    // OVER: the directional flash
+    if (o) this.fx.forEach(function (f) {
+      if (f.kind !== 'flash') return;
+      var p = (t - f.t0) / f.dur, cy = f.y + f.dirY * f.r * 0.35;
+      var g = o.createRadialGradient(f.x, cy, 0, f.x, cy, f.r); g.addColorStop(0, 'rgba(255,242,220,0.9)'); g.addColorStop(1, 'rgba(255,242,220,0)');
+      o.globalAlpha = 0.6 * (1 - p); o.fillStyle = g; o.beginPath(); o.ellipse(f.x, cy, f.radial ? f.r : f.r * 0.7, f.r, 0, 0, Math.PI * 2); o.fill(); o.globalAlpha = 1;
+    });
+    // the dissolve's embers on Canvas 2D (on the GPU they are sprites)
+    if (o) this.parts.forEach(function (pt) {
+      if (pt.kind !== 'ember' || pt.sprite) return;
+      var k01 = Math.min(1, (t - pt.t0) / pt.life), sz = pt.r * 6;
+      o.globalAlpha = Math.min(1, k01 / 0.15) * Math.pow(1 - k01, 1.4); o.drawImage(self.imageOf('glow', pt.color), pt.x - sz / 2, pt.y - sz / 2, sz, sz); o.globalAlpha = 1;
+    });
+    // the camera impulse
+    if (this.impulseFx) {
+      var I = this.impulseFx, ip = (t - I.t0) / I.dur;
+      if (ip >= 1) { this.field.style.transform = ''; this.impulseFx = null; }
+      else this.field.style.transform = 'translate3d(0,' + (I.dirY * I.px * Math.sin(Math.PI * Math.max(0, ip))).toFixed(2) + 'px,0)';
+    }
+    var ms = perf() - t0; s.frames++; if (this.actors.length) { s.drawMsTotal += ms; s.drawN++; s.liveFrames++; s.liveRealLast = realNow != null ? realNow : perf(); if (s.liveRealT0 == null) s.liveRealT0 = s.liveRealLast; s.drawnPx = Math.round(Math.max.apply(null, this.actors.map(function (a) { return a.pose ? a.pose.cell.h * a.pose.scale : 0; }))); }
+  };
+  P.drawCanvas = function () {
+    var g = this.canvas && this.canvas.getContext('2d'), self = this; if (!g) return;
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); g.clearRect(0, 0, this.w, this.h);
+    g.globalCompositeOperation = 'source-over';
+    this.actors.forEach(function (a) {
+      var q = a.pose; if (!q) return; var c = q.cell;
+      g.save(); g.globalAlpha = Math.max(0, Math.min(1, q.alpha)); g.translate(q.x, q.y); g.scale((q.flipX ? -1 : 1) * q.scale, q.scale);
+      var off = a.dz && a.dz.path === 'mask' ? self.maskedCell(a, q) : null;
+      if (off) g.drawImage(off, 0, 0, c.w, c.h, -c.pivot.x, -c.pivot.y, c.w, c.h);
+      else g.drawImage(a.art.image, c.x, c.y, c.w, c.h, -c.pivot.x, -c.pivot.y, c.w, c.h);
+      g.restore(); self.noteCell(a, q);
+    });
+  };
+  P.drawPixi = function () {
+    var PIXI = this.pixi, app = this.app, self = this;
+    var g = this.canvas && this.canvas.getContext('2d'); if (g) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, this.canvas.width, this.canvas.height); }
+    this.actors.forEach(function (a) {
+      var q = a.pose; if (!q) return; var c = q.cell;
+      var base = self.base[a.cardId] || (self.base[a.cardId] = PIXI.Texture.from(a.art.image));
+      a.frames = a.frames || {};
+      var key = c.x + ',' + c.y;
+      var tex = a.frames[key] || (a.frames[key] = new PIXI.Texture({ source: base.source, frame: new PIXI.Rectangle(c.x, c.y, c.w, c.h) }));
+      if (!a.sprite) { a.sprite = new PIXI.Sprite(tex); a.sprite.blendMode = 'normal'; app.stage.addChild(a.sprite); }
+      a.sprite.texture = tex; a.sprite.anchor.set(c.pivot.x / c.w, c.pivot.y / c.h);
+      a.sprite.position.set(q.x, q.y); a.sprite.scale.set((q.flipX ? -1 : 1) * q.scale, q.scale); a.sprite.alpha = Math.max(0, Math.min(1, q.alpha));
+      if (a.dz && a.dz.path === 'shader') self.applyDissolve(a);
+    });
+    try { app.renderer.render(app.stage); this.actors.forEach(function (a) { if (a.pose && a.sprite) self.noteCell(a, a.pose); }); } catch (e) {}
+  };
+
+  // ── THE DISSOLVE ──
+  P.dissolve = function (a, fx) {
+    var D = root.Dissolve; if (!a || !D) return false;
+    var pr = D.resolve(fx), nzKey = pr.seed + ':' + Math.max(2, Math.round(pr.noiseScale));
+    if (!this.nz || this.nz.key !== nzKey) this.nz = D.noise(pr);
+    a.dz = { pr: pr, nz: this.nz, key: (fx && fx.key) || null, t0: this.now(), dur: Math.max(1, a.dur), r: D.rng((pr.seed * 7919 + a.id) >>> 0),
+             emberAcc: 0, smokeAcc: 0, hazeAcc: 0, spawned: 0, peak: 0, puffs: 0, hazes: 0, liveE: 0, capped: 0, sweepDoneT: null, afterSweep: 0, sweep: [], p: 0, ps: 0, th: D.threshold(0, pr), lastT: null,
+             path: this.backend === 'pixi' && this.app ? 'shader' : 'mask' };
+    return true;
+  };
+  P.exitOf = function (a) {
+    var z = a.dz, s = z.sweep, mono = true;
+    for (var i = 1; i < s.length; i++) if (s[i] < s[i - 1]) { mono = false; break; }
+    return { name: z.pr.name, key: z.key, kind: 'dissolve', path: z.path, edge: z.pr.edge, dur: z.dur, embers: z.spawned, peak: z.peak, smoke: z.puffs,
+             haze: z.hazes, cap: z.path === 'shader' ? z.pr.gpuCap : z.pr.canvasCap, capped: z.capped, sweepFrac: z.pr.sweep, sweepDoneAt: z.sweepDoneT == null ? null : Math.round(z.sweepDoneT - z.t0), afterSweep: z.afterSweep,
+             frames: s.length, monotonic: mono, first: s[0], last: s[s.length - 1], progress: z.p };
+  };
+  // one frame of the dissolve: the sweep, embers and smoke off the front, the particles' motion, the GPU ember sprites
+  P.stepDissolve = function (a, t) {
+    var D = root.Dissolve, z = a.dz, pr = z.pr, q = a.pose, c = q.cell, self = this;
+    var p = Math.min(1, Math.max(0, (t - z.t0) / z.dur)), dt = z.lastT == null ? 0 : Math.max(0, t - z.lastT) / 1000; z.lastT = t;
+    var ps = Math.min(1, p / Math.max(0.05, pr.sweep));                 // the erosion's own progress: done at sweep_frac of FIZZLE
+    z.p = p; z.ps = ps; z.th = D.threshold(ps, pr); if (z.sweep.length < 2000) z.sweep.push(z.th);
+    if (ps >= 1 && z.sweepDoneT == null) z.sweepDoneT = t;
+    var left = z.t0 + z.dur - t, gpu = z.path === 'shader', sil = a.art.silhouetteOf ? a.art.silhouetteOf(q.cellIndex) : null, flip = q.flipX ? -1 : 1, lifeK = z.dur / 600, slow = Math.max(1, lifeK);
+    var lifeE = z.dur / (pr.lifeRef || 600), slowE = Math.max(1, lifeE), cap = gpu ? pr.gpuCap : pr.canvasCap;
+    var at = function (u, v) { return { x: q.x + flip * (u * c.w - c.pivot.x) * q.scale, y: q.y + (v * c.h - c.pivot.y) * q.scale }; };
+    var onFigure = function (u, v) {
+      if (!(v >= 0 && v <= 1)) return false; if (!sil) return true;
+      var i = Math.min(sil.cols - 1, Math.floor(u * sil.cols)); return sil.top[i] >= 0 && v >= sil.top[i] && v <= sil.bottom[i];
+    };
+    var spawn = function (kind, lift) {
+      for (var tries = 0; tries < 5; tries++) {
+        var R = z.r, u = R(), v = D.frontAt(z.nz, pr, u, z.th) + lift();
+        if (!onFigure(u, v)) continue;
+        var s = at(u, v);
+        if (kind === 'ember') self.parts.push({ kind: kind, owner: a, x: s.x, y: s.y, vx: (R() - 0.5) * pr.emberSpread / slowE, vy: -(pr.emberRise[0] + R() * (pr.emberRise[1] - pr.emberRise[0])) / slowE,
+          r: pr.emberSize[0] + R() * (pr.emberSize[1] - pr.emberSize[0]), t0: t, life: Math.min((pr.emberLife[0] + R() * (pr.emberLife[1] - pr.emberLife[0])) * lifeE, left),
+          ph: R() * 6.283, color: pr.emberColor, tint: D.tint(pr.emberColor), slow: slowE, sprite: null });
+        else if (kind === 'haze') { var hz = pr.haze; self.parts.push({ kind: kind, owner: a, x: s.x, y: s.y, vx: (R() - 0.5) * 10 / slowE, vy: -(hz.rise[0] + R() * (hz.rise[1] - hz.rise[0])) / slowE,
+          r: (hz.size[0] + R() * (hz.size[1] - hz.size[0])) * c.h * q.scale, t0: t, life: Math.min((hz.life[0] + R() * (hz.life[1] - hz.life[0])) * (z.dur / 1500), left), ph: R() * 6.283, color: hz.color, alpha: hz.alpha, slow: slowE, sprite: null }); }
+        else self.parts.push({ kind: kind, owner: a, x: s.x, y: s.y, vx: (R() - 0.5) * 14 / slow, vy: -(8 + R() * 16) / slow, r: (0.05 + R() * 0.06) * c.h * q.scale,
+          t0: t, life: Math.min((520 + R() * 280) * lifeK, left), ph: R() * 6.283, color: pr.smokeColor, alpha: pr.smokeAlpha, slow: slow, sprite: null });
+        return true;
+      }
+      return false;
+    };
+    if (ps < 1 && left > 40) {
+      z.emberAcc += dt * (gpu ? 150 : 60) * pr.embers / slowE;
+      var liftE = pr.emberZone > 0 ? function () { return -z.r() * pr.emberZone; } : function () { return -z.r() * pr.edgeWidth * 0.8; };
+      while (z.emberAcc >= 1) { z.emberAcc -= 1; if (z.liveE >= cap) { z.capped++; continue; } if (spawn('ember', liftE)) { z.spawned++; z.liveE++; } }
+      if (pr.haze) { z.hazeAcc += dt * pr.haze.rate / slowE; while (z.hazeAcc >= 1) { z.hazeAcc -= 1; if (spawn('haze', function () { return -z.r() * Math.max(pr.emberZone, pr.edgeWidth); })) z.hazes++; } }
+      if (pr.smoke) { z.smokeAcc += dt * 14 / slow; while (z.smokeAcc >= 1) { z.smokeAcc -= 1; if (spawn('smoke', function () { return 0.03 + z.r() * 0.1; })) z.puffs++; } }
+    }
+    var live = 0;
+    this.parts = this.parts.filter(function (pt) {
+      if (pt.owner !== a) return true;
+      var age = t - pt.t0; if (age >= pt.life) { self.dropPart(pt); return false; }
+      pt.x += (pt.vx + Math.sin(pt.ph + age / (95 * pt.slow)) * (pt.kind === 'ember' ? 10 : 4) / pt.slow) * dt; pt.y += pt.vy * dt;
+      if (pt.kind === 'ember') { pt.vy *= Math.pow(0.6, dt / pt.slow); live++; }
+      return true;
+    });
+    z.peak = Math.max(z.peak, live); z.liveE = live; if (z.sweepDoneT != null && t > z.sweepDoneT) z.afterSweep = Math.max(z.afterSweep, live);
+    if (gpu && this.app) {
+      var kit = this.gpuKit(z), PIXI = this.pixi, app = this.app;
+      this.parts.forEach(function (pt) {
+        if (pt.owner !== a || pt.kind !== 'ember') return;
+        var sp = pt.sprite;
+        if (!sp) { sp = self.pool.pop() || new PIXI.Sprite(kit.glow); sp.anchor.set(0.5); sp.blendMode = 'normal'; pt.sprite = sp; }
+        if (!sp.parent) app.stage.addChild(sp);
+        var k01 = Math.min(1, (t - pt.t0) / pt.life);
+        sp.tint = pt.tint; sp.alpha = Math.min(1, k01 / 0.15) * Math.pow(1 - k01, 1.4); sp.position.set(pt.x, pt.y); sp.scale.set(pt.r * 6 / 64);
+      });
+    }
+  };
+  P.dropPart = function (pt) { var sp = pt.sprite; if (sp) { if (sp.parent) sp.parent.removeChild(sp); this.pool.push(sp); pt.sprite = null; } };
+  P.docOf = function () { return (this.canvas && this.canvas.ownerDocument) || root.document; };
+  P.imageOf = function (kind, color) { var id = kind + '|' + color, D = root.Dissolve; return this.tex[id] || (this.tex[id] = kind === 'glow' ? D.glowCanvas(this.docOf(), color) : D.puffCanvas(this.docOf(), color)); };
+  // the GPU kit: one glow texture for the ember pool, the uniforms, and the filter (rebuilt only when the noise changes)
+  P.gpuKit = function (z) {
+    var PIXI = this.pixi, D = root.Dissolve;
+    if (!this.dz) {
+      var v4 = function (a) { return { value: new Float32Array(a), type: 'vec4<f32>' }; };
+      this.dz = { glow: PIXI.Texture.from(D.glowCanvas(this.docOf(), '#ffffff')), noiseKey: null, filter: null,
+                  ug: new PIXI.UniformGroup({ uEdge: v4([1, 0.4, 0.8, 1]), uCore: v4([1, 1, 1, 1]), uParams: v4([0, 0.02, 0.06, 0.24]), uParams2: v4([0.6, 0.4, 0, 0]) }) };
+    }
+    var k = this.dz;
+    if (k.noiseKey !== z.nz.key) {
+      var tex = PIXI.Texture.from(D.noiseCanvas(this.docOf(), z.nz)), S = D.SHADER;
+      k.noise = tex; k.noiseKey = z.nz.key;
+      k.filter = new PIXI.Filter({
+        glProgram: PIXI.GlProgram.from({ vertex: S.glVertex, fragment: S.glFragment, name: 'lab-dissolve' }),
+        gpuProgram: PIXI.GpuProgram.from({ vertex: { source: S.wgsl, entryPoint: 'mainVertex' }, fragment: { source: S.wgsl, entryPoint: 'mainFragment' } }),
+        resources: { dissolveUniforms: k.ug, uNoise: tex.source, uNoiseSampler: tex.source && tex.source.style },
+        padding: 0, resolution: this.dpr,
+      });
+    }
+    return k;
+  };
+  P.applyDissolve = function (a) {
+    var D = root.Dissolve, z = a.dz, pr = z.pr, k = this.gpuKit(z), U = k.ug.uniforms, e = D.rgb(pr.edge), c = D.rgb(pr.core);
+    U.uEdge[0] = e[0]; U.uEdge[1] = e[1]; U.uEdge[2] = e[2]; U.uCore[0] = c[0]; U.uCore[1] = c[1]; U.uCore[2] = c[2];
+    U.uParams[0] = z.th; U.uParams[1] = pr.soft; U.uParams[2] = pr.edgeWidth; U.uParams[3] = pr.charge; U.uParams2[0] = pr.chargeAlpha; U.uParams2[1] = pr.noise;
+    if (k.ug.update) k.ug.update();
+    if (!a.sprite.filters || a.sprite.filters[0] !== k.filter) a.sprite.filters = [k.filter];
+  };
+  // the Canvas 2D path: the held cell, masked by this frame's erosion (destination-in), the front's glow over what is left (source-atop)
+  P.maskedCell = function (a, q) {
+    var D = root.Dissolve, z = a.dz, c = q.cell, id = a.cardId + '#' + q.cellIndex + '|' + z.nz.key + '|' + z.pr.noise, k = this.cz[id], doc = this.docOf();
+    if (!k) {
+      var mk = function (w, h) { var cv = doc.createElement('canvas'); cv.width = w; cv.height = h; return cv; };
+      var w2 = Math.max(1, Math.ceil(c.w / 2)), h2 = Math.max(1, Math.ceil(c.h / 2)), off = mk(c.w, c.h), mc = mk(w2, h2), gc = mk(w2, h2), mctx = mc.getContext('2d'), gctx = gc.getContext('2d');
+      var img = function (g2) { var im = g2 && g2.createImageData ? g2.createImageData(w2, h2) : null; return im && im.data ? im : { data: new Uint8ClampedArray(w2 * h2 * 4), width: w2, height: h2 }; };
+      k = this.cz[id] = { off: off, octx: off.getContext('2d'), mc: mc, gc: gc, mctx: mctx, gctx: gctx, w2: w2, h2: h2, grid: D.grid(z.nz, z.pr, w2, h2), mimg: img(mctx), gimg: img(gctx) };
+    }
+    D.paint(k.grid, z.th, z.pr, k.mimg.data, k.gimg.data);
+    k.mimg.__role = 'mask'; k.mimg.__cell = q.cellIndex; k.gimg.__role = 'glow';
+    k.mctx.putImageData(k.mimg, 0, 0); k.gctx.putImageData(k.gimg, 0, 0);
+    var o = k.octx; o.setTransform(1, 0, 0, 1, 0, 0);
+    o.globalCompositeOperation = 'source-over'; o.clearRect(0, 0, c.w, c.h); o.drawImage(a.art.image, c.x, c.y, c.w, c.h, 0, 0, c.w, c.h);
+    o.globalCompositeOperation = 'destination-in'; o.drawImage(k.mc, 0, 0, k.w2, k.h2, 0, 0, c.w, c.h);
+    o.globalCompositeOperation = 'source-atop'; o.drawImage(k.gc, 0, 0, k.w2, k.h2, 0, 0, c.w, c.h);
+    o.globalCompositeOperation = 'source-over';
+    return k.off;
+  };
+
+  // THE CLEANUP GUARANTEE — no actor, sprite, effect or camera offset survives this
+  P.clear = function () {
+    var self = this;
+    this.actors.slice().forEach(function (a) { self.remove(a); });
+    this.parts.forEach(function (pt) { self.dropPart(pt); }); this.parts = [];
+    this.actors = []; this.fx = []; this.impulseFx = null; this.frozenUntil = -1;
+    this.field.style.transform = '';
+    [this.under, this.canvas, this.over].forEach(function (c) { var g = c && c.getContext('2d'); if (g) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height); } });
+    if (this.app) { try { this.app.stage.removeChildren(); this.app.renderer.render(this.app.stage); } catch (e) {} }
+    this.closeLiveWindow();
+  };
+  P.liveActors = function () { return this.actors.length; };                                            // actors on stage (one per manifestation)
+  P.liveParticles = function () { return this.parts.length; };                                          // dissolve embers and smoke still alive
+  P.liveSprites = function () { return this.app ? this.app.stage.children.length : 0; };                  // GPU sprites still attached (0 once cleared)
+  P.stats = function () {
+    var s = this.stat;
+    return { backend: this.renderer, frames: s.frames, drawMsAvg: s.drawN ? s.drawMsTotal / s.drawN : 0, fps: s.fps, liveFps: (s.liveRealT0 != null && s.liveRealLast > s.liveRealT0) ? Math.round(s.liveFrames * 1000 / (s.liveRealLast - s.liveRealT0)) : null, cellPx: s.cellPx, drawnPx: s.drawnPx,
+             cellsDrawn: this.actors.length ? this.playOf(this.actors[0], true) : s.lastPlay,
+             exit: this.actors.length && this.actors[0].dz ? this.exitOf(this.actors[0]) : s.lastExit,
+             decodedBytes: this.decodedBytes(), actorsLoaded: Object.keys(this.assets).length, peakDecoded: s.peakDecoded, loads: s.loads, unloads: s.unloads };
+  };
+
+  root.ActorStage = ActorStage;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · actorstage ===== */
+/* ===== ACTOR MODULE VERBATIM BEGIN · playback ===== */
+/* lib/playback.js — VFX-LAB-3. The wiring from a Director plan's cues to the stage and the board. Card-agnostic: everything
+   about the page arrives through `env`, so the same wiring runs in the lab page and in a test.
+   env = { stage (ActorStage), ctx (ClashContext), boards {entry, settle, final}, viewer,
+           rectOf(uid) → field-local {x,y,w,h} | null, clientOf(uid) → client {cx,cy,w} | null, field {w,h}, bandOf(seat) → rect | null,
+           render(board, floats), pulse(uid, ms), actorFor(cardId) → {manifest,image} | null, factionFx(faction) → {name, portal, exit, dissolve},
+           embers(clientX, clientY) (the existing ember recipe), queueFx(event, board, skipped), onDone(result),
+           sound?(name) — 'contact' on the contact cell, 'exit' as FIZZLE starts (LAB-5), release?(cardId) — after SETTLE (LAB-5) }
+   A1 on every cue: the actor acts toward the enemy side and never reaches the enemy cards (StageMath); nothing is drawn on the
+   target; the numbers land at SETTLE from the board difference, and the queued events land theirs after.
+   Browser: window.Playback. Node: require (with a stub env). */
+(function (root) {
+  'use strict';
+  var CC = (typeof module !== 'undefined' && module.exports) ? require('./clashcontext.js') : root.ClashContext;
+  var SM = (typeof module !== 'undefined' && module.exports) ? require('./stagemath.js') : root.StageMath;
+  var clone = function (x) { return JSON.parse(JSON.stringify(x)); };
+
+  function create(env) {
+    var ctx = env.ctx, actor = null, working = null, log = [];
+    var side = ctx.seat === env.viewer ? 'me' : 'opp';
+    var fx = env.factionFx(ctx.faction) || {};
+    function placement() {
+      var art = env.actorFor(ctx.cardId), card = env.rectOf(ctx.sourceUid);
+      if (!art || !card) return null;
+      var pl = SM.place({ card: card, side: side, fieldW: env.field.w, fieldH: env.field.h, band: env.bandOf(1 - ctx.seat), refHeight: art.manifest.refHeight, facing: art.manifest.facing });
+      // LAB-10: the card says how far it charges (travelScale, default 1); LAB-9a: a nova bursts where it stands whatever it says
+      var ts = art.manifest.contactRule === 'nova' ? 0 : (root.ActorManifest || require('./manifest.js')).travelScale(art.manifest);
+      if (ts !== 1) pl.travel = { x: pl.travel.x * ts, y: pl.travel.y * ts };
+      return pl;
+    }
+    function ensureActor() {
+      if (actor) return actor;
+      var pl = placement(); if (!pl) return null;
+      actor = env.stage.spawn(ctx.cardId, pl, ctx.faction);
+      return actor;
+    }
+    var handlers = {
+      cue: function (c, info) {
+        log.push(c.cue + (info.skipped ? '·skipped' : ''));
+        switch (c.cue) {
+          case 'board-entry': working = clone(env.boards.entry); env.render(working, []); break;
+          case 'portal-open': {
+            if (info.skipped) break;
+            var r = env.rectOf(ctx.sourceUid), cl = env.clientOf(ctx.sourceUid); if (!r) break;
+            env.stage.portal(r.x + r.w / 2, r.y + r.h * 0.6, r.w * 1.1, fx.portal || 'rgba(255,220,160,0.8)', c.dur);
+            if (fx.exit === 'embers' && cl) env.embers(cl.cx, cl.cy);
+            break;
+          }
+          case 'actor-phase': { if (info.skipped) break; var a = ensureActor(); if (a) env.stage.setPhase(a, c.phase, c.dur, c.contactFrac, c.cellFps, c.cellStep); break; }
+          case 'contact': {
+            if (info.skipped || !actor) break;
+            var who = actor;
+            var hit = function () {
+              if (!who.pose) return;
+              var q = who.pose, h = who.pl.height, mf = who.art && who.art.manifest;
+              // LAB-9: the card's contact strength scales the flash (its length and its radius) and the camera impulse; a self-cast may set impulse 0
+              var st = (root.ActorManifest || require('./manifest.js')).contactStrength(mf), flashMs = Math.max(1, Math.round(c.flashMs * st.flash)), px = c.impulsePx * st.impulse;
+              env.stage.hitstop(c.hitstopMs);
+              if (env.sound) env.sound('contact');   // LAB-5: the strike, on the frame the contact cell is drawn
+              // LAB-8 · contact rule "nova": a radial flash from the actor's centre; every other rule: the directional flash toward the target
+              if (mf && mf.contactRule === 'nova') env.stage.flash(q.x, q.feetY - h * 0.5, h * 0.9 * st.flash, 0, flashMs, 'radial');
+              else env.stage.flash(q.x, q.feetY - h * 0.55, h * 0.9 * st.flash, who.pl.dirY, flashMs);   // the flash and the impulse point at the true target (dirY), whatever way the action is drawn
+              if (px > 0) env.stage.impulse(who.pl.dirY, px, c.impulseMs);   // LAB-9: impulse 0 = no camera move at all
+            };
+            // LAB-4a: a native actor's contact lands on its contact CELL — the stage fires it on the frame that cell is drawn
+            if (c.contactCell != null && env.stage.onCell) env.stage.onCell(who, 'act', c.contactCell, hit); else hit();
+            break;
+          }
+          case 'exit-fx': {
+            if (info.skipped || !actor) break;
+            // LAB-4b: the faction's dissolve — the stage erodes the held cell over FIZZLE (the actor-phase cue just set its length)
+            if (fx.exit === 'dissolve' && env.stage.dissolve) { env.stage.dissolve(actor, fx); if (env.sound) env.sound('exit'); break; }   // LAB-5: the ember exit's sound as FIZZLE starts
+            if (!actor.pose) break;
+            if (fx.exit === 'embers' && env.sound) env.sound('exit');
+            if (fx.exit === 'embers') { var p = actor.pose, fr = env.fieldClient ? env.fieldClient() : { x: 0, y: 0 }; env.embers(fr.x + p.x, fr.y + p.feetY - actor.pl.height * 0.4); env.embers(fr.x + p.x, fr.y + p.feetY - actor.pl.height * 0.8); }
+            break;
+          }
+          case 'actor-gone': if (actor) { if (!(env.stage.finish && env.stage.finish(actor))) env.stage.remove(actor); actor = null; } break;   // LAB-8: a native-exit actor that is behind finishes its cells first
+          case 'card-pulse': if (!info.skipped) env.pulse(ctx.sourceUid, c.dur); break;
+          case 'settle': working = clone(env.boards.settle); env.render(working, info.skipped ? [] : c.floats); break;
+          case 'queue': {
+            if (!working) working = clone(env.boards.settle);
+            var floats = CC.applyEvent(working, c.event);
+            env.render(working, info.skipped ? [] : floats);
+            env.queueFx(c.event, working, info.skipped);
+            break;
+          }
+          case 'done': {
+            var ok = JSON.stringify(CC.project(working)) === JSON.stringify(CC.project(env.boards.final));
+            env.onDone({ equalsFinal: ok });
+            break;
+          }
+        }
+      },
+      cleanup: function () {
+        env.stage.clear(); actor = null;
+        // LAB-5 (A5): after SETTLE the actor's decoded atlas goes — the page drops its bitmap too; between plays 0 actor MB
+        if (env.release) env.release(ctx.cardId); else if (env.stage.unloadActor) env.stage.unloadActor(ctx.cardId);
+      },
+      error: function (e) { if (env.onError) env.onError(e); },
+    };
+    return { handlers: handlers, log: log, get actor() { return actor; }, get board() { return working; }, placement: placement };
+  }
+  var OUT = { create: create };
+  root.Playback = OUT;
+  if (typeof module !== 'undefined' && module.exports) module.exports = OUT;
+})(typeof window !== 'undefined' ? window : this);
+/* ===== ACTOR MODULE VERBATIM END · playback ===== */
+</script>
+<script>
 const $=id=>document.getElementById(id);
 const TYPE_ICON={hero:'👑',unit:'⚔',astra:'🔱',mantra:'🕉',artifact:'🧿'};
 const RAR_CLASS={ L:'rar-L', M:'rar-M', E:'rar-E' };
@@ -5148,7 +6841,7 @@ $('mullconfirm').onclick=()=>{
   $('mulligan').classList.add('hidden');
   const evs=G.events.slice(evStart); blogRecord(G, blogBefore, evs, ME); render();
   if (reducedMotion() || !evs.length){ pump(); return; }
-  choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoForce=[];
+  choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=skipChoreo;
   (async()=>{ try{ for(const ev of evs){ if(choreoSkip) break; try{ await playEvent(ev, snap, evs); }catch(e){} } }
     finally{ choreoActive=false; choreoStartedAt=0; choreoForce=[]; layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML=''; try{ render(); }catch(e){} pump(); } })();
@@ -8158,6 +9851,7 @@ function revealMaterializingHero(uid){ if(!materializingHeroes[uid]) return; del
 function revealAllMaterializingHeroes(){ for(const uid in materializingHeroes) revealMaterializingHero(uid); }   // skip/reset safety: never leave a hero stuck hidden
 function render(targetSet){
   const me=G.players[ME], op=G.players[OPP];
+  try{ fxPrefetchHands(); }catch(e){} try{ mfPrefetchHands(); }catch(e){}   // EXPORT-1/2: hand-entry prefetch of a routed effect card's compressed atlas bytes (decode waits for the cast)
   $('rnum').textContent=G.round;
   $('pips').innerHTML =
     '<span class="pip-w">'+'★'.repeat(me.roundWins)+'</span><span class="pip-l">'+'★'.repeat(2-me.roundWins)+'</span>'+
@@ -8777,7 +10471,13 @@ function animateTotals(ov0, ov1){   // ITEMS 2+3: optional target overrides — 
 /* ---------- event choreography (sequential) ---------- */
 let choreoActive=false, choreoSkip=false, choreoTimers=[], roundCountAtActionStart=0;
 let venomStrikeNpAtAction=-1;   // VASUKI VENOM STRIKE attribution: the striking player captured PRE-mutate each action (endRound resets pl.venomStrike=0 AND increments g.round before the choreo plays the round-end 'toast', so a live peek at choreo time would read the wiped flag / advanced round — capture it before mutate instead). -1 = no strike active this action.
-let choreoForce=[], choreoStartedAt=0;   // choreoForce: finishers for rAF-based awaits (animateTotals); choreoStartedAt: watchdog clock
+let choreoForce=[], choreoStartedAt=0;
+// EXPORT-2 · THE PLAN-AWARE WATCHDOG (owner ruling, built FIRST, before any actor route): a step's budget is the flat 8,000 ms unless the step
+// is a Hero manifestation, whose budget is ITS OWN PLAN'S TOTAL + a margin — Vasuki's Full manifestation alone is 8,018 ms, and one speed plays
+// everywhere, so a flat cap would force-finish him mid-strike. Every step resets the budget to the flat cap; only a manifestation raises it.
+const CHOREO_WATCHDOG_MS=8000, CHOREO_WATCHDOG_MARGIN_MS=2000;
+let choreoBudgetMs=CHOREO_WATCHDOG_MS;
+function choreoBudgetFor(planMs){ return Math.max(CHOREO_WATCHDOG_MS, Math.ceil(+planMs||0) + CHOREO_WATCHDOG_MARGIN_MS); }   // choreoForce: finishers for rAF-based awaits (animateTotals); choreoStartedAt: watchdog clock
 const FAC_COLOR={ 'fac-deva':'#e0b040', 'fac-asura':'#e0483c', 'fac-vanara':'#6fc257', 'fac-naga':'#3fb9a8' };
 function snapshotBoard(){
   const m={};
@@ -8811,18 +10511,18 @@ function choreoRace(promise, snap){
 function fastForwardChoreo(){ if(!choreoActive) return; choreoSkip=true;
   choreoTimers.forEach(([t,r])=>{ try{ clearTimeout(t); }catch(e){} try{ r&&r(); }catch(e){} }); choreoTimers=[];
   const fs=choreoForce; choreoForce=[]; fs.forEach(fn=>{ try{ fn(); }catch(e){} });
-  try{ revealAllMaterializingHeroes(); }catch(e){} }   // T104-B: a skipped/backgrounded/watchdog'd entry must never leave a hero stuck hidden
+  try{ revealAllMaterializingHeroes(); }catch(e){} try{ fxSkip(); }catch(e){} }   // EXPORT-1: a skipped/backgrounded/watchdog'd action lands its effect clip too. T104-B: a skipped/backgrounded/watchdog'd entry must never leave a hero stuck hidden
 function skipChoreo(){ fastForwardChoreo(); }
 // (b) iOS backgrounding pauses rAF mid-await → fast-forward the choreo the moment the tab is hidden, so it can't stick.
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && choreoActive) fastForwardChoreo(); });
 // (c) belt-and-braces watchdog: if choreoActive is stuck true for >8s, force-finish, then hard-release input if still locked.
-setInterval(()=>{ if(choreoActive && choreoStartedAt && (performance.now()-choreoStartedAt)>8000){
+setInterval(()=>{ if(choreoActive && choreoStartedAt && (performance.now()-choreoStartedAt)>choreoBudgetMs){
   fastForwardChoreo();
   setTimeout(()=>{ if(choreoActive){ choreoActive=false; choreoStartedAt=0; const l=$('choreolayer'); if(l){ l.classList.remove('locked'); l.onclick=null; l.innerHTML=''; } try{ render(); }catch(e){} try{ pump(); }catch(e){} } }, 300);
 } }, 1500);
 // Defensive reset of ALL choreography globals — a new match must never inherit a stuck choreoActive from a prior match
 // whose choreo async was left pending (a hung rAF await) or rejected (an uncaught step exception, e.g. the drawImage race).
-function resetChoreo(){ choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
+function resetChoreo(){ try{ fxSkip(); }catch(e){} try{ mfSkip(); }catch(e){} choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
   choreoTimers.forEach(([t])=>{ try{ clearTimeout(t); }catch(e){} }); choreoTimers=[]; pendingPlay=null; roundCountAtActionStart=0;
   const layer=$('choreolayer'); if(layer){ layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML=''; } }
 const FTOAST_CLASS = a => a==='Chaos Surge'?'f-chaos': a==='Dharma Shield'?'f-dharma': a==='Leap'?'f-leap': a==='Venom'?'f-venom':'f-other';
@@ -9739,6 +11439,7 @@ async function attributeSource(ev, evs, snap){   // ~520ms source beat (cpulse +
   else { const t0=ev.targetUids && ev.targetUids[0]; const tp = (t0 && koePos[t0]) || { cx: window.innerWidth/2, top: window.innerHeight*0.42, rect:{top: window.innerHeight*0.42} }; calloutAt(tp, cause); await cDelay(480); }   // T88b: SOURCELESS delayed cause (only Surasa-died-but-trap-fired reaches here today) → name the cause at the victim's (kill-on-entry showcase) position, else screen-centre. Kumbhakarna/Kalanemi/decay always have a board source above.
 }
 async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event slice, for the surviving-damage look-ahead (a same-uid destroy ⇒ killing blow ⇒ no tick)
+  try{ fxBeatFrom(ev); }catch(e){}   // EXPORT-5: a routed clip hears its REAL beat here
   playEventSound(ev);
   const src = ev.sourceUid!=null ? posOf(ev.sourceUid, snap) : null;
   if (ev.type==='destroy' || ev.type==='damage') await attributeSource(ev, evs, snap);   // T88: WHO did it, before the target beats below
@@ -9760,8 +11461,9 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     if(src){ cpulse(src.el,'choreo-src'); calloutAt(src, ev.abilityName); }   // cpulse fires CONCURRENT with the impact visual (beat 1a)
     if(LEGACY_VFX && isBody && src) VFX.cardLand(src.cx, src.rect.top+src.rect.height/2);   // (a) card-lands dust + embers — same beat as the clash SFX [T77-gated]
     if(LEGACY_VFX && isAstra){ const tp=halfCenterClient(1-ownerPiOfUid(ev.sourceUid)); if(tp){ VFX.astraBurst(tp.x, tp.y); if(tier==='combat') vignetteFlash(); if(c.r==='M') VFX.mythic(tp.x, tp.y); } }   // (b) burst; combat → screen-edge vignette; Mythic → lightning + flash + smoke [T77-gated; astra hit-stop/shake stay below]
-    if(isAstra && c && c.id==='brahmastra'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprBrahmastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T78: BOARD EFFECT (NEW pipeline, ungated) — the golden pillar row-plate over the enemy rows (Brahmastra destroys ALL enemy Units, engine-verified). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). Its strike beat rides the unconditional spectacle hit-stop below.
-    if(isAstra && c && c.id==='pashupata'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprPashupatastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T89: BOARD EFFECT (NEW pipeline, ungated) — the violet devouring vortex over the enemy rows (Pashupatastra = AoE board damage, engine-verified; pierces shields). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). The vortex tear-open (beat 2) rides the spectacle hit-stop below.
+    if(isAstra && c) fxCast(c, ev, evs, snap);   // EXPORT-1: a routed Astra (registry.json) starts its effect clip HERE, on this beat's clock; unrouted Astras return at once and draw exactly as before
+    if(isAstra && c && c.id==='brahmastra'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(), fire=()=>VFX.sprBrahmastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('brahmastra', fire)) fire(); } }   // EXPORT-3: the rebuilt clip (LAB-22) owns this moment when it is routed and ready; not ready, or failing after the cast, the classic sprite fires (late) — T78: BOARD EFFECT (NEW pipeline, ungated) — the golden pillar row-plate over the enemy rows (Brahmastra destroys ALL enemy Units, engine-verified). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). Its strike beat rides the unconditional spectacle hit-stop below.
+    if(isAstra && c && c.id==='pashupata'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(), fire=()=>VFX.sprPashupatastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('pashupata', fire)) fire(); } }   // T89: BOARD EFFECT (NEW pipeline, ungated) — the violet devouring vortex over the enemy rows (Pashupatastra = AoE board damage, engine-verified; pierces shields). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). The vortex tear-open (beat 2) rides the spectacle hit-stop below.
     if(isAstra && c && c.id==='tamasa'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTamasa(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // TAMASA — THE SMOTHERING (first Asura astra): the dim darkness plate over the CASTER's ENEMY half (es=1-ownerPiOfUid, f9c3149 idiom — correct for AI casts natively; the smother settles on the skipped opponent). DIM register — NO hit-stop coupling (the spectacle astra play beat already carries the astra impact; the darkness settles, it does not strike). Chaos Surge (the caster's own toast+buff, same evs list) plays as its OWN serialized beat — the wash on the ASURA/caster half (line ~9185, ownerPiOfUid(buffed unit)), opposite this plate, never merged (evs order play→toast→buff verified live). Nothing wired at the forced-skip consumption (it never calls pass() → no pass banner; the plate + the visible turn theft IS the card).
     if(c && c.id==='amrita'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAmritaBless(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // AMRITA KALASHA — THE VESSEL'S BLESSING (ARTIFACT ROW opener).
     if(c && c.id==='kishkindhacrown'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprKishkindhacrown(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // KISHKINDHA CROWN — THE CANOPY CROWNS THE HOST: the crest plate (green + gold) over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). VERDANT/ASCENDING register — no hit-stop; the canopy CRESTS UP (the Signet's press-down mirror). The Crown-precedent Leap +1/+1 beats (leaper + copied unit, engine ~520) play through the existing buff machinery every leap — nothing bespoke here. ascent composites WHOLE via the 'contain' fit vocab.
@@ -9794,6 +11496,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
           else VFX.sprOathCast(r.left+r.width/2, r.top+r.height/2, r.width); }   // fire-and-forget over the warded card (24f ≈ 1.5s); the play beat's own 700ms hold outlives into it, Rama-Naam style
       }
     }
+    if(isBody && src && c && c.t==='hero' && mfRouted(c.id)){ if(await mfManifest(c, ev, evs, tier)) return; }   // EXPORT-2: a routed Hero manifests (AWAKEN→EMERGE→ACT→SETTLE); not ready or failed → today's path below, untouched
     // T67 painted sprite layer (falls back to procedural when a sprite isn't loaded)
     if(isBody && src){ const fac=cardHomeFaction(c) || (G.players[ownerPiOfUid(ev.sourceUid)]||{}).faction || 'devas', isHero=(c.t==='hero');
       if(LEGACY_VFX) VFX.sprRing(src.cx, src.rect.top+src.rect.height*0.78, fac, src.rect.width*(isHero?1.15:1));                          // E2 landing ground ring (faction-tinted; heroes land bigger) [T77-gated]
@@ -9823,7 +11526,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     await cDelay(hold); return;
   }
   if (ev.type==='destroy'){ const u=ev.targetUids[0]; const dp=posOf(u, snap) || koePos[u];   // T88b: kill-on-entry death dissolves at the showcase position
-    if(ev.abilityName==='Vajra' && dp) VFX.sprVajra(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width);   // T82: target-anchored strike (NEW pipeline, ungated) — keyed off the RESOLUTION event's struck unit; the 2-frame snap lands inside the 40ms death hit-stop below. T97: the struck card is STILL VISIBLE here (captured + persisted at render) → the bolt lands ON the card.
+    if(ev.abilityName==='Vajra' && dp && !fxOwnsMoment('vajra')) VFX.sprVajra(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width);   // T82: target-anchored strike (NEW pipeline, ungated) — keyed off the RESOLUTION event's struck unit; the 2-frame snap lands inside the 40ms death hit-stop below. T97: the struck card is STILL VISIBLE here (captured + persisted at render) → the bolt lands ON the card.
     if(ev.abilityName==='Sarpa Satra' && dp) VFX.sprSarpaA(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width);   // SARPA SATRA Zone A — the fire→serpent→ash frames the SACRIFICED unit's dissolve. The normal death beat below still runs (non-Vajra placeholder dissolve); the 20f square sprite outlives the ~640ms death hold and hands off to Zone B, which fires on the subsequent enemy 'damage' events. Global solo-stagger holds (fire⊥serpent).
     if(ev.abilityName==='Gandiva' && dp) VFX.sprGandiva(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width);   // GANDIVA ARROW — the victim-anchored strike (Vajra class), keyed off the destroy RESOLUTION event's struck unit; strike-lands-first: fires BEFORE the showcaseVictim dissolve below, ON the captured+persisted card. A double-kill emits TWO 'Gandiva' destroy events in the same action's evs list → the choreo loop plays them SERIALLY (arrow 1 lands + dwells, THEN arrow 2), each with its own showcase — the queue serializes naturally, no new machinery.
     await cDelay(40);
@@ -9836,7 +11539,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
       // T97: the hero card is captured + persisted (captureVictims) → it stays VISIBLE through the whole cast beat AND the disc flight, so the disc bites a VISIBLE hero (no empty-slot flight). The 'removal' exit fires at the BITE below → hit-then-gone (the parked ruling's words). NO dissolve — T92 law: the hero returns next round, it is spirited off, not slain.
       const caster=1-ownerPiOfUid(u), ch=document.querySelector(halfSel(caster));   // origin = the CASTER's half center (T79/T87 half idiom) — caster = the side opposite the removed hero's owner, cleanly derivable at the handler from the target uid.
       let fx=null, fy=null; if(ch){ const r=ch.getBoundingClientRect(); fx=r.left+r.width/2; fy=r.top+r.height*0.5; }
-      VFX.sprSudarshana(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width, fx, fy, 380);   // THROW — thrown flat from the caster's half; travelMs 380 → the flight completes at the frame-9 CONTACT PIN (cDelay scales by exactly vfxT, so the await below tracks the sprite frame timing).
+      if(!fxOwnsMoment('sudarshana')) VFX.sprSudarshana(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width, fx, fy, 380);   // THROW — thrown flat from the caster's half; travelMs 380 → the flight completes at the frame-9 CONTACT PIN (cDelay scales by exactly vfxT, so the await below tracks the sprite frame timing).
       await cDelay(380);   // FLIGHT (frames 1-8) → the disc reaches the STILL-VISIBLE hero.
       // 3f BITE (frames 9-10): the disc PINS at full presence + the baked spark burst (L3 f9-11) and glow (L4 f9-12) fire AT the contact point. The cast's spectacle hit-stop (110ms) fired back at the astra PLAY beat (~1s earlier); this contact is a separate, later beat, so we punctuate it with its OWN hit-stop — a combat-weight shake (a sharp precise BITE, distinct from the cast's board cataclysm) + a ~100ms freeze — so the hit is FELT at the target.
       screenShake(false); await cDelay(100);
@@ -9948,12 +11651,341 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
   }
   await cDelay(160 + bigHit);
 }
+/* ══ EXPORT-1 — THE PREMIUM EFFECTS: Vajra, Sudarshana Chakra (the travelling chain), Pashupatastra ═════════════════════
+   The additive effect clips certified in the manifestation lab, drawn on THE GAME'S OWN BEATS. The beat code below (playEvent)
+   stays the conductor: it still owns every sound, crack, removal, callout, hit-stop and dwell. The clip only DRAWS — its env
+   gives the player no-op sound/crack/removal/callout/render hooks — started at the cast (the Astra's `play` beat) on the game's
+   own clock (plan mode 'full' with choreoSpeed = vfxT(), so the clip's frame time is speedMult × CHOREO_SPEED like every
+   cDelay), with its impact cell pinned to the game's resolution cue. So an effect costs 0 ms of wire clock: nothing is re-timed.
+   ROUTING IS DATA: https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/registry.json lists exactly the cards that play a clip; any card absent from it (Brahmastra,
+   pinned; every other card) keeps its classic sprite, byte-unchanged. Delete a route and that card returns to its sprite.
+   FAIL-OPEN FALLS BACK TO YESTERDAY'S GAME, NEVER TO ABSENCE (owner ruling EXPORT-1/7): a clip that is not ready, or fails, at
+   its moment draws the classic sprite instead. No registry (a 404, an offline build, a copy of the page that was not given the
+   assets) → every card plays its sprite. A failed cast is logged to the console and to the battle log's diagnostics (BLog.fx,
+   never a narrated line) — no banner.
+   MEMORY (E1): the player holds at most one clip decoded at a time and releases it when the clip ends; compressed atlas bytes
+   are prefetched when a routed card enters a hand that this page can see, and decoded only on the cast. */
+const FX = { base:'https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/', routes:null, registry:null, boot:null, specs:{}, specP:{}, blobs:{}, blobP:{}, run:null, owner:null, snap:null,
+             pendingFire:null, raf:0, player:null, diag:[] };
+function fxNote(kind, detail, loud){   // quiet by default: kept for asserting and inspecting; a real cast failure also warns
+  const d=Object.assign({ kind, at: Date.now() }, detail||{}); FX.diag.push(d); if(FX.diag.length>50) FX.diag.shift();
+  try{ if(BLog){ (BLog.fx=BLog.fx||[]).push(d); } }catch(e){}
+  if(loud){ try{ console.warn('[effects]', kind, detail||''); }catch(e){} }
+}
+function fxBoot(){
+  if(FX.boot) return FX.boot;
+  FX.boot = (typeof fetch==='function' ? fetch(FX.base+'registry.json') : Promise.reject(new Error('no fetch')))
+    .then(r=>{ if(!r || !r.ok) throw new Error('registry '+(r?r.status:'unreachable')); return r.json(); })
+    .then(j=>{ FX.registry = j || null; const rt=j && j.routes; FX.routes = (rt && typeof rt==='object') ? rt : null; return FX.routes; })
+    .catch(e=>{ FX.routes=null; fxNote('registry-unavailable', { error:String(e&&e.message||e) }); return null; });
+  return FX.boot;
+}
+function fxUrl(rel, base){ try{ return new URL(rel, base || new URL(FX.base, location.href)).href; }catch(e){ return null; } }
+// EXPORT-5 · THE SHARED RETRY (effects and actors, owner ruling 3): one record per URL. A failed fetch — or bytes that will not decode — may be
+// tried again after 2 s, then 8 s, then 30 s: three retries, then that asset stays on the classic path for the session. A decode failure
+// EVICTS the cached bytes first, so bad bytes are never served twice. Nothing ever waits on a retry: until the bytes are good the card is simply
+// not ready, and not-ready plays the classic path, exactly as before. The count resets only when an asset has fetched AND decoded.
+const ASSET_RETRY = { backoffMs:[2000, 8000, 30000], s:{} };
+const assetRetryAllowed = (u)=>{ const r=ASSET_RETRY.s[u]; return !r || (!r.gaveUp && performance.now() >= r.nextAt); };
+function assetRetryFail(u, why, note){
+  const r=ASSET_RETRY.s[u] || (ASSET_RETRY.s[u]={ attempts:0, nextAt:0, gaveUp:false, why:[] });
+  r.why.push(why); r.attempts++;
+  if(r.attempts > ASSET_RETRY.backoffMs.length){ r.gaveUp=true; if(note) note('retry-gave-up', { url:u, why }, true); }
+  else { r.nextAt=performance.now()+ASSET_RETRY.backoffMs[r.attempts-1]; if(note) note('retry-scheduled', { url:u, why, inMs:ASSET_RETRY.backoffMs[r.attempts-1], attempt:r.attempts }); }
+}
+const assetRetryOk = (u)=>{ delete ASSET_RETRY.s[u]; };
+// a route's spec: one clip manifest, or an effect chain with its two clip manifests resolved beside it
+function fxSpec(cardId){
+  if(FX.specP[cardId]) return FX.specP[cardId];
+  const rt=FX.routes && FX.routes[cardId]; if(!rt || !window.EffectClip) return Promise.resolve(null);
+  const murl=fxUrl(rt.spec);
+  if(!assetRetryAllowed(murl)) return Promise.resolve(null);   // EXPORT-5: a failed spec waits out its backoff
+  FX.specP[cardId] = fetch(murl).then(r=>{ if(!r.ok) throw new Error('manifest '+r.status); return r.json(); }).then(m=>{
+    if(m.class==='effect-chain') return Promise.all(m.clips.map(c=>{ const u=fxUrl(c.manifest, murl); return fetch(u).then(r=>{ if(!r.ok) throw new Error('clip manifest '+r.status); return r.json(); }).then(cm=>{ cm.__url=u; return cm; }); }))
+      .then(clips=>{ const v=EffectClip.validateChain(m, clips); if(!v.ok) throw new Error(v.errors.join('; ')); return { class:'effect-chain', chain:m, clips, cardId:m.cardId, __url:murl }; });
+    const v=EffectClip.validate(m); if(!v.ok) throw new Error(v.errors.join('; ')); m.__url=murl; return m;
+  }).then(s=>{ FX.specs[cardId]=s; return s; }).catch(e=>{ delete FX.specP[cardId]; fxNote('spec-failed', { card:cardId, error:String(e&&e.message||e) }, true); assetRetryFail(murl, 'spec', fxNote); return null; });
+  return FX.specP[cardId];
+}
+const fxClips = (spec)=> spec ? (spec.class==='effect-chain' ? spec.clips : [spec]) : [];
+const fxAtlasUrl = (m)=> fxUrl(m.atlas, m.__url);
+// the compressed bytes only — decoding waits for the cast (E1)
+function fxPrefetch(cardId){
+  return fxSpec(cardId).then(spec=>{ if(!spec) return null;
+    return Promise.all(fxClips(spec).map(m=>{ const u=fxAtlasUrl(m); if(FX.blobP[u]) return FX.blobP[u];
+      if(!assetRetryAllowed(u)) return null;   // EXPORT-5: a failed or evicted atlas waits out its backoff
+      FX.blobP[u]=fetch(u).then(r=>{ if(!r.ok) throw new Error('atlas '+r.status); return r.blob(); }).then(b=>{ FX.blobs[u]=b; return b; })
+        .catch(e=>{ delete FX.blobP[u]; fxNote('prefetch-failed', { card:cardId, error:String(e&&e.message||e) }, true); assetRetryFail(u, 'fetch', fxNote); return null; });
+      return FX.blobP[u]; })); });
+}
+// hand-entry prefetch: a routed card in any hand this page can see (called from render; idempotent and cheap)
+function fxPrefetchHands(){
+  if(FX.routes===null && !FX.boot) fxBoot();
+  if(!FX.routes || !G || !G.players) return;
+  for(const pl of G.players) for(const c of (pl.hand||[])) if(c && FX.routes[c.id] && !fxReady(c.id)) fxPrefetch(c.id);   // EXPORT-5: not ready → try again (each URL rides its own backoff; in flight or good bytes are never refetched)
+}
+// every clip of the spec has its compressed bytes in hand → the cast can start the clip; otherwise the sprite plays
+const fxReady = (cardId)=>{ const s=FX.specs[cardId]; return !!(s && fxClips(s).every(m=>FX.blobs[fxAtlasUrl(m)])); };
+// decode one atlas from its prefetched bytes and bake the game's luminance alpha (the T72 bakeAlpha contract)
+async function fxLoadAtlas(m){
+  const u=fxAtlasUrl(m);
+  try{ const a=await fxDecodeAtlas(m); assetRetryOk(u); return a; }
+  catch(e){ delete FX.blobs[u]; delete FX.blobP[u]; assetRetryFail(u, 'decode', fxNote); throw e; }   // EXPORT-5: bad bytes are EVICTED, refetched after the backoff
+}
+async function fxDecodeAtlas(m){
+  const blob=FX.blobs[fxAtlasUrl(m)]; if(!blob) throw new Error('atlas bytes not prefetched');
+  let src=null;
+  if(typeof createImageBitmap==='function'){ try{ src=await createImageBitmap(blob); }catch(e){ src=null; } }
+  if(!src){ const u=URL.createObjectURL(blob), im=new Image(); try{ await new Promise((res,rej)=>{ im.onload=res; im.onerror=()=>rej(new Error('atlas decode failed')); im.src=u; }); } finally { URL.revokeObjectURL(u); } src=im; }
+  const cv=document.createElement('canvas'); cv.width=src.width; cv.height=src.height;
+  const g=cv.getContext('2d', { willReadFrequently:true }); if(!g) throw new Error('no 2D context for the atlas canvas');
+  g.drawImage(src,0,0); if(src.close) src.close();
+  const id=g.getImageData(0,0,cv.width,cv.height); EffectClip.bake(id.data); g.putImageData(id,0,0);
+  return { source:cv, bytes:cv.width*cv.height*4, close(){ cv.width=0; cv.height=0; } };
+}
+function fxFieldRect(){ const f=$('field'); return f ? f.getBoundingClientRect() : { left:0, top:0, width:0, height:0 }; }
+function fxSizeCanvas(){ const c=$('effectclip'); if(!c) return; const r=fxFieldRect(), d=window.devicePixelRatio||1; c.width=Math.round(r.width*d); c.height=Math.round(r.height*d); }
+function fxPlayer(){
+  if(FX.player || !window.EffectClip) return FX.player;
+  const noop=()=>{};
+  FX.player = EffectClip.createPlayer({
+    now: ()=>performance.now(), canvas: $('effectclip'), get dpr(){ return window.devicePixelRatio||1; },
+    cardOf: (uid)=>{ const p=posOf(uid, FX.snap); if(!p) return null; const f=fxFieldRect(); return { cx:p.cx-f.left, cy:p.rect.top+p.rect.height/2-f.top, w:p.rect.width }; },
+    halfOf: (seat)=>{ const h=document.querySelector(halfSel(seat)); if(!h) return null; const r=h.getBoundingClientRect(), f=fxFieldRect(); return { cx:r.left-f.left+r.width/2, cy:r.top-f.top+r.height/2, top:r.top-f.top, w:r.width, h:r.height }; },   // EXPORT-3: + top and width (Brahmastra hangs top-flush, sized as 0.93 of the half); EXPORT-4: + height (the fitted law's cap, the card floor)
+    fieldCentreX: ()=>fxFieldRect().width/2,
+    loadAtlas: fxLoadAtlas,
+    render: noop, sound: noop, crack: noop, removal: noop, callout: noop,   // THE BEAT CODE OWNS ALL OF THESE — the clip only draws
+    onDone: ()=>{}, onError: fxOnError, diag: noop,
+    // EXPORT-5: past the cap the clip stands down; a sprite held for the cast (the play-moment routes) now waits for the beat itself
+    onBeatLateCap: ()=>{ fxNote('beat-late-cap', { card:FX.owner }); if(FX.pendingFire){ FX.capFire=FX.pendingFire; FX.pendingFire=null; } } });
+  return FX.player;
+}
+function fxTick(){
+  const r=FX.run; if(!r || r.done || !FX.player){ FX.raf=0; return; }
+  try{ FX.player.frame(performance.now()); }catch(e){ fxOnError(e); }
+  FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
+}
+// the cast: start the routed clip on the game's clock, or return null and let the classic sprite play
+function fxCast(c, ev, evs, snap){
+  FX.pendingFire=null;
+  const rt=FX.routes && c && FX.routes[c.id]; if(!rt) return null;
+  if(reducedMotion()) return null;
+  if(!window.EffectClip || !fxReady(c.id)){ try{ fxPrefetch(c.id); }catch(e){}   // EXPORT-5: the play is a retry trigger too (under the backoff)
+    fxNote('not-ready-at-cast', { card:c.id }, true); return null; }
+  const P=fxPlayer(); if(!P) return null;
+  try{
+    FX.snap=snap; fxSizeCanvas();
+    const casterSeat=ownerPiOfUid(ev.sourceUid);
+    const sp=FX.specs[c.id], k=(sp.class==='effect-chain' ? sp.chain.contract : sp.contract) || {};
+    const run=P.play({ events:evs }, sp, { before:null, after:null }, { mode:'full', choreoSpeed:vfxT(), casterSeat, beatGate:true });   // EXPORT-5: the impact waits for the game's REAL beat
+    FX.beatWant = { trigger:k.trigger, abilityName:k.abilityName }; FX.capFire=null;
+    if(!run || !run.plan || !run.plan.clip){ fxNote('no-clip-planned', { card:c.id }, true); return null; }
+    FX.run=run; FX.owner=c.id;
+    if(!FX.raf) FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
+    return run;
+  }catch(e){ fxNote('cast-failed', { card:c.id, error:String(e&&e.message||e) }, true); fxSkip(); return null; }
+}
+// at a routed card's sprite moment: does the clip own it? If not, the caller draws the classic sprite (and the clip stands down)
+function fxOwnsMoment(cardId, fire){
+  const r=FX.run, rt=FX.routes && FX.routes[cardId];
+  if(!r || !rt || FX.owner!==cardId || r.done) return false;
+  if(r.log.loadErrors.length || r.log.drawError){ fxNote('fell-back', { card:cardId, why:'the clip failed before its moment' }, true); fxSkip(); return false; }
+  if(rt.moment==='play'){ FX.pendingFire=fire||null; return true; }   // the moment IS the cast: the decode is still in flight — a failure fires the sprite late (fxOnError)
+  const seg=r.plan.segments[r.plan.segments.length-1], role=seg && seg.role;
+  if(!role || r.log.ready[role]==null){ fxNote('fell-back', { card:cardId, why:'the clip was not decoded by its moment' }, true); fxSkip(); return false; }
+  return true;
+}
+function fxOnError(e){
+  const card=FX.owner; fxNote('clip-error', { card, error:String(e&&e.message||e) }, true);
+  const fire=FX.pendingFire; FX.pendingFire=null;
+  if(fire){ try{ fire(); }catch(x){} fxNote('fell-back', { card, why:'the clip failed after its cast — the classic sprite fired late' }); }
+}
+// EXPORT-5: the game's real beat for the routed cast — the event the contract names (Vajra/Brahmastra destroy, Pashupatastra damage,
+// Sudarshana's passive bite), heard once at the top of its beat. A clip that is holding lands its impact on it; a clip past the cap has stood
+// down, so a sprite it was holding takes this beat instead (the destroy/passive routes need nothing: their ownership test fails and they fire)
+function fxBeatFrom(ev){
+  const w=FX.beatWant; if(!w || !ev || ev.type!==w.trigger || ev.abilityName!==w.abilityName) return;
+  FX.beatWant=null;
+  const heard = FX.player && FX.run && !FX.run.done ? FX.player.beat() : false;
+  if(!heard && FX.capFire){ const f=FX.capFire; FX.capFire=null; try{ f(); }catch(e){} fxNote('fell-back', { card:FX.owner, why:'the beat came after the cap — the classic sprite took it' }); }
+}
+function fxSkip(){ FX.pendingFire=null; FX.beatWant=null; FX.capFire=null; if(FX.player && FX.run && !FX.run.done){ try{ FX.player.skip(); }catch(e){} } FX.run=null; FX.owner=null; }
+fxBoot();
+
+/* ══ EXPORT-2 — THE HERO MANIFESTATIONS: twenty Heroes (Indra … Rahu) ══════════════════════════════════════════════════════════
+   The actors certified in the manifestation lab, played in the live game. A routed Hero's PLAY beat — today sprLanding + the tier's
+   hit-stop/hold — becomes the Director's plan: AWAKEN → EMERGE → ACT (contact on its contact CELL) → SETTLE, native exits, in place.
+   ONE SPEED EVERYWHERE (owner ruling EXPORT-1/1 as amended): mode 'full' in solo, story and the wire; the player's speed setting does
+   NOT scale an actor, and the lab's repeat rule never applies (a Hero enters once per match; prior is always 0).
+   THE REST OF THE BATCH STAYS WITH THE GAME: the context is built from the whole batch — so the board difference is split into what a
+   later event carries and what NO event carries (the lab's ClashContext split) — and then its queue is emptied: SETTLE floats only the
+   un-evented part (GL-4: Indra's aura +1s float for the first time), and runAction's own loop plays every later event as it always did.
+   SOUNDS (ruling 5): sfx_unit_clash at the play (cardPlaySound, untouched); the spectacle boom moves to the CONTACT instant; native
+   exits are silent. cpulse + the callout stay (they fire before this beat, untouched).
+   MEMORY (A5, rung 256 only): compressed bytes are prefetched when a routed Hero enters a hand this page can see; the atlas is
+   decoded ON PLAY, alongside AWAKEN, and released after SETTLE — one actor decoded at a time. The stage is Canvas 2D (its default), so
+   the game's own Pixi layer stays the only GPU context on the page.
+   FAIL-OPEN = TODAY'S PATH (ruling 7): a Hero whose actor is not ready at the play, or whose atlas has not decoded by EMERGE, or whose
+   plan cannot be built, plays exactly today's presentation. Failures go to the console and the battle log's diagnostics (BLog.fx,
+   layer 'actor') — never narrated, no banner.
+   THE WATCHDOG (built first): a manifestation raises its step's budget to its own plan's total + a margin (choreoBudgetFor). */
+const MF = { reg:null, defaults:null, ffx:null, boot:null, specs:{}, specP:{}, blobs:{}, blobP:{}, art:{}, stage:null, before:null,
+             runner:null, raf:0, diag:[], last:null };
+function mfNote(kind, detail, loud){
+  const d=Object.assign({ kind, layer:'actor', at: Date.now() }, detail||{}); MF.diag.push(d); if(MF.diag.length>50) MF.diag.shift();
+  try{ if(BLog){ (BLog.fx=BLog.fx||[]).push(d); } }catch(e){}
+  if(loud){ try{ console.warn('[actors]', kind, detail||''); }catch(e){} }
+}
+function mfBoot(){
+  if(MF.boot) return MF.boot;
+  MF.boot = fxBoot().then(()=>{
+    const j=FX.registry; if(!j || !j.actors || typeof j.actors!=='object'){ MF.reg=null; return null; }
+    return fetch(fxUrl(j.factionFx||'factionfx.json')).then(r=>{ if(!r.ok) throw new Error('factionfx '+r.status); return r.json(); })
+      .then(ffx=>{ MF.ffx=ffx; MF.defaults=j.actorDefaults||{}; MF.reg=j.actors; return MF.reg; });
+  }).catch(e=>{ MF.reg=null; mfNote('registry-unavailable', { error:String(e&&e.message||e) }); return null; });
+  return MF.boot;
+}
+const mfRouted = (id)=> !!(MF.reg && MF.reg[id] && window.Director && window.ActorStage);
+function mfSpec(id){
+  if(MF.specP[id]) return MF.specP[id];
+  const e=MF.reg && MF.reg[id]; if(!e) return Promise.resolve(null);
+  const u=fxUrl(e.manifest);
+  if(!assetRetryAllowed(u)) return Promise.resolve(null);   // EXPORT-5
+  MF.specP[id]=fetch(u).then(r=>{ if(!r.ok) throw new Error('manifest '+r.status); return r.json(); }).then(m=>{
+    const v=ActorManifest.validate(m); if(!v.ok) throw new Error(v.errors.join('; ')); m.__url=u; MF.specs[id]=m; return m;
+  }).catch(e2=>{ delete MF.specP[id]; mfNote('spec-failed', { card:id, error:String(e2&&e2.message||e2) }, true); assetRetryFail(u, 'spec', mfNote); return null; });
+  return MF.specP[id];
+}
+// EXPORT-4 · THE RUNG BY DRAWN SIZE (owner ruling 4): an actor draws at card height x 2.1 (StageMath WANT) x min(DPR, 2) (the stage's own
+// DPR cap). Above 420 device px — just over the largest any phone draws (407) — it takes the 512 rung; otherwise 256. So every phone keeps
+// the rung the owner approved, and big retina screens stop upscaling 256 cells up to 5.4x. Fallback 512 -> 256 -> today's classic path.
+const MF_RUNG_PX = 420;
+function mfDrawnPx(el){ if(!el) return 0; const r=el.getBoundingClientRect(); return r.height>0 ? r.height*2.1*Math.min(2, window.devicePixelRatio||1) : 0; }
+const mfWantRung = (px)=> px > MF_RUNG_PX ? 512 : 256;
+const mfLayoutRung = ()=> mfWantRung(mfDrawnPx(document.querySelector('#field .bc[data-uid]')));   // the layout's implied rung, read off any board card
+const mfRungs = (id)=> (MF.reg && MF.reg[id] && Array.isArray(MF.reg[id].rungs) && MF.reg[id].rungs.length) ? MF.reg[id].rungs : [256];
+const mfAtlasUrl = (m, rung)=> fxUrl(ActorManifest.forRung(m, rung).atlas, m.__url);
+function mfPrefetch(id, rung){
+  rung = rung || 256;
+  return mfSpec(id).then(m=>{ if(!m || mfRungs(id).indexOf(rung) < 0) return null; const u=mfAtlasUrl(m, rung); if(MF.blobP[u]) return MF.blobP[u];
+    if(!assetRetryAllowed(u)) return null;   // EXPORT-5: the per-render hand prefetch rides the backoff — no fetch per render
+    MF.blobP[u]=fetch(u).then(r=>{ if(!r.ok) throw new Error('atlas '+r.status); return r.blob(); }).then(b=>{ MF.blobs[u]=b; return b; })
+      .catch(e=>{ delete MF.blobP[u]; mfNote('prefetch-failed', { card:id, rung, error:String(e&&e.message||e) }, true); assetRetryFail(u, 'fetch', mfNote); return null; });
+    return MF.blobP[u]; });
+}
+function mfPrefetchHands(){
+  if(MF.reg===null && !MF.boot) mfBoot();
+  if(!MF.reg || !G || !G.players) return;
+  const want=mfLayoutRung();   // the layout's implied rung (256 until a board card can be measured)
+  for(const pl of G.players) for(const c of (pl.hand||[])) if(c && MF.reg[c.id]){
+    if(!MF.specP[c.id]) mfPrefetch(c.id, want);
+    else if(MF.specs[c.id] && !MF.blobP[mfAtlasUrl(MF.specs[c.id], want)] && !MF.blobs[mfAtlasUrl(MF.specs[c.id], want)]) mfPrefetch(c.id, want);
+  }
+}
+const mfReady = (id, rung)=>{ const m=MF.specs[id]; return !!(m && MF.blobs[mfAtlasUrl(m, rung || 256)]); };
+// the rung this play will draw at: the wanted one if its bytes are here, else the one below it (512 -> 256); null = neither → classic path
+function mfPickRung(id, px){ const want=mfWantRung(px), order=(want===512 ? [512, 256] : [256]).filter(r=>mfRungs(id).indexOf(r) >= 0); for(const r of order) if(mfReady(id, r)) return r; return null; }
+async function mfDecode(id, rung){
+  const u=mfAtlasUrl(MF.specs[id], rung);
+  try{ const a=await mfDecodeAtlas(id, rung); assetRetryOk(u); return a; }
+  catch(e){ delete MF.blobs[u]; delete MF.blobP[u]; assetRetryFail(u, 'decode', mfNote); throw e; }   // EXPORT-5: bad bytes are EVICTED, refetched after the backoff
+}
+async function mfDecodeAtlas(id, rung){
+  const m=MF.specs[id], blob=MF.blobs[mfAtlasUrl(m, rung)]; if(!blob) throw new Error('atlas bytes not prefetched');
+  let image=null;
+  if(typeof createImageBitmap==='function'){ try{ image=await createImageBitmap(blob); }catch(e){ image=null; } }
+  if(!image){ const u=URL.createObjectURL(blob), im=new Image(); try{ await new Promise((res,rej)=>{ im.onload=res; im.onerror=()=>rej(new Error('atlas decode failed')); im.src=u; }); } finally { URL.revokeObjectURL(u); } image=im; }
+  const manifest=ActorManifest.forRung(m, rung), sil={};
+  const art={ manifest, image, rung, silhouetteOf: (ci)=>{   // only a dissolve reads it; every exported Hero exits natively
+    if(sil[ci]!==undefined) return sil[ci]; const c=manifest.cells[ci]; if(!c) return (sil[ci]=null);
+    try{ const cv=document.createElement('canvas'); cv.width=c.w; cv.height=c.h; const g=cv.getContext('2d',{willReadFrequently:true}); g.drawImage(image,c.x,c.y,c.w,c.h,0,0,c.w,c.h); sil[ci]=Dissolve.silhouette(g.getImageData(0,0,c.w,c.h).data,c.w,c.h,24); }catch(e){ sil[ci]=null; }
+    return sil[ci]; } };
+  mfStage().loadActor(id, art); MF.art[id]=art; return art;
+}
+function mfRelease(id){ try{ if(MF.stage && MF.stage.unloadActor(id)) delete MF.art[id]; }catch(e){} }
+function mfStage(){
+  if(!MF.stage) MF.stage = new ActorStage({ field: $('field'), under: $('actorunder'), actorCanvas: $('actorcanvas'), gpuCanvas: $('actorgpu'), over: $('actorover'), now: ()=>performance.now() });
+  return MF.stage;
+}
+// the engine's board in the lab's snapshot shape (read only; the page's own query facade supplies effective power)
+function mfSnap(g){
+  const card=(seat)=>(c)=> c ? { uid:c.uid, id:c.id, n:c.n, t:c.t, r:c.r, power:c.power, base:c.base, eff: c.ghost?1:Q.effPower(g,seat,c), venom:c.venom||0, bound:!!c.bound, ghost:!!c.ghost } : null;
+  return { round:g.round, turn:g.turn, over:!!g.over, realm:g.realm,
+           seats: g.players.map((pl,seat)=>({ faction:pl.faction, units:(pl.units||[]).map(card(seat)), heroes:(pl.heroes||[]).map(card(seat)), artifact:card(seat)(pl.artifact),
+             hand:(pl.hand||[]).map(c=>({ uid:c.uid, id:c.id, n:c.n, t:c.t, r:c.r, power:c.power })), discard:(pl.discard||[]).map(c=>c&&c.id),
+             deckCount:(pl.deck||[]).length, shieldUids:(pl.shieldUids||[]).slice(), passed:!!pl.passed, roundWins:pl.roundWins })) };
+}
+function mfSkip(){ const r=MF.runner; if(r && !r.done){ try{ r.skip(); }catch(e){} } }
+// the Hero's play beat. Resolves true when the manifestation played; false when the caller must play TODAY's path.
+async function mfManifest(c, ev, evs, tier){
+  if(reducedMotion() || !mfRouted(c.id)) return false;
+  const id=c.id, srcEl=$('field') && $('field').querySelector('.bc[data-uid="'+ev.sourceUid+'"]'), drawnPx=mfDrawnPx(srcEl), rung=mfPickRung(id, drawnPx);   // EXPORT-4: the rung from the LIVE card size
+  if(rung==null){ try{ mfPrefetch(id, mfWantRung(drawnPx)); }catch(e){}   // EXPORT-5: the play is a retry trigger too (under the backoff)
+    mfNote('not-ready-at-play', { card:id, want:mfWantRung(drawnPx) }, true); return false; }
+  if(rung!==mfWantRung(drawnPx)) mfNote('rung-fell-back', { card:id, want:mfWantRung(drawnPx), used:rung });   // 512 wanted, 256 drawn — quiet (not loud): the play still manifests
+  let ctx=null, plan=null;
+  try{
+    ctx = ClashContext.fromBatch({ events: evs, before: MF.before, after: mfSnap(G) });
+    if(!ctx || ctx.cardId!==id || ctx.scope!=='manifest') throw new Error('no context for this play');
+    ctx.rest = [];   // the game's own loop plays the rest of the batch; SETTLE lands only what no event carries (GL-4)
+    const mf=MF.specs[id], entry=MF.reg[id];
+    const timing={ fps:mf.fps, emerge:mf.phases.emerge.length, act:mf.phases.act.length, contact:mf.contact, emergeMs:mf.phaseMs&&mf.phaseMs.emerge, actMs:mf.phaseMs&&mf.phaseMs.act };
+    const tune=ActorManifest.defaultsFor({ manifest:mf, registry:{ defaults:MF.defaults }, preset:Dissolve.pick(MF.ffx, ctx.faction, ''), override:{} });
+    const exit=ActorManifest.exitMode({ entry, manifest:mf, override:'' });
+    plan = Director.plan(ctx, { mode:'full', prior:0, ladderExempt:false, timing, tempo:tune.tempo, fizzleMs:tune.fizzleMs, exit:exit.exit });
+    if(!plan || !plan.actor) throw new Error('the plan has no actor');
+  }catch(e){ mfNote('no-plan', { card:id, error:String(e&&e.message||e) }, true); return false; }
+  choreoBudgetMs = choreoBudgetFor(plan.total);   // THE PLAN-AWARE WATCHDOG: this step may run its own plan's length
+  const stage=mfStage(); stage.resize();
+  let art=null, fellBack=false, gaveBack=false;
+  mfDecode(id, rung).then(a=>{ art=a; if(gaveBack) mfRelease(id); }, e=>{ mfNote('decode-failed', { card:id, error:String(e&&e.message||e) }, true); });   // alongside AWAKEN — the beat does not wait, and neither does the end: a decode that lands after the Hero was handed back is released at once
+  const field=$('field'), fr=()=>field.getBoundingClientRect(), cellOf=(uid)=>field.querySelector('.bc[data-uid="'+uid+'"]');
+  const pb = Playback.create({ stage, ctx, boards: ClashContext.boards(ctx, MF.before, mfSnap(G)), viewer: ME, field: { w: fr().width, h: fr().height },
+    rectOf: (uid)=>{ const n=cellOf(uid); if(!n) return null; const r=n.getBoundingClientRect(), f=fr(); return { x:r.left-f.left, y:r.top-f.top, w:r.width, h:r.height }; },
+    clientOf: (uid)=>{ const n=cellOf(uid); if(!n) return null; const r=n.getBoundingClientRect(); return { cx:r.left+r.width/2, cy:r.top+r.height/2, w:r.width }; },
+    bandOf: (seat)=>{ const h=document.querySelector(halfSel(seat)); if(!h) return null; const f=fr(), rs=[...h.querySelectorAll('.bc')].map(n=>n.getBoundingClientRect()); if(!rs.length) return null;
+      const x0=Math.min(...rs.map(r=>r.left)), y0=Math.min(...rs.map(r=>r.top)), x1=Math.max(...rs.map(r=>r.right)), y1=Math.max(...rs.map(r=>r.bottom)); return { x:x0-f.left, y:y0-f.top, w:x1-x0, h:y1-y0 }; },
+    render: (board, floats)=>{ (floats||[]).forEach(fl=>{ const n=cellOf(fl.uid); if(n && fl.delta) floatText(n, fl.delta); }); },   // the board is already the game's; SETTLE lands the un-evented numbers (GL-4)
+    fieldClient: ()=>{ const r=fr(); return { x:r.left, y:r.top }; },
+    pulse: ()=>{},   // the game's own cpulse already fired on this card at the play (kept, ruling 4)
+    actorFor: (cid)=> MF.art[cid] || null, release: mfRelease,
+    sound: (name)=>{ if(name==='contact' && tier==='spectacle') Audio2.sfx('boom'); },   // ruling 5: the spectacle boom at CONTACT; native exits silent
+    factionFx: (fac)=> Dissolve.pick(MF.ffx, fac, ''),
+    embers: (x,y)=>{ try{ if(VFX.cardLand) VFX.cardLand(x,y); }catch(e){} },
+    queueFx: ()=>{}, onDone: ()=>{}, onError: (e)=> mfNote('actor-error', { card:id, error:String(e&&e.message||e) }, true) });
+  const cue0 = pb.handlers.cue;
+  pb.handlers.cue = function(cue, info){   // FAIL-OPEN at EMERGE: no decoded actor by then → stand the manifestation down; today's path plays instead
+    if(cue.cue==='actor-phase' && !info.skipped && !art){ fellBack=true; return; }
+    return cue0(cue, info);
+  };
+  const runner = MF.runner = Runner.create(plan, pb.handlers, ()=>performance.now());
+  MF.last = { card:id, plan, runner, total: plan.total, t0: performance.now(), rung, drawnPx: Math.round(drawnPx) };
+  choreoForce.push(()=>{ if(!runner.done) runner.skip(); });   // a skip, the backgrounding fast-forward or the watchdog lands it at once
+  runner.start();
+  await new Promise(res=>{
+    const tick=()=>{
+      if(fellBack && !runner.done) runner.skip();
+      if(!runner.done){ try{ runner.tick(); }catch(e){ mfNote('actor-error', { card:id, error:String(e&&e.message||e) }, true); runner.skip(); } }
+      try{ stage.frame(performance.now(), performance.now()); }catch(e){}
+      if(runner.done){ MF.raf=0; res(); return; }
+      MF.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(tick) : setTimeout(tick, 16);
+    };
+    tick();
+  });
+  MF.runner=null;
+  if(fellBack || !art){ gaveBack=true; mfRelease(id); mfNote('fell-back', { card:id, why: art ? 'stood down' : 'the actor was not decoded by EMERGE' }, true); return false; }
+  MF.last.done = performance.now(); MF.last.ms = MF.last.done - MF.last.t0;
+  return true;
+}
+mfBoot();
+
 function runAction(mutate, opts={}){
   const snap = snapshotBoard();
   const passedBefore=G.players.map(p=>!!p.passed);   // PASS ANNOUNCEMENT: detect a passed:false→true transition after this action resolves (pass emits no event). GL-2: ABSOLUTE seats — announcePassIfAny reads it back by absolute seat (the [ME, OPP] order it had misread every pass for seat 1)
   const blogBefore=blogCapture(G);   // GL-2 — the public names BEFORE the mutate: a card that leaves the board in this action is still named where it was seen
   roundCountAtActionStart = G.roundHistory.length;
   const evStart = G.events.length;
+  try{ MF.before = (MF.reg && !reducedMotion()) ? mfSnap(G) : null; }catch(e){ MF.before=null; }   // EXPORT-2: the board BEFORE this action, for a Hero manifestation's board difference (a pure read)
   venomStrikeNpAtAction = (G.players[ME].venomStrike===G.round) ? 0 : (G.players[OPP].venomStrike===G.round) ? 1 : -1;   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
   mutate();
   const evs = G.events.slice(evStart);
@@ -9970,7 +12002,7 @@ function runAction(mutate, opts={}){
     if (G.roundHistory.length>roundCountAtActionStart && !G.over){ const h=G.roundHistory[G.roundHistory.length-1]; snapTo(h['t'+ME],h['t'+OPP]); }   // ITEMS 2+3 reduced-motion: statically show the round's TRUE final scores (not the reset board) so they never contradict the winner banner
     showResultSummary(evs); announcePassIfAny(passedBefore, opts.actor); afterChoreo(); return;   // pass banner (if a pass just landed) enqueued BEFORE afterChoreo's round banner → pass shows first, round after
   }
-  choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoForce=[];
+  choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=skipChoreo;
   (async()=>{
     try{
@@ -9981,7 +12013,7 @@ function runAction(mutate, opts={}){
       const victimUids=[]; for(const ev of evs){ if(ev.type==='destroy' && (ev.abilityName==='Vajra' || ev.abilityName==='Gandiva')) (ev.targetUids||[]).forEach(u=>victimUids.push(u)); else if(ev.type==='passive' && ev.abilityName==='Sudarshana') (ev.targetUids||[]).forEach(u=>victimUids.push(u)); }   // GANDIVA: clone BOTH kill victims pre-render (a double-kill has two 'Gandiva' destroy events) so each strike lands on its held card
       captureVictims(victimUids);            // T97: clone the struck cards WHILE still on board — the next render() empties their cells; the strike then lands on the held clone
       render();                              // final board; spawnFloaters + HUD totals held while choreoActive
-      for (const ev of evs){ if(choreoSkip) break; choreoStartedAt=performance.now(); try{ await playEvent(ev, snap, evs); }catch(e){} }   // skip a broken step (e.g. a VFX drawImage race) — keep the match playable. HEARTBEAT (round-end venom fix): reset the watchdog clock BEFORE each event so the 8s watchdog (below, ~8126) measures STALL-since-last-beat, NOT total duration. A legitimately long round-end — a wide venomed board's per-unit ☠ ticks (~572ms each × 12+ units ≈ 7s+) — used to trip the absolute 8s cap, force-finishing the choreo so the round-end RESOLUTION BEAT (the totals count that shows the venom reducing the points) got snapped/skipped and the winner banner fired without the visible drop. With the heartbeat a PROGRESSING choreo never trips it (each event refreshes the budget); a genuinely STUCK one (no beat for 8s, or a hung single event) still does — and animateTotals stays double-protected by choreoRace's 3s cap. Mid-round choreos are short → the reset is a no-op there (nothing changes for mid-round totals).
+      for (const ev of evs){ if(choreoSkip) break; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; try{ await playEvent(ev, snap, evs); }catch(e){} }   // skip a broken step (e.g. a VFX drawImage race) — keep the match playable. HEARTBEAT (round-end venom fix): reset the watchdog clock BEFORE each event so the 8s watchdog (below, ~8126) measures STALL-since-last-beat, NOT total duration. A legitimately long round-end — a wide venomed board's per-unit ☠ ticks (~572ms each × 12+ units ≈ 7s+) — used to trip the absolute 8s cap, force-finishing the choreo so the round-end RESOLUTION BEAT (the totals count that shows the venom reducing the points) got snapped/skipped and the winner banner fired without the visible drop. With the heartbeat a PROGRESSING choreo never trips it (each event refreshes the budget); a genuinely STUCK one (no beat for 8s, or a hung single event) still does — and animateTotals stays double-protected by choreoRace's 3s cap. Mid-round choreos are short → the reset is a no-op there (nothing changes for mid-round totals).
       const roundEnded = G.roundHistory.length>roundCountAtActionStart && !G.over;
       if (roundEnded && !choreoSkip){   // ITEMS 2+3 — round-end RESOLUTION BEAT: the round-end effects (venom/round-end tier) already choreographed above; now settle the totals to the ROUND'S TRUE FINAL scores (roundHistory[last] — post-venom, PRE board-reset) so the score flip that decided the winner is VISIBLE, then hold before the banner. (Was: animateTotals→live totalPower = the post-RESET board = the desync root.)
         const h=G.roundHistory[G.roundHistory.length-1];

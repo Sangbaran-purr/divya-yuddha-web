@@ -1,8 +1,8 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `e2f4c196609ca654dc933c16897705d4d40fb7e8` (e2f4c19)
-- Source committed: 2026-09-13 15:03:01 +0530
+- Source commit: `c95a50355e26840c596a2bc76f2aa4ba3f8c110c` (c95a503)
+- Source committed: 2026-09-19 01:29:29 +0530
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -15,6 +15,7 @@
 ## Excluded / transformed
 - assets/video/ (~47MB) — NOT copied. The VIDEO_BASE web branch is rewritten to the free game's live same-origin URL (https://sangbaran-purr.github.io/divya-yuddha/assets/video/); the intro streams from there and fails open to the landing if unavailable (the game's own law).
 - assets/vfx/ (~285MB, S8 WORD 1) — NOT copied. The FIVE 'assets/vfx/ refs (3 sheet-URL builders mvURL/sheetURL/stillURL + 2 reduced-motion layer PNGs, ramanaam_wash + kishkindhaoath_ring) are rewritten from 'assets/vfx/ to the free game's live Pages URL (https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/); VFX sheets + layers stream same-origin. Guarded: the sync fails if the ref count is not exactly 5.
+- assets/manifest (~73MB, HALL-SYNC-1) — NOT copied. The export premium effects (Vajra, Sudarshana chain, Pashupatastra, Brahmastra) and the 20 Hero actors at both rungs, plus registry.json + factionfx.json. Every manifest URL resolves against the game's single FX.base, rewritten to https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/ in the heavy-dir loop below; guarded: exactly one absolute base after the rewrite, else the sync aborts. The free game's Pages serves CORS (access-control-allow-origin: *), so the fetches decode cleanly; a missing asset fails open to the classic sprite (the game's own law).
 - assets/cards (~73MB) + assets/img (~80MB) + assets/audio (~2MB) + assets/thumbs (~4MB) + assets/board (~12MB) + assets/story (~13MB) — NOT copied (M-F4e). ~184MB of asset copies pushed the Pages artifact to 262MB and timed the deploy out at ~11min. Each base path (assets/<dir>/) is rewritten — every context, quoted or backtick-templated — to the free game's live Pages origin (https://sangbaran-purr.github.io/divya-yuddha/assets/<dir>/) so the assets stream same-origin. Guarded per dir: at least one relative ref must exist and EVERY one must become absolute; a double-prefix aborts. Gameplay is byte-faithful — only asset origins change.
 - .DS_Store — not in the commit; never copied.
 
@@ -30,13 +31,13 @@
 
 ## Notes at sync time
 - Source working tree dirty files: 7 (ignored by the archive method).
-- game/ in-repo size: 2056 KB.
+- game/ in-repo size: 2224 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2) are stamped game/index.html?v=e2f4c19 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
+- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2) are stamped game/index.html?v=c95a503 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
 
 ## STAMP (S-HALL-WIRE-1 R4)
-- game/STAMP holds the source short sha (e2f4c19), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
+- game/STAMP holds the source short sha (c95a503), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh

@@ -348,6 +348,13 @@ async function main() {
     ok("F36 · game/STAMP names the synced commit — the SNAPSHOT's own short sha",
        fs.readFileSync(path.join(H.SITE, "game/STAMP"), "utf8").trim() === short, short);
     const gi = fs.readFileSync(path.join(H.SITE, "game/index.html"), "utf8");
+    // HALL-SYNC-1 — the exports reach the hosted game: every manifest URL (registry, faction effects, effect + actor specs and
+    //   atlases) resolves against the game's ONE FX.base, cross-linked to the free game's Pages origin — never a relative base
+    //   that 404s on this site and falls every Hero and premium effect back to the classic sprite in silence.
+    const MBASE = "base:'https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/'";
+    ok("F55 · the synced copy's manifest base is absolute to the free game's origin, exactly one, and no relative assets/manifest/ remains (HALL-SYNC-1)",
+       gi.split(MBASE).length === 2 && !/(^|[^\/])assets\/manifest\//.test(gi.split("https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/").join("")),
+       gi.split(MBASE).length - 1);
     ok("F37 · the gate gem skips the Hall's battle frame (R5): the skip rides the injected preamble exactly once",
        (gi.match(/window\.top !== window && \/\[\?&\]wire=1\(&\|\$\)\/\.test\(location\.search\)\) return;/g) || []).length === 1);
     // SYNC-NARRATOR-1 — the battle log reaches the Hall's wire frames: the narrator file beside the copy, the three

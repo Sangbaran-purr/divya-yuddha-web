@@ -38,7 +38,13 @@ It reads the free-game repo **read-only** (`git archive` of its current
 `game/` from scratch (idempotent — two runs produce byte-identical output),
 and records provenance in `game/SNAPSHOT.md`. What it does:
 
-- Copies `index.html` + `src/chapters.js` + `assets/{cards,img,audio,story,thumbs}`.
+- Copies `index.html` + `src/chapters.js` + `src/engine.js` (the Hall's engine, pinned
+  in `game/src/engine.sha256`) + `src/narrator.js` + `assets/vendor` (~780KB). Nothing heavier.
+- **Heavy assets are cross-linked, not copied:** `assets/{cards,img,audio,thumbs,board,story}`
+  (M-F4e) and `assets/manifest/` (HALL-SYNC-1 — the premium effects and Hero actors, ~73MB) are
+  rewritten to the free game's live Pages origin and stream from there (CORS open). The manifest
+  base is asserted to be exactly one absolute `base:'…/assets/manifest/'`; the sync aborts otherwise.
+- **VFX:** `assets/vfx/` (~285MB) is cross-linked the same way (exactly 5 refs, guarded).
 - **Video:** does not copy the ~47MB intro (`assets/video/`); rewrites the
   `VIDEO_BASE` web branch to the free game's live same-origin URL so the intro
   streams from there and fails open to the landing if unavailable.
