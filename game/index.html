@@ -4997,16 +4997,21 @@ if (typeof module!=='undefined'){
     });
     var member = m.role === 'invoke' || m.role === 'strike';
     if (m.role !== undefined && !member) e.push('role must be "invoke" or "strike"');
+    if (m.moment !== undefined && m.moment !== 'arming' && m.moment !== 'empowered-drain') e.push('moment must be "arming" or "empowered-drain"');
     if (m.role === 'invoke') { if (m.impact !== null) e.push('an invocation has no impact cell'); }
+    else if (m.moment === 'arming') { if (m.impact !== null) e.push('an arming clip has no impact cell'); }   // LAB-24: the cast resolves nothing — no impact, no beat gate
     else if (!(Number.isInteger(m.impact) && cells && m.impact >= 0 && m.impact < cells.length)) e.push('impact must name a cell');
     if (!(m.anchor && num(m.anchor.x) && num(m.anchor.y))) e.push('anchor missing');
     else if (m.cellSize && (m.anchor.x < 0 || m.anchor.y < 0 || m.anchor.x > m.cellSize.w || m.anchor.y > m.cellSize.h)) e.push('anchor falls outside the cell');
     var sr = m.scaleRule; if (!(sr && (sr.ringDiameterCell > 0 || sr.spanCell > 0) && sr.cardWidths > 0)) e.push('scaleRule missing');
+    else if (sr.heightFraction != null && sr.halfFraction != null) e.push('a plate is sized by ONE unit: heightFraction or halfFraction, never both');
+    else if (sr.heightFraction != null && !(sr.heightFraction > 0 && sr.heightFraction <= 1)) e.push('heightFraction out of range');
     else if (sr.halfFraction != null && !(sr.halfFraction > 0 && sr.halfFraction <= 1.2)) e.push('halfFraction out of range');
     else if (sr.heightCap != null && !(sr.heightCap > 0 && sr.heightCap <= 1)) e.push('heightCap out of range');
     else if (sr.cardFloorOfHalfH != null && !(sr.cardFloorOfHalfH > 0 && sr.cardFloorOfHalfH < 1)) e.push('cardFloorOfHalfH out of range');
     if (!member) e = e.concat(contractErrors(m.contract));
     else if (m.contract !== undefined) e.push('a chain member carries no contract (the chain does)');
+    if (m.moment === 'empowered-drain' && !(m.contract && m.contract.castEvent && m.contract.castEvent.type && m.contract.castEvent.abilityName && num(m.contract.minDrain))) e.push('an empowered-drain clip names its cast event and its minimum drain');
     if (m.atlasSize && m.atlasSize.w * m.atlasSize.h * 4 > E1.capBytes) e.push('the atlas decodes past the E1 cap');
     return { ok: e.length === 0, errors: e };
   }
@@ -5031,10 +5036,33 @@ if (typeof module!=='undefined'){
   var clipsOf = function (spec) { return spec.class === 'effect-chain' ? spec.clips : [spec]; };
 
   // the cast and the strike this batch carries: the play of the card, and its resolution event (null when the card found no mark)
+  // LAB-24 · THE EMPOWERED DRAIN (Vasuki Venom Strike's payoff). The cast of this plan is the round-end Venom TOAST of the striker's OWN drain
+  // (the empowered one: amount >= minDrain = base 1 + the strike's +2, naming the drained = enemy player), and its strike is that drain's FIRST
+  // `venom` beat on an enemy Unit. The striker is the seat whose venomStrike equalled the round BEFORE the action (the batch records it, captured
+  // pre-mutate — endRound wipes the flag). No striker, no empowered toast, or no drained Unit → no clip: an ordinary drain never floods.
+  function drainOf(batch, k) {
+    var ev = (batch && batch.events) || [], vs = batch && batch.venomStrike, none = { cast: null, strike: null, targetUid: null, drain: null };
+    if (!vs || vs.striker == null) return none;
+    var drained = 1 - vs.striker, names = batch.scenario ? [batch.scenario.p0, batch.scenario.p1] : null, seatOf = {};
+    if (batch.before) batch.before.seats.forEach(function (s, i) { (s.units || []).concat(s.heroes || []).forEach(function (c) { if (c) seatOf[c.uid] = i; }); });
+    var amt = function (t) { var mm = /[\u2212-](\d+)/.exec(t || ''); return mm ? +mm[1] : 0; };
+    for (var i = 0; i < ev.length; i++) {
+      var e = ev[i]; if (e.type !== k.castEvent.type || e.abilityName !== k.castEvent.abilityName) continue;
+      if (amt(e.text) < k.minDrain) continue;                                                 // an ordinary (or Karkotaka flat −1) drain is never the empowered one
+      if (names && (e.text || '').indexOf(names[drained]) < 0) continue;                      // the striker's OWN drain names the drained player
+      for (var j = i + 1; j < ev.length && ev[j].type !== k.castEvent.type; j++) {
+        var v = ev[j]; if (v.type === k.trigger && v.abilityName === k.abilityName && v.targetUids && seatOf[v.targetUids[0]] === drained) return { cast: e, strike: v, targetUid: null, drain: { toast: i, firstBeat: j, amount: amt(e.text), drainedSeat: drained } };
+      }
+      return none;
+    }
+    return none;
+  }
   function fromBatch(batch, spec) {
+    if (spec.class !== 'effect-chain' && spec.moment === 'empowered-drain') return drainOf(batch, contractOf(spec));
     var ev = (batch && batch.events) || [], k = contractOf(spec);
     var name = spec.class === 'effect-chain' ? spec.chain.cardName : null;   // a chain's cast is named by its card (Sudarshana Chakra), its resolution by the ability (Sudarshana)
     var cast = ev[0] && ev[0].type === 'play' && (ev[0].abilityName === k.abilityName || (name && ev[0].abilityName === name)) ? ev[0] : null;
+    if (spec.class !== 'effect-chain' && spec.moment === 'arming') return { cast: cast, strike: null, arming: true, targetUid: null };   // LAB-24: the cast is the moment
     var strike = ev.filter(function (x) { return x.type === k.trigger && x.abilityName === k.abilityName; })[0] || null;
     return { cast: cast, strike: strike, targetUid: strike && strike.targetUids && strike.targetUids.length ? strike.targetUids[0] : null };
   }
@@ -5055,6 +5083,12 @@ if (typeof module!=='undefined'){
     return { vfxT: vfxT, frameMs: frameMs, leadMs: leadMs, totalMs: totalMs, castBeatMs: B.castBeatMs, destroyAt: B.destroyAt, clipStart: clipStart, impactAt: clipStart + m.impact * frameMs,
              crackAt: B.crackAt, beatEnd: B.beatEnd, clipEnd: clipStart + totalMs, waitCostMs: Math.max(0, -clipStart) };
   }
+  // LAB-24 · an ARMING clip: it starts AT the cast (S1, positional) and runs its length; the cast beat's own settle is unchanged. No impact.
+  function armingTimeline(m, speed, choreo) {
+    var vfxT = vfxOf(speed, choreo), k = m.contract, frameMs = 1000 / m.fps * vfxT, totalMs = m.cells.length * frameMs;
+    return { vfxT: vfxT, frameMs: frameMs, leadMs: 0, totalMs: totalMs, castBeatMs: (k.castHitStopMs + k.castHoldMs) * vfxT, destroyAt: null, clipStart: 0, impactAt: null,
+             crackAt: null, beatEnd: (k.castHitStopMs + k.castHoldMs) * vfxT, clipEnd: totalMs, waitCostMs: 0 };
+  }
   // the chain (LAB-20): the strike's impact cell on the bite; the invocation ends exactly where the strike begins (the handoff), and starts
   // its own length before — no dead time, no overlap, by construction. The wire-clock cost is whatever the chain would need before the cast
   function chainTimeline(chain, clips, speed, choreo) {
@@ -5070,25 +5104,29 @@ if (typeof module!=='undefined'){
   // spec: a clip manifest (one clip) or { class: 'effect-chain', chain, clips: [invoke, strike] }
   function plan(batch, spec, opts) {
     opts = opts || {};
-    var mode = SPEED[opts.mode] != null ? opts.mode : 'full', chained = spec.class === 'effect-chain', k = contractOf(spec), b = fromBatch(batch, spec);
-    var T = chained ? chainTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : timeline(spec, SPEED[mode], opts.choreoSpeed);
-    var clip = !!(b.cast && b.strike) && mode !== 'reduced', segments = [], cues = [];
+    var mode = SPEED[opts.mode] != null ? opts.mode : 'full', chained = spec.class === 'effect-chain', k = contractOf(spec), b = fromBatch(batch, spec), arming = !!b.arming;
+    var T = chained ? chainTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : arming ? armingTimeline(spec, SPEED[mode], opts.choreoSpeed) : timeline(spec, SPEED[mode], opts.choreoSpeed);
+    var clip = !!(b.cast && (b.strike || arming)) && mode !== 'reduced', segments = [], cues = [];
+    var HALF_PLACES = { 'enemy-half-centre': 'enemy-half', 'enemy-half-top': 'enemy-half-top', 'enemy-half-bottom': 'enemy-half-bottom', 'caster-half-bottom': 'caster-half-bottom' };
     if (clip && chained) segments.push({ role: 'invoke', clip: 0, start: T.invokeStart, end: T.handoffAt, frameMs: T.invokeFrameMs, place: 'caster-half' },
                                        { role: 'strike', clip: 1, start: T.strikeStart, end: T.strikeEnd, frameMs: T.frameMs, place: 'target', impact: spec.clips[1].impact });
-    else if (clip) segments.push({ role: 'strike', clip: 0, start: T.clipStart, end: T.clipEnd, frameMs: T.frameMs, place: k.anchor === 'enemy-half-centre' ? 'enemy-half' : k.anchor === 'enemy-half-top' ? 'enemy-half-top' : 'target', impact: spec.impact });   // LAB-21: a BOARD-WIDE astra anchors on the caster's enemy half (the game's own row-plate anchor), not on one card
+    else if (clip) segments.push({ role: 'strike', clip: 0, start: T.clipStart, end: T.clipEnd, frameMs: T.frameMs, place: HALF_PLACES[k.anchor] || 'target', impact: spec.impact });   // LAB-21: a BOARD-WIDE astra anchors on the caster's enemy half (the game's own row-plate anchor), not on one card
     if (b.cast) cues.push({ t: 0, cue: 'cast', sound: k.castSound });
     if (b.strike) {
       if (clip && chained) { cues.push({ t: T.invokeStart, cue: 'invoke-start' }); cues.push({ t: T.handoffAt, cue: 'handoff' }); }
       else if (clip) cues.push({ t: T.clipStart, cue: 'clip-start' });
       cues.push({ t: T.impactAt, cue: 'impact', sound: k.impactSound, uid: b.targetUid });
-      cues.push({ t: T.crackAt, cue: k.exitKind === 'removal' ? 'removal' : 'crack', uid: b.targetUid, ms: (k.exitKind === 'removal' ? k.exitMs : 520) * T.vfxT });
+      if (k.exitKind !== 'none') cues.push({ t: T.crackAt, cue: k.exitKind === 'removal' ? 'removal' : 'crack', uid: b.targetUid, ms: (k.exitKind === 'removal' ? k.exitMs : 520) * T.vfxT });   // LAB-24: a drain cracks no card
       if (T.calloutAt != null) cues.push({ t: T.calloutAt, cue: 'callout', uid: b.targetUid, text: chained ? spec.chain.cardName : null });
       cues.push({ t: T.beatEnd, cue: 'settle' });
       if (clip) cues.push({ t: chained ? T.strikeEnd : T.clipEnd, cue: 'clip-end' });
-    } else cues.push({ t: T.castBeatMs, cue: 'settle' });
+    } else {
+      if (clip && arming) { cues.push({ t: T.clipStart, cue: 'clip-start' }); cues.push({ t: T.clipEnd, cue: 'clip-end' }); }   // LAB-24: the rise runs its length past the cast's settle
+      cues.push({ t: T.castBeatMs, cue: 'settle' });
+    }
     cues.forEach(function (c) { if (c.sound === null) delete c.sound; });
     cues.sort(function (x, y) { return x.t - y.t; });
-    return { mode: mode, chained: chained, clip: clip, strike: !!b.strike, targetUid: b.targetUid, casterSeat: opts.casterSeat != null ? opts.casterSeat : null,
+    return { mode: mode, chained: chained, clip: clip, strike: !!b.strike, arming: arming, drain: b.drain || null, targetUid: b.targetUid, casterSeat: opts.casterSeat != null ? opts.casterSeat : null,
              timeline: T, segments: segments, cues: cues, end: cues[cues.length - 1].t };
   }
 
@@ -5096,7 +5134,10 @@ if (typeof module!=='undefined'){
   // where a clip draws: its anchor on a point, sized so its scale feature spans cardWidths card widths
   function place(m, card) {
     var sr = m.scaleRule, s;
-    if (sr.halfFraction) {
+    if (sr.heightFraction) {
+      // LAB-24 (owner ruling A): HEIGHT-FIT — the plate's HEIGHT is heightFraction x its half's HEIGHT; the width follows the clip. Top and bottom cuts sit on the half's own borders
+      s = sr.heightFraction * card.halfH / m.cellSize.h;
+    } else if (sr.halfFraction) {
       // LAB-22 (owner ruling 3): a plate recorded as a FRACTION OF THE ENEMY HALF is sized off the half's own width;
       // EXPORT-4 (ruling 1) THE FITTED LAW: clamped so the plate is never taller than heightCap x the half (landscape halves are wide and short)
       s = sr.halfFraction * card.halfW / m.cellSize.w;
@@ -5190,8 +5231,10 @@ if (typeof module!=='undefined'){
       var places = p.segments.map(function (sg) {
         var m = clips[sg.clip];
         if (sg.place === 'target') return target ? place(m, withHalf(target, hE)) : null;
-        var seat = (sg.place === 'enemy-half' || sg.place === 'enemy-half-top') ? (p.casterSeat != null ? 1 - p.casterSeat : null) : p.casterSeat;   // LAB-21: the enemy half is the caster's opposite seat
+        var seat = (sg.place === 'enemy-half' || sg.place === 'enemy-half-top' || sg.place === 'enemy-half-bottom') ? (p.casterSeat != null ? 1 - p.casterSeat : null) : p.casterSeat;   // LAB-21: the enemy half is the caster's opposite seat
         var hh = seat != null && env.halfOf ? env.halfOf(seat) : null;
+        // LAB-24: BOTTOM-FLUSH on a LOGICAL half (the caster's, or its enemy's) — the plate's bottom-centre on the half's bottom edge; no half height, no clip (fail-open)
+        if (sg.place === 'enemy-half-bottom' || sg.place === 'caster-half-bottom') return hh && hh.top != null && hh.h > 0 && hh.w > 0 ? place(m, { cx: hh.cx, cy: hh.top + hh.h, w: 0, halfW: hh.w, halfH: hh.h }) : null;
         // LAB-22: TOP-FLUSH — the plate's anchor (its top-centre) on the enemy half's TOP edge; a half that reports no top plays no clip (fail-open)
         // EXPORT-4: a height-capped plate needs the half's height (no height, no clip — it could not be kept inside the half)
         if (sg.place === 'enemy-half-top') return hh && target && hh.top != null && (!m.scaleRule.halfFraction || hh.w > 0) && (!m.scaleRule.heightCap || hh.h > 0) ? place(m, { cx: hh.cx, cy: hh.top, w: target.w, halfW: hh.w, halfH: hh.h }) : null;
@@ -5204,11 +5247,15 @@ if (typeof module!=='undefined'){
       // pre-impact cell (the weapon at maximum tension) until it does; past the cap the clip stands down and the classic sprite takes the beat
       var ic = p.cues.filter(function (c) { return c.cue === 'impact'; })[0], isg = p.segments[p.segments.length - 1];
       var gate = opts.beatGate && ic && p.clip ? { impactT: ic.t, deadMs: isg ? isg.frameMs : 0, capMs: opts.beatCapMs || 1500, state: 'wait', shift: 0, holdFrom: null, late: null } : null;
-      var run = { plan: p, spec: spec, clips: clips, boards: boards, target: target, places: places, t0: env.now(), next: 0, done: false, pin: opts.impactPin !== false, pending: null, current: -1, gate: gate, beatAt: null,
+      // EXPORT-6 · THE READY-ANCHORED RISE (owner ruling A, opt-in: the live game passes readyAnchor). An ARMING clip has no beat to keep, so its
+      // clock starts when its atlas is DECODED, not at the cast: a slow decode still opens on cell 0 (never a partial play). Bounded by the cast
+      // beat's own settle — past it the clip stands down, and env.onArmingLate lets the page fire the classic sprite once
+      var ra = opts.readyAnchor && p.arming && p.clip ? { bound: p.timeline.castBeatMs, shift: null, late: null } : null;
+      var run = { plan: p, spec: spec, clips: clips, boards: boards, target: target, places: places, t0: env.now(), next: 0, done: false, pin: opts.impactPin !== false, pending: null, current: -1, gate: gate, beatAt: null, ra: ra,
                   manifest: clips[p.segments.length ? p.segments[p.segments.length - 1].clip : 0],
                   place: places[places.length - 1] || null,
                   log: { cues: [], drawn: [], bySegment: {}, composite: [], impactDrawnAt: null, impactPinned: false, destroyCueAt: null, settledAt: null, crackAt: null, handoff: null, mirror: null,
-                         ready: {}, late: [], loadErrors: [], drawError: null, travel: [], travelPlan: null, beat: null, beatLateCap: null } };
+                         ready: {}, late: [], loadErrors: [], drawError: null, travel: [], travelPlan: null, beat: null, beatLateCap: null, clipStartedAt: null, armingLate: null } };
       p.segments.forEach(function (sg) { run.log.bySegment[sg.role] = []; });
       // LAB-20b: a travelling strike flies from the caster's half centre to the target's centre
       var ks = p.segments.map(function (sg) { return sg.role; }).indexOf('strike'), sm = ks >= 0 ? clips[p.segments[ks].clip] : null, hh2 = env.halfOf && p.casterSeat != null ? env.halfOf(p.casterSeat) : null;
@@ -5294,9 +5341,19 @@ if (typeof module!=='undefined'){
         }
         tc = G.state === 'hold' ? G.impactT - 1e-3 : t - G.shift;                           // HOLD: the pre-impact cell (impact − 1), the travel pose at arrival
       }
-      try { while (run.next < cues.length && cues[run.next].t <= tc + 1e-6) { fire(run, cues[run.next], t); run.next++; } }
+      var A = run.ra, tcl = tc;
+      if (A) {
+        var sgA = run.plan.segments[0], rdy = sgA ? run.log.ready[sgA.role] : null;
+        if (A.shift == null && A.late == null && rdy != null && rdy <= A.bound + 1e-6) { A.shift = rdy; run.log.clipStartedAt = rdy; diag('arming-start', { at: Math.round(rdy) }); }
+        if (A.shift == null && A.late == null && t >= A.bound - 1e-6) {                  // not decoded by the cast beat's settle: stand down
+          A.late = t; run.log.armingLate = t; diag('arming-late', { at: Math.round(t), bound: Math.round(A.bound) }); release(); run.current = -2;
+          if (env.onArmingLate) env.onArmingLate(run);
+        }
+        tcl = A.shift != null ? t - A.shift : (A.late != null ? t : -1);                  // the clip's own clock: stopped until it is decoded
+      }
+      try { while (run.next < cues.length) { var cu = cues[run.next], ct = A && (cu.cue === 'clip-start' || cu.cue === 'clip-end') ? tcl : tc; if (cu.t > ct + 1e-6) break; fire(run, cu, t); run.next++; } }
       catch (e) { if (env.onError) env.onError(e); diag('cue-error', { at: Math.round(t), error: String(e && (e.message || e)) }); env.render(run.boards.after); finish(run, true); return; }
-      try { if (run.plan.clip) draw(run, tc, t); }
+      try { if (run.plan.clip && !(A && A.late != null)) draw(run, A ? tcl : tc, t); }
       catch (e) {
         // a DRAW error costs the decoration, never the beats: the clip is dropped, the timeline plays on to AFTER
         if (!run.log.drawError) { run.log.drawError = { at: t, error: String(e && (e.message || e)) }; diag('draw-error', { at: Math.round(t), error: run.log.drawError.error }); if (env.onError) env.onError(e); }
@@ -10522,7 +10579,7 @@ setInterval(()=>{ if(choreoActive && choreoStartedAt && (performance.now()-chore
 } }, 1500);
 // Defensive reset of ALL choreography globals — a new match must never inherit a stuck choreoActive from a prior match
 // whose choreo async was left pending (a hung rAF await) or rejected (an uncaught step exception, e.g. the drawImage race).
-function resetChoreo(){ try{ fxSkip(); }catch(e){} try{ mfSkip(); }catch(e){} choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
+function resetChoreo(){ try{ fxSkip(); }catch(e){} try{ mfSkip(); }catch(e){} try{ VS.cast=null; }catch(e){} choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
   choreoTimers.forEach(([t])=>{ try{ clearTimeout(t); }catch(e){} }); choreoTimers=[]; pendingPlay=null; roundCountAtActionStart=0;
   const layer=$('choreolayer'); if(layer){ layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML=''; } }
 const FTOAST_CLASS = a => a==='Chaos Surge'?'f-chaos': a==='Dharma Shield'?'f-dharma': a==='Leap'?'f-leap': a==='Venom'?'f-venom':'f-other';
@@ -11446,10 +11503,10 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
   if (ev.type==='toast'){
     // VASUKI VENOM STRIKE — THE ROUND-END PAYOFF (the tide falls). ATTRIBUTION BY STATE PEEK (no emit): a Venom drain 'toast' fires the enemy-half drain plate IFF (a) a player's venomStrike===G.round AND (b) the drained amount ≥3 (parsed from the toast text). The amount≥3 test is the KARKOTAKA DISCRIMINATOR: drainAmount's additivity guarantees a strike-round round-end PASSIVE drain is ≥3 (base 1 + strike's +2/+3), while Karkotaka's interim per-turn tick is a flat −1 (EXP-L amtOverride) — so an interim −1 toast (SAME strike round, state peek TRUE) is correctly rejected; the Strike amplification never rides Karkotaka's ticks. Keyed on the PASSIVE-drain toast ONLY: venomTokens (sarpaDouble) emits per-unit 'venom' but NO 'toast' → the Sarpa token stream never fires a second plate (coexistence, STEP-0.4). Once per round-end action (first qualifying Venom toast in evs). Enemy (drained) half = the striker's opponent (1-np). Does NOT suppress the per-unit ☠ ticks / −N floaters — the plate is the weather, the ticks are the rain. Fire-and-forget: the plate rides the canvas past this toast beat and coexists with the round-finish banner/totals (no queue fight).
     if(ev.abilityName==='Venom'){
-      const np = venomStrikeNpAtAction;   // captured PRE-mutate (endRound already wiped pl.venomStrike + advanced g.round by choreo time — see runAction)
-      const amtOf=t=>{ const mm=/[−-](\d+)/.exec(t||''); return mm?+mm[1]:0; };
-      if(np>=0 && amtOf(ev.text)>=3 && ev===evs.find(e=>e.type==='toast' && e.abilityName==='Venom' && amtOf(e.text)>=3)){
-        const drained=1-np, eh=document.querySelector(halfSel(drained)); if(eh){ const r=eh.getBoundingClientRect(); VFX.sprVenomDrain(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }
+      const np = venomStrikeNpAtAction;   // EXPORT-6: the striker by ABSOLUTE seat, captured PRE-mutate (vsStriker — the engine flag, or on the staked road the cast's own play event)
+      if(vsDrainPick(ev, evs, np)){   // EXPORT-6 (ruling B): the striker's OWN drain — it names the drained player, the striker's opponent
+        const drained=1-np, eh=document.querySelector(halfSel(drained));
+        if(eh){ const r=eh.getBoundingClientRect(); fxVenomDrain(ev, evs, np, snap, ()=>VFX.sprVenomDrain(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04)); }   // the FLOOD, or the classic plate
       }
     }
     factionToast(ev.abilityName, ev.text); await cDelay(620); return; }
@@ -11474,7 +11531,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     if(c && c.id==='tripura'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTripuraRise(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // TRIPURA — THE THREE CITIES RISE: the tri-metal arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). DOMINION register — no hit-stop. The turn-start +1 pulse rides its own buff beat each turn (Crown-precedent emit, evs-carried per check 4); THE FALL fires later off the ninth-sibling 'passive' emit when any astra shatters it.
     if(c && c.id==='kavacha'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprKavacha(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // DHARMA KAVACHA — THE WALL OF LAW: the structured wall plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT, not an astra (no isAstra gate). STRUCTURED register — no hit-stop. ADD, SUPPRESS NOTHING: the shield-formation beats (sprShieldForm per designated Unit, same evs on an AI cast) play WHOLE — check-2 PROVEN LIVE (sprShieldForm×2, suppress=false): the shield events target EXISTING Units (not the played Kavacha), so the played-this-action suppression never applies. The G4 chip glow (R95) covers the passive.
     if(c && c.t==='mantra' && c.id==='gayatri'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprGayatri(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T79: MANTRA row wash (NEW pipeline, ungated) — the serene sigil/lotus over the CASTER's (friendly) half; Gayatri revives the lowest friendly Unit shielded (engine-verified). No hit-stop coupling.
-    if(isAstra && c && c.id==='venomstrike'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprVenomSurge(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // VASUKI VENOM STRIKE — THE CAST (the poison rises): the amplifier's announcement surge over the CASTER's half (Gayatri half-rect precedent; the source rises). ⚑ OPEN RULING: caster-side is the authored shape — to move it to the ENEMY half on the owner's word, flip `cst` → `1-cst` on THIS line only. The astra carries NO resolution (flag-only cast, emit-free); the payoff plate fires at round-end off the drain toast. The spectacle-tier cast machinery coexists (Ahamkara/Chaos precedent — no contradiction).
+    if(isAstra && c && c.id==='venomstrike'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(), fire=()=>VFX.sprVenomSurge(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('venomstrike', fire)) fire(); } }   // VASUKI VENOM STRIKE — THE CAST (the poison rises): the amplifier's announcement surge over the CASTER's half (Gayatri half-rect precedent; the source rises). ⚑ OPEN RULING: caster-side is the authored shape — to move it to the ENEMY half on the owner's word, flip `cst` → `1-cst` on THIS line only. The astra carries NO resolution (flag-only cast, emit-free); the payoff plate fires at round-end off the drain toast. The spectacle-tier cast machinery coexists (Ahamkara/Chaos precedent — no contradiction).
     if(c && c.t==='mantra' && c.id==='pavamana'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprPavamana(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T95: MANTRA cleanse wash (Gayatri sibling, row plate over the CASTER's friendly half) — the purifying chant. SERENE, no hit-stop. The cleanse itself emits no per-unit ticks (Q3) so there is nothing to suppress.
     if(c && c.t==='mantra' && c.id==='ramanaam'){   // RAMA NAAM — MANTRA RADIANT BUFF wash (Gayatri/Pavamana sibling, row plate over the CASTER's friendly half). Rama Naam emits ONLY a log (no per-unit buff event), so the +2 floaters are UI-computed from the board (the friendly units the engine buffed) and land in the settle window (frames 26-36 ≈ 1.6s at 16fps). No engine touch.
       const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst));
@@ -11694,10 +11751,12 @@ function assetRetryFail(u, why, note){
   else { r.nextAt=performance.now()+ASSET_RETRY.backoffMs[r.attempts-1]; if(note) note('retry-scheduled', { url:u, why, inMs:ASSET_RETRY.backoffMs[r.attempts-1], attempt:r.attempts }); }
 }
 const assetRetryOk = (u)=>{ delete ASSET_RETRY.s[u]; };
+// EXPORT-6: a route may nest a second moment (Venom Strike's drain) — addressed as "<card>:<moment>"
+function fxRoute(key){ if(!FX.routes) return null; const k=String(key), i=k.indexOf(':'); if(i<0) return FX.routes[k] || null; const r=FX.routes[k.slice(0,i)]; return (r && r[k.slice(i+1)]) || null; }
 // a route's spec: one clip manifest, or an effect chain with its two clip manifests resolved beside it
 function fxSpec(cardId){
   if(FX.specP[cardId]) return FX.specP[cardId];
-  const rt=FX.routes && FX.routes[cardId]; if(!rt || !window.EffectClip) return Promise.resolve(null);
+  const rt=fxRoute(cardId); if(!rt || !window.EffectClip) return Promise.resolve(null);
   const murl=fxUrl(rt.spec);
   if(!assetRetryAllowed(murl)) return Promise.resolve(null);   // EXPORT-5: a failed spec waits out its backoff
   FX.specP[cardId] = fetch(murl).then(r=>{ if(!r.ok) throw new Error('manifest '+r.status); return r.json(); }).then(m=>{
@@ -11722,7 +11781,10 @@ function fxPrefetch(cardId){
 function fxPrefetchHands(){
   if(FX.routes===null && !FX.boot) fxBoot();
   if(!FX.routes || !G || !G.players) return;
-  for(const pl of G.players) for(const c of (pl.hand||[])) if(c && FX.routes[c.id] && !fxReady(c.id)) fxPrefetch(c.id);   // EXPORT-5: not ready → try again (each URL rides its own backoff; in flight or good bytes are never refetched)
+  for(const pl of G.players) for(const c of (pl.hand||[])) if(c && FX.routes[c.id]){
+    if(!fxReady(c.id)) fxPrefetch(c.id);
+    if(FX.routes[c.id].drain && !fxReady(c.id+':drain')) fxPrefetch(c.id+':drain');   // EXPORT-6: Venom Strike's flood — its BYTES arrive with the card (decoded only at the drain)
+  }   // EXPORT-5: not ready → try again (each URL rides its own backoff; in flight or good bytes are never refetched)
 }
 // every clip of the spec has its compressed bytes in hand → the cast can start the clip; otherwise the sprite plays
 const fxReady = (cardId)=>{ const s=FX.specs[cardId]; return !!(s && fxClips(s).every(m=>FX.blobs[fxAtlasUrl(m)])); };
@@ -11757,7 +11819,9 @@ function fxPlayer(){
     render: noop, sound: noop, crack: noop, removal: noop, callout: noop,   // THE BEAT CODE OWNS ALL OF THESE — the clip only draws
     onDone: ()=>{}, onError: fxOnError, diag: noop,
     // EXPORT-5: past the cap the clip stands down; a sprite held for the cast (the play-moment routes) now waits for the beat itself
-    onBeatLateCap: ()=>{ fxNote('beat-late-cap', { card:FX.owner }); if(FX.pendingFire){ FX.capFire=FX.pendingFire; FX.pendingFire=null; } } });
+    onBeatLateCap: ()=>{ fxNote('beat-late-cap', { card:FX.owner }); if(FX.pendingFire){ FX.capFire=FX.pendingFire; FX.pendingFire=null; } },
+    // EXPORT-6 (ruling A): the ready-anchored rise was not decoded by the cast beat's settle — it stood down, and the classic surge fires ONCE
+    onArmingLate: ()=>{ fxNote('arming-late', { card:FX.owner }); const f=FX.pendingFire; FX.pendingFire=null; if(f){ try{ f(); }catch(e){} fxNote('fell-back', { card:FX.owner, why:'the rise was not decoded by the cast beat\'s settle — the classic surge fired' }); } } });
   return FX.player;
 }
 function fxTick(){
@@ -11777,8 +11841,9 @@ function fxCast(c, ev, evs, snap){
     FX.snap=snap; fxSizeCanvas();
     const casterSeat=ownerPiOfUid(ev.sourceUid);
     const sp=FX.specs[c.id], k=(sp.class==='effect-chain' ? sp.chain.contract : sp.contract) || {};
-    const run=P.play({ events:evs }, sp, { before:null, after:null }, { mode:'full', choreoSpeed:vfxT(), casterSeat, beatGate:true });   // EXPORT-5: the impact waits for the game's REAL beat
-    FX.beatWant = { trigger:k.trigger, abilityName:k.abilityName }; FX.capFire=null;
+    const arming = sp.moment==='arming';   // EXPORT-6: Venom Strike's rise — no impact, started when decoded (ruling A)
+    const run=P.play({ events:evs }, sp, { before:null, after:null }, { mode:'full', choreoSpeed:vfxT(), casterSeat, beatGate:true, readyAnchor:arming });   // EXPORT-5: the impact waits for the game's REAL beat
+    FX.beatWant = arming ? null : { trigger:k.trigger, abilityName:k.abilityName }; FX.capFire=null;
     if(!run || !run.plan || !run.plan.clip){ fxNote('no-clip-planned', { card:c.id }, true); return null; }
     FX.run=run; FX.owner=c.id;
     if(!FX.raf) FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
@@ -11810,6 +11875,62 @@ function fxBeatFrom(ev){
   if(!heard && FX.capFire){ const f=FX.capFire; FX.capFire=null; try{ f(); }catch(e){} fxNote('fell-back', { card:FX.owner, why:'the beat came after the cap — the classic sprite took it' }); }
 }
 function fxSkip(){ FX.pendingFire=null; FX.beatWant=null; FX.capFire=null; if(FX.player && FX.run && !FX.run.done){ try{ FX.player.skip(); }catch(e){} } FX.run=null; FX.owner=null; }
+/* ══ EXPORT-6 — VASUKI VENOM STRIKE: the RISE at the cast, the FLOOD at the empowered round-end drain ══════════════════════════════
+   Owner rulings (2026-09-19): "Export Vasuki Venom in live game." then "Go." — A: hand-entry prefetch only, and the ready-anchored rise;
+   B: the drain side-check; C: the staked-road striker from the cast's own play event; D: the flood ends a still-playing rise.
+   The rise rides the ordinary cast hook (its route: "venomstrike", moment play, replacing sprVenomSurge). The flood is the route's nested
+   "drain" moment, replacing sprVenomDrain: armed at the empowered drain's toast, its eruption heard on that drain's FIRST venom beat through the
+   EXPORT-5 gate. The classic surge and the classic plate stay as the stand-down path everywhere: a page whose fetches or decodes all fail sees
+   exactly the game it saw before. */
+// THE STRIKER, by ABSOLUTE seat (ruling C). The engine roads hold it as pl.venomStrike===round; the STAKED view does not (its venomStrike is
+// always 0), so the cast's own play event is recorded too — seat and round — and either answers. The old capture returned a seat RELATIVE to
+// ME while the drain plate read it as absolute: right in solo (ME is 0), the wrong half at the wire's seat 1 — this replaces it.
+const VS = { cast:null };
+function vsNoteCasts(evs, actor){
+  for(const e of (evs||[])) if(e && e.type==='play' && e.abilityName==='Vasuki Venom Strike'){
+    let seat=G.players.findIndex(p=>p && [...(p.units||[]),...(p.heroes||[]),...(p.discard||[])].some(c=>c && c.uid!=null && c.uid===e.sourceUid));
+    if(seat<0) seat=(Number.isInteger(actor) && G.players[actor]) ? actor : null;   // the staked view keeps no uid on a spent Astra: the move's own seat
+    if(seat!=null) VS.cast={ seat, round:G.round };
+  }
+}
+function vsStriker(){   // PRE-mutate: the seat whose Venom Strike empowers THIS round's drain, or -1
+  const flagged=G.round ? G.players.findIndex(p=>p && p.venomStrike===G.round) : -1;
+  if(flagged>=0) return flagged;
+  return (VS.cast && VS.cast.round===G.round) ? VS.cast.seat : -1;
+}
+// THE DRAIN PICK (ruling B): the empowered drain's toast is the striker's OWN drain — it names the drained player (the striker's opponent)
+// and reads at least 3 (base 1 + the strike's +2); the first such toast of the action. It feeds BOTH the classic plate and the flood
+function vsDrainPick(ev, evs, np){
+  if(!(np===0 || np===1) || !ev || !G.players[1-np]) return false;
+  const amt=t=>{ const mm=/[−-](\d+)/.exec(t||''); return mm ? +mm[1] : 0; }, head='Venom drains '+G.players[1-np].name+'’s Units';
+  const is=e=>!!(e && e.type==='toast' && e.abilityName==='Venom' && amt(e.text)>=3 && String(e.text||'').indexOf(head)===0);
+  return is(ev) && ev===(evs||[]).find(is);
+}
+// the flood, or the classic plate — never both, never neither. The clip owns the moment; a failure or a stand-down fires the plate late
+function fxVenomDrain(ev, evs, np, snap, fire){
+  const run=fxCastDrain(ev, evs, np, snap);
+  if(run){ FX.pendingFire=fire; return true; }
+  fire(); return false;
+}
+function fxCastDrain(ev, evs, np, snap){
+  const key='venomstrike:drain'; if(!fxRoute(key)) return null;
+  if(reducedMotion()) return null;
+  if(!window.EffectClip || !fxReady(key)){ try{ fxPrefetch(key); }catch(e){} fxNote('not-ready-at-cast', { card:key }, true); return null; }
+  const P=fxPlayer(); if(!P) return null;
+  try{
+    FX.snap=snap; fxSizeCanvas();
+    const i=(evs||[]).indexOf(ev), tail=i>=0 ? evs.slice(i) : [ev], seats=[{ units:[] }, { units:[] }];
+    for(const e of tail) if(e.type==='venom') for(const u of (e.targetUids||[])) seats[ownerPiOfUid(u)].units.push({ uid:u });   // who each drained uid belonged to
+    const sp=FX.specs[key], k=sp.contract||{};
+    const run=P.play({ events:tail, venomStrike:{ striker:np }, scenario:{ p0:G.players.map(p=>p.name)[0], p1:G.players.map(p=>p.name)[1] }, before:{ seats } }, sp, { before:null, after:null },
+                     { mode:'full', choreoSpeed:vfxT(), casterSeat:np, beatGate:true });   // ruling D: a rise still playing is ended first (one effect decoded at a time)
+    FX.beatWant={ trigger:k.trigger, abilityName:k.abilityName }; FX.capFire=null;   // the eruption waits for the drain's FIRST venom beat
+    if(!run || !run.plan || !run.plan.clip){ FX.beatWant=null; fxNote('no-clip-planned', { card:key }, true); return null; }
+    FX.run=run; FX.owner=key;
+    if(!FX.raf) FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
+    return run;
+  }catch(e){ fxNote('cast-failed', { card:key, error:String(e&&e.message||e) }, true); fxSkip(); return null; }
+}
 fxBoot();
 
 /* ══ EXPORT-2 — THE HERO MANIFESTATIONS: twenty Heroes (Indra … Rahu) ══════════════════════════════════════════════════════════
@@ -11986,12 +12107,13 @@ function runAction(mutate, opts={}){
   roundCountAtActionStart = G.roundHistory.length;
   const evStart = G.events.length;
   try{ MF.before = (MF.reg && !reducedMotion()) ? mfSnap(G) : null; }catch(e){ MF.before=null; }   // EXPORT-2: the board BEFORE this action, for a Hero manifestation's board difference (a pure read)
-  venomStrikeNpAtAction = (G.players[ME].venomStrike===G.round) ? 0 : (G.players[OPP].venomStrike===G.round) ? 1 : -1;   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
+  venomStrikeNpAtAction = vsStriker();   // EXPORT-6 (ruling C): the striker by ABSOLUTE seat — the engine flag, or the cast's own play event on the staked road   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
   mutate();
   const evs = G.events.slice(evStart);
   blogRecord(G, blogBefore, evs, opts.actor);   // GL-2 — record this batch NOW, names resolved at this instant (never at result time); before any choreography, on every road
   if (Story && Story.mode==='SUGGESTED' && opts.actor!==OPP) storyAfterPlayerAction(evs);   // SUGGESTED: advance the beat / arm the aside on each player commit
   if (Story && Story.mode==='FREE' && opts.actor!==OPP){ Story.holdLine=null; Story.holdInstruct=''; Story.shimmerDone=true; }   // FREE: dismiss the intro line + Artifact shimmer once the player acts
+  try{ vsNoteCasts(evs, opts.actor); }catch(e){}   // EXPORT-6: record a Venom Strike cast (seat, round) — the staked view carries no venomStrike flag
   resetPowerBeat();   // new event beat — power-change blips coalesce within this batch
   if (reducedMotion() || !evs.length){
     // reduced-motion keeps AUDIO (it's not motion): fire the key sounds, skip the visual choreography.

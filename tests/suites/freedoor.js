@@ -355,6 +355,15 @@ async function main() {
     ok("F55 · the synced copy's manifest base is absolute to the free game's origin, exactly one, and no relative assets/manifest/ remains (HALL-SYNC-1)",
        gi.split(MBASE).length === 2 && !/(^|[^\/])assets\/manifest\//.test(gi.split("https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/").join("")),
        gi.split(MBASE).length - 1);
+    // HALL-SYNC-2 — Vasuki Venom Strike (game EXPORT-6) reaches the hosted game THROUGH that one base: the synced page carries the export's
+    //   glue (the nested "venomstrike:drain" route, the flood's cast and its side-checked drain pick), and both packs' manifests and atlases,
+    //   resolved the way the page resolves them (new URL against the base), land on the free game's Pages origin. Reachability over HTTP is
+    //   proven live at each sync (the suite runs offline); this proves the page asks the right origin for them.
+    const ORIGIN = "https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/";
+    const vsUrls = ["effects/venomstrike_rise/manifest.json", "effects/venomstrike_rise/atlas.webp", "effects/venomstrike_flood/manifest.json", "effects/venomstrike_flood/atlas.webp"].map((rel) => new URL(rel, ORIGIN).href);
+    ok("F56 · the synced copy carries Vasuki Venom Strike's glue (fxRoute, the nested venomstrike:drain route, fxCastDrain, vsDrainPick) and both packs resolve through the ONE absolute base to the free game's origin (HALL-SYNC-2)",
+       /function fxRoute\(key\)/.test(gi) && gi.indexOf("const key='venomstrike:drain'") >= 0 && /function fxCastDrain\(/.test(gi) && /function vsDrainPick\(/.test(gi) &&
+       gi.split(MBASE).length === 2 && vsUrls.every((u) => u.indexOf(ORIGIN + "effects/venomstrike_") === 0), vsUrls.join(" · "));
     ok("F37 · the gate gem skips the Hall's battle frame (R5): the skip rides the injected preamble exactly once",
        (gi.match(/window\.top !== window && \/\[\?&\]wire=1\(&\|\$\)\/\.test\(location\.search\)\) return;/g) || []).length === 1);
     // SYNC-NARRATOR-1 — the battle log reaches the Hall's wire frames: the narrator file beside the copy, the three
