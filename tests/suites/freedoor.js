@@ -364,6 +364,15 @@ async function main() {
     ok("F56 · the synced copy carries Vasuki Venom Strike's glue (fxRoute, the nested venomstrike:drain route, fxCastDrain, vsDrainPick) and both packs resolve through the ONE absolute base to the free game's origin (HALL-SYNC-2)",
        /function fxRoute\(key\)/.test(gi) && gi.indexOf("const key='venomstrike:drain'") >= 0 && /function fxCastDrain\(/.test(gi) && /function vsDrainPick\(/.test(gi) &&
        gi.split(MBASE).length === 2 && vsUrls.every((u) => u.indexOf(ORIGIN + "effects/venomstrike_") === 0), vsUrls.join(" · "));
+    // HALL-SYNC-3 — Lanka Dahan (game EXPORT-7) reaches the hosted game through the same one base: the synced page carries the export's
+    //   glue (the lankadahan route with its strike-afterglow chain, fxLankaBurn's owned burn and wash, and the caster seat derived from the
+    //   first damage target), and the chain plus both packs' manifests and atlases resolve to the free game's origin. Live reachability is
+    //   proven over HTTP at each sync (the suite runs offline); this proves the page asks the right origin for them.
+    const lkUrls = ["effects/lankadahan/chain.json", "effects/lankadahan_fire/manifest.json", "effects/lankadahan_fire/atlas.webp", "effects/lankadahan_gold/manifest.json", "effects/lankadahan_gold/atlas.webp"].map((rel) => new URL(rel, ORIGIN).href);
+    ok("F57 · the synced copy carries Lanka Dahan's glue (the strike-afterglow chain in its player, fxLankaBurn's owned burn and wash, the caster seat from the first damage target) and all five pack files resolve through the ONE absolute base to the free game's origin (HALL-SYNC-3)",
+       /function fxLankaBurn\(fire, wash, floats\)\{/.test(gi) && /fxLankaBurn\(fire, wash, floats\);/.test(gi) && gi.indexOf("fxOwnsMoment('lankadahan')") >= 0 && gi.indexOf("fxChainLive('lankadahan')") >= 0 &&
+       /function fxSeatFromTarget\(evs, k\)/.test(gi) && /const casterSeat = fxGlow\(sp\) \? fxSeatFromTarget\(evs, k\) : ownerPiOfUid\(ev\.sourceUid\);/.test(gi) && /chain\.shape === 'strike-afterglow'/.test(gi) &&
+       gi.split(MBASE).length === 2 && lkUrls.length === 5 && lkUrls.every((u) => u.indexOf(ORIGIN + "effects/lankadahan") === 0), lkUrls.join(" · "));
     ok("F37 · the gate gem skips the Hall's battle frame (R5): the skip rides the injected preamble exactly once",
        (gi.match(/window\.top !== window && \/\[\?&\]wire=1\(&\|\$\)\/\.test\(location\.search\)\) return;/g) || []).length === 1);
     // SYNC-NARRATOR-1 — the battle log reaches the Hall's wire frames: the narrator file beside the copy, the three

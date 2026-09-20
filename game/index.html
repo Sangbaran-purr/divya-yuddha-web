@@ -4995,10 +4995,10 @@ if (typeof module!=='undefined'){
       if (!(num(c.x) && num(c.y) && c.w > 0 && c.h > 0)) e.push('cell ' + i + ' has no rectangle');
       else if (m.atlasSize && (c.x + c.w > m.atlasSize.w || c.y + c.h > m.atlasSize.h)) e.push('cell ' + i + ' falls outside the atlas');
     });
-    var member = m.role === 'invoke' || m.role === 'strike';
-    if (m.role !== undefined && !member) e.push('role must be "invoke" or "strike"');
+    var member = m.role === 'invoke' || m.role === 'strike' || m.role === 'afterglow';   // LAB-25: + the afterglow (a strike-then-afterglow chain's second plate)
+    if (m.role !== undefined && !member) e.push('role must be "invoke", "strike" or "afterglow"');
     if (m.moment !== undefined && m.moment !== 'arming' && m.moment !== 'empowered-drain') e.push('moment must be "arming" or "empowered-drain"');
-    if (m.role === 'invoke') { if (m.impact !== null) e.push('an invocation has no impact cell'); }
+    if (m.role === 'invoke' || m.role === 'afterglow') { if (m.impact !== null) e.push('an ' + (m.role === 'invoke' ? 'invocation' : 'afterglow') + ' has no impact cell'); }
     else if (m.moment === 'arming') { if (m.impact !== null) e.push('an arming clip has no impact cell'); }   // LAB-24: the cast resolves nothing — no impact, no beat gate
     else if (!(Number.isInteger(m.impact) && cells && m.impact >= 0 && m.impact < cells.length)) e.push('impact must name a cell');
     if (!(m.anchor && num(m.anchor.x) && num(m.anchor.y))) e.push('anchor missing');
@@ -5028,7 +5028,11 @@ if (typeof module!=='undefined'){
     if (!chain || chain.class !== 'effect-chain') e.push('class must be "effect-chain"');
     if (!(chain && typeof chain.cardName === 'string')) e.push('cardName missing (the cast event carries the card name)');
     e = e.concat(contractErrors(chain && chain.contract));
-    if (!(Array.isArray(clips) && clips.length === 2 && clips[0].role === 'invoke' && clips[1].role === 'strike')) e.push('a chain is an invocation then a strike');
+    if (chain && chain.shape === 'strike-afterglow') {   // LAB-25: a strike then an afterglow, the afterglow a fixed delay after the impact
+      if (!(Array.isArray(clips) && clips.length === 2 && clips[0].role === 'strike' && clips[1].role === 'afterglow')) e.push('a strike-afterglow chain is a strike then an afterglow');
+      if (!(chain.contract && num(chain.contract.afterglowDelayMs) && chain.contract.afterglowDelayMs >= 0)) e.push('a strike-afterglow chain names its afterglow delay');
+    }
+    else if (!(Array.isArray(clips) && clips.length === 2 && clips[0].role === 'invoke' && clips[1].role === 'strike')) e.push('a chain is an invocation then a strike');
     (clips || []).forEach(function (m, i) { var v = validate(m); if (!v.ok) e.push('clip ' + i + ': ' + v.errors.join('; ')); if (chain && m.cardId !== chain.cardId) e.push('clip ' + i + ' is another card'); });
     return { ok: e.length === 0, errors: e };
   }
@@ -5089,6 +5093,15 @@ if (typeof module!=='undefined'){
     return { vfxT: vfxT, frameMs: frameMs, leadMs: 0, totalMs: totalMs, castBeatMs: (k.castHitStopMs + k.castHoldMs) * vfxT, destroyAt: null, clipStart: 0, impactAt: null,
              crackAt: null, beatEnd: (k.castHitStopMs + k.castHoldMs) * vfxT, clipEnd: totalMs, waitCostMs: 0 };
   }
+  // LAB-25 · a STRIKE then an AFTERGLOW: the strike's impact cell on the beat; the afterglow starts afterglowDelayMs x vfxT after the impact (the
+  // game's own timer for the second plate), and the strike is released there — it ends there by construction (the pack range makes it so)
+  function afterglowTimeline(chain, clips, speed, choreo) {
+    var vfxT = vfxOf(speed, choreo), B = beats(chain.contract, vfxT), str = clips[0], aft = clips[1];
+    var frameMs = 1000 / str.fps * vfxT, aftFrameMs = 1000 / aft.fps * vfxT, strikeStart = B.impactAt - str.impact * frameMs, handoffAt = B.impactAt + chain.contract.afterglowDelayMs * vfxT;
+    return { vfxT: vfxT, frameMs: frameMs, afterglowFrameMs: aftFrameMs, castBeatMs: B.castBeatMs, impactAt: B.impactAt, crackAt: B.crackAt, calloutAt: null, beatEnd: B.beatEnd,
+             strikeStart: strikeStart, strikeEnd: strikeStart + str.cells.length * frameMs, handoffAt: handoffAt, afterglowStart: handoffAt, afterglowEnd: handoffAt + aft.cells.length * aftFrameMs,
+             leadMs: str.impact * frameMs, waitCostMs: Math.max(0, -strikeStart) };
+  }
   // the chain (LAB-20): the strike's impact cell on the bite; the invocation ends exactly where the strike begins (the handoff), and starts
   // its own length before — no dead time, no overlap, by construction. The wire-clock cost is whatever the chain would need before the cast
   function chainTimeline(chain, clips, speed, choreo) {
@@ -5105,21 +5118,25 @@ if (typeof module!=='undefined'){
   function plan(batch, spec, opts) {
     opts = opts || {};
     var mode = SPEED[opts.mode] != null ? opts.mode : 'full', chained = spec.class === 'effect-chain', k = contractOf(spec), b = fromBatch(batch, spec), arming = !!b.arming;
-    var T = chained ? chainTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : arming ? armingTimeline(spec, SPEED[mode], opts.choreoSpeed) : timeline(spec, SPEED[mode], opts.choreoSpeed);
+    var glow = chained && spec.chain.shape === 'strike-afterglow';
+    var T = glow ? afterglowTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : chained ? chainTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : arming ? armingTimeline(spec, SPEED[mode], opts.choreoSpeed) : timeline(spec, SPEED[mode], opts.choreoSpeed);
     var clip = !!(b.cast && (b.strike || arming)) && mode !== 'reduced', segments = [], cues = [];
     var HALF_PLACES = { 'enemy-half-centre': 'enemy-half', 'enemy-half-top': 'enemy-half-top', 'enemy-half-bottom': 'enemy-half-bottom', 'caster-half-bottom': 'caster-half-bottom' };
-    if (clip && chained) segments.push({ role: 'invoke', clip: 0, start: T.invokeStart, end: T.handoffAt, frameMs: T.invokeFrameMs, place: 'caster-half' },
+    if (clip && glow) segments.push({ role: 'strike', clip: 0, start: T.strikeStart, end: Math.min(T.strikeEnd, T.handoffAt), frameMs: T.frameMs, place: k.anchor, impact: spec.clips[0].impact },
+                                    { role: 'afterglow', clip: 1, start: T.afterglowStart, end: T.afterglowEnd, frameMs: T.afterglowFrameMs, place: k.afterglowAnchor, impact: null });
+    else if (clip && chained) segments.push({ role: 'invoke', clip: 0, start: T.invokeStart, end: T.handoffAt, frameMs: T.invokeFrameMs, place: 'caster-half' },
                                        { role: 'strike', clip: 1, start: T.strikeStart, end: T.strikeEnd, frameMs: T.frameMs, place: 'target', impact: spec.clips[1].impact });
     else if (clip) segments.push({ role: 'strike', clip: 0, start: T.clipStart, end: T.clipEnd, frameMs: T.frameMs, place: HALF_PLACES[k.anchor] || 'target', impact: spec.impact });   // LAB-21: a BOARD-WIDE astra anchors on the caster's enemy half (the game's own row-plate anchor), not on one card
     if (b.cast) cues.push({ t: 0, cue: 'cast', sound: k.castSound });
     if (b.strike) {
-      if (clip && chained) { cues.push({ t: T.invokeStart, cue: 'invoke-start' }); cues.push({ t: T.handoffAt, cue: 'handoff' }); }
+      if (clip && glow) { cues.push({ t: T.strikeStart, cue: 'clip-start' }); cues.push({ t: T.handoffAt, cue: 'handoff' }); }
+      else if (clip && chained) { cues.push({ t: T.invokeStart, cue: 'invoke-start' }); cues.push({ t: T.handoffAt, cue: 'handoff' }); }
       else if (clip) cues.push({ t: T.clipStart, cue: 'clip-start' });
       cues.push({ t: T.impactAt, cue: 'impact', sound: k.impactSound, uid: b.targetUid });
       if (k.exitKind !== 'none') cues.push({ t: T.crackAt, cue: k.exitKind === 'removal' ? 'removal' : 'crack', uid: b.targetUid, ms: (k.exitKind === 'removal' ? k.exitMs : 520) * T.vfxT });   // LAB-24: a drain cracks no card
       if (T.calloutAt != null) cues.push({ t: T.calloutAt, cue: 'callout', uid: b.targetUid, text: chained ? spec.chain.cardName : null });
       cues.push({ t: T.beatEnd, cue: 'settle' });
-      if (clip) cues.push({ t: chained ? T.strikeEnd : T.clipEnd, cue: 'clip-end' });
+      if (clip) cues.push({ t: glow ? T.afterglowEnd : chained ? T.strikeEnd : T.clipEnd, cue: 'clip-end' });
     } else {
       if (clip && arming) { cues.push({ t: T.clipStart, cue: 'clip-start' }); cues.push({ t: T.clipEnd, cue: 'clip-end' }); }   // LAB-24: the rise runs its length past the cast's settle
       cues.push({ t: T.castBeatMs, cue: 'settle' });
@@ -5205,7 +5222,7 @@ if (typeof module!=='undefined'){
     function loadSegment(run, k) {
       var sg = run.plan.segments[k], m = run.clips[sg.clip], t0 = Date.now(), tStart = env.now() - run.t0;
       run.current = k; diag('load-start', { role: sg.role, at: Math.round(tStart) });
-      var h = sg.role === 'strike' && k > 0 ? run.log.handoff : null;
+      var h = k > 0 ? run.log.handoff : null;   // LAB-25: the second segment of either chain shape
       var ready = function (x) {
         if (!x) return fail(new Error('the ' + sg.role + ' atlas loader returned nothing'));
         var t = env.now() - run.t0;
@@ -5233,6 +5250,13 @@ if (typeof module!=='undefined'){
         if (sg.place === 'target') return target ? place(m, withHalf(target, hE)) : null;
         var seat = (sg.place === 'enemy-half' || sg.place === 'enemy-half-top' || sg.place === 'enemy-half-bottom') ? (p.casterSeat != null ? 1 - p.casterSeat : null) : p.casterSeat;   // LAB-21: the enemy half is the caster's opposite seat
         var hh = seat != null && env.halfOf ? env.halfOf(seat) : null;
+        // LAB-25: DIVIDER-FLUSH on a LOGICAL half — the plate's edge nearest the divider sits ON it (its bottom on the upper half, its top on the lower)
+        if (sg.place === 'enemy-half-divider' || sg.place === 'caster-half-divider') {
+          var hs = sg.place === 'enemy-half-divider' ? (p.casterSeat != null ? 1 - p.casterSeat : null) : p.casterSeat, hd = hs != null && env.halfOf ? env.halfOf(hs) : null, ho = hs != null && env.halfOf ? env.halfOf(1 - hs) : null;
+          if (!(hd && ho && hd.top != null && ho.top != null && hd.h > 0 && hd.w > 0)) return null;
+          var pd = place(m, { cx: hd.cx, cy: 0, w: 0, halfW: hd.w, halfH: hd.h }), upper = hd.top < ho.top;
+          return { scale: pd.scale, x: hd.cx - pd.w / 2, y: upper ? hd.top + hd.h - pd.h : hd.top, w: pd.w, h: pd.h };
+        }
         // LAB-24: BOTTOM-FLUSH on a LOGICAL half (the caster's, or its enemy's) — the plate's bottom-centre on the half's bottom edge; no half height, no clip (fail-open)
         if (sg.place === 'enemy-half-bottom' || sg.place === 'caster-half-bottom') return hh && hh.top != null && hh.h > 0 && hh.w > 0 ? place(m, { cx: hh.cx, cy: hh.top + hh.h, w: 0, halfW: hh.w, halfH: hh.h }) : null;
         // LAB-22: TOP-FLUSH — the plate's anchor (its top-centre) on the enemy half's TOP edge; a half that reports no top plays no clip (fail-open)
@@ -11667,12 +11691,11 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
       else if (ev.type==='damage' && ev.abilityName==='Lanka Dahan'){ cpulse(pos.el,'impact');   // LANKA DAHAN — the INVERTED Sarpa two-zone. ONCE per action: fire the enemy BURN PLATE over the DAMAGED units' half (ownerPiOfUid — works whichever side cast), THEN (after the burn's hold) the INSPIRATION WASH over the OPPOSITE caster's half + friendly +1 floaters — fire first, inspiration second, never simultaneous. SUPPRESS the per-enemy red tick + hit-stop (unified burn, not per-enemy strikes); KEEP the −N floater (ev.amount — Patala −3 reads honestly). STEP-0.2: a lethal hit emits 'damage' BEFORE 'destroy', so the once-guard fires even on an all-kill board (no destroy-fallback needed); killed enemies still get their death beat via the destroy handler. STEP-0.3: an all-Ratri board emits ZERO 'damage' events → this branch never runs → cast beat only (honest — the fire was prevented; the silent friendly +1 still landed via render).
         if(ev===evs.find(e=>e.type==='damage'&&e.abilityName==='Lanka Dahan')){   // once-guard (Chaos Surge / Sarpa idiom)
           const ds=ownerPiOfUid(tgts[i]);                                          // ds = the DAMAGED (enemy) unit's owner
-          const eh=document.querySelector(halfSel(ds)); if(eh){ const r=eh.getBoundingClientRect(); VFX.sprLankaFire(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }   // the BURN over the enemy half
-          setTimeout(function(){ if(choreoSkip) return;                            // after the burn's hold (fire recedes f18-24): the INSPIRATION over the CASTER's (opposite) half + friendly +1 floaters
-            const wh=document.querySelector(halfSel((1-ds))); if(wh){ const r=wh.getBoundingClientRect(); VFX.sprLankaWash(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); }
-            const friends=((G.players[1-ds]||{}).units||[]).filter(u=>!u.ghost);   // the caster's units got the raw +1 (emit-blind) → UI-compute the floaters (Oath pattern), staggered across the wash window
-            friends.forEach(function(u,k){ const el=document.querySelector('.bc[data-uid="'+u.uid+'"]'); if(el) setTimeout(function(){ if(!choreoSkip) floatText(el,1); }, k*90); });
-          }, (18/16)*vfxT()*1000);
+          const eh=document.querySelector(halfSel(ds)), fire=()=>{ if(eh){ const r=eh.getBoundingClientRect(); VFX.sprLankaFire(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } };   // the BURN over the enemy half
+          const wash=()=>{ const wh=document.querySelector(halfSel((1-ds))); if(wh){ const r=wh.getBoundingClientRect(); VFX.sprLankaWash(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } };   // after the burn's hold (fire recedes f18-24): the INSPIRATION over the CASTER's (opposite) half
+          const floats=()=>{ const friends=((G.players[1-ds]||{}).units||[]).filter(u=>!u.ghost);   // the caster's units got the raw +1 (emit-blind) → UI-compute the floaters (Oath pattern), staggered across the wash window
+            friends.forEach(function(u,k){ const el=document.querySelector('.bc[data-uid="'+u.uid+'"]'); if(el) setTimeout(function(){ if(!choreoSkip) floatText(el,1); }, k*90); }); };
+          fxLankaBurn(fire, wash, floats);   // EXPORT-7: the routed chain owns the burn and the wash when its fire is decoded; otherwise exactly the classic pair on the classic timer
         }
         ft=ev.text||String(ev.amount); fk='down heavy'; }   // no red sprDamage, no hitStop — the burn is the unified flame; the −N floater STAYS
       else if (ev.type==='damage'){ cpulse(pos.el,'impact');
@@ -11839,8 +11862,8 @@ function fxCast(c, ev, evs, snap){
   const P=fxPlayer(); if(!P) return null;
   try{
     FX.snap=snap; fxSizeCanvas();
-    const casterSeat=ownerPiOfUid(ev.sourceUid);
     const sp=FX.specs[c.id], k=(sp.class==='effect-chain' ? sp.chain.contract : sp.contract) || {};
+    const casterSeat = fxGlow(sp) ? fxSeatFromTarget(evs, k) : ownerPiOfUid(ev.sourceUid);   // EXPORT-7 (ruling): Lanka Dahan's caster is the OTHER side of its FIRST damage target — the Astra-uid lookup (and its silent seat-0 fallback) is retired for this route
     const arming = sp.moment==='arming';   // EXPORT-6: Venom Strike's rise — no impact, started when decoded (ruling A)
     const run=P.play({ events:evs }, sp, { before:null, after:null }, { mode:'full', choreoSpeed:vfxT(), casterSeat, beatGate:true, readyAnchor:arming });   // EXPORT-5: the impact waits for the game's REAL beat
     FX.beatWant = arming ? null : { trigger:k.trigger, abilityName:k.abilityName }; FX.capFire=null;
@@ -11856,7 +11879,7 @@ function fxOwnsMoment(cardId, fire){
   if(!r || !rt || FX.owner!==cardId || r.done) return false;
   if(r.log.loadErrors.length || r.log.drawError){ fxNote('fell-back', { card:cardId, why:'the clip failed before its moment' }, true); fxSkip(); return false; }
   if(rt.moment==='play'){ FX.pendingFire=fire||null; return true; }   // the moment IS the cast: the decode is still in flight — a failure fires the sprite late (fxOnError)
-  const seg=r.plan.segments[r.plan.segments.length-1], role=seg && seg.role;
+  const seg=r.plan.segments[r.plan.segments.length-1], role=fxGlow(r.spec) ? 'strike' : (seg && seg.role);   // EXPORT-7: a strike-afterglow chain's moment is its FIRE's (the gold decodes later, after the fire is released)
   if(!role || r.log.ready[role]==null){ fxNote('fell-back', { card:cardId, why:'the clip was not decoded by its moment' }, true); fxSkip(); return false; }
   return true;
 }
@@ -11930,6 +11953,29 @@ function fxCastDrain(ev, evs, np, snap){
     if(!FX.raf) FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
     return run;
   }catch(e){ fxNote('cast-failed', { card:key, error:String(e&&e.message||e) }, true); fxSkip(); return null; }
+}
+/* ══ EXPORT-7 — LANKA DAHAN: the FIRE on the enemy half at the first damage beat, released, then the GOLD on the caster's half ═══════════
+   Owner rulings (2026-09-19): "Export." then "Go." — the frozen set 77 → 82 (the chain rides with its two packs, the Sudarshana precedent); the
+   gold's cold decode accepted as measured (the lab player verbatim); the caster seat from the FIRST damage target; an empty caster half is
+   washed (as classic); a zero-damage cast plays nothing (as classic); the +1 floaters stay on the classic timer in both paths.
+   The chain is cast at the play beat (the ordinary routed-Astra hook). Its fire's impact is heard on the cast's FIRST damage event through the
+   EXPORT-5 gate; the gold follows at the game's own wash timer, (18/16) x vfxT x 1000 after the burn, decoded only after the fire is released.
+   Not ready, failing, or stood down past the cap: the classic sprLankaFire / sprLankaWash pair, exactly as before. */
+const fxGlow = (sp)=> !!(sp && sp.class==='effect-chain' && sp.chain && sp.chain.shape==='strike-afterglow');
+// the caster by ABSOLUTE seat: the other side of the chain's first beat target (a damaged Unit is always on a public board or in a discard)
+function fxSeatFromTarget(evs, k){
+  const e=(evs||[]).find(x=>x && x.type===k.trigger && x.abilityName===k.abilityName && x.targetUids && x.targetUids.length);
+  return e ? 1-ownerPiOfUid(e.targetUids[0]) : null;
+}
+function fxChainLive(cardId){ const r=FX.run; return !!(r && !r.done && FX.owner===cardId && !r.log.loadErrors.length && !r.log.drawError); }
+// the burn beat: the chain owns the fire (its fire decoded) and then the wash; otherwise the classic pair. Never both, never neither
+function fxLankaBurn(fire, wash, floats){
+  const owned=fxOwnsMoment('lankadahan');
+  if(owned) FX.pendingFire=fire; else fire();                                // a chain that fails after this beat fires the classic burn late (fxOnError)
+  setTimeout(function(){ if(choreoSkip) return;
+    if(owned && fxChainLive('lankadahan')) FX.pendingFire=wash; else wash();  // the GOLD owns the wash; a gold that fails to decode fires the classic wash late
+    floats();                                                                 // the +1 floaters: the classic timer, both paths (ruling)
+  }, (18/16)*vfxT()*1000);
 }
 fxBoot();
 
