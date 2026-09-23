@@ -413,6 +413,31 @@ async function main() {
   }
 
   // the runner's footer contract (tests/run.js countOf): "ALL GREEN — pass/total", same as freedoor
+  // ═══ I. THE CACHE-STAMP LAW (bytes-not-tasks) ═══
+  // Shipped and caught the hard way: GATE-FIX-1 rewrote js/admin.js and left admin.html pointing at ?v=s35, the
+  // exact URL every console browser already had cached. The fix was live and invisible — the owner would have
+  // pasted his key, pressed FIND ELIGIBLE, and been answered by the OLD bytes. The stamp is not decoration; it is
+  // how a change reaches the person who asked for it. This check compares committed history: if a stamped script's
+  // bytes changed AFTER its stamp last moved, the stamp is stale and the deploy is a lie.
+  {
+    const { execFileSync } = require("child_process");
+    const html = fs.readFileSync(path.join(SITE, "admin.html"), "utf8");
+    const stamped = [...html.matchAll(/src="([^"?]+)\?v=([A-Za-z0-9]+)"/g)].map((m) => ({ src: m[1], v: m[2] }));
+    const when = (args) => {
+      const out = execFileSync("git", ["log", "-1", "--format=%ct"].concat(args), { cwd: SITE, encoding: "utf8" }).trim();
+      return out ? Number(out) : 0;
+    };
+    const stale = stamped.filter((x) => {
+      const fileAt = when(["--", x.src]);
+      const stampAt = when(["-G", x.src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\?v=", "--", "admin.html"]);
+      return fileAt > stampAt; // bytes moved after the stamp did
+    });
+    ok("I1 · BYTES-NOT-TASKS · every stamped console script carries a stamp at least as new as its own bytes — no cached-stale deploy",
+       stale.length === 0, "stale: " + stale.map((x) => x.src + "?v=" + x.v).join(", "));
+    ok("I2 · and js/admin.js is stamped at all (an unstamped script can never be busted out of a browser cache)",
+       stamped.some((x) => x.src === "js/admin.js"));
+  }
+
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));
   if (fail) process.exitCode = 1;
 }

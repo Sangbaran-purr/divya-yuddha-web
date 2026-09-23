@@ -34,7 +34,7 @@ const SUITES = [
   { name: "freedoor",      file: path.join(__dirname, "suites", "freedoor.js"), chain: true, expect: 57 },
   // GATE-FIX-1: the owner console's archive road. No chain and no network — the public RPCs' 2026-09-23 wire
   // shapes are FIXTURES (docs/ARCHIVE_ROAD_2026-09-23.md); a suite that dials out measures the weather.
-  { name: "consoleroad",   file: path.join(__dirname, "suites", "consoleroad.js"), chain: false, expect: 57 },
+  { name: "consoleroad",   file: path.join(__dirname, "suites", "consoleroad.js"), chain: false, expect: 59 },
   { name: "stakedframe",   file: path.join(__dirname, "suites", "stakedframe.js"), chain: true, expect: 29 },
   { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 73 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)
