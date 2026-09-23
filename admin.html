@@ -343,6 +343,10 @@
         <input class="txt" id="cfg-deploy" type="number" placeholder="0" />
         <label class="fld" for="cfg-readrpc">Read RPC URL (archive-capable — for FULL Mint History; blank = recent-only)</label>
         <input class="txt" id="cfg-readrpc" type="text" placeholder="https://… (read-only; never signs)" />
+        <!-- GATE-FIX-1 — the archive road's STARTING getLogs width, beside the URL because they are one decision.
+             The key stays in this browser only: it is saved to dyadmin::config, never to a committed file. -->
+        <label class="fld" for="cfg-logchunk">Starting getLogs span (blocks; the scan self-tunes down — blank = 9999)</label>
+        <input class="txt" id="cfg-logchunk" type="number" min="50" max="50000" step="1" placeholder="9999" />
         <label class="fld" for="cfg-roburl">Robot base URL (for "Publish via robot" — coupon publishing)</label>
         <input class="txt" id="cfg-roburl" type="text" placeholder="https://… (the approval-bot service origin)" />
         <label class="fld" for="cfg-robtoken">Robot admin token (bearer; stored in this browser only, never committed)</label>

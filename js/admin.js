@@ -38,7 +38,54 @@ window.DYAdmin = (function () {
   var ACCESS_MINT_GAS = 300000;
   var WAVE_MINT_GAS = 300000;
   var COIN_XFER_GAS = 120000; // ERC-20 transfer ~51k–66k (fresh recipient); ~2x floor
-  var LOG_CHUNK = 9999; // getLogs block window — MUST stay under archive-RPC caps (drpc + publicnode reject >10000). S-LEDGER-FIX-2: 9000→9999 (still <10000) shaves the request count on the deep scan (fewer browser-origin hits at drpc).
+  // GATE-FIX-1 — the getLogs block window is NO LONGER A CONSTANT. On 2026-09-23 drpc's free plan was measured
+  // serving a maximum span of 101 blocks while its rejection text still SAYS "ranges over 10000 blocks are not
+  // supported on free plan" — the text is stale, the cap is real, and a hardcoded 9999 makes every deep scan
+  // unreachable (see docs/ARCHIVE_ROAD_2026-09-23.md). So the width is now a STARTING GUESS that the road
+  // self-tunes DOWNWARD on a range-class rejection and remembers per endpoint for the session:
+  //   • the start comes from the Configuration panel (`logChunk`), default LOG_CHUNK_START;
+  //   • a range-class rejection halves it (never below LOG_CHUNK_FLOOR) and the SAME range is re-read in halves,
+  //     so a caller always gets the events for the span it asked for, whatever it cost underneath;
+  //   • the discovered width is remembered in `archiveSpans` (session memory, keyed by endpoint URL), so the
+  //     owner's keyed endpoint keeps the wide start while drpc free settles at 78 after seven halvings.
+  var LOG_CHUNK_START = 9999; // sane wide start — an archive endpoint with a real key accepts thousands
+  var LOG_CHUNK_FLOOR = 50;   // never narrower than this; below it the scan is not worth issuing
+  var archiveSpans = {};      // endpoint url -> discovered width (session only; a reload re-discovers)
+  function chunkStart() {
+    var v = Number(cfg().logChunk);
+    return Number.isFinite(v) && v >= LOG_CHUNK_FLOOR ? Math.floor(v) : LOG_CHUNK_START;
+  }
+  // Accepts a url string, a provider, or an ethers Contract (whose .runner is the provider) — see tamedProvider.
+  function spanKeyOf(x) {
+    if (!x) return "_";
+    if (typeof x === "string") return x;
+    if (x.__dyUrl) return x.__dyUrl;
+    if (x.runner && x.runner.__dyUrl) return x.runner.__dyUrl;
+    if (x.provider && x.provider.__dyUrl) return x.provider.__dyUrl;
+    return "_";
+  }
+  function archiveSpan(x) { return archiveSpans[spanKeyOf(x)] || chunkStart(); }
+  // Halve the remembered width for this endpoint. Returns false when already at the floor (cannot shrink).
+  // Narrow the remembered width after a refusal. `failedSpan` is the width that was actually REFUSED — the new
+  // memory is half of THAT, never half of whatever the memory happens to hold. Measured the hard way: halving the
+  // CURRENT memory on every refusal makes the width race to the floor, because one wide read fails at many levels
+  // of the split below it and each level halved again (live drpc landed on 50 when its real cap is 101).
+  function archiveSpanShrink(x, failedSpan) {
+    var k = spanKeyOf(x), cur = archiveSpan(k);
+    var next = Math.floor((failedSpan || cur) / 2);
+    if (next < LOG_CHUNK_FLOOR) next = LOG_CHUNK_FLOOR;
+    if (next > cur) next = cur;        // a refusal may never WIDEN the memory
+    if (next >= cur) return false;
+    archiveSpans[k] = next;
+    return true;
+  }
+  // Learn upward from a success: a width that the endpoint actually served is known-good. Only ever raises a
+  // memory that a refusal had already lowered, and never past the configured start.
+  function archiveSpanConfirm(x, okSpan) {
+    var k = spanKeyOf(x);
+    if (archiveSpans[k] && archiveSpans[k] < okSpan && okSpan <= chunkStart()) archiveSpans[k] = okSpan;
+  }
+  function archiveSpanReset() { archiveSpans = {}; } // Configuration save re-opens the question
   var WAIT_CONFIRMS = 1;
   var WAIT_TIMEOUT_MS = 75000; // bound tx.wait — a never-mined/dropped tx must NEVER sit PENDING (S5a-FIX-2)
   var FEE_HEADROOM = 2n; // 2x headroom over the live base+priority fee signal (S5a-FIX-2); wallet override stays possible
@@ -95,6 +142,10 @@ window.DYAdmin = (function () {
       // S-LEDGER-FIX-4: a stored 0 / "" / null / undefined / non-numeric deployBlock counts as UNSET → file default rules; only a genuine positive integer wins (a stored 0 used to win and force a genesis full-chain scan).
       deployBlock: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.deployBlock || 0); })(o.deployBlock),
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null, // archive-capable RPC for HISTORY READS only (S5a-FIX-3)
+      // GATE-FIX-1 — the STARTING getLogs width for the archive road. Sits beside the Read RPC URL because the two
+      // are one decision: a keyed endpoint takes thousands, drpc free takes 101. Only the START is configured —
+      // the scan self-tunes downward from here and remembers what the endpoint actually served.
+      logChunk: (function (v) { v = Number(v); return Number.isFinite(v) && v >= LOG_CHUNK_FLOOR ? Math.floor(v) : (FILE.logChunk || LOG_CHUNK_START); })(o.logChunk),
       // S-ROBOT-COUPON-1: robot base URL + admin bearer for "Publish via robot" (coupon publishing). Token is
       // localStorage-only (this browser), NEVER admin-config.js / never committed. Full registry wiring stays its own task.
       robotUrl: o.robotUrl || FILE.robotUrl || null,
@@ -129,6 +180,34 @@ window.DYAdmin = (function () {
   // browser-origin traffic: a single labeled request can 429, and under the deep scan's burst it returns HTTP 5xx, which
   // ethers v6 surfaces as code "SERVER_ERROR" / shortMessage "server response 500". This class RETRIES the SAME endpoint
   // (the endpoint is fine, just busy) — it must NOT demote drpc to a pruned node.
+  // Shared error-text flattener — isRateLimited / isRangeError / isArchiveError all judge the same string.
+  function errText(e) {
+    var s = "";
+    try { s = JSON.stringify(e && (e.info || e.error || {})) + " " + ((e && e.message) || "") + " " + ((e && e.shortMessage) || ""); }
+    catch (x) { s = (e && e.message) || ""; }
+    return s.toLowerCase();
+  }
+  // GATE-FIX-1 — a WIDTH rejection: the endpoint refuses THIS SPAN, and would serve a narrower one. Distinct from
+  // isArchiveError's DEPTH class (pruned history), which narrowing can never fix — so a pruned/-32701 answer is
+  // explicitly excluded here. Measured shapes this must catch (2026-09-23):
+  //   drpc  code 35   "ranges over 10000 blocks are not supported on free plan"   (stale text; real cap 101)
+  //   1rpc  code -32602 "eth_getLogs is limited to 0 - 50 blocks range"
+  function isRangeError(e) {
+    if (!e) return false;
+    var s = errText(e);
+    if (s.indexOf("-32701") >= 0 || s.indexOf("pruned") >= 0) return false; // DEPTH, not width — never narrow for this
+    return (
+      s.indexOf("block range") >= 0 ||
+      s.indexOf("blocks range") >= 0 ||
+      s.indexOf("ranges over") >= 0 ||
+      s.indexOf("range is too") >= 0 ||
+      s.indexOf("limited to") >= 0 ||
+      s.indexOf("-32602") >= 0 ||
+      s.indexOf("query returned more than") >= 0 ||
+      s.indexOf("too many results") >= 0 ||
+      (s.indexOf("range") >= 0 && s.indexOf("limit") >= 0)
+    );
+  }
   function isRateLimited(e) {
     if (!e) return false;
     if (e.code === "SERVER_ERROR") return true; // ethers v6 wraps an HTTP 5xx as SERVER_ERROR
@@ -160,7 +239,122 @@ window.DYAdmin = (function () {
     }
     return go();
   }
-  var SCAN_DEADLINE_MS = 75000; // S-LEDGER-FIX-3: hard cap on the WHOLE history scan → busy message; nothing on the road runs unbounded.
+  // GATE-FIX-1 — read ONE range, whatever it costs underneath. `read(a, b)` is the caller's own filter read; on a
+  // range-class rejection this halves [a,b], remembers the narrower width for the endpoint, and re-reads BOTH
+  // halves, combining the results. The caller therefore always receives the events for the exact span it asked
+  // for and needs no restructuring — which is why all four archive panels adopt it in one line. Per-filter retry
+  // is preserved (each piece rides withRetry). `combine` defaults to array concat; a caller whose read resolves
+  // to something else (the Mint-History loop resolves to a PAIR of event arrays) passes its own combiner.
+  // Sub-pieces are paced by the same 120ms courtesy the loops use.
+  function readRangeAdaptive(url, read, a, b, onRetry, combine, deadlineAt) {
+    var join = combine || function (l, r) { return l.concat(r); };
+    if (deadlineAt && Date.now() > deadlineAt) { var d0 = new Error("scan deadline"); d0.__deadline = true; return Promise.reject(d0); }
+    var askedSpan = b - a + 1;
+    // If a refusal has already TAUGHT us this endpoint's width, do not ask for more and be refused again — walk
+    // the range in known-good pieces. Without this every recursive call re-attempted its own full span first, so
+    // the right-hand remainder of each split paid another doomed request at each level (measured: 295 reads for
+    // one 9999-block chunk instead of ~135). An endpoint that has never refused has no learned width, so a
+    // capable keyed endpoint still gets asked for the whole wide chunk exactly once.
+    var learned = archiveSpans[spanKeyOf(url)];
+    if (learned && askedSpan > learned) {
+      var midK = a + learned - 1;
+      return readRangeAdaptive(url, read, a, midK, onRetry, combine, deadlineAt).then(function (left) {
+        return sleep(120).then(function () {
+          return readRangeAdaptive(url, read, midK + 1, b, onRetry, combine, deadlineAt).then(function (right) {
+            return join(left, right);
+          });
+        });
+      });
+    }
+    return withRetry(function () { return read(a, b); }, onRetry).then(function (evs) {
+      archiveSpanConfirm(url, askedSpan);         // this width is known-good on this endpoint
+      return evs;
+    }, function (e) {
+      if (!isRangeError(e)) throw e;              // not a width problem — the caller's funnel owns it
+      if (askedSpan <= LOG_CHUNK_FLOOR) throw e;  // already as narrow as we tune — nothing left to try
+      archiveSpanShrink(url, askedSpan);          // remember, relative to the width that was actually refused
+      // Cut at the DISCOVERED width, not at a blind half. Once the first descent has learned what the endpoint
+      // serves, the rest of a wide range is walked in known-good pieces instead of re-deriving the same answer by
+      // binary descent on every branch — measured live, blind halving spent 255 requests on one 9999-block chunk.
+      // Halving alone also steps straight over a cap of exactly 50 (1rpc), hence the floor clamp.
+      var half = Math.floor(askedSpan / 2);
+      var cut = Math.min(half, archiveSpan(url));
+      if (cut < LOG_CHUNK_FLOOR) cut = LOG_CHUNK_FLOOR;
+      if (cut >= askedSpan) cut = half;           // never fail to make progress
+      var mid = a + cut - 1;
+      return readRangeAdaptive(url, read, a, mid, onRetry, combine, deadlineAt).then(function (left) {
+        return sleep(120).then(function () {
+          return readRangeAdaptive(url, read, mid + 1, b, onRetry, combine, deadlineAt).then(function (right) {
+            return join(left, right);
+          });
+        });
+      });
+    });
+  }
+
+  // GATE-FIX-1 — learn the endpoint's width BEFORE the scan issues its first chunk. Without this the first chunk
+  // is the configured wide start (9999), readRangeAdaptive walks it in ~128 narrow pieces, and — because a chunk
+  // is the unit that gets CHECKPOINTED — nothing is banked until all 128 land. Measured live: 60 seconds spent
+  // inside "chunk 1/225" with an empty checkpoint. The descent costs ~7 refusals (each one fast, they are refused
+  // on sight, not computed) and leaves every later chunk right-sized and individually resumable.
+  // An endpoint that accepts the wide start pays exactly ONE extra read and learns nothing it did not know.
+  function discoverSpan(x, read, at) {
+    if (archiveSpans[spanKeyOf(x)]) return Promise.resolve(archiveSpan(x)); // already learned this session
+    function tryWidth(w) {
+      return withRetry(function () { return read(at, at + w - 1); }).then(
+        function () { archiveSpans[spanKeyOf(x)] = w; return w; },
+        function (e) {
+          if (!isRangeError(e)) throw e;            // depth / rate — not our question; the caller's funnel owns it
+          var next = Math.floor(w / 2);
+          if (next < LOG_CHUNK_FLOOR) next = LOG_CHUNK_FLOOR;
+          if (next >= w) throw e;
+          return sleep(120).then(function () { return tryWidth(next); });
+        }
+      );
+    }
+    return tryWidth(chunkStart());
+  }
+
+  // GATE-FIX-1 — grow-only scan checkpoints, ported from the proven wallet.js treasury mechanism
+  // (js/wallet.js ckptGet/ckptSet/HEAD_BUFFER) into the ADMIN namespace. Laws carried over verbatim:
+  //   • resume at scannedTo + 1 (deployBlock on first run);
+  //   • persist after EACH chunk, so an interrupted scan still advances the high-water mark;
+  //   • HEAD_BUFFER — never bookmark the freshest window, because replica lag on a load-balanced public RPC can
+  //     answer an empty getLogs for a block whose logs land moments later, and a bookmark past it is permanent;
+  //   • GROW-ONLY BOTH WAYS — scannedTo never moves backwards and the accumulated totals are never dropped.
+  // The stored value is wallets + USD only (zero-PII law): { scannedTo, totals: { "0x…": "<usdE18 string>" } }.
+  var HEAD_BUFFER = 128;
+  var CKPT_NS = "dyadmin::scan::"; // dyadmin:: — the admin surface's namespace; no public page reads it
+  function ckptKey(kind, address) { return CKPT_NS + kind + "::" + String(address || "").toLowerCase(); }
+  function ckptGet(key) {
+    try { var v = window.localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+  }
+  function ckptSet(key, obj) {
+    try { window.localStorage.setItem(key, JSON.stringify(obj)); } catch (e) { /* private mode / quota — the scan still works, just not O(delta) */ }
+  }
+  // GROW-ONLY writer: refuses to move scannedTo backwards and merges (never replaces) the totals.
+  function ckptAdvance(key, scannedTo, totals) {
+    var prev = ckptGet(key) || {};
+    var prevTo = Number(prev.scannedTo) || 0;
+    if (!(scannedTo > prevTo)) return prevTo;     // never re-narrow
+    var merged = prev.totals || {};
+    for (var k in totals) { if (Object.prototype.hasOwnProperty.call(totals, k)) merged[k] = totals[k]; }
+    ckptSet(key, { scannedTo: scannedTo, totals: merged });
+    return scannedTo;
+  }
+
+  var SCAN_DEADLINE_FLOOR_MS = 75000; // the standing floor — nothing on the road runs unbounded
+  var SCAN_DEADLINE_CEIL_MS = 600000; // and nothing runs forever either; a checkpointed scan resumes on re-run
+  var SCAN_MS_PER_CHUNK = 400;        // measured 2026-09-23: ~242ms latency + the 120ms inter-chunk courtesy
+  // GATE-FIX-1 — the deadline now SCALES with the work actually planned. A fixed 75s was sized when the scan was
+  // 225 chunks wide; at the measured drpc width the same history is 22,195 chunks, so a constant is a guaranteed
+  // false "busy". Floors at the historic 75s (never shorter than before) and ceils so the tab is never hostage.
+  function scanDeadlineMs(fromBlock, latest, span) {
+    var chunks = Math.max(1, Math.ceil((latest - fromBlock + 1) / Math.max(1, span || LOG_CHUNK_START)));
+    var want = chunks * SCAN_MS_PER_CHUNK;
+    return Math.max(SCAN_DEADLINE_FLOOR_MS, Math.min(SCAN_DEADLINE_CEIL_MS, want));
+  }
+  var SCAN_DEADLINE_MS = SCAN_DEADLINE_FLOOR_MS; // retained name: the floor, used where no span is known yet
   // S-LEDGER-FIX-3 — a JsonRpcProvider whose transport is TAMED: 12s per-request timeout (ethers' default is 300s) and the
   // internal 429 throttle capped at 2 attempts (ethers' default is 12, exponential-backoff to the 300s cap — the root cause
   // of the >5-min freeze, S-LEDGER-FIX-3 STEP-0). So a single history request can never grind past ~12s or silently retry 12×.
@@ -168,7 +362,11 @@ window.DYAdmin = (function () {
     var req = new ethersRef.FetchRequest(url);
     req.timeout = 12000;
     req.setThrottleParams({ maxAttempts: 2 });
-    return new ethersRef.JsonRpcProvider(req, 137, { staticNetwork: true });
+    var prov = new ethersRef.JsonRpcProvider(req, 137, { staticNetwork: true });
+    prov.__dyUrl = url; // GATE-FIX-1: the adaptive-span memory is keyed by endpoint; stamping it here means a caller
+                        // can hand readRangeAdaptive whatever it already holds (url, provider, or contract) — no
+                        // signature threading through four different scan loops.
+    return prov;
   }
   // S-LEDGER-FIX-3 — race a scan promise against a wall-clock deadline. On expiry, reject with a __deadline error (routed to
   // the busy message). The scan's own per-chunk `Date.now() > deadlineAt` guard stops issuing further chunks, so no orphaned
@@ -241,7 +439,7 @@ window.DYAdmin = (function () {
   function historyProvider(probeAddress) {
     var c = cfg();
     var probeFrom = c.deployBlock || 0;
-    var probeTo = probeFrom + 127; // >10 → catches the Alchemy 10-block getLogs cap; at the deploy block → catches pruning
+    var probeTo = probeFrom; // GATE-FIX-1: depth-only probe (1 block). Width is discovered by the scan, not gated here.
     var cands = [];
     if (c.readRpcUrl) cands.push(c.readRpcUrl);
     HISTORY_RPCS.forEach(function (u) { if (u !== c.readRpcUrl) cands.push(u); });
@@ -257,7 +455,13 @@ window.DYAdmin = (function () {
       // chainId-detection round-trip that can flake into "could not coalesce error"). Covers the probe AND every chunk (the
       // scan rides this same provider), on both panels.
       var p = tamedProvider(url);
-      var probe = { fromBlock: probeFrom, toBlock: probeTo };
+      // GATE-FIX-1 — the probe now asks ONE question: does this endpoint still HOLD the deep history? A single
+      // block at the deploy block is the true archive test — a 1-block range cannot be "too wide", so a pruned
+      // node answers -32701 and a real archive answers with logs (measured 2026-09-23: drpc passes, publicnode
+      // prunes). The old probe asked TWO questions at once with a hardcoded 128-block span, and when drpc's free
+      // width fell to 101 that probe started reading "not an archive" for an endpoint that serves the archive
+      // perfectly — the whole GATE-FIX-1 fault. Width is no longer a gate here; the scan discovers it.
+      var probe = { fromBlock: probeFrom, toBlock: probeFrom };
       if (probeAddress) probe.address = probeAddress;
       // S-LEDGER-FIX-2: a rate-limited probe RETRIES this same endpoint (withRetry) — drpc is busy, not incapable. If it is
       // STILL rate-limited after the retries, THROW (surface the plain-words "busy" message) — do NOT demote drpc to a
@@ -266,6 +470,10 @@ window.DYAdmin = (function () {
         function () { return { provider: p, url: url, fellBack: fellBack }; },
         function (err) {
           if (isRateLimited(err)) throw err; // busy after retries → don't fail over to a pruned node; caller shows the busy message
+          // GATE-FIX-1 — a WIDTH complaint is not a verdict on DEPTH. A 1-block probe cannot be too wide, so an
+          // endpoint that still answers range-class here is describing its own caps, not its history. KEEP it;
+          // the adaptive scan finds the usable width. Only a depth failure (pruned / archive-class) fails over.
+          if (isRangeError(err)) return { provider: p, url: url, fellBack: fellBack };
           if (c.readRpcUrl && i === 1) fellBack = true; // owner URL can't serve deep history → note the fall-back to drpc
           return attempt();
         }
@@ -993,13 +1201,7 @@ window.DYAdmin = (function () {
   // detect an archive/range rejection so we tell the owner to set a Read RPC URL (vs a generic "could not read")
   function isArchiveError(e) {
     if (e && e.__archive) return true; // S-LEDGER-FIX: historyProvider exhausted every getLogs endpoint (all pruned/capped)
-    var s = "";
-    try {
-      s = JSON.stringify(e && (e.info || e.error || {})) + " " + ((e && e.message) || "") + " " + ((e && e.shortMessage) || "");
-    } catch (x) {
-      s = (e && e.message) || "";
-    }
-    s = s.toLowerCase();
+    var s = errText(e); // GATE-FIX-1: one flattener, shared with isRateLimited / isRangeError (same string, same verdict surface)
     return (
       s.indexOf("archive") >= 0 ||
       s.indexOf("personal token") >= 0 ||
@@ -1031,7 +1233,7 @@ window.DYAdmin = (function () {
     body.innerHTML = "";
     var deadlineAt = Date.now() + SCAN_DEADLINE_MS;
     // S-LEDGER-FIX: run a chunked mint scan over a READ-ONLY provider, then attach block times → resolve rows.
-    function scanOn(ethers, provider, from) {
+    function scanOn(ethers, provider, from, url) { // GATE-FIX-1: `url` keys the adaptive-span memory for this endpoint
       var access = new ethers.Contract(c.accessNFT, ACCESS_ABI, provider);
       var wave = new ethers.Contract(c.waveCardNFT, WAVE_ABI, provider);
       return provider.getBlockNumber().then(function (latest) {
@@ -1046,14 +1248,14 @@ window.DYAdmin = (function () {
         // S-LEDGER-FIX: deep history rides the shared ARCHIVE-capable provider (drpc-first, TAMED) — NOT the Alchemy readRpcUrl
         // (10-block getLogs cap) and NOT the wallet's pruned node.
         return historyProvider(c.accessNFT).then(function (h) {
-          return scanOn(ethers, h.provider, c.deployBlock || 0).then(function (rows) {
+          return scanOn(ethers, h.provider, c.deployBlock || 0, h.url).then(function (rows) {
             return { rows: rows, mode: "archive", fellBack: h.fellBack };
           });
         }).catch(function (e) {
           if (e && e.__deadline) throw e; // S-LEDGER-FIX-3: deadline → busy message, do NOT drop to the recent window
           if (!isArchiveError(e)) throw e; // a genuine (non-archive) error → surface it below
           // LAST RESORT — every history endpoint failed: recent window on the wallet node (dodges archive gating).
-          return scanOn(ethers, readProvider(), null).then(function (rows) {
+          return scanOn(ethers, readProvider(), null, "wallet").then(function (rows) {
             return { rows: rows, mode: "recent", fellBack: false };
           });
         });
@@ -1094,21 +1296,24 @@ window.DYAdmin = (function () {
   function scanChunked(ethers, access, wave, from, latest, onProgress, deadlineAt) {
     var out = [];
     var start = from;
-    var total = Math.max(1, Math.ceil((latest - from + 1) / LOG_CHUNK)), idx = 0; // S-LEDGER-FIX-3: for the progress voice
+    var total = Math.max(1, Math.ceil((latest - from + 1) / archiveSpan(url))), idx = 0; // S-LEDGER-FIX-3: for the progress voice
     function step() {
       if (start > latest) return Promise.resolve(out);
       if (deadlineAt && Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; return Promise.reject(de); } // S-LEDGER-FIX-3: stop issuing chunks past the deadline
-      var end = Math.min(start + LOG_CHUNK - 1, latest);
+      var end = Math.min(start + archiveSpan(url) - 1, latest); // GATE-FIX-1: current (possibly self-tuned) width
       idx++;
       var label = "chunk " + idx + "/" + total;
       if (onProgress) onProgress(label);
       // S-LEDGER-FIX-2: retry-with-backoff on drpc's browser-origin rate-limits (the 120ms throttle below already spaces chunks).
-      return withRetry(function () {
+      // GATE-FIX-1: readRangeAdaptive splits the range in flight if the endpoint calls it too wide; this read resolves
+      // to a PAIR of event arrays, so it passes its own combiner (the default concat would flatten the pair).
+      return readRangeAdaptive(url, function (a, b) {
         return Promise.all([
-          access.queryFilter(access.filters.Transfer(ethers.ZeroAddress, null), start, end),
-          wave.queryFilter(wave.filters.CardMinted(), start, end),
+          access.queryFilter(access.filters.Transfer(ethers.ZeroAddress, null), a, b),
+          wave.queryFilter(wave.filters.CardMinted(), a, b),
         ]);
-      }, function () { if (onProgress) onProgress(label + ", retrying"); }).then(function (res) {
+      }, start, end, function () { if (onProgress) onProgress(label + ", retrying"); },
+         function (l, r) { return [l[0].concat(r[0]), l[1].concat(r[1])]; }).then(function (res) {
         res[0].forEach(function (ev) {
           out.push({ block: ev.blockNumber, logIndex: ev.index, type: "Access", to: ev.args.to, cardId: null, hash: ev.transactionHash });
         });
@@ -1226,6 +1431,7 @@ window.DYAdmin = (function () {
     if ($("cfg-dropdesk")) $("cfg-dropdesk").value = c.dropDesk || ""; // M-F6
     $("cfg-deploy").value = c.deployBlock || 0;
     $("cfg-readrpc").value = c.readRpcUrl || "";
+    if ($("cfg-logchunk")) $("cfg-logchunk").value = c.logChunk || LOG_CHUNK_START; // GATE-FIX-1
     if ($("cfg-roburl")) $("cfg-roburl").value = c.robotUrl || ""; // S-ROBOT-COUPON-1
     if ($("cfg-robtoken")) $("cfg-robtoken").value = c.robotToken || "";
     if ($("cfg-torana-definite")) $("cfg-torana-definite").value = c.toranaDefiniteUsd; // S-TORANA-1
@@ -1306,6 +1512,13 @@ window.DYAdmin = (function () {
       if (readRpc && !/^https?:\/\//i.test(readRpc)) {
         return warn(msg, "Read RPC URL must be an http(s) URL. Nothing saved.");
       }
+      // GATE-FIX-1 — the starting getLogs width. Blank = the default start; a number must be sane (the road refuses
+      // to issue anything narrower than LOG_CHUNK_FLOOR, and nothing public serves beyond ~10k).
+      var lcRaw = $("cfg-logchunk") ? $("cfg-logchunk").value.trim() : "";
+      var lc = lcRaw === "" ? LOG_CHUNK_START : Number(lcRaw);
+      if (!(Number.isFinite(lc) && lc >= LOG_CHUNK_FLOOR && lc <= 50000)) {
+        return warn(msg, "Starting getLogs span must be a number between " + LOG_CHUNK_FLOOR + " and 50000 (blank = " + LOG_CHUNK_START + "). Nothing saved.");
+      }
       var robUrl = $("cfg-roburl") ? $("cfg-roburl").value.trim() : ""; // S-ROBOT-COUPON-1
       if (robUrl && !/^https?:\/\//i.test(robUrl)) {
         return warn(msg, "Robot base URL must be an http(s) URL. Nothing saved.");
@@ -1330,6 +1543,7 @@ window.DYAdmin = (function () {
         dropDesk: pdd, // M-F6
         deployBlock: Number($("cfg-deploy").value) || 0,
         readRpcUrl: readRpc || null,
+        logChunk: Math.floor(lc), // GATE-FIX-1
         robotUrl: robUrl || null, // S-ROBOT-COUPON-1 — robot base URL
         robotToken: robTok || null, // S-ROBOT-COUPON-1 — admin bearer, localStorage-only
         toranaDefiniteUsd: tDef, // S-TORANA-1
@@ -1347,6 +1561,7 @@ window.DYAdmin = (function () {
         warn(msg, "Saved addresses · WAVE CARDS NOT SET — the picker stays disabled. Paste the wave-card JSON and Save again.");
       }
       histLoaded = false;
+      archiveSpanReset(); // GATE-FIX-1: a new endpoint (or a new starting width) means the discovered caps are stale
       buildPicker();
       fillCfgForm();
       refreshGate();
@@ -1355,6 +1570,7 @@ window.DYAdmin = (function () {
 
   function clearCfg() {
     localStorage.removeItem(LS_KEY);
+    archiveSpanReset(); // GATE-FIX-1
     $("cfg-msg").textContent = "Cleared. Reverted to admin-config.js.";
     $("cfg-msg").style.color = "var(--flame-core)";
     histLoaded = false;
@@ -1473,18 +1689,18 @@ window.DYAdmin = (function () {
   function boughtOf(saleArchive, wallet, from, latest, onProgress) {
     if (!saleArchive) return Promise.resolve(BOUGHT_BUSY); // the archive road was unavailable this load → busy, not "—"
     var total = 0n, start = from;
-    var totalChunks = Math.max(1, Math.ceil((latest - from + 1) / LOG_CHUNK)), idx = 0;
-    var deadlineAt = Date.now() + SCAN_DEADLINE_MS; // PER-WALLET deadline (owner ruling): a slow wallet → busy, next proceeds
+    var totalChunks = Math.max(1, Math.ceil((latest - from + 1) / archiveSpan(saleArchive))), idx = 0;
+    var deadlineAt = Date.now() + scanDeadlineMs(from, latest, archiveSpan(saleArchive)); // PER-WALLET deadline (owner ruling): a slow wallet → busy, next proceeds
     function step() {
       if (start > latest) return Promise.resolve(total);
       if (Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; return Promise.reject(de); } // stop issuing chunks past the deadline
-      var end = Math.min(start + LOG_CHUNK - 1, latest);
+      var end = Math.min(start + archiveSpan(saleArchive) - 1, latest); // GATE-FIX-1: self-tuned width
       idx++;
       var label = "chunk " + idx + "/" + totalChunks;
       if (onProgress) onProgress(label);
-      return withRetry(function () {
-        return saleArchive.queryFilter(saleArchive.filters.Purchased(wallet), start, end);
-      }, function () { if (onProgress) onProgress(label + ", retrying"); }).then(function (evs) {
+      return readRangeAdaptive(saleArchive, function (a, b) {
+        return saleArchive.queryFilter(saleArchive.filters.Purchased(wallet), a, b);
+      }, start, end, function () { if (onProgress) onProgress(label + ", retrying"); }).then(function (evs) {
         evs.forEach(function (ev) { total += ev.args.dycOut; });
         start = end + 1;
         return sleep(120).then(step); // gentle on the public RPC (matches the shared road)
@@ -1630,24 +1846,50 @@ window.DYAdmin = (function () {
   }
 
   // single UNFILTERED Purchased() scan, usdE18 summed per buyer — the shared archive road primitives (no third copy).
-  function scanPurchasedByBuyer(sale, from, latest, onProgress, deadlineAt) {
-    var byBuyer = {}, start = from;
-    var totalChunks = Math.max(1, Math.ceil((latest - from + 1) / LOG_CHUNK)), idx = 0;
+  //
+  // GATE-FIX-1 — now CHECKPOINTED (grow-only), the wallet.js treasury mechanism in the dyadmin:: namespace:
+  //   • the high-water block AND the running per-buyer totals persist together, because a resumed scan that kept
+  //     only the block would silently forget every purchase before it — the totals ARE the scan's product;
+  //   • resume at scannedTo + 1; the deploy block on a first run;
+  //   • persist after EACH chunk, never above latest - HEAD_BUFFER (replica lag near the head must never be
+  //     bookmarked away), and never backwards (ckptAdvance refuses a lower mark);
+  //   • so a deadline is no longer a loss — the next FIND ELIGIBLE resumes where this one stopped.
+  // Zero-PII: the stored shape is wallets + USD strings, nothing else.
+  function scanPurchasedByBuyer(sale, from, latest, onProgress, deadlineAt, ckKey) {
+    var key = ckKey || ckptKey("purchased", sale && sale.target);
+    var ck = ckptGet(key) || {};
+    var byBuyer = {};
+    // rehydrate the running totals (JSON carries them as strings; the scan sums BigInt)
+    var stored = ck.totals || {};
+    for (var a in stored) { if (Object.prototype.hasOwnProperty.call(stored, a)) { try { byBuyer[a] = BigInt(stored[a]); } catch (e) {} } }
+    var resumeFrom = Number(ck.scannedTo) > 0 && Number(ck.scannedTo) >= from ? Number(ck.scannedTo) + 1 : from;
+    var start = resumeFrom;
+    var totalChunks = Math.max(1, Math.ceil((latest - resumeFrom + 1) / archiveSpan(sale))), idx = 0;
+    function persist(end) {
+      var persistTo = Math.min(end, latest - HEAD_BUFFER); // never bookmark the freshest window
+      if (persistTo < from) return;                        // nothing durable yet (contract younger than the buffer)
+      var flat = {};
+      for (var k in byBuyer) { if (Object.prototype.hasOwnProperty.call(byBuyer, k)) flat[k] = byBuyer[k].toString(); }
+      ckptAdvance(key, persistTo, flat);
+    }
     function stepp() {
       if (start > latest) return Promise.resolve(byBuyer);
       if (Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; return Promise.reject(de); }
-      var end = Math.min(start + LOG_CHUNK - 1, latest);
+      var end = Math.min(start + archiveSpan(sale) - 1, latest); // GATE-FIX-1: self-tuned width, known before chunk 1
       idx++;
       var label = "chunk " + idx + "/" + totalChunks;
       if (onProgress) onProgress(label);
-      return withRetry(function () { return sale.queryFilter(sale.filters.Purchased(), start, end); },
-        function () { if (onProgress) onProgress(label + ", retrying"); }).then(function (evs) {
+      return readRangeAdaptive(sale, function (x, y) { return sale.queryFilter(sale.filters.Purchased(), x, y); }, start, end,
+        function () { if (onProgress) onProgress(label + ", retrying"); }, null, deadlineAt).then(function (evs) {
         evs.forEach(function (ev) { var b = (ev.args.buyer || "").toLowerCase(); byBuyer[b] = (byBuyer[b] || 0n) + ev.args.usdE18; });
+        persist(end);
         start = end + 1;
         return sleep(120).then(stepp);
       });
     }
-    return stepp();
+    // learn the width first (≈7 fast refusals at worst), so chunk 1 is right-sized and banks on its own
+    return discoverSpan(sale, function (x, y) { return sale.queryFilter(sale.filters.Purchased(), x, y); }, resumeFrom)
+      .then(function () { return stepp(); }, function () { return stepp(); }); // discovery is an optimisation, never a gate
   }
 
   function toranaFindEligible() {
@@ -1665,8 +1907,14 @@ window.DYAdmin = (function () {
       return provider.getBlockNumber().then(function (latest) {
         return historyProvider(c.dycoinSale).then(function (h) {
           var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, h.provider);
-          var deadlineAt = Date.now() + SCAN_DEADLINE_MS;
-          return raceDeadline(scanPurchasedByBuyer(sale, c.deployBlock || 0, latest, function (lbl) { cntEl.textContent = lbl; }, deadlineAt), deadlineAt);
+          // GATE-FIX-1 — the budget is sized to the work actually left AFTER the checkpoint, not to a constant.
+          var ckKey = ckptKey("purchased", c.dycoinSale);
+          var ck = ckptGet(ckKey) || {};
+          var from = c.deployBlock || 0;
+          var resumeFrom = Number(ck.scannedTo) > 0 && Number(ck.scannedTo) >= from ? Number(ck.scannedTo) + 1 : from;
+          var deadlineAt = Date.now() + scanDeadlineMs(resumeFrom, latest, archiveSpan(sale));
+          if (resumeFrom > from) cntEl.textContent = "resuming from block " + resumeFrom + "…";
+          return raceDeadline(scanPurchasedByBuyer(sale, from, latest, function (lbl) { cntEl.textContent = lbl; }, deadlineAt, ckKey), deadlineAt);
         });
       });
     }).then(function (byBuyer) {
@@ -1684,6 +1932,13 @@ window.DYAdmin = (function () {
       });
     }).catch(function (e) {
       if (find) find.disabled = false;
+      // GATE-FIX-1 — THE TRUTH GOES TO THE CONSOLE, the plain words go to the owner. The funnel below collapses three
+      // very different faults into one sentence; before this line the underlying error was discarded, so a diagnosis
+      // cost a full measurement pass to recover what the browser already knew. The friendly message is unchanged.
+      console.error("[DY admin] TORANA find-eligible failed:", {
+        deadline: !!(e && e.__deadline), rateLimited: isRateLimited(e), archive: isArchiveError(e), range: isRangeError(e),
+        code: e && (e.code || (e.error && e.error.code)), shortMessage: e && e.shortMessage, message: e && e.message,
+      }, e);
       if ((e && e.__deadline) || isRateLimited(e) || isArchiveError(e)) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>The archive is busy or unreachable</span> — try again in a moment."; }
       else { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>Could not read purchases</span> — check the DYCoinSale address + network."; }
     });
@@ -2201,10 +2456,14 @@ window.DYAdmin = (function () {
             var hs = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, h.provider);
             return h.provider.getBlockNumber().then(function (latest) {
               var start = c.deployBlock || 0;
-              var total = Math.max(1, Math.ceil((latest - start + 1) / LOG_CHUNK));
+              var total = Math.max(1, Math.ceil((latest - start + 1) / archiveSpan(hs)));
               var filter = hs.filters.RoiCredited(wallet, null, adminAddr);
               var granted = 0n, jobs = Promise.resolve(), idx = 0;
-              for (var from = start; from <= latest; from += LOG_CHUNK) {
+              // GATE-FIX-1 — this loop precomputes its boundaries up front, so a mid-scan shrink cannot re-cut them.
+              // readRangeAdaptive still saves it: a too-wide piece is split IN FLIGHT and returns the same events,
+              // so the fixed boundaries stay correct whatever the endpoint's real width turns out to be.
+              var claimSpan = archiveSpan(hs);
+              for (var from = start; from <= latest; from += claimSpan) {
                 (function (a, b) {
                   jobs = jobs.then(function () {
                     if (Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; throw de; } // stop issuing chunks past the deadline
@@ -2212,12 +2471,12 @@ window.DYAdmin = (function () {
                     var label = "Reading chain… chunk " + idx + "/" + total;
                     progress(label);
                     // S-LEDGER-FIX-2/3: retry-with-backoff (trimmed) + 120ms inter-chunk throttle; onRetry voices "…, retrying".
-                    return withRetry(function () { return hs.queryFilter(filter, a, b); }, function () { progress(label + ", retrying"); }).then(function (evs) {
+                    return readRangeAdaptive(hs, function (x, y) { return hs.queryFilter(filter, x, y); }, a, b, function () { progress(label + ", retrying"); }).then(function (evs) {
                       evs.forEach(function (ev) { granted += ev.args.amount; });
                       return sleep(120);
                     });
                   });
-                })(from, Math.min(from + LOG_CHUNK - 1, latest));
+                })(from, Math.min(from + claimSpan - 1, latest));
               }
               return jobs.then(function () {
                 var hsRead = new ethersRef.Contract(c.holderStaking, STAKE_GRANT_ABI, readProvider()); // eth_calls on the wallet (current-state)
@@ -2674,5 +2933,32 @@ window.DYAdmin = (function () {
     // wallet init + onChange are registered at the TOP of mount (S-ADMIN-CONNECT), so the status strip is live first.
   }
 
-  return { mount: mount };
+  // GATE-FIX-1 — read/drive seam for the suite, same posture as mp/hall.js's `DYHall._state`. Exposes the archive
+  // road's pure decisions so tests drive them with fixtures and NEVER make a live call. It carries no secret: the
+  // keyed URL lives only in dyadmin::config, which this does not read out.
+  return {
+    mount: mount,
+    _road: {
+      withEthers: withEthers, // lets the suite prime `ethersRef` with a fixture provider — no live call ever
+      isRangeError: isRangeError,
+      isRateLimited: isRateLimited,
+      isArchiveError: isArchiveError,
+      archiveSpan: archiveSpan,
+      archiveSpanShrink: archiveSpanShrink,
+      archiveSpanReset: archiveSpanReset,
+      readRangeAdaptive: readRangeAdaptive,
+      discoverSpan: discoverSpan,
+      scanDeadlineMs: scanDeadlineMs,
+      ckptKey: ckptKey,
+      ckptGet: ckptGet,
+      ckptAdvance: ckptAdvance,
+      scanPurchasedByBuyer: scanPurchasedByBuyer,
+      historyProvider: historyProvider,
+      HEAD_BUFFER: HEAD_BUFFER,
+      LOG_CHUNK_START: LOG_CHUNK_START,
+      LOG_CHUNK_FLOOR: LOG_CHUNK_FLOOR,
+      SCAN_DEADLINE_FLOOR_MS: SCAN_DEADLINE_FLOOR_MS,
+      SCAN_DEADLINE_CEIL_MS: SCAN_DEADLINE_CEIL_MS,
+    },
+  };
 })();
