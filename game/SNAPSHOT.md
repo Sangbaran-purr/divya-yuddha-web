@@ -1,8 +1,8 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `8f723b226d78c7a0298ce27df06b03186076aaac` (8f723b2)
-- Source committed: 2026-09-20 13:37:15 +0530
+- Source commit: `47b05c2db1cb8a891787af414eb8234dc9f949a1` (47b05c2)
+- Source committed: 2026-09-23 19:58:25 +0530
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -31,13 +31,13 @@
 
 ## Notes at sync time
 - Source working tree dirty files: 7 (ignored by the archive method).
-- game/ in-repo size: 2240 KB.
+- game/ in-repo size: 2248 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2) are stamped game/index.html?v=8f723b2 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
+- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2) are stamped game/index.html?v=47b05c2 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
 
 ## STAMP (S-HALL-WIRE-1 R4)
-- game/STAMP holds the source short sha (8f723b2), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
+- game/STAMP holds the source short sha (47b05c2), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh

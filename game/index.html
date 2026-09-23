@@ -12050,6 +12050,77 @@ function mfPrefetchHands(){
   }
 }
 const mfReady = (id, rung)=>{ const m=MF.specs[id]; return !!(m && MF.blobs[mfAtlasUrl(m, rung || 256)]); };
+// EXPORT-8 (ruling 1b) — THE READY-ANCHORED START. A REMOTE cast can land while this client's prefetch for that
+// card is still in flight: measured in a real browser, the FIRST remote cast of a routed Hero lost that race and
+// the actor stood down with no note, while the caster — whose card sat in hand through the mulligan and many
+// renders — always won it. So a remote cast that finds no bytes no longer gives up at once: it waits for them,
+// bounded by the cast beat's own settle window, and manifests in place when they land. Past the window it is
+// exactly today: absent for a Hero, classic for an Astra.
+// THE WINDOW is the EXPORT-6 Vasuki-rise precedent: 1,443 ms Normal / 866 ms Fast — i.e. this base through the
+// same vfxT() the beats themselves are scaled by (1110 x 1.3 = 1443; 1110 x 0.78 = 866).
+// EXPORT-8 — the seat that acted THIS action, captured for the duration of runAction's choreography. The Hero
+// actor's ready-anchored wait (ruling 1b) is for REMOTE casts only; a local cast must never wait on bytes.
+// DECLARED HERE, BELOW the VFX module above, on purpose: that module's byte range is pinned by a guard elsewhere
+// in the repo, so a declaration placed ABOVE it shifts every line of the range and trips the pin for a module
+// whose bytes never changed at all. Keep new top-level declarations below it.
+let actionActorSeat = null;
+const MF_READY_WINDOW_BASE = 1110;
+const mfReadyWindowMs = ()=> MF_READY_WINDOW_BASE * vfxT();
+// Resolve TRUE as soon as `id` is decodable at `want` (or the rung below it), FALSE when the window closes. Polls
+// the same blob store the prefetch fills — no new promise plumbing, and a late decode simply loses the race with
+// the timer. Never throws; never retries a fetch of its own (the shared 2/8/30 backoff owns that).
+function mfReadyWait(id, want, ms){
+  if(mfPickRung(id, 0)!=null || mfReady(id, want)) return Promise.resolve(true);
+  return new Promise(res=>{
+    const t0=(typeof performance!=='undefined'?performance.now():Date.now()), step=48;
+    let done=false;
+    const fin=(v)=>{ if(done) return; done=true; res(v); };   // the waiter can only settle ONCE
+    const tick=()=>{
+      if(done) return;
+      if(mfReady(id, want) || mfReady(id, 256)) return fin(true);
+      const now=(typeof performance!=='undefined'?performance.now():Date.now());
+      if(now - t0 >= ms) return fin(false);
+      setTimeout(tick, step);
+    };
+    setTimeout(tick, step);
+  });
+}
+// EXPORT-8 — THE STAKED ROAD'S BLIND SPOT, and why the opponent never saw the premium effects.
+// On the FREE road both hands live in the frame's own engine, so fxPrefetchHands / mfPrefetchHands already walk the
+// OPPONENT's hand and a remote cast finds its bytes. On the STAKED road the opponent's hand is a COUNT behind the
+// wall — viewToState builds it as {uid:null, id:null, hidden:true} — so those helpers can never see a single
+// routed card of the caster's. Measured (MP-FIX-1 STEP-0): the staked receiver requested only its OWN hand's
+// atlas, the remote cast found no bytes, fxReady/mfPickRung failed, and the effect stood down to classic on the
+// one client that did not cast it. That is the fault, exactly.
+// THE SEAT'S FACTION IS PUBLIC — the view carries oppFaction — so the set of routed cards that seat can EVER cast
+// is knowable without breaching the wall (it is the printed launch pool, not the hand). We prefetch that pool.
+// Rides the SAME helpers and the same shared 2/8/30 backoff; never awaited, never blocking, and a failure leaves
+// exactly today's classic path. NOTE the rung: at match start no board card is drawn yet, so mfLayoutRung reads
+// 256 — the phone rung — which is also the cheap one. A later desktop cast that wants 512 finds 256 present and
+// takes it with mfPickRung's quiet 'rung-fell-back' note, rather than nothing at all.
+function prefetchFactionPool(faction){
+  if(!faction) return false;
+  if(FX.routes===null && !FX.boot) fxBoot();
+  if(MF.reg===null && !MF.boot) mfBoot();
+  const run=()=>{
+    try{
+      const want=mfLayoutRung();
+      const list=(typeof DECKS!=='undefined' && DECKS && DECKS[faction]) || [];
+      const seen={};
+      for(const d of list){
+        const id=d && d.id; if(!id || seen[id]) continue; seen[id]=1;
+        if(FX.routes && FX.routes[id]){
+          if(!fxReady(id)) fxPrefetch(id);
+          if(FX.routes[id].drain && !fxReady(id+':drain')) fxPrefetch(id+':drain');   // Venom Strike's flood rides with its card
+        }
+        if(MF.reg && MF.reg[id] && !mfReady(id, want)) mfPrefetch(id, want);
+      }
+      mfNote('faction-pool', { faction:faction, rung:want, cards:Object.keys(seen).length });
+    }catch(e){ mfNote('faction-pool-failed', { faction:faction, error:String(e&&e.message||e) }, true); }
+  };
+  try{ if(MF.boot && MF.boot.then) MF.boot.then(run, run); else run(); }catch(e){ return false; }
+  return true;
+}
 // the rung this play will draw at: the wanted one if its bytes are here, else the one below it (512 -> 256); null = neither → classic path
 function mfPickRung(id, px){ const want=mfWantRung(px), order=(want===512 ? [512, 256] : [256]).filter(r=>mfRungs(id).indexOf(r) >= 0); for(const r of order) if(mfReady(id, r)) return r; return null; }
 async function mfDecode(id, rung){
@@ -12086,9 +12157,24 @@ function mfSkip(){ const r=MF.runner; if(r && !r.done){ try{ r.skip(); }catch(e)
 // the Hero's play beat. Resolves true when the manifestation played; false when the caller must play TODAY's path.
 async function mfManifest(c, ev, evs, tier){
   if(reducedMotion() || !mfRouted(c.id)) return false;
-  const id=c.id, srcEl=$('field') && $('field').querySelector('.bc[data-uid="'+ev.sourceUid+'"]'), drawnPx=mfDrawnPx(srcEl), rung=mfPickRung(id, drawnPx);   // EXPORT-4: the rung from the LIVE card size
-  if(rung==null){ try{ mfPrefetch(id, mfWantRung(drawnPx)); }catch(e){}   // EXPORT-5: the play is a retry trigger too (under the backoff)
-    mfNote('not-ready-at-play', { card:id, want:mfWantRung(drawnPx) }, true); return false; }
+  const id=c.id, srcEl=$('field') && $('field').querySelector('.bc[data-uid="'+ev.sourceUid+'"]'), drawnPx=mfDrawnPx(srcEl);
+  let rung=mfPickRung(id, drawnPx);   // EXPORT-4: the rung from the LIVE card size
+  if(rung==null){
+    try{ mfPrefetch(id, mfWantRung(drawnPx)); }catch(e){}   // EXPORT-5: the play is a retry trigger too (under the backoff)
+    // EXPORT-8 (ruling 1b): a REMOTE cast waits for its bytes inside the cast beat's settle window and manifests
+    // when they land. A LOCAL cast is byte-identical to today — it never waits, because its bytes have had the
+    // whole hand's life to arrive and a wait would only delay the player's own act.
+    // `typeof` on purpose: src/test_manifest.js evaluates mfManifest STANDALONE in its own sandbox, so this
+    // function may not see the page's bindings. An unbound seat reads as LOCAL — today's behaviour — which is the
+    // safe default: a harness (and any caller outside a wire match) must never inherit the remote wait.
+    const remoteCast = (typeof actionActorSeat!=='undefined' && actionActorSeat!=null && typeof ME!=='undefined' && actionActorSeat!==ME);
+    if(remoteCast){
+      const waited=await mfReadyWait(id, mfWantRung(drawnPx), mfReadyWindowMs());
+      rung = waited ? mfPickRung(id, drawnPx) : null;
+      if(rung==null){ mfNote('not-ready-in-window', { card:id, want:mfWantRung(drawnPx), windowMs:Math.round(mfReadyWindowMs()) }, true); return false; }
+      mfNote('ready-anchored', { card:id, rung:rung });   // the race, won
+    } else { mfNote('not-ready-at-play', { card:id, want:mfWantRung(drawnPx) }, true); return false; }
+  }
   if(rung!==mfWantRung(drawnPx)) mfNote('rung-fell-back', { card:id, want:mfWantRung(drawnPx), used:rung });   // 512 wanted, 256 drawn — quiet (not loud): the play still manifests
   let ctx=null, plan=null;
   try{
@@ -12153,6 +12239,7 @@ function runAction(mutate, opts={}){
   roundCountAtActionStart = G.roundHistory.length;
   const evStart = G.events.length;
   try{ MF.before = (MF.reg && !reducedMotion()) ? mfSnap(G) : null; }catch(e){ MF.before=null; }   // EXPORT-2: the board BEFORE this action, for a Hero manifestation's board difference (a pure read)
+  actionActorSeat = (opts && opts.actor!=null) ? opts.actor : null;   // EXPORT-8: remote vs local, for the ready-anchored wait
   venomStrikeNpAtAction = vsStriker();   // EXPORT-6 (ruling C): the striker by ABSOLUTE seat — the engine flag, or the cast's own play event on the staked road   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
   mutate();
   const evs = G.events.slice(evStart);
@@ -12569,11 +12656,20 @@ function startWireMatch(st){
     //   view (viewToState), replaced on every wire:view. A resync / re-seat arrives here too (events: [] — render state).
     if (st.view.seat !== ME) { wireRefuse('a view for another seat', st.view.seat); Wire = null; return; }
     G = viewToState(st.view, null);
+    // EXPORT-8 — the FIRST moment this client knows the opponent's faction (the view carries it). Fire-and-forget:
+    // the match is already starting below and nothing here is awaited. A resync arrives through this same path and
+    // calling again is free (every helper skips what is ready or already in flight).
+    try{ prefetchFactionPool(G.players[OPP].faction); }catch(e){}
   } else {
   // THE MIRROR — match.js:19-23, nothing added. Names are the frame's OWN labels (no address ever enters the frame);
   // they are log text only and touch no state and no rng.
   G = newGame({ p0: ME===0 ? 'You' : 'Opponent', p1: ME===1 ? 'You' : 'Opponent',
                 p0Faction: st.p0Faction, p1Faction: st.p1Faction, rng: wireSeeded(st.seed) });
+  // EXPORT-8 (ruling 1a) — THE EARLIEST MOMENT, on this road, is HERE: newGame has just dealt, so both hands'
+  // routed cards are knowable NOW. Waiting for the first render (the old sole trigger) cost the receiver the race
+  // against a fast first remote cast — measured. The hand-entry call inside render() stays as the INCREMENTAL
+  // path for cards drawn later; this is the head start it never had.
+  try{ fxPrefetchHands(); mfPrefetchHands(); }catch(e){}
   }
   seenLog = 0;
   blogStart(Wire.road, Wire.matchId, G);   // GL-2 — free: a fresh log (a resync replays every move from seq 1); staked: restored by matchId, the gap marked (R4)
