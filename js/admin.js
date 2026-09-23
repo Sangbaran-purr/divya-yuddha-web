@@ -85,7 +85,65 @@ window.DYAdmin = (function () {
     var k = spanKeyOf(x);
     if (archiveSpans[k] && archiveSpans[k] < okSpan && okSpan <= chunkStart()) archiveSpans[k] = okSpan;
   }
-  function archiveSpanReset() { archiveSpans = {}; } // Configuration save re-opens the question
+  function archiveSpanReset() { archiveSpans = {}; archiveIncapable = {}; } // Configuration save re-opens the question
+
+  // GATE-FIX-1b — endpoints that cannot serve a USABLE width, remembered for the session so they are probed once
+  // and then skipped. Field truth 2026-09-23: an Alchemy FREE url in READ RPC URL passes the depth probe (one
+  // block is one block) and then refuses every width down to the floor, because the free tier caps eth_getLogs at
+  // a TEN block range. GATE-FIX-1's old 128-block probe used to reject it by accident; when the probe became
+  // depth-only that accidental protection was lost and the scan sat on "chunk 1/42239, retrying" forever.
+  // Serving depth is not the same as being usable. An endpoint that cannot answer the floor is not an archive
+  // road, it is a wall — so we name it, remember it, and take the next candidate.
+  var archiveIncapable = {}; // url -> { capBlocks: number|null, detail: string }
+  function isWidthIncapable(x) { return !!archiveIncapable[spanKeyOf(x)]; }
+  function markWidthIncapable(x, capBlocks, detail) {
+    archiveIncapable[spanKeyOf(x)] = { capBlocks: capBlocks, detail: detail || "" };
+  }
+  // Pull the cap the endpoint ITSELF states, so the panel can tell the owner a number instead of a shrug. Reads
+  // the two wordings measured in the field; returns null when an endpoint refuses without saying how much it
+  // allows (then the panel says "only very small reads" rather than inventing a figure).
+  //   Alchemy free : "…eth_getLogs requests with up to a 10 block range…"        -> 10
+  //   1rpc         : "eth_getLogs is limited to 0 - 50 blocks range"             -> 50
+  // drpc's "ranges over 10000 blocks" is deliberately NOT read: that number is stale and false (its real cap is
+  // 101, measured), and drpc is width-CAPABLE anyway, so this never runs for it.
+  // KEY-SAFETY — the owner's READ RPC URL carries his paid credential in its path or query. It must never be
+  // rendered, and that includes the console: devtools screenshots are the most-shared artefact in any debugging
+  // session. Scheme + host only; everything that could be the key becomes "/…".
+  function redactUrl(u) {
+    try { var x = new URL(String(u)); return x.protocol + "//" + x.host + (x.pathname !== "/" || x.search ? "/…" : ""); }
+    catch (e) { return "(configured endpoint)"; }
+  }
+  // The plain-words note the panel shows when the owner's own endpoint had to be skipped. No URL, no jargon, and
+  // a NUMBER when the endpoint stated one — "only 10-block reads" tells the owner exactly what to fix.
+  function ownerSkippedNote(url) {
+    var rec = archiveIncapable[spanKeyOf(url)] || {};
+    return { host: redactUrl(url), capBlocks: rec.capBlocks || null };
+  }
+  // GATE-FIX-1b — the sentence the owner reads when his own endpoint had to be skipped. It names the LIMIT and the
+  // consequence, never the busy message (nothing is busy — his endpoint answered, it just answers too little) and
+  // never the URL. `chunks` is the real cost on the road actually taken, so "slow" carries a number behind it.
+  function ownerSkippedHtml(note, chunks) {
+    var limit = note && note.capBlocks
+      ? "allows only " + note.capBlocks + "-block reads"
+      : "allows only very small reads";
+    return "<span class='bad'>Your READ RPC endpoint " + limit + "</span> — using the public archive instead" +
+      (chunks ? " (slow, ~" + chunks.toLocaleString() + " chunks)" : " (slower)") +
+      ". A paid tier on your provider lifts this.";
+  }
+  function logWidthIncapable(url, cap, err) {
+    console.error("[DY admin] READ RPC endpoint refuses usable getLogs widths — skipped for this session:", {
+      endpoint: redactUrl(url), capBlocks: cap, floor: LOG_CHUNK_FLOOR,
+      shortMessage: err && err.shortMessage, message: err && err.message,
+    });
+  }
+  function rangeCapHint(e) {
+    var s = errText(e);
+    if (s.indexOf("ranges over") >= 0) return null; // the known-lying wording — never quote it at the owner
+    var m = s.match(/limited to\s*\d+\s*-\s*(\d+)\s*blocks?/) || s.match(/up to (?:a\s*)?(\d+)\s*blocks?\s*range/) || s.match(/(\d+)\s*blocks?\s*range/);
+    if (!m) return null;
+    var n = Number(m[1]);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
   var WAIT_CONFIRMS = 1;
   var WAIT_TIMEOUT_MS = 75000; // bound tx.wait — a never-mined/dropped tx must NEVER sit PENDING (S5a-FIX-2)
   var FEE_HEADROOM = 2n; // 2x headroom over the live base+priority fee signal (S5a-FIX-2); wallet override stays possible
@@ -443,14 +501,21 @@ window.DYAdmin = (function () {
     var cands = [];
     if (c.readRpcUrl) cands.push(c.readRpcUrl);
     HISTORY_RPCS.forEach(function (u) { if (u !== c.readRpcUrl) cands.push(u); });
-    var i = 0, fellBack = false;
+    var i = 0, fellBack = false, fellBackReason = null, ownerSkipped = null;
     function attempt() {
       if (i >= cands.length) {
         var e = new Error("archive: no getLogs endpoint served the deploy-block range probe");
         e.__archive = true; // marks the exhaustion so callers/ isArchiveError surface the plain-words message
+        e.__ownerSkipped = ownerSkipped; // the panel still explains WHY the owner's endpoint was not used
         return Promise.reject(e);
       }
       var url = cands[i++];
+      // GATE-FIX-1b — an endpoint already judged width-incapable this session is skipped WITHOUT a probe. This is
+      // what stops the spin: without the memory, every panel (and every chunk) would re-discover the same wall.
+      if (isWidthIncapable(url)) {
+        if (c.readRpcUrl && url === c.readRpcUrl) { fellBack = true; fellBackReason = "width"; ownerSkipped = ownerSkippedNote(url); }
+        return attempt();
+      }
       // S-LEDGER-FIX-3: TAMED transport (12s timeout, throttle maxAttempts 2) + static network (Polygon 137, skips ethers'
       // chainId-detection round-trip that can flake into "could not coalesce error"). Covers the probe AND every chunk (the
       // scan rides this same provider), on both panels.
@@ -466,15 +531,44 @@ window.DYAdmin = (function () {
       // S-LEDGER-FIX-2: a rate-limited probe RETRIES this same endpoint (withRetry) — drpc is busy, not incapable. If it is
       // STILL rate-limited after the retries, THROW (surface the plain-words "busy" message) — do NOT demote drpc to a
       // pruned node. Only a NON-rate-limit (archive/range/pruned) probe error means "can't serve deep history" → fail over.
+      function accepted() { return { provider: p, url: url, fellBack: fellBack, fellBackReason: fellBackReason, ownerSkipped: ownerSkipped }; }
+      // GATE-FIX-1b — WIDTH is proven here too, right after depth, because a candidate is only usable if it can
+      // answer BOTH questions. Discovery is one short descent and its answer is remembered per endpoint, so the
+      // scan that follows pays nothing and every other panel inherits it. An endpoint that refuses even the floor
+      // is marked incapable and we move on — the scan is never handed a wall to walk into.
+      function proveWidth() {
+        return discoverSpan(url, function (a, b) {
+          var q = { fromBlock: a, toBlock: b };
+          if (probeAddress) q.address = probeAddress;
+          return p.getLogs(q);
+        }, probeFrom).then(
+          function (w) {
+            if (w >= LOG_CHUNK_FLOOR) return accepted();
+            return refuseWidth(new Error("discovered width " + w + " is under the floor"));
+          },
+          function (werr) {
+            if (isRateLimited(werr)) throw werr; // busy, not incapable — same rule as the depth probe
+            if (!isRangeError(werr)) return accepted(); // not a width verdict; let the scan's own funnel judge it
+            return refuseWidth(werr);
+          }
+        );
+      }
+      function refuseWidth(werr) {
+        var cap = rangeCapHint(werr);
+        markWidthIncapable(url, cap, (werr && (werr.shortMessage || werr.message)) || "");
+        logWidthIncapable(url, cap, werr);
+        if (c.readRpcUrl && url === c.readRpcUrl) { fellBack = true; fellBackReason = "width"; ownerSkipped = ownerSkippedNote(url); }
+        return attempt();
+      }
       return withRetry(function () { return p.getLogs(probe); }).then(
-        function () { return { provider: p, url: url, fellBack: fellBack }; },
+        proveWidth,
         function (err) {
           if (isRateLimited(err)) throw err; // busy after retries → don't fail over to a pruned node; caller shows the busy message
           // GATE-FIX-1 — a WIDTH complaint is not a verdict on DEPTH. A 1-block probe cannot be too wide, so an
-          // endpoint that still answers range-class here is describing its own caps, not its history. KEEP it;
-          // the adaptive scan finds the usable width. Only a depth failure (pruned / archive-class) fails over.
-          if (isRangeError(err)) return { provider: p, url: url, fellBack: fellBack };
-          if (c.readRpcUrl && i === 1) fellBack = true; // owner URL can't serve deep history → note the fall-back to drpc
+          // endpoint that still answers range-class here is describing its own caps, not its history. Keep it as a
+          // DEPTH pass and let proveWidth decide whether it is usable (GATE-FIX-1b).
+          if (isRangeError(err)) return proveWidth();
+          if (c.readRpcUrl && url === c.readRpcUrl) { fellBack = true; fellBackReason = "depth"; } // owner URL can't serve deep history
           return attempt();
         }
       );
@@ -1249,7 +1343,7 @@ window.DYAdmin = (function () {
         // (10-block getLogs cap) and NOT the wallet's pruned node.
         return historyProvider(c.accessNFT).then(function (h) {
           return scanOn(ethers, h.provider, c.deployBlock || 0, h.url).then(function (rows) {
-            return { rows: rows, mode: "archive", fellBack: h.fellBack };
+            return { rows: rows, mode: "archive", fellBack: h.fellBack, fellBackReason: h.fellBackReason };
           });
         }).catch(function (e) {
           if (e && e.__deadline) throw e; // S-LEDGER-FIX-3: deadline → busy message, do NOT drop to the recent window
@@ -1271,7 +1365,13 @@ window.DYAdmin = (function () {
         if (res.mode === "archive") {
           finishHtml(
             (rows.length ? rows.length + " mint event(s) (full history)." : "No mints yet.") +
-            (res.fellBack ? " <span style='color:var(--ember)'>Configured Read RPC URL couldn't serve deep history — used drpc.</span>" : "")
+            (res.fellBack
+              ? (res.fellBackReason === "width"
+                  // GATE-FIX-1b: it DID serve deep history — one block at a time. Saying "couldn't serve deep
+                  // history" would send the owner hunting the wrong fault.
+                  ? " <span style='color:var(--ember)'>Configured Read RPC URL allows only tiny getLogs ranges — used drpc.</span>"
+                  : " <span style='color:var(--ember)'>Configured Read RPC URL couldn't serve deep history — used drpc.</span>")
+              : "")
           );
         } else {
           finishHtml(
@@ -1907,6 +2007,17 @@ window.DYAdmin = (function () {
       return provider.getBlockNumber().then(function (latest) {
         return historyProvider(c.dycoinSale).then(function (h) {
           var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, h.provider);
+          // GATE-FIX-1b — if the owner's endpoint was skipped for width, say so INLINE and keep going on the
+          // fallback. This is not an error state: the scan is running, just on the slower public road, and the
+          // chunk counter below goes on counting exactly as it would have.
+          if (h.ownerSkipped) {
+            var plannedFrom = c.deployBlock || 0;
+            var ckPre = ckptGet(ckptKey("purchased", c.dycoinSale)) || {};
+            var startAt = Number(ckPre.scannedTo) > 0 && Number(ckPre.scannedTo) >= plannedFrom ? Number(ckPre.scannedTo) + 1 : plannedFrom;
+            var planned = Math.max(1, Math.ceil((latest - startAt + 1) / archiveSpan(h.url)));
+            st.style.color = "var(--gold-aged)";
+            st.innerHTML = ownerSkippedHtml(h.ownerSkipped, planned);
+          }
           // GATE-FIX-1 — the budget is sized to the work actually left AFTER the checkpoint, not to a constant.
           var ckKey = ckptKey("purchased", c.dycoinSale);
           var ck = ckptGet(ckKey) || {};
@@ -2948,6 +3059,10 @@ window.DYAdmin = (function () {
       archiveSpanReset: archiveSpanReset,
       readRangeAdaptive: readRangeAdaptive,
       discoverSpan: discoverSpan,
+      isWidthIncapable: isWidthIncapable,
+      rangeCapHint: rangeCapHint,
+      redactUrl: redactUrl,
+      ownerSkippedHtml: ownerSkippedHtml,
       scanDeadlineMs: scanDeadlineMs,
       ckptKey: ckptKey,
       ckptGet: ckptGet,

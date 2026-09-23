@@ -23,7 +23,12 @@ const ok = (n, c, d) => { c ? (pass++, console.log("  ✓ " + n)) : (fail++, con
 const DRPC_WIDTH_ERR = { code: 35, message: "ranges over 10000 blocks are not supported on free plan" };
 const PRUNED_ERR = { code: -32701, message: "History has been pruned for this block. To remove restrictions, order a dedicated full node here: https://www.allnodes.com/pol/host" };
 const ONERPC_WIDTH_ERR = { code: -32602, message: "eth_getLogs is limited to 0 - 50 blocks range" };
-const DRPC_SPAN_CAP = 101; // measured: 101 accepted, 102 refused — stable at the deploy block AND at the head
+// GATE-FIX-1b — the wording the owner's console actually printed on 2026-09-23 with an Alchemy FREE url in
+// READ RPC URL. Verbatim: it is the fixture that keeps this fault from returning.
+const ALCHEMY_FREE_ERR = { code: -32600, message: "Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range. Upgrade to PAYG to make eth_getLogs requests with a larger block range." };
+const ALCHEMY_CAP = 10;
+const DRPC_SPAN_CAP = 101;
+const ONERPC_CAP_50 = 50; // measured: 101 accepted, 102 refused — stable at the deploy block AND at the head
 const DEPLOY = 92050143, HEAD = 94291762;
 
 // an ethers-v6-shaped rejection: the JSON-RPC error rides `info.error`, which is what errText() flattens
@@ -126,9 +131,15 @@ async function main() {
     cfgWrite(B.w, { deployBlock: DEPLOY });
     await road.withEthers();
     const h = await road.historyProvider("0xsale");
-    ok("B1 · the probe asks DEPTH only — a single block, never the old hardcoded 128",
-       drpc.seen.length === 1 && drpc.seen[0].span === 1 && drpc.seen[0].from === DEPLOY,
+    // The FIRST question is depth, and it is one block. GATE-FIX-1b adds a width proof AFTER it (so a wall is
+    // never handed to the scan), so selection is no longer a single read — but no read is ever the old 128.
+    ok("B1 · the FIRST question is DEPTH — a single block at the deploy block, never the old hardcoded 128",
+       drpc.seen[0] && drpc.seen[0].span === 1 && drpc.seen[0].from === DEPLOY,
        JSON.stringify(drpc.seen[0]));
+    ok("B1b · and the 128-block probe is gone for good — no read of that width is ever issued",
+       drpc.seen.every((x) => x.span !== 128), JSON.stringify(drpc.seen.map((x) => x.span)));
+    ok("B1c · the reads after it are the width proof, so the scan is only ever handed a usable road (GATE-FIX-1b)",
+       drpc.seen.length > 1 && drpc.seen.slice(1).every((x) => x.span > 1));
     ok("B2 · THE FAULT: an endpoint that serves depth but refuses width-128 is ACCEPTED (today's drpc)",
        h && h.url === "https://polygon.drpc.org");
     ok("B3 · it never even asked the pruned node — the first candidate answered", pub.seen.length === 0);
@@ -436,6 +447,93 @@ async function main() {
        stale.length === 0, "stale: " + stale.map((x) => x.src + "?v=" + x.v).join(", "));
     ok("I2 · and js/admin.js is stamped at all (an unstamped script can never be busted out of a browser cache)",
        stamped.some((x) => x.src === "js/admin.js"));
+  }
+
+  // ═══ J. GATE-FIX-1b — A WALL IS NOT A ROAD ═══
+  // Field truth 2026-09-23: an Alchemy FREE url in READ RPC URL passed the depth probe (one block is one block),
+  // then refused every width down to the floor, and the scan sat on "chunk 1/42239, retrying" forever. Serving
+  // depth is not the same as being usable. GATE-FIX-1's predecessor rejected Alchemy by ACCIDENT with its
+  // 128-block probe; making the probe honest lost that protection. This section is the protection made deliberate.
+  {
+    const road = boot().road;
+    const alch = rpcErr(ALCHEMY_FREE_ERR);
+    ok("J1 · Alchemy free's exact wording is understood as a WIDTH refusal", road.isRangeError(alch) === true);
+    ok("J2 · and the cap it states is read back, so the owner is told a NUMBER", road.rangeCapHint(alch) === ALCHEMY_CAP);
+    ok("J3 · drpc's stale '10000' is never quoted as a cap — its real cap is 101 and the sentence would be a lie",
+       road.rangeCapHint(rpcErr(DRPC_WIDTH_ERR)) === null);
+    ok("J4 · 1rpc's wording still reads its cap too", road.rangeCapHint(rpcErr(ONERPC_WIDTH_ERR)) === ONERPC_CAP_50);
+  }
+  {
+    // the whole fault, end to end: owner endpoint capped at 10, public archive behind it
+    const B = boot(), road = B.road;
+    const owner = fakeEndpoint({ cap: ALCHEMY_CAP, widthErr: ALCHEMY_FREE_ERR });
+    const drpc = fakeEndpoint({ cap: DRPC_SPAN_CAP });
+    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({
+      "https://owner.example/v2/KEY": owner, "https://polygon.drpc.org": drpc,
+      "https://polygon-bor-rpc.publicnode.com": fakeEndpoint({ pruned: true }),
+    }));
+    cfgWrite(B.w, { deployBlock: DEPLOY, readRpcUrl: "https://owner.example/v2/KEY" });
+    await road.withEthers();
+    const h = await road.historyProvider("0xsale");
+    ok("J5 · THE FAULT: an endpoint that refuses even the FLOOR width is abandoned — we fail over instead of spinning",
+       h.url === "https://polygon.drpc.org", "chose " + h.url);
+    ok("J6 · MUTANT (no fail-over → spin): the owner endpoint was probed a BOUNDED number of times and then dropped",
+       owner.seen.length > 0 && owner.seen.length <= 14, "reads against the wall=" + owner.seen.length);
+    ok("J7 · it is REMEMBERED as width-incapable for the session", road.isWidthIncapable("https://owner.example/v2/KEY") === true);
+    ok("J8 · the fall-back is reported as a WIDTH verdict, not a depth one (Mint History must not send the owner hunting the wrong fault)",
+       h.fellBack === true && h.fellBackReason === "width");
+    ok("J9 · the skip note carries the cap the endpoint itself stated", h.ownerSkipped && h.ownerSkipped.capBlocks === ALCHEMY_CAP);
+    ok("J10 · KEY-SAFETY · the note carries no key — host only, path and query redacted",
+       h.ownerSkipped && h.ownerSkipped.host.indexOf("KEY") < 0 && h.ownerSkipped.host.indexOf("owner.example") >= 0,
+       String(h.ownerSkipped && h.ownerSkipped.host));
+
+    // MUTANT (forgets and re-probes per chunk): a second selection must not touch the wall again
+    const before = owner.seen.length;
+    const h2 = await road.historyProvider("0xsale");
+    ok("J11 · MUTANT (forgets → re-probes every time): a second selection skips it WITHOUT a single further read",
+       owner.seen.length === before && h2.url === "https://polygon.drpc.org", "extra reads=" + (owner.seen.length - before));
+    ok("J12 · and the second selection still explains itself — the note is not a one-shot",
+       h2.ownerSkipped && h2.ownerSkipped.capBlocks === ALCHEMY_CAP && h2.fellBackReason === "width");
+
+    // the fallback road is a REAL road: it scans and it checkpoints
+    const sale = { target: "0xFALLBACK", runner: { __dyUrl: h.url }, filters: { Purchased: () => ({}) },
+                   queryFilter: (f, a, b) => drpc.getLogs({ fromBlock: a, toBlock: b }).then(() => []) };
+    const key = road.ckptKey("purchased", "0xFALLBACK");
+    const labels = [];
+    await road.scanPurchasedByBuyer(sale, 1000, 1000 + 4000, (l) => labels.push(l), Date.now() + 30000, key);
+    const ck = road.ckptGet(key);
+    ok("J13 · the fall-back scan is a real scan: it checkpoints", !!ck && ck.scannedTo > 1000, JSON.stringify(ck));
+    ok("J14 · and the chunk counter goes on counting normally on the fallback road", labels.some((l) => /^chunk \d+\/\d+/.test(l)), labels[0]);
+  }
+  {
+    // MUTANT (message hidden): the panel sentence must NAME the limit and must NEVER be the busy message
+    const road = boot().road;
+    const html = road.ownerSkippedHtml({ host: "https://owner.example/…", capBlocks: ALCHEMY_CAP }, 42239);
+    const plain = html.replace(/<[^>]+>/g, "");
+    ok("J15 · MUTANT (message hidden): the panel says the limit in plain words, with the number",
+       plain.indexOf("only " + ALCHEMY_CAP + "-block reads") >= 0, plain);
+    ok("J16 · it names the consequence and its cost on the road actually taken", plain.indexOf("public archive") >= 0 && plain.indexOf("42,239 chunks") >= 0);
+    ok("J17 · and it is NEVER the busy message — nothing is busy; the endpoint answered, it just answers too little",
+       plain.indexOf("busy") < 0 && plain.indexOf("unreachable") < 0, plain);
+    ok("J18 · KEY-SAFETY · no URL in the sentence at all", plain.indexOf("http") < 0, plain);
+    const noCap = road.ownerSkippedHtml({ host: "x", capBlocks: null }, 0).replace(/<[^>]+>/g, "");
+    ok("J19 · an endpoint that refuses without stating a number gets an honest shrug, never an invented figure",
+       noCap.indexOf("very small reads") >= 0 && !/\d/.test(noCap.replace(/[^0-9]/g, "")), noCap);
+  }
+  {
+    // every candidate a wall → the archive class IS the truth, and the busy message is then correct
+    const B = boot(), road = B.road;
+    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({
+      "https://owner.example/v2/KEY": fakeEndpoint({ cap: ALCHEMY_CAP, widthErr: ALCHEMY_FREE_ERR }),
+      "https://polygon.drpc.org": fakeEndpoint({ cap: 1, widthErr: ALCHEMY_FREE_ERR }),
+      "https://polygon-bor-rpc.publicnode.com": fakeEndpoint({ cap: 1, widthErr: ALCHEMY_FREE_ERR }),
+    }));
+    cfgWrite(B.w, { deployBlock: DEPLOY, readRpcUrl: "https://owner.example/v2/KEY" });
+    await road.withEthers();
+    const e = await road.historyProvider("0xsale").then(() => null, (x) => x);
+    ok("J20 · when EVERY road is a wall the archive class is the honest answer — the busy message is then correct",
+       !!e && e.__archive === true && road.isArchiveError(e) === true);
+    ok("J21 · and even then the owner is told why HIS endpoint was skipped", e.__ownerSkipped && e.__ownerSkipped.capBlocks === ALCHEMY_CAP);
   }
 
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));

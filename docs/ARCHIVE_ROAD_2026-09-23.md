@@ -153,7 +153,54 @@ the build the moment a second reader appears.
   75s and ceiled at 600s so a tab is never hostage.
 
 =====================================================
-## 4. WHAT IS NOT FIXED HERE
+## 4. KNOWN getLogs CAPS — AND WHY DEPTH IS NOT ENOUGH (GATE-FIX-1b)
+=====================================================
+| endpoint | eth_getLogs cap | verified |
+|---|---|---|
+| **Alchemy FREE** | **10 blocks** | owner's console, 2026-09-23 (`-32600`, "Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range… Upgrade to PAYG") |
+| Alchemy PAYG / paid | lifted (thousands) | per that same message; this is the tier to buy |
+| **drpc free** | **101 blocks** | measured 2026-09-23 (§1); its error text still SAYS 10000 |
+| 1rpc | 50 blocks | "eth_getLogs is limited to 0 - 50 blocks range" |
+| publicnode | n/a — PRUNED at depth | `-32701` |
+
+**An endpoint can pass the depth probe and still be useless.** Alchemy
+free answers a 1-block getLogs at the deploy block perfectly — one
+block is one block — and then refuses every width down to our floor of
+50. GATE-FIX-1's predecessor rejected it by ACCIDENT, because its probe
+was 128 blocks wide; when GATE-FIX-1 made the probe honestly
+depth-only, that accidental protection was lost and the owner's console
+sat on "chunk 1/42239, retrying" with no way out.
+
+So width is now proven during candidate SELECTION, not discovered later
+by the scan:
+
+  - depth probe (1 block) — unchanged, the GATE-FIX-1 ruling stands;
+  - then a width descent on that same candidate. If it refuses even
+    LOG_CHUNK_FLOOR (50), the endpoint is WIDTH-INCAPABLE: named in the
+    console, remembered for the session (never probed again), and
+    FAILED OVER to the next candidate;
+  - if every candidate is a wall, that is the archive class and the
+    busy message is then the honest answer.
+
+The owner is told in plain words, inline, with the number the endpoint
+itself stated: *"Your READ RPC endpoint allows only 10-block reads —
+using the public archive instead (slow, ~42,239 chunks). A paid tier on
+your provider lifts this."* It is never the busy message: nothing is
+busy. The endpoint answered; it just answers too little.
+
+Two wordings are deliberately NOT trusted as caps: drpc's "ranges over
+10000 blocks" (stale and false — the real cap is 101), and any refusal
+that states no number at all, which earns an honest "only very small
+reads" rather than an invented figure.
+
+**KEY-SAFETY in the telling.** The skipped endpoint's URL carries the
+owner's credential in its path or query, so it is redacted to scheme +
+host in the console line and does not appear in the panel sentence at
+all. Devtools screenshots are the most-shared artefact in any debugging
+session; a truth line that leaks the key would be a poor trade.
+
+=====================================================
+## 5. WHAT IS NOT FIXED HERE
 =====================================================
 - **The public site's first-visit break — queued as GATE-FIX-2.** A
   returning visitor is fine: `wallet.js` checkpoints, so it scans only
@@ -172,7 +219,7 @@ the build the moment a second reader appears.
   panel has taught the session the endpoint's real width.
 
 =====================================================
-## 5. THE FIX MEASURED AGAINST LIVE drpc FREE (2026-09-23)
+## 6. THE FIX MEASURED AGAINST LIVE drpc FREE (2026-09-23)
 =====================================================
 A dry FIND ELIGIBLE, read-only, driving the real road against the real
 endpoint (not a fixture), 60-second budget:
