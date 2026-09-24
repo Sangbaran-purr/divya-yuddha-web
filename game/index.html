@@ -173,15 +173,15 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 .half.opp{ background:radial-gradient(130% 92% at 50% -12%, rgba(138,30,24,.36), transparent 62%); }
 .half.me{  background:radial-gradient(130% 92% at 50% 112%, rgba(58,74,102,.30), transparent 62%); }
 /* thin sticky zone header */
-/* T42b DEFECT-1: left padding clears the deck stacks (left:5 + 42w = 47 → 54 = stack + gap) so card rows + zhead text
-   never render under the stack, both zones (deck-o top / deck-p bottom sit at the field extremes; a short desktop zone
-   otherwise lets the divider-hugging row reach the stack). The .row overflow-x:auto clips at this inset, so even a
-   horizontally-scrolled card never appears under the stack. Right stays 70 (clears the score column). Desktop bumps to 64. */
-.zhead{ flex:0 0 auto; position:sticky; top:0; z-index:4; padding:3px 70px 3px 54px;
+/* T42b DEFECT-1: left padding clears the deck stacks (left:5 + 42w = 47) so card rows + zhead text never render under the stack, both
+   zones (deck-o top / deck-p bottom sit at the field extremes; a short desktop zone otherwise lets the divider-hugging row reach it). The
+   .row overflow-x:auto clips at this inset. Right clears the score column (#hud: right:5 + 58w = the rightmost 63px). Desktop bumps to 74.
+   MP-FIX-3BC (C, 2026-09-24): the rails were 54/70, now 50/66 — the MEASURED equivalent of the ruled "~44/58", which cannot ship: 44 puts cards UNDER the deck stack (it ends at 47) and 58 under the score pills (they begin at 63). 50/66 keeps a 3px rail gap; the .row's own 6px padding puts the card edge 9px clear of both, and the 8px it buys is what lets three 100-tall cards still stand unscrolled on a 360 phone. */
+.zhead{ flex:0 0 auto; position:sticky; top:0; z-index:4; padding:3px 66px 3px 50px;
   font-family:Cinzel,serif; font-size:9px; letter-spacing:2px; color:var(--ink-dim);
   background:linear-gradient(#160f07, rgba(20,14,7,.35)); border-bottom:1px solid #241c0e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 /* rows scroll WITHIN their half — never grow over another zone */
-.zbody{ flex:1 1 auto; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:2px; padding:2px 70px 2px 54px; scrollbar-width:none; }
+.zbody{ flex:1 1 auto; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:2px; padding:2px 66px 2px 50px; scrollbar-width:none; }
 .zbody::-webkit-scrollbar{ display:none; }
 .half.opp .zbody{ justify-content:flex-end; }   /* opponent cards hug the divider */
 .half.me  .zbody{ justify-content:flex-start; }  /* my cards hug the divider */
@@ -6754,9 +6754,9 @@ function pulsePlaque(el){ if(reducedMotion())return; el.classList.remove('pulse'
 /* Scale board minis so both rows of a half always fit fully — never clipped.
    Each half gets a --mini-h; only below the 56px floor do we fall back to
    within-zone scrolling (with a fade affordance via .scrollzone). */
-const MINI_MIN=56, MINI_MAX=96, MINI_MAX_DESK=150, ROW_PAD=6, EMPTY_ROW=28;   // T71: desktop lifts the mini cap so the height-fitting logic scales cards up to command the wider board
+const MINI_MIN=56, MINI_MAX=100, MINI_MAX_DESK=150, ROW_PAD=6, EMPTY_ROW=28, MINI_FIT_N=3, ROW_PAD_X=6, ROW_GAP_X=6;   // T71: desktop lifts the mini cap so the height-fitting logic scales cards up to command the wider board. EXPORT-9 (C, 2026-09-24): the PHONE cap 96 → 100 — not a round number but the LAST value under the actor rung's flip (an actor draws at card h x 2.1 x min(DPR,2); above MF_RUNG_PX=420 it wants the 512 atlas, and 100 x 2.1 x 2 = 420 is not ABOVE it, so phones keep the 256 rung the owner ruled — 101 would flip them and, with no 512 phone pool, make the Hero BLURRIER for bigger cards). mfPhoneCapUnderFlip() holds that relationship; test_manifest U11/U12 pin it with a mutant. MINI_FIT_N/ROW_PAD_X/ROW_GAP_X are the row's own geometry (.row padding:3px 6px, gap:6px), so the cap can also answer "and do three still stand here?". Reasoning: docs/VFX_MANIFESTATION_v1.md, the EXPORT-9 amendment.
 function sizeBoard(){
-  const miniMax = (window.innerWidth>=1024) ? MINI_MAX_DESK : MINI_MAX;   // desktop only; mobile stays byte-identical at 96
+  const miniMaxH = (window.innerWidth>=1024) ? MINI_MAX_DESK : MINI_MAX;   // desktop lifts the cap; the phone cap is MINI_MAX
   for (const side of ['opp','me']){
     const half=document.querySelector('.half.'+side); if(!half) continue;
     const zbody=half.querySelector('.zbody');
@@ -6771,8 +6771,8 @@ function sizeBoard(){
     const artH=art?art.getBoundingClientRect().height:0;
     const childGaps=Math.max(0, rows.length+(artH>1?1:0)-1)*gap;
     const content=zbody.clientHeight - padV - artH - childGaps - emptyRows.length*EMPTY_ROW;
-    const per=Math.floor((content - nRows*ROW_PAD)/nRows) - 1; // -1 safety
-    if (per>=MINI_MIN){ half.style.setProperty('--mini-h', Math.min(per, miniMax)+'px'); half.classList.remove('scrollzone'); }
+    const per=Math.floor((content - nRows*ROW_PAD)/nRows) - 1, rowW=(rows[0]||zbody).clientWidth, perW=rowW>0 ? Math.floor(((rowW - 2*ROW_PAD_X - (MINI_FIT_N-1)*ROW_GAP_X) / MINI_FIT_N) / 0.75) : Infinity, miniMax=Math.min(miniMaxH, perW); // -1 safety. EXPORT-9 (C) — AND THE ROW'S OWN WIDTH: the cap was height-only, so a narrow phone got the same card as a wide one and simply scrolled sooner (at 360x800 three cards already did NOT stand unscrolled before this rung — 240 wanted, 234 available). perW is the height at which MINI_FIT_N cards still stand in THIS row (.bc is 0.75 as wide as it is tall). A desktop row allows ~370 and never feels it; 360x800 lands at 96, every wider phone takes the full 100.
+    if (per>=MINI_MIN){ half.style.setProperty('--mini-h', Math.max(MINI_MIN, Math.min(per, miniMax))+'px'); half.classList.remove('scrollzone'); }
     else { half.style.setProperty('--mini-h', MINI_MIN+'px'); half.classList.add('scrollzone'); }
   }
 }
@@ -12029,7 +12029,23 @@ function mfSpec(id){
 const MF_RUNG_PX = 420;
 function mfDrawnPx(el){ if(!el) return 0; const r=el.getBoundingClientRect(); return r.height>0 ? r.height*2.1*Math.min(2, window.devicePixelRatio||1) : 0; }
 const mfWantRung = (px)=> px > MF_RUNG_PX ? 512 : 256;
-const mfLayoutRung = ()=> mfWantRung(mfDrawnPx(document.querySelector('#field .bc[data-uid]')));   // the layout's implied rung, read off any board card
+// EXPORT-9 (B3) — THE DEVICE RUNG. This read off a BOARD CARD, and at match start there is none, so it answered 256
+// on every device — the phone rung, on a retina desktop. That is how the staked faction pool came to be fetched at
+// 256 and, because a ready rung beat a wanted one, how every remote Hero on that road stayed 256 for the whole match
+// (measured: 1.99x upscale at 1440x900 DPR2, 2.48x at 1920x1080). The card's height is knowable without a card on
+// it: sizeBoard writes --mini-h on each half from the room that half has, before anything is played. So the ladder
+// is: a real board card (the truest), else the half's own --mini-h, else the cap the layout would apply at this
+// width. The LAW is unchanged — card h x 2.1 x min(DPR,2) > MF_RUNG_PX.
+function mfCardH(){
+  const bc=document.querySelector('#field .bc[data-uid]');
+  if(bc){ const r=bc.getBoundingClientRect(); if(r.height>0) return r.height; }
+  const half=document.querySelector('#field .half');
+  if(half){ const v=parseFloat(getComputedStyle(half).getPropertyValue('--mini-h')); if(v>0) return v; }
+  return (typeof window!=='undefined' && window.innerWidth>=1024) ? MINI_MAX_DESK : MINI_MAX;
+}
+const mfLayoutRung = ()=> mfWantRung(mfCardH()*2.1*Math.min(2, (typeof window!=='undefined' && window.devicePixelRatio)||1));
+// the phone cap must stay under the flip while phones pool 256 only (see MINI_MAX): 100 x 2.1 x 2 = 420, not > 420.
+const mfPhoneCapUnderFlip = ()=> mfWantRung(MINI_MAX*2.1*2) === 256;
 const mfRungs = (id)=> (MF.reg && MF.reg[id] && Array.isArray(MF.reg[id].rungs) && MF.reg[id].rungs.length) ? MF.reg[id].rungs : [256];
 const mfAtlasUrl = (m, rung)=> fxUrl(ActorManifest.forRung(m, rung).atlas, m.__url);
 function mfPrefetch(id, rung){
@@ -12098,6 +12114,8 @@ function mfReadyWait(id, want, ms){
 // exactly today's classic path. NOTE the rung: at match start no board card is drawn yet, so mfLayoutRung reads
 // 256 — the phone rung — which is also the cheap one. A later desktop cast that wants 512 finds 256 present and
 // takes it with mfPickRung's quiet 'rung-fell-back' note, rather than nothing at all.
+// EXPORT-9 (B2) — desktop-class, the ruled gate: a retina screen with room for the game's desktop layout.
+const mfDesktopClass = ()=> (typeof window!=='undefined') && ((window.devicePixelRatio||1) >= 2) && (window.innerWidth >= 1024);
 function prefetchFactionPool(faction){
   if(!faction) return false;
   if(FX.routes===null && !FX.boot) fxBoot();
@@ -12106,23 +12124,56 @@ function prefetchFactionPool(faction){
     try{
       const want=mfLayoutRung();
       const list=(typeof DECKS!=='undefined' && DECKS && DECKS[faction]) || [];
-      const seen={};
+      const seen={}, landing=[];
       for(const d of list){
         const id=d && d.id; if(!id || seen[id]) continue; seen[id]=1;
         if(FX.routes && FX.routes[id]){
           if(!fxReady(id)) fxPrefetch(id);
           if(FX.routes[id].drain && !fxReady(id+':drain')) fxPrefetch(id+':drain');   // Venom Strike's flood rides with its card
         }
-        if(MF.reg && MF.reg[id] && !mfReady(id, want)) mfPrefetch(id, want);
+        if(MF.reg && MF.reg[id]){ if(!mfReady(id, 256)) landing.push(mfPrefetch(id, 256)); }   // 256 FIRST, always — the cheap pool that guarantees a first cast
       }
-      mfNote('faction-pool', { faction:faction, rung:want, cards:Object.keys(seen).length });
+      mfNote('faction-pool', { faction:faction, rung:256, want:want, cards:Object.keys(seen).length });
+      // EXPORT-9 (B2) — AND THEN, ON A DESKTOP, THE RIGHT ONE. The 256 pool stands exactly as EXPORT-8 shipped it:
+      // it is what makes the FIRST remote cast draw at all, and it is never delayed or replaced. Only once those
+      // bytes have LANDED does a desktop-class client go back for the 512 pool, in the background, off the wire's
+      // clock, fail-open — so the second cast onward is drawn at the rung the device actually wants. A phone never
+      // reaches here: the owner's standing phone ruling is 256, and its cap is held under the flip to keep it true.
+      // The gate is the ruled one (DPR>=2 && width>=1024) AND the device's own rung: a 1024x768 retina screen is
+      // desktop-class but draws 368 device px, where 256 IS the right rung — pooling 512 there is ~28MB of nothing.
+      if(mfDesktopClass() && want === 512){
+        Promise.all(landing.map(p=>Promise.resolve(p).catch(()=>null))).then(()=>{
+          let n=0;
+          for(const id of Object.keys(seen)) if(MF.reg && MF.reg[id] && mfRungs(id).indexOf(512) >= 0 && !mfReady(id, 512)){ mfPrefetch(id, 512); n++; }
+          mfNote('faction-pool-512', { faction:faction, cards:n });
+        }, ()=>{});
+      }
     }catch(e){ mfNote('faction-pool-failed', { faction:faction, error:String(e&&e.message||e) }, true); }
   };
   try{ if(MF.boot && MF.boot.then) MF.boot.then(run, run); else run(); }catch(e){ return false; }
   return true;
 }
+// EXPORT-9 (B1) — READY NOW, RIGHT NEXT. "Ready beats right" was the whole blur: a pool that made 256 ready
+// SUPPRESSED the 512 the device wanted, for ever, because nothing ever asked for it — mfManifest only prefetches
+// when NEITHER rung is ready. The cast still draws what is here (a first cast must never be absent), but a cast
+// that had to settle now ASKS for the rung it wanted, once, so the next one draws it.
+const MF_UPGRADED = {};   // id:rung asked for exactly once — the cast is a trigger, never a fetch loop
+function mfUpgradeRung(id, rung){
+  const k=id+':'+rung; if(MF_UPGRADED[k]) return false; MF_UPGRADED[k]=true;
+  mfNote('rung-upgrade', { card:id, want:rung });
+  try{ mfPrefetch(id, rung); }catch(e){}   // mfPrefetch dedupes on the url and rides the retry backoff besides
+  return true;
+}
 // the rung this play will draw at: the wanted one if its bytes are here, else the one below it (512 -> 256); null = neither → classic path
-function mfPickRung(id, px){ const want=mfWantRung(px), order=(want===512 ? [512, 256] : [256]).filter(r=>mfRungs(id).indexOf(r) >= 0); for(const r of order) if(mfReady(id, r)) return r; return null; }
+function mfPickRung(id, px){
+  const want=mfWantRung(px), rungs=mfRungs(id);
+  const order=(want===512 ? [512, 256] : [256]).filter(r=>rungs.indexOf(r) >= 0);
+  for(const r of order) if(mfReady(id, r)){
+    if(r !== want && rungs.indexOf(want) >= 0) mfUpgradeRung(id, want);   // drew the ready one; ask for the right one
+    return r;
+  }
+  return null;
+}
 async function mfDecode(id, rung){
   const u=mfAtlasUrl(MF.specs[id], rung);
   try{ const a=await mfDecodeAtlas(id, rung); assetRetryOk(u); return a; }
