@@ -41,6 +41,9 @@ const SUITES = [
   // MP-FIX-2: the Hall steps back while a match is live — the frame's bands, the collapse, and the lobby's safety
   // (source + mutants; no chain and no network — the pixels are proven in a browser and written into the rung).
   { name: "hallframe",     file: path.join(__dirname, "suites", "hallframe.js"), chain: false, expect: 32 },
+  // MP-FIX-3A: the Hall's stake refusals — one sentence per truth, an unread balance that says so, the chain guard,
+  // the read failover and the pre-flight line (source + real ethers decode + mutants; no chain, no network).
+  { name: "hallstake",     file: path.join(__dirname, "suites", "hallstake.js"), chain: false, expect: 33 },
 ];
 
 function freePort() {

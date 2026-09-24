@@ -249,6 +249,12 @@ async function hall(url, escAddr, dycAddr, player, provider, opts) {
   //   the working tree, unchanged for every existing suite.
   const SRC = opts.srcDir || SITE;
   run(path.join(SITE, "config.js"));
+  //  MP-FIX-3A — DECLARE THE HARNESS'S CHAIN, as storePage already does (lib.js:157, "the harness's chain, declared
+  //  not faked"). The Hall page never did, so CFG.chain.id stayed at mainnet's 137 while the wallet shim forwarded
+  //  eth_chainId to anvil's own id — a page that believed it was on Polygon while its wallet was demonstrably not.
+  //  Nothing noticed until the Hall grew a chain guard; the guard is right, and this is the gap it found.
+  w.DY_CONFIG.chain.id = await provider.getNetwork().then(function (n) { return Number(n.chainId); });
+  w.DY_CONFIG.chain.idHex = "0x" + w.DY_CONFIG.chain.id.toString(16);
   if (!opts.noWallet) run(path.join(SITE, "js/wallet.js"));   // control: boot with DYWallet absent (init cannot run)
   run(path.join(SRC, "mp/matchclient.js"));
   run(path.join(SRC, "mp/hall.js"));

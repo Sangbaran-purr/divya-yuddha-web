@@ -51,6 +51,15 @@
   var gateGen = 0, feedGen = 0;  // read-generation guards (a stale read never clobbers a newer one)
   var lossLimit = null;          // { cap, netLossToday, remaining } | null
   var liquid = null;             // BigInt liquid DYC | null
+  //  MP-FIX-3A (1a/5) — WHAT A SEAT COSTS IN POL. A seat is two casts (approve, then the lock); SIT_GAS is their
+  //  budget together. The price comes from the READ road, never from the failing call itself — a wallet that
+  //  cannot pay for gas is exactly the wallet whose estimateGas throws, so estimating there would hand us the
+  //  error instead of the number. `feeHint` is null until it is read, and every surface draws "—" for null: the
+  //  pre-flight line may never show a figure nobody measured.
+  var SIT_GAS = 260000n;         // approve (~60k) + openMatch/joinMatch (~200k), measured shapes
+  var feeHint = null;            // POL as a display string, or null while unknown
+  var liquidRead = "none";       // MP-FIX-3A — none | reading | ok | failed: WHY liquid is null, so a dead endpoint
+                                 // is never dressed as an empty wallet. `liquid` itself keeps its busy-sentinel meaning.
 
   // ── ETHERS + the site read provider (for the gate + liquid reads) ─────────
   function loadEthers() {
@@ -107,8 +116,24 @@
       .catch(function (e) { enginePromise = null; engineNote = ENGINE_REFUSED; renderCurrent(); throw e; });
     return enginePromise;
   }
-  function readRpcUrl() { return lsGet("dyhall::readRpcUrl") || ((CFG.chain && CFG.chain.readRpcUrls) || [])[0]; } // anvil override for the local proof; mainnet otherwise
-  function readProvider(ethers) { return new ethers.JsonRpcProvider(readRpcUrl(), undefined, { staticNetwork: true }); }
+  //  MP-FIX-3A (4) — THE READ ROAD FAILS OVER. One endpoint with no retry is HOW an unread balance became a
+  //  refusal: readLiquid's catch sets liquid = null, and every staked tier then read "insufficient liquid DYC" —
+  //  a wallet's poverty and a dead endpoint were the same sentence (measured on the live origin, 2026-09-24).
+  //  The Hall now walks its endpoints in turn with one backoff before it surrenders to the busy sentinel.
+  //  drpc is sound as a second READ endpoint: GATE-FIX-1's drpc cap is a getLogs WIDTH cap, and eth_call is not
+  //  a getLogs (measured 2026-09-24: it answers balanceOf and carries the CORS header for this origin).
+  //  THE SITE-WIDE READ ROAD IS UNTOUCHED — js/wallet.js still takes chain.readRpcUrls[0], and so does this file
+  //  when it wants one url. The local-proof override stays SOLE: an anvil run must never fall through to mainnet.
+  var HALL_READ_FALLBACKS = ["https://polygon.drpc.org"];
+  var READ_BACKOFF_MS = 400;
+  function readRpcUrls() {
+    var over = lsGet("dyhall::readRpcUrl"); if (over) return [over];   // anvil/local proof: this one and no other
+    var out = (((CFG.chain && CFG.chain.readRpcUrls) || []).slice());
+    HALL_READ_FALLBACKS.forEach(function (u) { if (out.indexOf(u) < 0) out.push(u); });
+    return out;
+  }
+  function readRpcUrl() { return readRpcUrls()[0]; } // anvil override for the local proof; mainnet otherwise
+  function readProvider(ethers, i) { return new ethers.JsonRpcProvider(readRpcUrls()[i || 0], undefined, { staticNetwork: true }); }
   var ACCESS_ABI = ["function balanceOf(address) view returns (uint256)"];
   var DYC_ABI = ["function balanceOf(address) view returns (uint256)"];
 
@@ -120,7 +145,7 @@
     if (!me) { accessState = "connect"; return render(); } // no wallet = quiet connect card, no floor
     // R5 applies on BOTH pass roads — this bypass called startFeed() directly, which would have started (and so
     // signed) B's session without a click. The guard belongs wherever the session can start.
-    if (devAccessBypass()) { accessState = "pass"; if (!signInNeeded) startFeed(); loadEthers().then(function (e) { readLiquid(e); }).catch(function () {}); return render(); } // proof-only bypass (still reads liquid for affordability)
+    if (devAccessBypass()) { accessState = "pass"; if (!signInNeeded) startFeed(); loadEthers().then(function (e) { readLiquid(e); readFeeHint(e); }).catch(function () {}); return render(); } // proof-only bypass (still reads liquid for affordability)
     accessState = "init"; render();
     loadEthers().then(function (ethers) {
       var acc = CFG.contracts && CFG.contracts.accessNFT;
@@ -130,7 +155,7 @@
         accessState = (bal && bal > 0n) ? "pass" : "gateless";
         if (accessState === "pass") {
           try { sessionStorage.setItem("dyw_pass", "1"); } catch (e) {} // G5 — a Hall holder carries the same site pass, so PRACTICE into the game copy isn't bounced to the rite
-          readLiquid(ethers);
+          readLiquid(ethers); readFeeHint(ethers);
           // S-HALL-ACCOUNT-1 (R5) — after an account switch the session waits for a click. accountsChanged is
           // broadcast to EVERY connected site, so a switch made for another tab reaches the Hall too, and the Hall
           // cannot tell a deliberate switch from a stray one. The CHROME-1 law therefore holds absolutely: no
@@ -147,13 +172,25 @@
     });
   }
   function readLiquid(ethers) {
-    var dyc = dycAddr(); if (!dyc || !me) return; // dycAddr honors the dyhall::dycAddress anvil override
+    var dyc = dycAddr(); if (!dyc || !me) return Promise.resolve(); // dycAddr honors the dyhall::dycAddress anvil override
     // S-HALL-CHROME-1 (M3) — the catch used to be EMPTY, so a dead RPC left `liquid` at its previous value and the
     // header went on rendering a stale number. Busy-sentinel law: an unreadable balance is null, which the header
     // already draws as "—". Never a stale number silently.
-    new ethers.Contract(dyc, DYC_ABI, readProvider(ethers)).balanceOf(me)
-      .then(function (b) { liquid = b; render(); })
-      .catch(function () { liquid = null; render(); });
+    // MP-FIX-3A (4) — and now it tries the NEXT endpoint before it says that. `liquidRead` carries WHY the number
+    // is missing, so the tier rows can tell "you are short" from "we could not ask" (readLiquidState below).
+    var urls = readRpcUrls(), who = me;
+    liquidRead = "reading";
+    var attempt = function (i) {
+      return new ethers.Contract(dyc, DYC_ABI, readProvider(ethers, i)).balanceOf(who).then(function (b) {
+        if (who !== me) return;                                  // the wallet changed under the read — drop it
+        liquid = b; liquidRead = "ok"; afterRead();
+      }, function () {
+        if (i + 1 < urls.length) return new Promise(function (res) { setTimeout(res, READ_BACKOFF_MS); }).then(function () { return attempt(i + 1); });
+        if (who !== me) return;
+        liquid = null; liquidRead = "failed"; afterRead();
+      });
+    };
+    return attempt(0);
   }
 
   // ── THE LIVE FEED (M-P1) — matchclient's existing handshake; whole-list {tables} reconcile; three faces. ──
@@ -313,6 +350,18 @@
     return "Your " + dycOf(stakeWei) + " DYC locks in escrow now. It returns in full if you cancel before anyone sits, or on a draw. The winner takes the pot minus the 5% platform fee. If a finished match is somehow never settled, the chain refunds both players automatically after 24 hours - locked stakes can never be stranded.";
   }
   var BOTH_STAKES = "Once both stakes lock, the match begins.";
+  //  MP-FIX-3A — the three sentences this rung adds. Each names ONE truth; none of them stands in for another.
+  var BALANCE_UNREAD = "Couldn't read your balance - tap to retry";
+  function NEED_POL(fee) {
+    return fee ? ("You need a little POL for the network fee - this table costs ~" + fee + " POL to sit.")
+               : "You need a little POL for the network fee - your wallet has none to pay it with.";
+  }
+  function NEED_DYC(have, want) {
+    return (have == null)
+      ? ("Not enough DYC for this stake - the table needs " + want + " DYC.")
+      : ("Not enough DYC for this stake - you hold " + have + ", the table needs " + want + " DYC.");
+  }
+  var WRONG_CHAIN = "Your wallet is on another network - switch it to " + ((CFG.chain && CFG.chain.name) || "Polygon") + " to sit at this table.";
   // S-HALL-L3-FIX-2 (B2) — RULED 2026-09-08 (LOBBY_DESIGN amendment 2026-09-08b). A cancel act on a plaque whose
   // escrow is no longer OPEN must not report a raw revert string under a button that promised a refund. Shown ONLY
   // when the chain confirms the escrow has moved on; a genuinely unknown revert keeps the generic message.
@@ -337,29 +386,67 @@
   // ── THE ESCROW ROAD (browser signer; the store's signerRoad shape) ──
   function escrowAddr() { return lsGet("dyhall::stakeEscrowAddress") || (CFG.stakeEscrow && CFG.stakeEscrow.address) || ""; }
   function dycAddr() { return lsGet("dyhall::dycAddress") || (CFG.contracts && CFG.contracts.dycoin); } // anvil override for the local proof
-  var DYC_FULL_ABI = ["function approve(address,uint256) returns (bool)", "function allowance(address,address) view returns (uint256)", "function balanceOf(address) view returns (uint256)"];
-  var ESC_ABI = [
+  //  MP-FIX-3A (1b) — THE ERRORS, SO THEY DECODE. DYC is OpenZeppelin 5.x: a real shortage reverts with a CUSTOM
+  //  error, and an ABI that does not carry it renders "execution reverted (unknown custom error)" — so the ONE
+  //  cause the old "insufficient DYC" sentence named was the one cause that could not produce it. With the errors
+  //  declared, ethers hands us e.revert.{name,args} and the sentence can quote the wallet's own numbers.
+  var ERC20_ERRORS = [
+    "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
+    "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
+    "error ERC20InvalidApprover(address approver)",
+    "error ERC20InvalidSpender(address spender)",
+    "error ERC20InvalidSender(address sender)",
+    "error ERC20InvalidReceiver(address receiver)",
+  ];
+  //  the escrow's own (contracts/src/StakeEscrow.sol) — its refusals are not money refusals and must never be
+  //  dressed as one; they pass through as themselves.
+  var ESCROW_ERRORS = [
+    "error BadStake()", "error SelfMatch()", "error NotOpen()", "error NotMatched()",
+    "error NotExpectedOpponent()", "error LedgerUnset()", "error BadBounds()",
+  ];
+  var DYC_FULL_ABI = ["function approve(address,uint256) returns (bool)", "function allowance(address,address) view returns (uint256)", "function balanceOf(address) view returns (uint256)"].concat(ERC20_ERRORS);
+  var ESC_ABI = ERC20_ERRORS.concat(ESCROW_ERRORS).concat([
     "function openMatch(uint256,address,uint8) returns (uint256)",
     "function joinMatch(uint256,uint8)",
     "function cancelMatch(uint256)",
     "function settle(uint256,uint8,bytes)",
     "function matches(uint256) view returns (address playerA, address playerB, uint256 stake, uint8 srcA, uint8 srcB, address expectedOpponent, uint64 matchedAt, uint8 state)",
     "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)",
-  ];
+  ]);
   //  S-HALL-ACCOUNT-1 (L2) — NO CROSS-SIGNING, STRUCTURALLY. getSigner() follows the LIVE wallet while `me` is the
   //  identity everything else is keyed to (the gate, the session, the pending records, the escrow ownership reads).
   //  If those two ever disagree, the pen belongs to another account and NOTHING may be signed: every ceremony in the
   //  Hall — open, join, cancel, settle, the strand's finish — reaches the wallet through here and through nowhere
   //  else, so one guard covers them all. This also refuses a settle mid-battle while the wallet has wandered (R1),
   //  because `me` is still the seat's address until the deferred re-key runs.
+  //  MP-FIX-3A (3) — THE CHAIN GUARD, in the same one door. The Hall never checked the wallet's network, while
+  //  js/dashboard.js and js/admin.js both do; a wallet on another chain reached the escrow call and came back with
+  //  "insufficient funds" (no native balance THERE), which the old message dressed as a DYC shortage. The guard
+  //  prompts the switch — DYWallet.ensureChain, the dashboard's own pattern — and refuses in plain words if the
+  //  wallet stays put. It sits beside the cross-account guard because every ceremony reaches the wallet here.
+  function ensurePolygon(bp) {
+    var want = (CFG.chain && CFG.chain.id);
+    if (!want) return Promise.resolve();
+    var read = function () { return bp.getNetwork().then(function (n) { return Number(n.chainId); }, function () { return null; }); };
+    return read().then(function (got) {
+      if (got === want || got == null) return;                                  // right chain, or unknowable — not ours to refuse
+      var W = window.DYWallet;
+      if (!W || !W.ensureChain) { var e0 = new Error(WRONG_CHAIN); e0.wrongChain = true; throw e0; }
+      return W.ensureChain().then(function () { return read(); }, function () { return read(); }).then(function (now) {
+        if (now !== want) { var e = new Error(WRONG_CHAIN); e.wrongChain = true; throw e; }
+      });
+    });
+  }
   function signerRoad() {
     return loadEthers().then(function (ethers) {
       if (!window.ethereum) throw new Error("no wallet in this browser");
       var bp = new ethers.BrowserProvider(window.ethereum);
-      return bp.getSigner().then(function (sg) {
-        return sg.getAddress().then(function (a) {
-          if (me && String(a).toLowerCase() !== me) { var e = new Error(CROSS_ACCOUNT(me)); e.crossAccount = true; throw e; }
-          return { ethers: ethers, provider: bp, signer: sg };
+      return ensurePolygon(bp).then(function () {
+        return bp.getSigner().then(function (sg) {
+          return sg.getAddress().then(function (a) {
+            if (me && String(a).toLowerCase() !== me) { var e = new Error(CROSS_ACCOUNT(me)); e.crossAccount = true; throw e; }
+            return { ethers: ethers, provider: bp, signer: sg };
+          });
         });
       });
     });
@@ -548,7 +635,20 @@
       });
     });
   }
-  function readLiquidAgain() { loadEthers().then(function (ethers) { readLiquid(ethers); }).catch(function () {}); }
+  //  MP-FIX-3A — a read lands on the lobby AND on any open sheet: the tier rows and the pre-flight line are drawn
+  //  by renderSheet, and a retry that refreshed only the header would leave the row still asking to be tapped.
+  //  renderSheet() draws nothing when no sheet is open.
+  function afterRead() { render(); try { renderSheet(); } catch (e) {} }
+  function readLiquidAgain() { loadEthers().then(function (ethers) { readLiquid(ethers); readFeeHint(ethers); }).catch(function () {}); }
+  function readFeeHint(ethers) {
+    return readProvider(ethers).getFeeData().then(function (fd) {
+      var per = fd && (fd.maxFeePerGas || fd.gasPrice); if (!per) return;
+      var wei = BigInt(per) * SIT_GAS;
+      var pol = Number(wei) / 1e18;
+      feeHint = (pol < 0.001 ? pol.toFixed(4) : pol.toFixed(3)).replace(/0+$/, "").replace(/\.$/, "");
+      afterRead();
+    }, function () { /* unknown stays unknown — the line draws "—" */ });
+  }
 
   //  S-HALL-L3-FIX-1 (B4) — raise the ruled affordance. Called when a lock is CONFIRMED but the server was not
   //  told: the send was refused by a closed socket, or it was carried but no ack ever came back (a refusal such
@@ -600,12 +700,41 @@
     readLiquidAgain();
   }
 
+  //  MP-FIX-3A (1) — ONE SENTENCE PER TRUTH, MATCHED ON SHAPE.
+  //  The old line matched the WORD "insufficient" and collapsed four different failures into a DYC shortage. Three
+  //  of them had nothing to do with DYC — a wallet with no POL for gas, a node's raw -32000, a wallet on another
+  //  network — and the fourth, a genuine DYC shortage, could not reach it at all (OZ5 custom errors do not carry
+  //  the word). The wallet the players report — 500 DYC and no POL — is exactly the shape the $20 bundle pays out.
+  //  Each helper reads the error's STRUCTURE and walks the wrappers (ethers puts the node's error at e.info.error;
+  //  an injected wallet often puts it at e.error), so no sentence rests on a substring of prose.
+  function errText(e) { return String((e && (e.shortMessage || e.reason || e.message)) || ""); }
+  function errChain(e) { var out = [], n = e, hops = 0; while (n && hops++ < 5) { out.push(n); n = (n.info && n.info.error) || n.error || null; } return out; }
+  //  (a) THE GAS SHORTAGE. ethers 6 raises code INSUFFICIENT_FUNDS with "insufficient funds for intrinsic
+  //  transaction cost"; a node says "insufficient funds for gas * price + value"; MetaMask says "Insufficient
+  //  funds for gas". All three say FUNDS — an OZ5 ERC20 revert never does, decoded or not, so the two cannot meet.
+  function isGasShort(e) {
+    return errChain(e).some(function (n) {
+      return n.code === "INSUFFICIENT_FUNDS" || /insufficient funds/i.test(String(n.shortMessage || "") + " " + String(n.message || ""));
+    });
+  }
+  //  (b) THE DYC SHORTAGE, decoded — with the wallet's own numbers when the error carries them.
+  function revertOf(e) { var f = errChain(e).filter(function (n) { return n.revert && n.revert.name; })[0]; return f ? f.revert : null; }
   function ceremonyMsg(e) {
     if (e && e.crossAccount) return e.message;   // S-HALL-ACCOUNT-1 — the §11 line passes through verbatim
-    var m = (e && (e.shortMessage || e.reason || e.message)) || "the cast failed";
+    if (e && e.wrongChain) return e.message;     // MP-FIX-3A (3) — the guard's own plain sentence
+    var m = errText(e) || "the cast failed";
     if (/user rejected|denied/i.test(m)) return "you declined the wallet prompt";
-    if (/insufficient/i.test(m)) return "insufficient DYC for this stake";
-    return String(m).slice(0, 140);
+    if (isGasShort(e)) return NEED_POL(feeHint);
+    var rv = revertOf(e);
+    if (rv && rv.name === "ERC20InsufficientBalance") {
+      var a = rv.args || [];
+      return NEED_DYC(a.length > 1 ? dycOf(a[1]) : (liquid != null ? dycOf(liquid) : null), a.length > 2 ? dycOf(a[2]) : "the stake");
+    }
+    //  an allowance that came up short is NOT a shortage of DYC — saying so would repeat the very fault this rung
+    //  is fixing. It is an approval that did not land, and it has its own sentence.
+    if (rv && rv.name === "ERC20InsufficientAllowance") return "The approval did not land - try the table again.";
+    if (rv && rv.name) return String(rv.name).replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+    return String(m).slice(0, 140);   // (c) everything else passes through, uncollapsed
   }
 
   // ── RESUME (on load, after the gate passes) — complete or abandon a pending ceremony cleanly. ──
@@ -699,7 +828,12 @@
   //    may scan `tables` for a code. ──
 
   // ── the affordability + headroom judgments ──
+  //  MP-FIX-3A (2) — THREE STATES, NOT TWO. `affordable` keeps its exact meaning (KNOWN and enough) because every
+  //  act gate depends on it: an unknown balance must never arm a cast. What changes is that the SCREEN no longer
+  //  collapses "unknown" into "short" — balanceUnread() is the third state, and the tier row says so and offers
+  //  the retry instead of disabling itself.
   function affordable(stakeWei) { return liquid != null && BigInt(liquid) >= BigInt(stakeWei); }
+  function balanceUnread() { return liquid == null; }
   function headroomWei() { return (lossLimit && lossLimit.cap != null) ? BigInt(lossLimit.remaining) : null; }
   function crossesLimit(stakeWei) { var h = headroomWei(); return h != null && h < BigInt(stakeWei); }
 
@@ -723,6 +857,14 @@
     return '<div class="hall-ceremony state-line">' + label + '<div class="hall-ceremony-wait">confirm in your wallet…</div></div>';
   }
 
+  //  MP-FIX-3A (5) — THE PRE-FLIGHT LINE. Both numbers a seat actually costs, before the act rather than after the
+  //  refusal: the DYC the wallet holds and the POL the network will take. Either may be unknown, and an unknown
+  //  one draws "—" — never a figure that was not read (the header's busy-sentinel law, applied to the sheet).
+  function preflightLine() {
+    var liq = liquid == null ? "—" : dycOf(liquid) + " DYC";
+    var fee = feeHint == null ? "—" : "~" + feeHint + " POL";
+    return '<div class="hall-preflight state-line">Liquid DYC: <b>' + liq + '</b> · network fee: <b>' + fee + '</b></div>';
+  }
   function sheetOverlay(inner, titleCls) {
     return '<div class="hall-sheet-overlay" id="hall-sheet-overlay"><div class="hall-sheet ' + (titleCls || "") + '" role="dialog" aria-modal="true">' + inner +
       '<div class="hall-sheet-foot"><button class="hall-sheet-close" data-sheet-close="1">close</button></div></div></div>';
@@ -735,10 +877,14 @@
       if (t.friend) return; // FRIEND has its own door
       var isFree = t.id === "free";
       var aff = isFree || affordable(t.stake);
-      var cls = "hall-tier-row" + (sheet.ctx && sheet.ctx.tierId === t.id ? " on" : "") + (aff ? "" : " unaffordable");
+      //  MP-FIX-3A (2) — an UNREAD balance is not an empty one. The row keeps its reach and offers the retry; only
+      //  a balance we actually read, and that is actually short, says "insufficient liquid DYC".
+      var unread = !isFree && balanceUnread();
+      var cls = "hall-tier-row" + (sheet.ctx && sheet.ctx.tierId === t.id ? " on" : "") + (unread ? " unread" : (aff ? "" : " unaffordable"));
       var right = isFree ? '<span class="hall-tier-note">no stake - human opponent</span>'
+        : unread ? '<span class="hall-tier-note">' + BALANCE_UNREAD + '</span>'
         : (aff ? '<span class="hall-tier-usd">~' + t.usd + '</span>' : '<span class="hall-tier-note">insufficient liquid DYC</span>');
-      rows += '<button class="' + cls + '" data-tier-row="' + t.id + '"' + (aff ? "" : " aria-disabled=\"true\"") + '>' +
+      rows += '<button class="' + cls + '" data-tier-row="' + t.id + '"' + (unread ? ' data-liquid-retry="1"' : (aff ? "" : " aria-disabled=\"true\"")) + '>' +
         medallionImg(t.medallion, "hall-medallion " + t.cls) + '<span class="hall-tier-label">' + t.label + '</span>' +
         '<span class="hall-tier-stake">' + (isFree ? "no stake" : (Number(BigInt(t.stake) / DEC)) + " DYC") + '</span>' + right + '</button>';
     });
@@ -758,7 +904,7 @@
       '<h2 class="hall-sheet-title">OPEN A TABLE</h2>' +
       '<div class="hall-tier-rows">' + rows + '</div>' +
       '<div class="hall-sheet-faction"><div class="hall-sheet-sub">Your faction</div>' + factionPicker(selectedFaction) + '</div>' +
-      commit + freeNote + '<div class="hall-sheet-act">' + act + '</div>', "hall-sheet-open");
+      commit + freeNote + (chosen && chosen.id !== "free" ? preflightLine() : "") + '<div class="hall-sheet-act">' + act + '</div>', "hall-sheet-open");
   }
 
   function seatSheetHTML() {
@@ -781,7 +927,7 @@
       (free ? '<div class="hall-pot-line state-line">' + FREE_LINE + '</div>'
             : '<div class="hall-pot-line state-line">Pot ' + dycOf(pot) + ' DYC <span class="hall-fee-line">- ' + dycOf(fee) + ' fee -> winner takes ' + dycOf(win) + ' DYC</span></div>') +
       '<div class="hall-sheet-faction"><div class="hall-sheet-sub">Your faction</div>' + factionPicker(selectedFaction) + '</div>' +
-      commit + (free ? "" : '<p class="hall-seat-rule"><b>' + BOTH_STAKES + '</b></p>') +
+      commit + (free ? "" : '<p class="hall-seat-rule"><b>' + BOTH_STAKES + '</b></p>') + (free ? "" : preflightLine()) +
       '<div class="hall-sheet-act">' + act + '</div>', "hall-sheet-seat");
   }
 
@@ -810,7 +956,7 @@
       '<div class="hall-sheet-sub">Stake (10 - 10,000 DYC)</div><input class="hall-friend-stake" id="hall-friend-stake" inputmode="numeric" placeholder="e.g. 50" value="' + (ctx.stakeInput || "") + '">' +
       '<div class="hall-sheet-sub">Your friend\'s wallet address</div><input class="hall-friend-opponent" id="hall-friend-opp" spellcheck="false" placeholder="0x…" value="' + (ctx.opponent || "") + '">' +
       '<div class="hall-sheet-faction"><div class="hall-sheet-sub">Your faction</div>' + factionPicker(selectedFaction) + '</div>' +
-      commit + '<p class="state-line hall-friend-note">Friend tables never appear on the floor.</p>' +
+      commit + preflightLine() + '<p class="state-line hall-friend-note">Friend tables never appear on the floor.</p>' +
       '<div class="hall-sheet-act">' + act + '</div>' +
       (ctx.err ? '<p class="state-line hall-sheet-err">' + ctx.err + '</p>' : "") +
       '<button class="hall-sheet-switch" data-sheet-switch="friendjoin">have a code? join a friend\'s table</button>', "hall-sheet-friend");
@@ -836,7 +982,7 @@
       '<h2 class="hall-sheet-title">JOIN BY CODE</h2>' +
       '<div class="hall-seat-opp">' + sigil + '<span class="hall-plaque-addr">' + shortAddr(t.opener) + '</span><span class="hall-plaque-stake">' + dycOf(t.stake) + ' DYC</span></div>' +
       '<div class="hall-sheet-faction"><div class="hall-sheet-sub">Your faction</div>' + factionPicker(selectedFaction) + '</div>' +
-      commit + '<p class="hall-seat-rule"><b>' + BOTH_STAKES + '</b></p>' +
+      commit + '<p class="hall-seat-rule"><b>' + BOTH_STAKES + '</b></p>' + preflightLine() +
       '<div class="hall-sheet-act">' + act + '</div>', "hall-sheet-friendjoin");
   }
 
@@ -1689,7 +1835,15 @@
     // faction picks
     Array.prototype.forEach.call(host.querySelectorAll(".hall-faction-sigil"), function (b) { b.onclick = function () { selectedFaction = b.getAttribute("data-faction"); renderSheet(); }; });
     // tier rows (open sheet)
-    Array.prototype.forEach.call(host.querySelectorAll("[data-tier-row]"), function (b) { b.onclick = function () { var id = b.getAttribute("data-tier-row"); sheet.ctx = sheet.ctx || {}; sheet.ctx.tierId = id; renderSheet(); }; });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-tier-row]"), function (b) {
+      b.onclick = function () {
+        //  MP-FIX-3A (2) — an unread row is a RETRY, not a choice: asking again is the only useful act while the
+        //  balance is unknown, and it costs one eth_call. The tier is not selected, so no cast can be armed on a
+        //  number we do not have.
+        if (b.getAttribute("data-liquid-retry")) { readLiquidAgain(); return; }
+        var id = b.getAttribute("data-tier-row"); sheet.ctx = sheet.ctx || {}; sheet.ctx.tierId = id; renderSheet();
+      };
+    });
     // ceremony retry
     var retry = host.querySelector("[data-cer-retry]"); if (retry) retry.onclick = function () { ceremony = null; renderSheet(); };
     // the acts
@@ -1864,6 +2018,8 @@
         matchView: matchView ? { matchId: matchView.matchId, seat: matchView.seat, phase: matchView.phase, myTurn: matchView.myTurn, over: !!matchView.outcome } : null,
         signedInAs: signedInAs, settleState: settleState, settlement: settlementView || (matchView && matchView.settlement) || null,
         lossLimit: lossLimit, liquid: liquid == null ? null : liquid.toString(),
+        liquidRead: liquidRead, feeHint: feeHint, readRpcUrls: readRpcUrls(),   // MP-FIX-3A — why the number is missing, what a seat costs, and the road it was asked on
+
         pending: listPending(), strand: openStrand, unknownOpen: openUnknown, resumeNote: resumeNote,
         accountNote: accountNote, pendingReKey: pendingReKey, walletSeen: walletSeen, signInNeeded: signInNeeded,
         lastServerError: lastServerError, escrow: escrowAddr(),
