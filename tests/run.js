@@ -38,6 +38,9 @@ const SUITES = [
   { name: "stakedframe",   file: path.join(__dirname, "suites", "stakedframe.js"), chain: true, expect: 29 },
   { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 73 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)
+  // MP-FIX-2: the Hall steps back while a match is live — the frame's bands, the collapse, and the lobby's safety
+  // (source + mutants; no chain and no network — the pixels are proven in a browser and written into the rung).
+  { name: "hallframe",     file: path.join(__dirname, "suites", "hallframe.js"), chain: false, expect: 32 },
 ];
 
 function freePort() {

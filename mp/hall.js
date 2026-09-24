@@ -1259,6 +1259,7 @@
     if (wireF.el && wireF.el.parentNode) wireF.el.parentNode.removeChild(wireF.el);
     wireF = null;
     var host = $("hall-frame-host"); if (host) host.hidden = true;
+    setMatchLive(false);
   }
   function frameFallback() {           // R4 — the thin client plays THIS match; the mirror (R6) is already current
     if (!wireF) return;
@@ -1266,7 +1267,17 @@
     if (wireF.el && wireF.el.parentNode) wireF.el.parentNode.removeChild(wireF.el);
     wireF.el = null; wireF.fallback = true;
     var host = $("hall-frame-host"); if (host) host.hidden = true;
+    setMatchLive(false);
     renderCurrent();
+  }
+  // MP-FIX-2 — THE HALL STEPS BACK. One flag, set in the ONE place that already decides whether the frame is on
+  // screen. While a dealt, ready, UNDECIDED match is up, html.hall-match-live collapses the Hall's chrome and the
+  // frame takes the window (hall.css). It is cleared on every road out: the outcome (the settle and "back to the
+  // Hall" controls live in the strip and must never sit behind the board), leave, unmount, the thin-client
+  // fallback, and the lobby. The dealing beat keeps the Hall's chrome — the matched moment is the Hall's, not the
+  // board's — so the layout changes once, on a beat the player is already watching.
+  function setMatchLive(on) {
+    try { document.documentElement.classList.toggle("hall-match-live", !!on); } catch (e) {}
   }
   function syncFrameHost() {
     var host = $("hall-frame-host");
@@ -1279,12 +1290,14 @@
       //  are explicit: leaveMatch on the way out, and the relay itself when a new match is dealt.
       if (wireF && matchView && wireF.matchId !== String(matchView.matchId)) unmountFrame();
       if (host) host.hidden = true;
+      setMatchLive(false);
       return;
     }
     if (!wireF.el) mountFrame();
     host = frameHost(); if (!host) return;
     host.hidden = false;
     host.classList.toggle("dealing", !dealtMatches[matchView.matchId] || !wireF.ready);   // loads, unseen, behind the matched moment (R5: until BOTH)
+    setMatchLive(!host.hidden && !host.classList.contains("dealing") && !matchView.outcome);
   }
   // every message to the frame: built from the ruled field list, walled, then posted to OUR origin only.
   function toFrame(type, fields, shape) {

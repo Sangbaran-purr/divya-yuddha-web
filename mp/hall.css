@@ -602,11 +602,51 @@ body:has(.hall-frame-host:not([hidden])) > .hall-wrap { flex: 1 0 auto; padding-
   .hall-frame-host { --fw: min(520px, calc(100vw - 32px)); width: var(--fw); max-width: none; margin-right: 0;
     margin-left: calc(clamp(16px, calc(52.5vw - var(--fw) / 2), calc(100vw - var(--fw) - 16px)) - 52.5vw + min(215px, 27vw) - 16px); }
 }
+@media (min-width: 900px) and (max-width: 1023.98px) {
+  /* MP-FIX-2 — THE BAND THAT HAD NO RULE OF ITS OWN. Between 900 and 1023 the frame fell through to the base
+     `max-width: 520px`, so the geometry was an accident of another rule rather than a decision: the comment above
+     said "520 inside the column" and nothing said it. It is stated now, pinning exactly what was measured before
+     this change (520 wide; x=212.5 at 900x800, x=265 at 1000x800 — the 820 column is already corridor-centred, so
+     `margin: auto` inside it lands on the same pixels). Nothing moves; a future edit to the base rule can no longer
+     move this band silently. */
+  .hall-frame-host { --fw: min(520px, calc(100vw - 32px)); width: var(--fw); max-width: none;
+    margin-left: auto; margin-right: auto; }
+}
 @media (min-width: 1024px) {
   /* the column's content box starts at 52.5vw - 410px + 32px (the .hall-wrap rule above) */
   .hall-frame-host { --fw: clamp(1024px, calc(100vw - 64px), 1120px); width: var(--fw); max-width: none; margin-right: 0;
     margin-left: calc(clamp(0px, calc(52.5vw - var(--fw) / 2), calc(100vw - var(--fw))) - 52.5vw + 378px); }
 }
+/* ══ MP-FIX-2 — THE HALL STEPS BACK WHILE A MATCH IS LIVE (owner ruling 2026-09-23, fault 1, road (i)) ══
+   Measured before the change: at 1440x900 the Hall kept 200.5px of its own chrome above the frame (nav 65 + title
+   band + the column's padding), so the board played in 1120x699.5 and its half stood 179.4 tall against 279.6 solo
+   — every viewport in the 16-matrix lost between 19% and 47% of the board's height to furniture. While a match is
+   live the nav, the title band, the column's padding and the statue-corridor margins are not the player's
+   furniture; the board is. `html.hall-match-live` — set and cleared by hall.js's syncFrameHost, the ONE place that
+   decides whether the frame is on screen — collapses them and gives the frame the window's width AND height, minus
+   nothing but the safe area.
+   THE LOBBY IS UNTOUCHED BY CONSTRUCTION: every declaration below is behind the class, so with the class absent not
+   one of them applies (hallframe's mutant proves it — leak a rule out of the prefix and the suite goes red).
+   THE STRIP STAYS: #hall-root carries statusStrip's lines (reconnecting, the vanish line, the thinking clock) in a
+   slot that is usually empty; while live it becomes an overlay at the top of the frame with no pointer events, so an
+   empty slot draws nothing and a live line is urgent enough to sit over the board. It returns to the flow the moment
+   the match has an outcome — the settle and "back to the Hall" controls live there and must never be behind the
+   board, so hall.js clears the flag on the outcome, on leave, on unmount and on the fallback.
+   The 520 minimum is dropped while live (the frame is the window; the game fits itself to any height — the same
+   measurement the base rule cites), and the page cannot scroll behind a fixed board. */
+html.hall-match-live, html.hall-match-live body { overflow: hidden; }
+html.hall-match-live .hall-nav, html.hall-match-live .hall-title { display: none; }
+html.hall-match-live body:has(.hall-frame-host:not([hidden])) { display: block; min-height: 100dvh; }
+html.hall-match-live body:has(.hall-frame-host:not([hidden])) > .hall-wrap {
+  width: 100%; max-width: none; margin: 0; padding: 0; gap: 0; display: block; flex: none; }
+html.hall-match-live #hall-root {
+  position: fixed; left: 0; right: 0; top: env(safe-area-inset-top, 0px); z-index: 3; pointer-events: none; margin: 0; }
+html.hall-match-live .hall-wrap > .hall-frame-host:not([hidden]) {
+  position: fixed; inset: 0; display: block; width: auto; max-width: none; margin: 0; flex: none; box-sizing: border-box;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+html.hall-match-live .hall-wrap > .hall-frame-host:not([hidden]) > .hall-frame {
+  width: 100%; height: 100%; min-height: 0; flex: none; border: 0; outline: 0; border-radius: 0; }
+
 .hall-free-result .hall-settle-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 /* S-HALL-STRIPS-1 (R4) — THE STRIP SLOT above the frame: statusStrip's lines (reconnecting, the vanish line, the
    thinking clock) in a FIXED one-line slot, so a line coming or going never changes the frame's height and the game
