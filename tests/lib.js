@@ -137,7 +137,7 @@ async function storePage(c, player, opts) {
   const html = fs.readFileSync(path.join(SITE, "store.html"), "utf8");
   const body = (html.split(/<body[^>]*>/)[1] || "").split("</body>")[0];
   const dom = new JSDOM(`<!doctype html><body class="treasury">${body}</body>`,
-    { url: "https://divyayuddha.games/store.html", pretendToBeVisual: true, runScripts: "outside-only" });
+    { url: opts.url || "https://divyayuddha.games/store.html", pretendToBeVisual: true, runScripts: "outside-only" });   // STORE-TRACK-1: a tagged link is a URL with a query
   const w = dom.window;
   w.ethers = ethers;
   const eth = makeEthereum(player, c.provider);

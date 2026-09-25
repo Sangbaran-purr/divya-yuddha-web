@@ -41,6 +41,8 @@ function rpcErr(shape) {
 
 // ── boot admin.js headless, exactly as admin.html loads it, WITHOUT mounting ──────────────────────────────────
 // mount() would reach for a wallet and a network; the archive road's decisions are all reachable without it.
+const adminSrcAll = fs.readFileSync(path.join(SITE, "js/admin.js"), "utf8");
+
 function boot() {
   const errs = [], logs = [];
   const vc = new VirtualConsole();
@@ -438,15 +440,97 @@ async function main() {
       const out = execFileSync("git", ["log", "-1", "--format=%ct"].concat(args), { cwd: SITE, encoding: "utf8" }).trim();
       return out ? Number(out) : 0;
     };
-    const stale = stamped.filter((x) => {
+    const staleIn = (page, list) => list.filter((x) => {
       const fileAt = when(["--", x.src]);
-      const stampAt = when(["-G", x.src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\?v=", "--", "admin.html"]);
+      const stampAt = when(["-G", x.src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\?v=", "--", page]);
       return fileAt > stampAt; // bytes moved after the stamp did
     });
+    const stale = staleIn("admin.html", stamped);
     ok("I1 · BYTES-NOT-TASKS · every stamped console script carries a stamp at least as new as its own bytes — no cached-stale deploy",
        stale.length === 0, "stale: " + stale.map((x) => x.src + "?v=" + x.v).join(", "));
     ok("I2 · and js/admin.js is stamped at all (an unstamped script can never be busted out of a browser cache)",
        stamped.some((x) => x.src === "js/admin.js"));
+    // STORE-TRACK-1 (owner ruling): the same law now covers the STORE. The store page took a money path and an
+    // analytics tag in one commit; a stale stamp there would serve the old bytes to exactly the buyers the campaign
+    // is counting — the console's lesson, applied where the money is.
+    {
+      const shtml = fs.readFileSync(path.join(SITE, "store.html"), "utf8");
+      const sstamped = [...shtml.matchAll(/src="([^"?]+)\?v=([A-Za-z0-9]+)"/g)].map((m) => ({ src: m[1], v: m[2] }));
+      const sstale = staleIn("store.html", sstamped);
+      ok("I3 · STORE-TRACK-1 · the bytes-not-tasks law extends to store.html — every script it stamps (" +
+         sstamped.map((x) => x.src).join(", ") + ") carries a stamp at least as new as its own bytes",
+         sstamped.length > 0 && sstale.length === 0, "stale: " + sstale.map((x) => x.src + "?v=" + x.v).join(", "));
+      ok("I4 · and js/store.js is stamped at all — the file the buy road lives in can always be busted out of a cache",
+         sstamped.some((x) => x.src === "js/store.js"));
+    }
+  }
+
+  // ═══ BS. STORE-TRACK-1 · THE BUNDLE COUNT (the campaign's chain-side number) ═══
+  // The panel answers "how many bundles sold in this window" from the PlayStore's OWN event. Every check here
+  // drives the seam with fixtures — no live call, and no wallet ever leaves the scan.
+  {
+    const A = boot();
+    const R = A.road;
+    ok("BS1 · the count reads Bundled, NOT the sale's Purchased — a bundle sale is a PlayStore log, and counting the token sale would answer the wrong question",
+       /event Bundled\(address indexed buyer, address indexed payAsset, uint256 price, uint256 dyc, uint256 tokenId\)/.test(adminSrcAll) &&
+       /ps\.filters\.Bundled\(\)/.test(adminSrcAll) && !/filters\.Purchased\(\)[^;]*bundled/i.test(adminSrcAll));
+    ok("BS2 · the scan reuses the archive machinery rather than copying it (discoverSpan → readRangeAdaptive → checkpointed walk)",
+       /function scanBundledWindow/.test(adminSrcAll) &&
+       /discoverSpan\(ps, reads, resumeFrom\)/.test(adminSrcAll) &&
+       /readRangeAdaptive\(ps, reads, start, end/.test(adminSrcAll) &&
+       /HEAD_BUFFER/.test(adminSrcAll.slice(adminSrcAll.indexOf("function scanBundledWindow"))));
+    ok("BS3 · the checkpoint lives under the admin namespace and carries COUNTS ONLY — no buyer, ever",
+       R.bundledCkKey("0xabc", 1, 2).indexOf("dyadmin::scan::") === 0 &&
+       /ckptSet\(key, \{ scannedTo: scannedTo, count: count, dyc: String\(dyc\) \}\)/.test(adminSrcAll));
+    // the date → block mapping, driven against a fixture chain whose timestamps are a known ramp
+    const chainTs = (n) => 1700000000 + n * 2;                       // 2s blocks, monotonic
+    const fakeProv = { getBlock: (n) => Promise.resolve({ timestamp: chainTs(n) }) };
+    const probe = async () => {
+      const a = await R.blockAtOrAfter(fakeProv, chainTs(5000), 1, 10000);
+      const b = await R.blockAtOrAfter(fakeProv, chainTs(5000) + 1, 1, 10000);
+      const c2 = await R.blockAtOrBefore(fakeProv, chainTs(5000), 1, 10000);
+      const past = await R.blockAtOrAfter(fakeProv, chainTs(10000) + 99, 1, 10000);
+      const mono = [];
+      for (const t of [1000, 2000, 3000, 7000]) mono.push(await R.blockAtOrAfter(fakeProv, chainTs(t), 1, 10000));
+      return { a, b, c2, past, mono };
+    };
+    const P = await probe();
+    ok("BS4 · a date resolves to the FIRST block at or after it, and the search is monotonic (earlier date → earlier block, never later)",
+       P.a === 5000 && P.b === 5001 && P.c2 === 5000 &&
+       P.mono.every((v, i) => i === 0 || v >= P.mono[i - 1]) && String(P.mono) === "1000,2000,3000,7000", JSON.stringify(P));
+    ok("BS5 · a window past the head resolves above the tip rather than clamping silently onto it",
+       P.past === 10001, String(P.past));
+    ok("BS6 · the UTC day is the window's unit: 00:00:00Z to 23:59:59Z, parsed strictly",
+       R.dayStartTs("2026-10-01") === Math.floor(Date.parse("2026-10-01T00:00:00Z") / 1000) &&
+       R.dayEndTs("2026-10-01") === R.dayStartTs("2026-10-01") + 86399 &&
+       R.dayStartTs("not-a-date") === null);
+    // the scan itself, over a fixture contract that serves two Bundled logs
+    const mkPs = (logs) => ({
+      target: "0xPlayStore",
+      filters: { Bundled: () => ({ __f: "Bundled" }) },
+      queryFilter: (f, a, b) => Promise.resolve(logs.filter((l) => l.blockNumber >= a && l.blockNumber <= b)),
+    });
+    const logs = [
+      { blockNumber: 120, args: { buyer: "0x" + "a".repeat(40), dyc: 500000000000000000000n, tokenId: 1n } },
+      { blockNumber: 480, args: { buyer: "0x" + "b".repeat(40), dyc: 500000000000000000000n, tokenId: 2n } },
+    ];
+    try { A.w.localStorage.clear(); } catch (e) {}
+    const counted = await R.scanBundledWindow(mkPs(logs), 100, 500, () => {}, Date.now() + 20000);
+    ok("BS7 · the scan counts the logs and sums their DYC — and returns COUNTS ONLY, no buyer field on the result",
+       counted.count === 2 && counted.dyc === 1000000000000000000000n &&
+       Object.keys(counted).sort().join(",") === "count,dyc", JSON.stringify({ c: counted.count, keys: Object.keys(counted) }));
+    const narrow = await R.scanBundledWindow(mkPs(logs), 100, 200, () => {}, Date.now() + 20000);
+    ok("BS8 · a narrower window counts only its own blocks — the window is the question, not the whole history",
+       narrow.count === 1, String(narrow.count));
+    const ckRaw = (() => { try { return A.w.localStorage.getItem(R.bundledCkKey("0xPlayStore", 100, 500)); } catch (e) { return null; } })();
+    ok("BS9 · the checkpoint it wrote carries no 0x-address anywhere in its bytes (zero-PII, storage included)",
+       ckRaw == null || !/0x[0-9a-fA-F]{40}/.test(ckRaw), String(ckRaw));
+    const panelHtml = fs.readFileSync(path.join(SITE, "admin.html"), "utf8");
+    const panel = (panelHtml.split('id="panel-bundlesales"')[1] || "").split("</section>")[0];
+    ok("BS10 · the panel renders a count and a DYC total and never a wallet — no address column, no buyer field",
+       !!panel && /bsale-from/.test(panel) && /bsale-to/.test(panel) && /bsale-out/.test(panel) &&
+       !/<th>\s*(To|Buyer|Wallet|Address)\s*<\/th>/i.test(panel) && !/0x[0-9a-fA-F]{40}/.test(panel),
+       panel.slice(0, 120));
   }
 
   // ═══ J. GATE-FIX-1b — A WALL IS NOT A ROAD ═══

@@ -11,7 +11,7 @@
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1g" />
     <link rel="stylesheet" href="css/admin.css?v=s11" />
-    <script src="config.js?v=s16"></script>
+    <script src="config.js?v=s17"></script>
     <script src="admin-config.js?v=s20"></script>
     <script src="js/wave-registry.js?v=w3"></script>
   </head>
@@ -213,6 +213,26 @@
         <div id="registry-results"></div>
       </section>
 
+      <!-- PANEL 5b — BUNDLE SALES (STORE-TRACK-1) -->
+      <section class="panel" id="panel-bundlesales">
+        <h2>Bundle sales — on-chain count</h2>
+        <p class="hint">Counts the PlayStore's <span class="mono">Bundled</span> logs over a date window — the chain's
+          own answer to "how many bundles did that campaign sell", read with the same archive machinery as the
+          registry (adaptive width, resumable checkpoint). Not the sale's <span class="mono">Purchased</span> logs:
+          those are token-sale purchases, a different contract and a different question. <b>Zero personal data</b> —
+          a count and a DYC total; no wallet is accumulated, stored or shown. Read-only; nothing is signed or sent.
+          Leave the dates empty to count everything since the PlayStore's first block.</p>
+        <div class="row-actions">
+          <label class="fld" for="bsale-from" style="margin:0">From (UTC)</label>
+          <input class="txt" id="bsale-from" type="date" style="max-width:11rem" />
+          <label class="fld" for="bsale-to" style="margin:0">To (UTC)</label>
+          <input class="txt" id="bsale-to" type="date" style="max-width:11rem" />
+          <button class="btn tiny" id="bsale-load" data-always="1">Count from chain</button>
+        </div>
+        <div id="bsale-status" class="mono" style="font-size:0.78rem;color:var(--gold-aged);margin-top:0.4rem"></div>
+        <div id="bsale-out" style="margin-top:0.5rem"></div>
+      </section>
+
       <!-- HISTORY -->
       <section class="panel" id="panel-history">
         <h2>Mint history</h2>
@@ -373,7 +393,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1n"></script>
-    <script src="js/admin.js?v=s37"></script>
+    <script src="js/admin.js?v=s38"></script>
     <script>
       window.DYAdmin.mount();
     </script>

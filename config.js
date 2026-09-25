@@ -99,12 +99,32 @@ window.DY_CONFIG = {
   // this is the batch's first block (a safe 1-block floor below the market's events).
   marketDeployBlock: 92465315, // W3-REDEPLOY-WAVE — reborn Sale/Market birth block (bounds the store Listed getLogs scan)
 
+  // STORE-TRACK-1 — the PlayStore's birth block, the floor of the console's Bundled scan. Carried as a VALUE (it
+  // was only a comment beside the address before), so the panel never hardcodes a number the config already knows.
+  playStoreDeployBlock: 93676726,
+
   // ethers.js — pinned. UMD build, verified to expose BrowserProvider /
   // Contract / queryFilter (see S1 STEP-0 report). Loaded via CDN with SRI off
   // (jsDelivr immutable version path is the pin).
   ethers: {
     version: "6.17.0",
     cdn: "https://cdn.jsdelivr.net/npm/ethers@6.17.0/dist/ethers.umd.min.js",
+  },
+
+  // STORE-TRACK-1 — the influencer campaign's tag (owner rulings 2026-09-25). THE ONLY PLACE THE VENDOR IS NAMED:
+  // js/store.js reads this and nothing else. Plausible is cookieless — no cookie, no localStorage, no cross-site
+  // identifier — and the store sends it the three utm values plus which stablecoin was chosen. NEVER a wallet
+  // address, NEVER a transaction hash (the zero-PII law, admin.html:202); the on-chain half of the answer is read
+  // from the PlayStore's Bundled logs in the console instead.
+  //
+  // enabled:false removes the tag ENTIRELY — no script is injected, `window.plausible` stays undefined, and every
+  // event call is a no-op. The store buys identically either way (proven by the bundle suite).
+  analytics: {
+    enabled: true,
+    // Informational only: the per-site script below has the domain baked in, and applies it
+    // LAST over any init options, so it cannot be overridden from the page.
+    domain: "divyayuddha.games",
+    script: "https://plausible.io/js/pa-sJ1oC1_YVyaxd2ADo13iV.js",
   },
 
   // Access-NFT claim state. The site CANNOT mint (AccessNFT.mint is

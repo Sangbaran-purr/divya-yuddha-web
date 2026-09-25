@@ -196,6 +196,11 @@ window.DYAdmin = (function () {
       waveCardSale: o.waveCardSale || fc.waveCardSale || null, // LEG2 — WaveCardSale (Price Desk)
       waveCardMarket: o.waveCardMarket || fc.waveCardMarket || null, // LEG4 — WaveCardMarket (marketsOpen switch)
       vestingVault: o.vestingVault || fc.vestingVault || null, // M-F3 — Purchase Registry VESTED column
+      // STORE-TRACK-1 — the PlayStore (the BUNDLE's contract, not the token sale). Its Bundled logs are the chain
+      // side of the campaign answer; the player config owns the address and the birth block, so the console reads
+      // the same two values the store itself speaks to.
+      playStore: o.playStore || fc.playStore || (PLAYER.contracts && PLAYER.contracts.playStore) || null,
+      playStoreDeployBlock: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (Number(PLAYER.playStoreDeployBlock) || 0); })(o.playStoreDeployBlock),
       holderStaking: o.holderStaking || fc.holderStaking || null, // M-F3 — Purchase Registry STAKED + REWARDS
       // S-LEDGER-FIX-4: a stored 0 / "" / null / undefined / non-numeric deployBlock counts as UNSET → file default rules; only a genuine positive integer wins (a stored 0 used to win and force a genesis full-chain scan).
       deployBlock: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.deployBlock || 0); })(o.deployBlock),
@@ -1684,6 +1689,11 @@ window.DYAdmin = (function () {
     "function allowlistSigner() view returns (address)",
     "event Purchased(address indexed buyer, uint8 round, address asset, uint256 paid, uint256 usdE18, uint256 dycOut, uint256 liquid)",
   ];
+  // STORE-TRACK-1 — the BUNDLE's own event. Deliberately NOT the sale's Purchased: a bundle sale is a PlayStore
+  // Bundled log, and counting the wrong event would answer a campaign question with token-sale numbers.
+  var PLAYSTORE_ABI = [
+    "event Bundled(address indexed buyer, address indexed payAsset, uint256 price, uint256 dyc, uint256 tokenId)",
+  ];
   var REG_VAULT_ABI = ["function vestedBalanceOf(address) view returns (uint256)"];
   var REG_STAKE_ABI = [
     "function positionCount(address) view returns (uint256)",
@@ -1823,6 +1833,139 @@ window.DYAdmin = (function () {
       return { wallet: wallet, bought: r[0], liquid: r[1], vested: r[2], staked: r[3], rewards: r[4] };
     });
   }
+  // ═══════════════ STORE-TRACK-1 · BUNDLE SALES, COUNTED ON CHAIN ═══════════════
+  // The campaign's second number. The store's tag says how many people clicked; this says how many bundles the
+  // chain actually recorded in the same window. Two independent roads to one truth — a gap between them is the
+  // question worth asking (a blocked tag, or a purchase that confirmed after the page stopped waiting).
+  //
+  // ZERO-PII: the scan reads `Bundled(buyer, ...)` but the buyer is NEVER accumulated, never stored and never
+  // rendered. What leaves this function is a COUNT and a DYC TOTAL. The checkpoint carries the same two numbers.
+  //
+  // THE DATE WINDOW → BLOCKS. Polygon block times drift, so a date cannot be divided into a block number; the
+  // mapping is a BINARY SEARCH over block timestamps (`provider.getBlock(n).timestamp`, monotonic by consensus):
+  // `from` resolves to the FIRST block at or after 00:00:00Z of the chosen day, `to` to the LAST block at or
+  // before 23:59:59Z. ~log2(span) block reads, each cached for the session.
+  var blockTsCache = {};
+  function blockTs(provider, n) {
+    if (blockTsCache[n] != null) return Promise.resolve(blockTsCache[n]);
+    return provider.getBlock(n).then(function (b) {
+      var t = b && b.timestamp != null ? Number(b.timestamp) : null;
+      if (t != null) blockTsCache[n] = t;
+      return t;
+    });
+  }
+  // the first block whose timestamp is >= ts, searched inside [lo, hi]; hi + 1 when every block is older
+  function blockAtOrAfter(provider, ts, lo, hi) {
+    var a = lo, b = hi, best = hi + 1;
+    function step() {
+      if (a > b) return Promise.resolve(best);
+      var mid = Math.floor((a + b) / 2);
+      return blockTs(provider, mid).then(function (t) {
+        if (t == null) { a = mid + 1; return step(); }      // a hole in the archive: walk right, never guess
+        if (t >= ts) { best = mid; b = mid - 1; } else { a = mid + 1; }
+        return step();
+      });
+    }
+    return step();
+  }
+  // the last block whose timestamp is <= ts (one before the first block after it)
+  function blockAtOrBefore(provider, ts, lo, hi) {
+    return blockAtOrAfter(provider, ts + 1, lo, hi).then(function (n) { return n - 1; });
+  }
+  // a YYYY-MM-DD in UTC → the day's first second / last second
+  function dayStartTs(d) { var t = Date.parse(String(d) + "T00:00:00Z"); return Number.isFinite(t) ? Math.floor(t / 1000) : null; }
+  function dayEndTs(d) { var t = Date.parse(String(d) + "T23:59:59Z"); return Number.isFinite(t) ? Math.floor(t / 1000) : null; }
+
+  // The scan itself — the SAME machinery the registry rides (discoverSpan → readRangeAdaptive → chunked walk with a
+  // checkpoint after each chunk), reused rather than copied. The checkpoint is keyed by the window so an
+  // interrupted scan of the same window resumes; it stores { scannedTo, count, dyc } and nothing else.
+  function bundledCkKey(ps, from, to) { return ckptKey("bundled", ps) + "::" + from + "-" + to; }
+  function bundledAdvance(key, scannedTo, count, dyc) {
+    var prev = ckptGet(key) || {};
+    var prevTo = Number(prev.scannedTo) || 0;
+    if (!(scannedTo > prevTo)) return prevTo;                 // grow-only, exactly as ckptAdvance is
+    ckptSet(key, { scannedTo: scannedTo, count: count, dyc: String(dyc) });
+    return scannedTo;
+  }
+  function scanBundledWindow(ps, from, to, onProgress, deadlineAt) {
+    var key = bundledCkKey(ps && ps.target, from, to);
+    var ck = ckptGet(key) || {};
+    var count = Number(ck.count) || 0, dyc = 0n;
+    try { dyc = BigInt(ck.dyc || "0"); } catch (e) { dyc = 0n; }
+    var resumeFrom = Number(ck.scannedTo) > 0 && Number(ck.scannedTo) >= from ? Number(ck.scannedTo) + 1 : from;
+    var start = resumeFrom;
+    var totalChunks = Math.max(1, Math.ceil((to - resumeFrom + 1) / archiveSpan(ps))), idx = 0;
+    var reads = function (x, y) { return ps.queryFilter(ps.filters.Bundled(), x, y); };
+    function persist(end) {
+      var persistTo = Math.min(end, to - HEAD_BUFFER);        // never bookmark the freshest window (replica lag)
+      if (persistTo < from) return;
+      bundledAdvance(key, persistTo, count, dyc);
+    }
+    function stepp() {
+      if (start > to) return Promise.resolve({ count: count, dyc: dyc });
+      if (Date.now() > deadlineAt) { var de = new Error("scan deadline"); de.__deadline = true; return Promise.reject(de); }
+      var end = Math.min(start + archiveSpan(ps) - 1, to);
+      idx++;
+      var label = "chunk " + idx + "/" + totalChunks;
+      if (onProgress) onProgress(label);
+      return readRangeAdaptive(ps, reads, start, end, function () { if (onProgress) onProgress(label + ", retrying"); }, null, deadlineAt)
+        .then(function (evs) {
+          evs.forEach(function (ev) { count += 1; dyc += (ev.args && ev.args.dyc != null) ? ev.args.dyc : 0n; });  // the buyer is READ and DROPPED
+          persist(end);
+          start = end + 1;
+          return sleep(120).then(stepp);
+        });
+    }
+    return discoverSpan(ps, reads, resumeFrom).then(function () { return stepp(); }, function () { return stepp(); });
+  }
+
+  // the panel driver
+  function loadBundleCount() {
+    var c = cfg(), st = $("bsale-status"), outEl = $("bsale-out"), btn = $("bsale-load");
+    if (!st) return;
+    outEl.textContent = "";
+    if (!c.playStore) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>PlayStore not configured</span> — needed to read Bundled logs."; return; }
+    var fromD = ($("bsale-from") && $("bsale-from").value) || "", toD = ($("bsale-to") && $("bsale-to").value) || "";
+    var tsFrom = fromD ? dayStartTs(fromD) : null, tsTo = toD ? dayEndTs(toD) : null;
+    if ((fromD && tsFrom == null) || (toD && tsTo == null)) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>Dates must be YYYY-MM-DD.</span>"; return; }
+    if (tsFrom != null && tsTo != null && tsTo < tsFrom) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>The window ends before it starts.</span>"; return; }
+    if (btn) btn.disabled = true;
+    st.style.color = "var(--gold-aged)"; st.innerHTML = "Waking the archive — this can take ~30 seconds on first contact…";
+    var deployFrom = c.playStoreDeployBlock || c.deployBlock || 0;
+    withEthers().then(function () {
+      var provider = readProvider();
+      return provider.getBlockNumber().then(function (latest) {
+        return historyProvider(c.playStore).then(function (h) {
+          var ps = new ethersRef.Contract(c.playStore, PLAYSTORE_ABI, h.provider);
+          if (h.ownerSkipped) st.innerHTML = ownerSkippedHtml(h.ownerSkipped, 0);
+          st.innerHTML = "Finding the window's blocks…";
+          var pFrom = tsFrom == null ? Promise.resolve(deployFrom) : blockAtOrAfter(h.provider, tsFrom, deployFrom, latest);
+          var pTo = tsTo == null ? Promise.resolve(latest) : blockAtOrBefore(h.provider, tsTo, deployFrom, latest);
+          return Promise.all([pFrom, pTo]).then(function (r) {
+            var from = Math.max(deployFrom, r[0]), to = Math.min(latest, r[1]);
+            if (to < from) return { count: 0, dyc: 0n, from: from, to: to, empty: true };
+            var deadlineAt = Date.now() + scanDeadlineMs(from, to, archiveSpan(ps));
+            return raceDeadline(scanBundledWindow(ps, from, to, function (lbl) { st.innerHTML = "Reading Bundled logs — " + lbl + "…"; }, deadlineAt), deadlineAt)
+              .then(function (x) { return { count: x.count, dyc: x.dyc, from: from, to: to }; });
+          });
+        });
+      });
+    }).then(function (r) {
+      if (btn) btn.disabled = false;
+      st.style.color = "var(--gold-aged)";
+      st.innerHTML = "Blocks " + r.from + "–" + r.to + (r.empty ? " (no blocks in that window yet)" : "") + ".";
+      var dycTxt = "0";
+      try { dycTxt = ethersRef.formatUnits(r.dyc, 18); } catch (e) {}
+      outEl.innerHTML = "<b>" + r.count + "</b> bundle" + (r.count === 1 ? "" : "s") + " sold · <b>" +
+        String(dycTxt).replace(/\.0+$/, "") + " DYC</b> delivered. <span class='hint'>Counts only — no wallets are read out of this panel.</span>";
+    }).catch(function (e) {
+      if (btn) btn.disabled = false;
+      console.error("[DY admin] BUNDLE count failed:", { deadline: !!(e && e.__deadline), archive: isArchiveError(e), range: isRangeError(e), error: e });
+      st.style.color = "var(--gold-aged)";
+      st.innerHTML = "<span class='bad'>" + (e && e.__deadline ? "The scan ran long — press again and it resumes where it stopped." : "Could not read the chain just now — try again.") + "</span>";
+    });
+  }
+
   function loadRegistry() {
     var c = cfg(), out = $("registry-results"), cnt = $("registry-count");
     if (!c.dycoinSale) { out.innerHTML = "<div class='q'>Configure the DYCoinSale address first.</div>"; return; }
@@ -2976,6 +3119,7 @@ window.DYAdmin = (function () {
     if ($("approve-sign")) $("approve-sign").onclick = runApprove;
     if ($("approve-download")) $("approve-download").onclick = downloadAllowlist;
     if ($("registry-load")) $("registry-load").onclick = loadRegistry;
+    if ($("bsale-load")) $("bsale-load").onclick = loadBundleCount;   // STORE-TRACK-1
     if ($("registry-csv")) $("registry-csv").onclick = downloadRegistryCsv;
     // Access panel
     $("acc-review").onclick = function () {
@@ -3068,6 +3212,13 @@ window.DYAdmin = (function () {
       ckptGet: ckptGet,
       ckptAdvance: ckptAdvance,
       scanPurchasedByBuyer: scanPurchasedByBuyer,
+      // STORE-TRACK-1 — the bundle count's pure parts, driven by the suite with fixtures (never a live call)
+      scanBundledWindow: scanBundledWindow,
+      blockAtOrAfter: blockAtOrAfter,
+      blockAtOrBefore: blockAtOrBefore,
+      dayStartTs: dayStartTs,
+      dayEndTs: dayEndTs,
+      bundledCkKey: bundledCkKey,
       historyProvider: historyProvider,
       HEAD_BUFFER: HEAD_BUFFER,
       LOG_CHUNK_START: LOG_CHUNK_START,

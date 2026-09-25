@@ -81,6 +81,95 @@ window.DYStore = (function () {
   }
   function eqAddr(a, b) { return a && b && a.toLowerCase() === b.toLowerCase(); }
 
+  // ═══════════════════ STORE-TRACK-1 · THE COOKIELESS TAG ═══════════════════
+  // Owner rulings 2026-09-25 (docs/STORE_TRACK_2026-09-25.md): option B, vendor Plausible, and NO transaction hash
+  // and NO wallet address ever leave the page — the zero-PII law (admin.html:202) stands over this surface too.
+  //
+  // What travels: the three utm values from the link the player followed, plus which stablecoin they chose. That is
+  // all a campaign needs and it names nobody. The on-chain half of the answer (how many bundles actually sold in a
+  // window) is read from the Bundled logs in the console, never sent from here.
+  //
+  // The vendor script is INJECTED AT RUNTIME from config, the way ethers is (js/wallet.js:56-58): a blocked, failed
+  // or disabled tag leaves `window.plausible` undefined, and every call site below is a try/catch no-op. Nothing in
+  // this module is allowed to touch a money path.
+  var TRACK_KEY = "dystore::utm";       // sessionStorage ONLY — never localStorage, so a later visit inherits nothing
+  var UTM_FIELDS = ["utm_source", "utm_medium", "utm_campaign"];
+  var trackMounted = false;
+
+  function trackCfg() { return (CFG && CFG.analytics) || {}; }
+  // sessionStorage, guarded: private mode / disabled storage must never throw into a mount or a buy
+  function ssGet(k) { try { return window.sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ssSet(k, v) { try { window.sessionStorage.setItem(k, v); } catch (e) { /* no store — the visit is simply untagged */ } }
+
+  // THE FIRST-PAINT CAPTURE. A link carrying ANY of the three tags REPLACES the stored set wholesale — campaign B
+  // must never inherit campaign A's source. A visit with no tags at all leaves whatever this session already had
+  // (the player moved from a tagged page to an untagged one), and a brand-new session has nothing to inherit.
+  function captureUtm(search) {
+    var q = String(search == null ? (window.location && window.location.search) || "" : search);
+    var found = {}, any = false;
+    UTM_FIELDS.forEach(function (k) {
+      var m = q.match(new RegExp("[?&]" + k + "=([^&#]*)"));
+      if (m) { any = true; try { found[k] = decodeURIComponent(m[1].replace(/\+/g, " ")); } catch (e) { found[k] = m[1]; } }
+    });
+    if (!any) return currentUtm();
+    UTM_FIELDS.forEach(function (k) { if (found[k] == null) found[k] = ""; });
+    ssSet(TRACK_KEY, JSON.stringify(found));
+    return found;
+  }
+  function currentUtm() {
+    var raw = ssGet(TRACK_KEY);
+    if (!raw) return {};
+    var o = null;
+    try { o = JSON.parse(raw); } catch (e) { return {}; }
+    if (!o || typeof o !== "object") return {};
+    var out = {};
+    UTM_FIELDS.forEach(function (k) { if (typeof o[k] === "string" && o[k] !== "") out[k] = o[k]; });
+    return out;
+  }
+
+  // ONE event helper. Every payload is built here, from the captured tags plus the caller's own plain props, so no
+  // call site can smuggle a value past the law: anything that looks like an address or a hash is dropped, loudly in
+  // the console and silently on the wire.
+  function track(name, props) {
+    try {
+      var payload = currentUtm();
+      var extra = props || {};
+      for (var k in extra) {
+        if (!Object.prototype.hasOwnProperty.call(extra, k)) continue;
+        var v = extra[k];
+        if (typeof v !== "string" && typeof v !== "number") continue;
+        if (/^0x[0-9a-fA-F]{40}$|^0x[0-9a-fA-F]{64}$/.test(String(v))) { continue; }   // never an address, never a hash
+        payload[k] = v;
+      }
+      if (typeof window.plausible === "function") window.plausible(name, { props: payload });
+    } catch (e) { /* a tag can never break a road */ }
+  }
+
+  // The tag itself: injected once, from config, and only when the owner has it on.
+  function mountTracking() {
+    if (trackMounted) return;
+    trackMounted = true;
+    captureUtm();                                   // first paint: the tags are read before anything else can navigate
+    var a = trackCfg();
+    if (a.enabled && a.script && typeof document !== "undefined" && document.head) {
+      try {
+        // Plausible's per-site snippet. The queue shim catches calls made before the script
+        // lands — the script replays window.plausible.q on arrival and then replaces the
+        // global — so store_view is no longer lost to the race. The site's domain is baked
+        // into the script itself, so there is no data-domain attribute to set.
+        var w = window;
+        w.plausible = w.plausible || function () { (w.plausible.q = w.plausible.q || []).push(arguments); };
+        w.plausible.init = w.plausible.init || function (i) { w.plausible.o = i || {}; };
+        w.plausible.init();
+        var s = document.createElement("script");
+        s.async = true;
+        s.src = a.script;
+        document.head.appendChild(s);
+      } catch (e) { /* a refused injection is a no-op, exactly like a blocked one */ }
+    }
+    track("store_view", {});                        // once per load, whether or not the script landed
+  }
+
   function loadE() { return window.DYWallet.loadEthers(); }
   // RUNG4-FIX-3 — reads ride the shared tamed publicnode road (staticNetwork, fail-fast), NOT the dead rpcUrls[0]
   // JsonRpcProvider that spun the "failed to detect network, retry in 1s" loop. Writes still use signerRoad (wallet).
@@ -1082,6 +1171,9 @@ window.DYStore = (function () {
       });
     }).then(function (w) {
       if (w.o.slow) { msg.className = "st-msg"; msg.textContent = "Still confirming on chain. Nothing is lost — refresh when it lands."; btn.disabled = false; return; }
+      // STORE-TRACK-1: CONFIRMED only. A slow tx returns above with no event — the chain-side count in the console
+      // is what reconciles those; a client-side "probably landed" would be a lie the campaign figures inherit.
+      track("bundle_purchased", { asset: assetKey });
       return bundleReceipt(w.r, w.o.receipt, dycBefore, host);
     }).catch(function (e) {
       btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = bundleErr(e, { sym: sym, sum: sum });
@@ -1329,7 +1421,10 @@ window.DYStore = (function () {
       var buy = el("button", "st-btn b-buy"); buy.type = "button"; buy.textContent = "Buy the bundle";
       var closed = st.open === false || (st.packSize != null && st.stock != null && st.stock < st.packSize) || st.stock == null;
       buy.disabled = !!closed;
-      buy.onclick = function () { bundleBuy(pick.chosen, host, msg, buy); };
+      buy.onclick = function () {
+        track("bundle_buy_click", { asset: pick.chosen });   // STORE-TRACK-1: intent, before any wallet prompt
+        bundleBuy(pick.chosen, host, msg, buy);
+      };
       body.appendChild(buy);
     } else {
       var packs = Math.max(1, Math.min(bPacks, maxPacksNow >= 1 ? maxPacksNow : 1));
@@ -1391,6 +1486,10 @@ window.DYStore = (function () {
   return {
     mountStore: mountStore,
     mountBundle: mountBundle,
+    mountTracking: mountTracking,
+    track: track,
+    captureUtm: captureUtm,
+    currentUtm: currentUtm,
     bundleConfigured: bundleConfigured,
     saleConfigured: saleConfigured,
     marketConfigured: marketConfigured,

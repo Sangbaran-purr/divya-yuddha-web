@@ -381,6 +381,208 @@ async function main() {
     H.teardown(h);
   }
 
+  // ══════════════════════════ P7 · STORE-TRACK-1 · THE TAG ══════════════════════════
+  // The campaign's client-side half, driven through the REAL store.js on the REAL contracts. Three laws are under
+  // test at once: the tag never carries a person, it never fires on a purchase that did not confirm, and it can
+  // never touch the money path — a throwing tag must leave the buy exactly as it was.
+  console.log("\n── P7 · the cookieless tag: tags only, confirmed only, never in the way ──");
+  {
+    const TAG_URL = "https://divyayuddha.games/store.html?utm_source=test&utm_medium=video&utm_campaign=torana_oct26";
+    // a capture stub standing in for the vendor script: every call recorded, nothing sent
+    const spy = (w) => { const calls = []; w.plausible = (name, o) => calls.push({ name, props: (o && o.props) || {} }); return calls; };
+    const PII = /0x[0-9a-fA-F]{40}\b|0x[0-9a-fA-F]{64}\b/;
+    const scanPII = (calls) => calls.filter((c) => PII.test(JSON.stringify(c)));
+
+    // THE HARNESS'S GAS BUDGET, stated: every case here deploys its own contracts through the deployer account,
+    // and the page's fee floors (RUNG4-FIX-6: 45/30 gwei) make each deployment cost real ETH on anvil. After the
+    // twelve cases above, the deployer is near the end of its default balance — the first symptom is an
+    // "insufficient funds" that looks like a page fault and is not one. Top both harness accounts up here, once,
+    // so THIS section's failures can only ever be the page's.
+    const fund = async (c) => {
+      for (const a of [c.addrs.owner, c.player.address]) {
+        await c.provider.send("anvil_setBalance", [a, "0x" + (10000n * 10n ** 18n).toString(16)]);
+      }
+    };
+
+    // ── the capture, and what a later visit may inherit (no buy: one chain serves both) ──
+    const cNoBuy = await H.chainStore();
+    await fund(cNoBuy);
+
+    // ── the vendor snippet itself, exactly as Plausible's per-site form ships it ──
+    {
+      const h = await H.storePage(cNoBuy, cNoBuy.player, { url: TAG_URL });
+      const w = h.w;
+      w.DYStore.mountTracking();                     // deliberately NO spy: the REAL shim has to install
+      const tags = [...w.document.querySelectorAll("script")].filter((t) => t.src === w.DY_CONFIG.analytics.script);
+      ok("the injected tag IS the per-site script named in config — async, and carrying no data-domain attribute",
+         tags.length === 1 && tags[0].async === true && !tags[0].hasAttribute("data-domain"),
+         JSON.stringify([...w.document.querySelectorAll("script")].map((t) => t.src)));
+      // The script replays window.plausible.q on arrival, so store_view — fired before the network
+      // has a chance to deliver it — is queued rather than dropped.
+      const q = (w.plausible && w.plausible.q) || [];
+      ok("the queue shim is installed and initialised, so store_view is QUEUED for the script, not lost to the race",
+         typeof w.plausible === "function" && typeof w.plausible.init === "function" && !!w.plausible.o &&
+         q.length === 1 && q[0][0] === "store_view" && q[0][1].props.utm_campaign === "torana_oct26",
+         JSON.stringify(q));
+      H.teardown(h);
+    }
+    {
+      const c = cNoBuy;
+      const h = await H.storePage(c, c.player, { url: TAG_URL });
+      const w = h.w;
+      const calls = spy(w);
+      w.DYStore.mountTracking();
+      ok("the three utm values are captured at first paint, from the page's own URL",
+         JSON.stringify(w.DYStore.currentUtm()) === JSON.stringify({ utm_source: "test", utm_medium: "video", utm_campaign: "torana_oct26" }),
+         JSON.stringify(w.DYStore.currentUtm()));
+      ok("they live in sessionStorage, never localStorage — a later VISIT inherits nothing",
+         !!w.sessionStorage.getItem("dystore::utm") && w.localStorage.getItem("dystore::utm") === null);
+      ok("store_view fires once per load and carries the tags",
+         calls.length === 1 && calls[0].name === "store_view" && calls[0].props.utm_campaign === "torana_oct26", JSON.stringify(calls));
+      w.DYStore.mountTracking();
+      ok("and only once — a second mount is a no-op, so one load is one view", calls.length === 1, String(calls.length));
+      // the same session, a page with no tags: the campaign is still known
+      w.DYStore.captureUtm("?nothing=here");
+      ok("an untagged page LATER IN THE SAME VISIT inherits the campaign (the player browsed on)",
+         w.DYStore.currentUtm().utm_campaign === "torana_oct26");
+      // a different campaign REPLACES — never merges
+      w.DYStore.captureUtm("?utm_campaign=other_campaign");
+      const after = w.DYStore.currentUtm();
+      ok("a second campaign link REPLACES the set — campaign B never inherits campaign A's source (a merge would mis-credit)",
+         after.utm_campaign === "other_campaign" && after.utm_source == null && after.utm_medium == null, JSON.stringify(after));
+      H.teardown(h);
+    }
+    // a FRESH visit, untagged, with no storage: nothing is inherited
+    {
+      const c = cNoBuy;
+      const h = await H.storePage(c, c.player);          // the plain URL, a new jsdom, empty sessionStorage
+      const calls = spy(h.w);
+      h.w.DYStore.mountTracking();
+      ok("a FRESH untagged visit carries no tags at all — no stale set survives a visit",
+         JSON.stringify(h.w.DYStore.currentUtm()) === "{}" && JSON.stringify(calls[0].props) === "{}", JSON.stringify(calls));
+      H.teardown(h);
+    }
+
+    // ── the two money-path events, on a real confirmed buy ──
+    {
+      const c = await H.chainStore();
+      await fund(c);
+      await deal(c, "usdc", c.player.address, 25n * DEC6);
+      const h = await H.storePage(c, c.player, { url: TAG_URL });
+      const w = h.w;
+      const calls = spy(w);
+      w.DYStore.mountTracking();
+      await connect(w);
+      H.click(w, ".b-buy");
+      const clicked = calls.filter((x) => x.name === "bundle_buy_click");
+      ok("bundle_buy_click fires on the click, with the tags and the chosen asset",
+         clicked.length === 1 && clicked[0].props.asset === "usdc" && clicked[0].props.utm_source === "test", JSON.stringify(clicked));
+      await waitFor("the receipt", () => /is yours/.test(tile(w)));
+      const bought = calls.filter((x) => x.name === "bundle_purchased");
+      ok("bundle_purchased fires exactly once, AFTER the purchase confirmed, with the tags and the asset",
+         bought.length === 1 && bought[0].props.asset === "usdc" && bought[0].props.utm_campaign === "torana_oct26", JSON.stringify(bought));
+      ok("THE PURCHASE STILL LANDED — the tag is a bystander to the money path",
+         (await c.nft.balanceOf(c.player.address)) === 1n && (await c.dyc.balanceOf(c.player.address)) === 500n * DEC);
+      ok("ZERO-PII · no captured call carries a wallet address or a transaction hash, anywhere in its payload",
+         scanPII(calls).length === 0, JSON.stringify(scanPII(calls)));
+
+      // The check above is passive: the page never passes an address, so it would stay green
+      // even with the filter gone. This one ATTACKS the filter — the law has to hold against
+      // a caller that tries, because that is the only way a wallet ever reaches a vendor.
+      const before = calls.length;
+      w.DYStore.track("smuggle_attempt", { addr: c.player.address, hash: "0x" + "ab".repeat(32), asset: "usdc" });
+      const smug = calls[before] || { props: {} };
+      ok("ZERO-PII · the filter DROPS an address and a tx hash handed to it, and keeps the honest field",
+         scanPII([smug]).length === 0 && smug.props.asset === "usdc" &&
+         smug.props.addr === undefined && smug.props.hash === undefined, JSON.stringify(smug));
+      H.teardown(h);
+    }
+
+    // ── a purchase that did NOT confirm in time: no event, ever ──
+    {
+      const c = await H.chainStore();
+      await fund(c);
+      await deal(c, "usdc", c.player.address, 25n * DEC6);
+      const h = await H.storePage(c, c.player, { url: TAG_URL, waitMs: 1 });   // the bounded wait gives up at once
+      const w = h.w;
+      const calls = spy(w);
+      w.DYStore.mountTracking();
+      await connect(w);
+      H.click(w, ".b-buy");
+      await waitFor("the slow-confirm line", () => /Still confirming on chain/.test(msg(w)));
+      ok("a SLOW (unconfirmed) purchase fires NO bundle_purchased — the count must never inherit a maybe",
+         calls.filter((x) => x.name === "bundle_purchased").length === 0 &&
+         calls.filter((x) => x.name === "bundle_buy_click").length === 1, JSON.stringify(calls.map((x) => x.name)));
+      H.teardown(h);
+    }
+
+    // ── the receiver refusal: the pre-flight stops before any approve, and before any purchased event ──
+    {
+      const c = await H.chainStore();
+      await fund(c);
+      await deal(c, "usdc", c.player.address, 25n * DEC6);
+      await c.provider.send("anvil_setCode", [c.player.address, "0x60006000fd"]);   // a wallet that cannot receive an ERC-721
+      const h = await H.storePage(c, c.player, { url: TAG_URL });
+      const w = h.w;
+      const calls = spy(w);
+      w.DYStore.mountTracking();
+      await connect(w);
+      H.click(w, ".b-buy");
+      await waitFor("the P5 refusal", () => msg(w).indexOf(P5) >= 0);
+      ok("a wallet that cannot hold the Torana is refused with NO bundle_purchased — the hook sits after the pre-flight, not before it",
+         calls.filter((x) => x.name === "bundle_purchased").length === 0, JSON.stringify(calls.map((x) => x.name)));
+      ok("and the allowance never moved (GATES 12e still holds with the tag in place)",
+         (await c.usdc.allowance(c.player.address, c.addrs.ps)) === 0n);
+      // THE SUITE'S OWN TRIPWIRE (P2's lesson): anvil_setCode is chain-wide and every case here shares one anvil.
+      // Put the wallet back, and assert it — without this the blocks below buy from a smart account and the tag's
+      // happy path looks broken when the leak, not the page, is at fault.
+      await c.provider.send("anvil_setCode", [c.player.address, "0x"]);
+      ok("the tag's refusal case puts the wallet back too — no code leaks into the cases below",
+         (await c.provider.getCode(c.player.address)) === "0x");
+      H.teardown(h);
+    }
+
+    // ── the tag off, and the tag broken: the store buys identically either way ──
+    {
+      const c = await H.chainStore();
+      await fund(c);
+      await deal(c, "usdc", c.player.address, 25n * DEC6);
+      const h = await H.storePage(c, c.player, { url: TAG_URL });
+      const w = h.w;
+      const SCRIPT = w.DY_CONFIG.analytics.script;
+      w.DY_CONFIG.analytics = { domain: "divyayuddha.games", script: SCRIPT, enabled: false };
+      // No stub here, deliberately: a spy would define window.plausible itself and hide whether
+      // the page installed a shim. With nothing standing in, "nothing exists" is provable.
+      w.DYStore.mountTracking();
+      ok("config.analytics.enabled=false injects NO vendor script AND installs no shim — window.plausible stays undefined",
+         [...w.document.querySelectorAll("script")].filter((t) => t.src === SCRIPT).length === 0 &&
+         typeof w.plausible === "undefined");
+      await connect(w);
+      H.click(w, ".b-buy");
+      await waitFor("the receipt", () => /is yours/.test(tile(w)));
+      ok("with the tag OFF the bundle still lands, whole — the page's money path does not depend on it",
+         (await c.nft.balanceOf(c.player.address)) === 1n && (await c.dyc.balanceOf(c.player.address)) === 500n * DEC);
+      ok("and nothing was queued for a vendor that never arrives — still no window.plausible after the whole purchase",
+         typeof w.plausible === "undefined");
+      H.teardown(h);
+    }
+    {
+      const c = await H.chainStore();
+      await fund(c);
+      await deal(c, "usdc", c.player.address, 25n * DEC6);
+      const h = await H.storePage(c, c.player, { url: TAG_URL });
+      const w = h.w;
+      w.plausible = () => { throw new Error("the tag exploded"); };   // the worst a vendor script can do
+      w.DYStore.mountTracking();
+      await connect(w);
+      H.click(w, ".b-buy");
+      await waitFor("the receipt", () => /is yours/.test(tile(w)));
+      ok("A THROWING TAG CANNOT BREAK A BUY — the Torana and the 500 DYC land exactly as they do without it",
+         (await c.nft.balanceOf(c.player.address)) === 1n && (await c.dyc.balanceOf(c.player.address)) === 500n * DEC);
+      H.teardown(h);
+    }
+  }
+
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));
   process.exit(fail ? 1 : 0);
 }
