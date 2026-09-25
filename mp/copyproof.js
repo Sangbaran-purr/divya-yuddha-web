@@ -16,6 +16,10 @@ const HALL = fs.readFileSync(path.resolve(__dirname, "hall.js"), "utf8");
 // js/store.js). One prover, two laws; neither can drift from its doc without turning this suite red.
 const SDOC = fs.readFileSync(path.resolve(__dirname, "..", "docs", "STORE_DESIGN.md"), "utf8");
 const STORE = fs.readFileSync(path.resolve(__dirname, "..", "js", "store.js"), "utf8");
+// WINNINGS-4 — THE THIRD PAIR. The dashboard had no copy law at all until this rung, which made the most
+// money-adjacent surface on the site the only unruled one. DASHBOARD_DESIGN_v1.md section 11 -> js/dashboard.js.
+const DDOC = fs.readFileSync(path.resolve(__dirname, "..", "docs", "DASHBOARD_DESIGN_v1.md"), "utf8");
+const DASH = fs.readFileSync(path.resolve(__dirname, "..", "js", "dashboard.js"), "utf8");
 const RITE = fs.readFileSync(path.resolve(__dirname, "..", "rite.html"), "utf8");
 const RULINGS = fs.readFileSync(path.resolve(__dirname, "..", "docs", "RULINGS_2026-08-27.md"), "utf8");
 const INDEX = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
@@ -259,5 +263,51 @@ while ((m = re.exec(DOC))) {
 console.log("    " + lit + " carried literally, " + diff + " rendered differently — advisory only.");
 
 const RULED_N = LAW.length + STORE_LAW.length;
-console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_N + " ruled lines × doc+code across TWO pairs, + " + (pass + fail - RULED_N * 2) + " structural)");
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// WINNINGS-4 — THE DASHBOARD'S LAW: docs/DASHBOARD_DESIGN_v1.md section 11 -> js/dashboard.js
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+function inDDoc(line) { return norm(DDOC).indexOf(norm(line)) >= 0; }
+const DASH_LAW = [
+  ["W1 lead",            "Winnings are a tag on the DYC you already hold - not a separate balance. Only DYC won from a match where your opponent staked liquid DYC can be withdrawn."],
+  ["W2 rate",            "0.008 USDT per DYC - fixed until DYC lists on an exchange."],
+  ["W3 floor",           "Minimum withdrawal 125 DYC (USD 1)."],
+  ["W4 cadence",         "One withdrawal per wallet every 24 hours."],
+  ["W5 treasury",        "The DYC you withdraw returns to the treasury."],
+  ["W6 facility",        "Withdrawals are available while the desk's USDT reserve lasts. This is a facility, not an entitlement."],
+  ["W7 dormant",         "Withdrawals are not yet open. The desk opens when the reserve is funded."],
+  ["W8 fresh win",       "A win needs a few minutes on chain before it can be withdrawn."],
+  ["W9 confirm",         "Withdraw [900] DYC and receive [7.200000] USDT. The DYC returns to the treasury."],
+  ["W10 reopens",        "Your next withdrawal opens at [time]."],
+  ["E1 cooldown",        "You have already withdrawn today. Only one withdrawal per wallet every 24 hours."],
+  ["E2 below minimum",   "The minimum withdrawal is 125 DYC (USD 1)."],
+  ["E3 exhausted",       "You have withdrawn all of your winnings so far."],
+  ["E4 expired",         "This withdrawal approval has expired. Approvals last 4 hours - ask for a fresh one."],
+  ["E5 paused",          "Withdrawals are paused for a moment."],
+  ["E6 reserve short",   "The cash-out desk's reserve can't cover this right now. Try a smaller amount or check back later."],
+  ["E7 bad signature",   "This withdrawal approval couldn't be verified. It may be from an old signing key - ask for a fresh one."],
+  ["S1 deriver refusal", "We can't confirm your winnings right now - nothing is lost. Try again shortly."],
+  ["S2 rate limited",    "You've just asked for one - give it a minute and try again."],
+  ["S3 nothing yet",     "You have no winnings to withdraw yet."],
+  ["S4 bad challenge",   "That sign-in couldn't be verified. Start again."],
+  ["S5 geo",             "Withdrawals aren't available from your location."],
+  ["S6 kyc",             "Withdrawals need identity verification first."],
+  ["S7 not served",      "This wallet can't be served."],
+  ["G1 gas",             "You need a small amount of POL for network fees. Add a little POL to your wallet and try again."],
+];
+console.log("\n── THE DASHBOARD'S LAW · DASHBOARD_DESIGN_v1 section 11 ruled copy (doc → js/dashboard.js) ──");
+for (const [tag, line] of DASH_LAW) {
+  ok(tag + " — in the doc", inDDoc(line), line);
+  ok(tag + " — carried verbatim by dashboard.js", carriesIn(DASH, line, false), line);
+}
+// THE TRAP THIS LAW EXISTS TO CATCH: the DropDesk's 90-day wording must never answer a WINNINGS expiry. The
+// winnings sentence says 4 hours; the drop sentence says 90 days; both must be present and distinct.
+ok("W-TRAP — the winnings expiry does NOT use the DropDesk's 90-day wording",
+   DASH.indexOf("Approvals last 4 hours") >= 0
+   && DASH.indexOf("Coupons are valid for 90 days") >= 0
+   && DASH.indexOf("ExpiredCoupon: \"This withdrawal approval has expired") >= 0);
+
+// WINNINGS-4: THREE pairs now (Hall, Store, Dashboard). RULED_N counts the first two; DASH_LAW is the third and
+// is added here so the arithmetic printed below is the true one, not an inherited one.
+const RULED_ALL = RULED_N + DASH_LAW.length;
+console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across THREE pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);

@@ -129,6 +129,80 @@ async function chainStore(opts) {
   };
 }
 
+// ── WINNINGS-4 — THE DASHBOARD'S CHAIN. The REAL WinningsDesk (web3 2b1f106) against MockDYC + a 6-dec MockStable
+//    standing in for USDT, funded and unpaused so the ceremony has somewhere real to land. Nothing is mocked that
+//    a wallet would actually touch: the desk under test is the deployed bytecode, not a stub of it.
+async function chainWinnings(opts) {
+  opts = opts || {};
+  const provider = new ethers.JsonRpcProvider(RPC);
+  const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
+  const player = new ethers.Wallet(K.p1, provider);
+  const ownerAddr = await owner.getAddress();
+  const signer = ethers.Wallet.createRandom();           // the winnings coupon key (ephemeral, test-only)
+  const treasury = ethers.Wallet.createRandom().address;
+  const F = (n) => { const a = art(n); return new ethers.ContractFactory(a.abi, a.bytecode, owner); };
+
+  const dyc = await (F("MockDYC")).deploy(); await dyc.waitForDeployment();
+  const usdt = await (F("MockStable")).deploy("Tether USD", "USDT", 6); await usdt.waitForDeployment();
+  const desk = await (F("WinningsDesk")).deploy(await dyc.getAddress(), await usdt.getAddress(), treasury, signer.address, ownerAddr);
+  await desk.waitForDeployment();
+  const deskAddr = await desk.getAddress();
+
+  await (await dyc.mint(player.address, 100000n * DEC)).wait();
+  await (await usdt.mint(ownerAddr, 1000n * DEC6)).wait();
+  await (await usdt.approve(deskAddr, ethers.MaxUint256)).wait();
+  if (opts.reserve !== 0n) await (await desk.fundDesk(opts.reserve == null ? 500n * DEC6 : opts.reserve)).wait();
+  if (opts.paused) await (await desk.pause()).wait();
+
+  return { provider, owner, player, desk, dyc, usdt, signer, treasury,
+           addrs: { desk: deskAddr, dyc: await dyc.getAddress(), usdt: await usdt.getAddress(), treasury, owner: ownerAddr } };
+}
+
+// ── WINNINGS-4 — THE DASHBOARD'S PAGE, in jsdom: dashboard.html's REAL markup and the REAL scripts in page order.
+//    `opts.winnings` supplies the two switches; leaving them out is the DORMANT state the site actually ships.
+//    `opts.svc` installs a fetch stub standing in for the approval-bot's /winnings/* routes.
+async function dashboardPage(c, player, opts) {
+  opts = opts || {};
+  const html = fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8");
+  const body = (html.split(/<body[^>]*>/)[1] || "").split("</body>")[0];
+  const dom = new JSDOM(`<!doctype html><body class="mf">${body}</body>`,
+    { url: "https://divyayuddha.games/dashboard.html", pretendToBeVisual: true, runScripts: "outside-only" });
+  const w = dom.window;
+  w.ethers = ethers;
+  const eth = makeEthereum(player, c.provider);
+  w.ethereum = eth;
+  w.TextEncoder = TextEncoder;
+  w.__fetches = [];
+  w.fetch = function (u, init) {
+    w.__fetches.push(String(u));
+    const svc = opts.svc || {};
+    for (const key of Object.keys(svc)) {
+      if (String(u).indexOf(key) >= 0) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(svc[key](init)) });
+    }
+    return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
+  };
+  const chainId = Number((await c.provider.getNetwork()).chainId);
+  w.localStorage.setItem("dy::readRpcUrl", RPC);
+  for (const [k, v] of Object.entries(opts.ls || {})) w.localStorage.setItem(k, v);
+  const run = (p) => w.eval(fs.readFileSync(p, "utf8"));
+  run(path.join(SITE, "config.js"));
+  run(path.join(SITE, "mf-config.js"));
+  w.DY_CONFIG.chain.id = chainId;
+  w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
+  w.DY_MF_CONFIG.readRpcUrl = RPC;
+  w.DY_MF_CONFIG.readRpcUrlFallbacks = [];
+  w.DY_MF_CONFIG.contracts.dycoin = c.addrs.dyc;
+  for (const k of ["vestingVault", "holderStaking", "roiRedemption", "dycoinSale", "dropDesk"]) w.DY_MF_CONFIG.contracts[k] = null;
+  // the two switches. Absent => the DORMANT face the site ships today.
+  w.DY_MF_CONFIG.contracts.winningsDesk = (opts.winnings && opts.winnings.desk) || null;
+  w.DY_MF_CONFIG.winningsServiceUrl = (opts.winnings && opts.winnings.service) || null;
+  run(path.join(SITE, "js/wallet.js"));
+  run(path.join(SITE, "js/dashboard.js"));
+  w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
+  w.DYDash.mount();            // dashboard.html's inline boot, which jsdom (runScripts: outside-only) will not run
+  return { dom, w, eth };
+}
+
 // ── S-BUNDLE-1 — THE STORE'S PAGE, in jsdom: store.html's REAL markup plus the REAL scripts in page order, then the
 //    two mounts its inline script makes. The chain is anvil; the harness declares anvil's own chain id in the config
 //    it hands the page (it does not lie about eth_chainId), and points every read at anvil through dy::readRpcUrl.
@@ -281,4 +355,4 @@ function teardown(h) {
   // deliberately NOT window.close() — closing is the race itself. The window dies with the process.
 }
 
-module.exports = { chain, chainStore, server, hall, storePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };
+module.exports = { chain, chainStore, chainWinnings, server, hall, storePage, dashboardPage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };

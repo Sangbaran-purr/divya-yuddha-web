@@ -10,9 +10,9 @@
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1g" />
-    <link rel="stylesheet" href="css/dashboard.css?v=mf5" />
+    <link rel="stylesheet" href="css/dashboard.css?v=mf6" />
     <script src="config.js?v=s17"></script>
-    <script src="mf-config.js?v=mf5"></script>
+    <script src="mf-config.js?v=mf6"></script>
   </head>
   <body class="dash">
     <!-- S-DASH-NAV-1 — the shared house header/nav (S-NAV-1), reused verbatim: seven doors, mobile dropdown, and the
@@ -145,6 +145,13 @@
           </article>
         </section>
 
+        <!-- WINNINGS-4 — the fifth card. NOT a fifth balance: winnings are a TAG on liquid DYC the player already
+             holds, which is why it sits beside the four and not among them. Ships DORMANT (winningsDesk null). -->
+        <div class="panel-box winnings-panel" id="winnings-panel">
+          <div class="sec-label"><span class="sec-num">&#9733;</span> WINNINGS &middot; WITHDRAW AS USDT</div>
+          <div id="winnings-body"></div>
+        </div>
+
         <!-- 3 + 4 -->
         <div class="mid-row">
           <div class="panel-box">
@@ -228,7 +235,7 @@
     </div>
 
     <script src="js/wallet.js?v=s1n"></script>
-    <script src="js/dashboard.js?v=mf29"></script>
+    <script src="js/dashboard.js?v=mf30"></script>
     <script>
       window.DYDash.mount();
     </script>

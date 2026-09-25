@@ -870,3 +870,21 @@ body.report { background: radial-gradient(120% 90% at 50% -10%, rgba(40,30,12,.3
 .rep-foot p { max-width: 720px; margin: 0 auto 16px; color: var(--gold-aged); font-size: .84rem; line-height: 1.6; }
 .rep-back { color: var(--gold-burnished); text-decoration: none; font-family: var(--display); letter-spacing: .06em; font-size: .9rem; }
 .rep-back:hover { color: var(--flame-core); }
+
+/* ── WINNINGS-4 — the fifth card. It deliberately does NOT use .bcard: winnings are a tag on liquid DYC, not a
+   fifth balance, and giving it the balance-card shape would say otherwise. ── */
+.winnings-panel{margin-top:18px}
+.win-lead{color:var(--ink-2);line-height:1.6;margin:0 0 14px}
+.win-amt{font-size:1.9rem;letter-spacing:.02em;color:var(--gold);font-variant-numeric:tabular-nums}
+.win-amt .u{font-size:.9rem;color:var(--ink-2);margin-left:6px}
+.win-usdt{color:var(--ink-2);font-size:.92rem;margin-top:2px;font-variant-numeric:tabular-nums}
+.win-facts{display:flex;flex-wrap:wrap;gap:8px 20px;margin:14px 0 4px}
+.win-fact{font-size:.86rem;color:var(--ink-2)}
+.win-fact b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.win-note{font-size:.86rem;color:var(--ink-2);line-height:1.6;margin-top:12px}
+.win-wait{color:var(--gold-dim)}
+.win-dormant{color:var(--ink-2);line-height:1.6}
+.win-steps{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+.win-step-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;
+  border:1px solid rgba(201,162,74,.5);color:var(--gold);font-size:.72rem;margin-right:7px}
+.win-done{color:var(--green,#7fb069)}

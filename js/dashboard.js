@@ -48,6 +48,18 @@ window.DYDash = (function () {
     "event VestedRegistered(address indexed holder, uint256 principal, uint256 positionId)",
     "event RoiAccrued(address indexed staker, uint256 amount)",
   ];
+  // WINNINGS-4 — the WinningsDesk surface the card reads and the ceremony sends.
+  var WIN_ABI = [
+    "function redeem(uint256 amount, uint256 cumulativeWinningsWei, uint256 deadline, bytes sig) returns (uint256 usdtOut)",
+    "function redeemed(address) view returns (uint256)",
+    "function lastRedeem(address) view returns (uint256)",
+    "function reserve() view returns (uint256)",
+    "function paused() view returns (bool)",
+    "function quote(uint256) view returns (uint256 usdtOut, uint256 dycUsed)",
+    "function MIN_REDEEM() view returns (uint256)",
+    "function COOLDOWN() view returns (uint256)",
+    "event Redeemed(address indexed wallet, uint256 dycUsed, uint256 usdtOut, uint256 newRedeemed)",
+  ];
   var DESK_ABI = [
     "function quote(uint256) view returns (uint256 usdtOut, uint256 dycUsed)",
     "function redeem(uint256) returns (uint256)",
@@ -94,6 +106,16 @@ window.DYDash = (function () {
     "error ExpiredCoupon(uint256 deadline)", "error CancelledCoupon(uint256 nonce)",
     "error AlreadyRedeemed(uint256 nonce)", "error DeskNeedsRefill(uint256 amount, uint256 balance)",
     "error BadSignature(address recovered)", "error ZeroSigner()", "error InsufficientBalance(uint256 amount, uint256 balance)",
+    // WinningsDesk (WINNINGS-4). ⚠ ExpiredCoupon(uint256) and BadSignature(address) are the SAME SELECTORS the
+    // DropDesk uses, so a name-keyed sentence would hand a winnings failure the DropDesk's 90-day wording. That is
+    // why decodeErr takes a CONTEXT and consults ERR_WINNINGS first. ReserveInsufficient(uint256,uint256) is a
+    // DIFFERENT selector from RoiRedemption's no-arg one — both are listed, and ethers resolves the overload.
+    "error BelowMinimum(uint256 dycUsed, uint256 minimum)",
+    "error EntitlementExhausted(uint256 requested, uint256 remaining)",
+    "error CooldownActive(uint256 readyAt)",
+    "error ReserveInsufficient(uint256 need, uint256 have)",
+    "error BadRateIdentity()",
+    "error EnforcedPause()", "error ExpectedPause()",
     // DYCoin + OpenZeppelin base
     "error ERC20ExceededCap(uint256 increasedSupply, uint256 cap)",
     "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
@@ -153,6 +175,50 @@ window.DYDash = (function () {
     // shared
     ZeroAddress: "An address in this request is invalid.",
   };
+
+  // ── WINNINGS-4 · THE RULED COPY (DASHBOARD_DESIGN.md §11). Every string below is pinned by mp/copyproof.js,
+  //    doc → code, exactly as the Hall's §11 and the Store's §11 are. Change one here without changing the doc and
+  //    the suite turns red. ──
+  var W_LEAD = "Winnings are a tag on the DYC you already hold - not a separate balance. Only DYC won from a match where your opponent staked liquid DYC can be withdrawn.";
+  var W_RATE = "0.008 USDT per DYC - fixed until DYC lists on an exchange.";
+  var W_FLOOR = "Minimum withdrawal 125 DYC (USD 1).";
+  var W_CADENCE = "One withdrawal per wallet every 24 hours.";
+  var W_TREASURY = "The DYC you withdraw returns to the treasury.";
+  var W_FACILITY = "Withdrawals are available while the desk's USDT reserve lasts. This is a facility, not an entitlement.";
+  var W_DORMANT = "Withdrawals are not yet open. The desk opens when the reserve is funded.";
+  var W_FRESH = "A win needs a few minutes on chain before it can be withdrawn.";
+  function W_CONFIRM(dyc, usdt) { return "Withdraw " + dyc + " DYC and receive " + usdt + " USDT. The DYC returns to the treasury."; }
+  function W_REOPENS(when) { return "Your next withdrawal opens at " + when + "."; }
+
+  // The winnings desk's OWN sentences. Consulted BEFORE ERR_PLAIN whenever the failing road was a winnings one —
+  // without this, ExpiredCoupon and BadSignature would answer in the DropDesk's words, because they are the same
+  // selectors. A withdrawal approval lives 4 HOURS; a drop coupon lives 90 DAYS. Saying the wrong one is a lie.
+  var ERR_WINNINGS = {
+    CooldownActive: "You have already withdrawn today. Only one withdrawal per wallet every 24 hours.",
+    BelowMinimum: "The minimum withdrawal is 125 DYC (USD 1).",
+    EntitlementExhausted: "You have withdrawn all of your winnings so far.",
+    ExpiredCoupon: "This withdrawal approval has expired. Approvals last 4 hours - ask for a fresh one.",
+    EnforcedPause: "Withdrawals are paused for a moment.",
+    ReserveInsufficient: "The cash-out desk's reserve can't cover this right now. Try a smaller amount or check back later.",
+    BadSignature: "This withdrawal approval couldn't be verified. It may be from an old signing key - ask for a fresh one.",
+    ZeroAmount: "Enter an amount to withdraw.",
+  };
+  // The service's own refusals (WINNINGS_SERVICE_v1.md §6). The service sends its own sentence; these are the
+  // fallbacks for the named reasons, so a refusal is never rendered as a bare code.
+  var SVC_PLAIN = {
+    DERIVER_SHORT_READ: "We can't confirm your winnings right now - nothing is lost. Try again shortly.",
+    RECONCILE_MISMATCH: "We can't confirm your winnings right now - nothing is lost. Try again shortly.",
+    RPC_ERROR: "We can't confirm your winnings right now - nothing is lost. Try again shortly.",
+    ISSUANCE_PAUSED: "Withdrawals are paused for a moment.",
+    SCREENING_STALE: "Withdrawals are paused for a moment.",
+    RATE_LIMITED: "You've just asked for one - give it a minute and try again.",
+    NOTHING_TO_WITHDRAW: "You have no winnings to withdraw yet.",
+    BAD_CHALLENGE: "That sign-in couldn't be verified. Start again.",
+    GEO_DENIED: "Withdrawals aren't available from your location.",
+    KYC_REQUIRED: "Withdrawals need identity verification first.",
+    OFAC_MATCH: "This wallet can't be served.",
+    DENY_LIST: "This wallet can't be served.",
+  };
   var _errIface = null;
   function errIface() { if (!_errIface && ethersRef) _errIface = new ethersRef.Interface(ERR_ABI); return _errIface; }
   // dig the revert bytes out of ethers' nested error shapes
@@ -184,7 +250,7 @@ window.DYDash = (function () {
   var MIN_BUY_USDT = 100000000n; // M-F4 defect 1: page-side minimum purchase = 100 USDT (6-dec). Ruled 2026-08-06.
   // GAS floors (house law: explicit gas limit for every state-touching call). redeem cold-state floor: measured max
   // 140,296 (cold nonce SSTORE + cold recipient + funding reconcile) → 160,000 with margin.
-  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, approve: 90000, buy: 380000, redeem: 160000, send: 90000 };
+  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, winRedeem: 260000, approve: 90000, buy: 380000, redeem: 160000, send: 90000 };
   // S-STAKE-GATE-1 (owner ruling 2026-08-22): staking LIQUID DYC from the dashboard requires a 10,000 DYC floor
   // (the $100 line at 100 DYC/USD). Pure balanceOf threshold — SOURCE-BLIND (ICO liquid and P2P-received liquid
   // qualify equally). wei-DYC bigint, compared against the raw balanceOf — never a float on a formatted string. The
@@ -234,6 +300,10 @@ window.DYDash = (function () {
       roiRedemption: oc.roiRedemption || fc.roiRedemption || null,
       dycoinSale: oc.dycoinSale || fc.dycoinSale || null,
       dropDesk: oc.dropDesk || fc.dropDesk || null, // M-F6 — the Drop Desk (coupon redemption)
+      // WINNINGS-4 — both NULL today. Either one missing keeps the Winnings card dormant, so a half-configured
+      // deploy can never produce a card that asks a wallet to sign against a desk that isn't there.
+      winningsDesk: oc.winningsDesk || fc.winningsDesk || null,
+      winningsServiceUrl: o.winningsServiceUrl || FILE.winningsServiceUrl || null,
       usdt: oc.usdt || fc.usdt || null,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
       readRpcUrlFallbacks: (o.readRpcUrlFallbacks || FILE.readRpcUrlFallbacks || []),
@@ -568,6 +638,10 @@ window.DYDash = (function () {
   // =========================================================================
   function refresh() {
     renderWalletBar();
+    // WINNINGS-4: paint the winnings card BEFORE the disconnected early-return. Its dormant face is static copy —
+    // the rate, the floor, the cadence and "not yet open" — and a visitor with no wallet must still see it. Without
+    // this the card renders an empty box to everyone who has not connected, which is what a browser run found.
+    renderWinnings();
     if (!isConnected()) { dimCards(true); preConnectCards(); return; }
     dimCards(false);
     resumePendingTx(); // S-BUY-RESUME: on every connected load/cycle, reconcile any tx persisted before a drop/refresh
@@ -594,6 +668,13 @@ window.DYDash = (function () {
           jobs.push(Promise.all([vv.grantedTo(addr), vv.vestedSoFar(addr), vv.releasable(addr), vv.dexDay(), vv.VEST_DURATION()])
             .then(function (r) { data.vest = { granted: r[0], vested: r[1], releasable: r[2], dexDay: r[3], dur: r[4] }; })
             .catch(function () { data.vestErr = true; }));
+        }
+        // WINNINGS (WINNINGS-4) — read ONLY when the desk exists. Dormant => not a single call is made.
+        if (c.winningsDesk) {
+          var wd = new ethersRef.Contract(c.winningsDesk, WIN_ABI, provider);
+          jobs.push(Promise.all([wd.redeemed(addr), wd.lastRedeem(addr), wd.reserve(), wd.paused(), wd.MIN_REDEEM(), wd.COOLDOWN()])
+            .then(function (r) { data.win = { redeemed: r[0], lastRedeem: r[1], reserve: r[2], paused: r[3], min: r[4], cooldown: r[5] }; })
+            .catch(function () { data.winErr = true; })); // the busy-sentinel law: unknown renders "—", never a guess
         }
         // STAKING + REWARDS
         if (c.holderStaking) {
@@ -665,7 +746,7 @@ window.DYDash = (function () {
         // M-F4b: a configured read that threw is a NETWORK failure (not a bad address) → retry + honest message
         var failed = !!(data.liqErr || data.vestErr || data.stakeErr || data.rewardErr);
         if (failed) scheduleReadRetry(); else readSucceeded();
-        renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderRunway();
+        renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderRunway(); renderWinnings();
         renderEmptyMint();
         renderPolBanner();
         loadFeed();
@@ -678,7 +759,7 @@ window.DYDash = (function () {
       dimCards(false);
       scheduleReadRetry();
       data.liqErr = data.vestErr = data.stakeErr = data.rewardErr = true;
-      renderLiquid(); renderVesting(); renderStaked(); renderRewards();
+      renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderWinnings();
       renderEmptyMint();
       renderBuy();
       wireReadRetry();
@@ -707,7 +788,9 @@ window.DYDash = (function () {
     }
     return null;
   }
-  function decodeErr(e) {
+  function decodeErr(e, ctx) {
+    // ctx === "winnings" consults the desk's own sentences first (see ERR_WINNINGS: shared selectors, different meanings)
+    var PLAIN = (ctx === "winnings") ? Object.assign({}, ERR_PLAIN, ERR_WINNINGS) : ERR_PLAIN;
     if (e && e.code === "ACTION_REJECTED") return "You declined the signature in your wallet.";
     // 1) decode a custom error by its on-chain selector → plain words (never surface "unknown custom error")
     try {
@@ -715,13 +798,13 @@ window.DYDash = (function () {
       if (data && ifc) {
         var parsed = ifc.parseError(data);
         if (parsed && parsed.name) {
-          if (ERR_PLAIN[parsed.name]) return ERR_PLAIN[parsed.name];
+          if (PLAIN[parsed.name]) return PLAIN[parsed.name];
           return "The contract stopped this (" + parsed.name + "). Please double-check the amount, or contact support.";
         }
       }
     } catch (_) {}
     // 2) ethers already named it (ABI-known errors)
-    if (e && e.revert && e.revert.name && ERR_PLAIN[e.revert.name]) return ERR_PLAIN[e.revert.name];
+    if (e && e.revert && e.revert.name && PLAIN[e.revert.name]) return PLAIN[e.revert.name];
     // 3) gas / funds
     var s = (e && (e.shortMessage || e.reason || e.message)) || "";
     if (/insufficient funds|gas required|out of gas/i.test(s)) return "You need a small amount of POL for network fees. Add a little POL and try again.";
@@ -1230,6 +1313,198 @@ window.DYDash = (function () {
       .catch(function () { return []; });
   }
   // The Redeem card is visible ONLY when the connected wallet holds a live coupon (unredeemed, unexpired, uncancelled).
+  // ═══════════════════════════════════════════════════════════════════════
+  //  WINNINGS-4 — the fifth card, and its two-step ceremony
+  //  THE ORDER IS THE SAFETY: a coupon is requested first, and `redeem` is only reachable from a coupon the
+  //  service actually returned. There is no path that sends a transaction without one.
+  // ═══════════════════════════════════════════════════════════════════════
+  var winCoupon = null;   // { coupon:{wallet,cumulativeWinningsWei,deadline}, signature, cumulativeWinningsWei }
+  var winBusy = false;
+
+  function winSvcBase() { var u = cfg().winningsServiceUrl; return u ? String(u).replace(/\/+$/, "") : null; }
+  function winDormant() { return !cfg().winningsDesk || !winSvcBase(); }
+
+  // what the wallet may still draw: the signed cumulative minus what the desk says it has already redeemed
+  function winWithdrawable() {
+    if (!winCoupon || !data.win) return null;
+    var cum = BigInt(winCoupon.cumulativeWinningsWei), done = BigInt(data.win.redeemed);
+    return cum > done ? cum - done : 0n;
+  }
+  function winReopensAt() {
+    if (!data.win || !data.win.lastRedeem || BigInt(data.win.lastRedeem) === 0n) return 0;
+    return Number(data.win.lastRedeem) + Number(data.win.cooldown);
+  }
+  function winInCooldown() { var at = winReopensAt(); return at > 0 && data.now != null && data.now < at; }
+  function whenText(ts) { try { return new Date(ts * 1000).toLocaleString(); } catch (_) { return "—"; } }
+  // 0.008 USDT per DYC: usdtOut = dycWei / 1.25e14, rendered at SIX places — fmt() defaults to two, which would
+  // print a six-decimal token as "7.20" and quietly drop what the desk actually pays.
+  function usdtFor(dycWei) { return fmt(BigInt(dycWei) / 125000000000000n, 6, 6); }  // the desk's own RATE_DIVISOR
+
+  function renderWinnings() {
+    var host = $("winnings-body"); if (!host) return;
+    var c = cfg();
+
+    // DORMANT — the shipped state. No contract is read, no coupon asked for, nothing signed.
+    if (winDormant()) {
+      host.innerHTML = "<p class='win-lead'>" + esc(W_LEAD) + "</p>"
+        + "<p class='win-dormant'>" + esc(W_DORMANT) + "</p>"
+        + "<div class='win-facts'><span class='win-fact'>" + esc(W_RATE) + "</span>"
+        + "<span class='win-fact'>" + esc(W_FLOOR) + "</span>"
+        + "<span class='win-fact'>" + esc(W_CADENCE) + "</span></div>"
+        + "<p class='win-note'>" + esc(W_FACILITY) + "</p>";
+      return;
+    }
+    if (!isConnected()) {
+      host.innerHTML = "<p class='win-lead'>" + esc(W_LEAD) + "</p><div class='notlive'>Connect your wallet to see your winnings.</div>";
+      return;
+    }
+
+    // EVERY NUMBER SHOWN WAS READ. A failed read renders "—" (the busy-sentinel law), never a zero that looks real.
+    var unknown = !!data.winErr || !data.win;
+    var avail = winWithdrawable();
+    var amtTxt = unknown ? "—" : (avail == null ? "—" : fmt(avail, data.dycDec || 18));
+    var usdTxt = (unknown || avail == null) ? "—" : usdtFor(avail);
+
+    var h = "<p class='win-lead'>" + esc(W_LEAD) + "</p>"
+      + "<div class='win-amt'>" + amtTxt + "<span class='u'>DYC</span></div>"
+      + "<div class='win-usdt'>" + (usdTxt === "—" ? "—" : "&#8776; " + usdTxt + " USDT") + "</div>"
+      + "<div class='win-facts'>"
+      + "<span class='win-fact'>" + esc(W_RATE) + "</span>"
+      + "<span class='win-fact'>" + esc(W_FLOOR) + "</span>"
+      + "<span class='win-fact'>" + esc(W_CADENCE) + "</span>"
+      + "</div>";
+
+    if (unknown) {
+      h += "<p class='win-note'>The desk is busy or unreachable — your winnings are safe. Try again in a moment.</p>";
+    } else if (data.win.paused) {
+      h += "<p class='win-note'>" + esc(SVC_PLAIN.ISSUANCE_PAUSED) + "</p>";
+    } else if (winInCooldown()) {
+      h += "<p class='win-note win-wait'>" + esc(W_REOPENS(whenText(winReopensAt()))) + "</p>";
+    }
+
+    h += "<div class='win-steps'>"
+      + "<button class='rite-btn' id='win-coupon'" + (winBusy || data.win && data.win.paused ? " disabled" : "") + ">"
+      + "<span class='win-step-num'>1</span>" + (winCoupon ? "Approval received" : "Request approval") + "</button>"
+      + "<button class='rite-btn' id='win-redeem'" + (winCoupon && !winInCooldown() && !unknown ? "" : " disabled") + ">"
+      + "<span class='win-step-num'>2</span>Withdraw as USDT</button>"
+      + "</div>"
+      + "<p class='win-note'>" + esc(W_TREASURY) + " " + esc(W_FACILITY) + "</p>"
+      + "<p class='win-note'>" + esc(W_FRESH) + "</p>";
+
+    host.innerHTML = h;
+    if ($("win-coupon")) $("win-coupon").onclick = actWinningsCoupon;
+    // STEP 2 IS UNREACHABLE WITHOUT STEP 1: the handler is only attached when a coupon is actually held.
+    if ($("win-redeem") && winCoupon) $("win-redeem").onclick = actWinningsRedeem;
+  }
+
+  // STEP 1 — prove the wallet, then ask the service for a signed cumulative. Nothing but the signed challenge
+  // leaves the page; the service decides the address by RECOVERING it, so nothing this page claims is trusted.
+  function actWinningsCoupon() {
+    var base = winSvcBase(); if (!base) return;
+    winBusy = true; renderWinnings();
+    var done = function () { winBusy = false; renderWinnings(); };
+    fetch(base + "/winnings/challenge", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (ch) {
+        if (!ch || !ch.nonce || !ch.message) throw new Error("no challenge");
+        // the Hall's idiom (mp/matchclient.js): sign as the CONNECTED wallet; the service RECOVERS the address,
+        // so the identity is never one this page claims.
+        return withEthers()
+          .then(function () { return new ethersRef.BrowserProvider(window.ethereum).getSigner(); })
+          .then(function (sg) { return sg.signMessage(ch.message); })
+          .then(function (sig) {
+          return fetch(base + "/winnings/coupon", {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ nonce: ch.nonce, signature: sig }),   // NO wallet field: the service recovers it
+          }).then(function (r) { return r.json(); });
+        });
+      })
+      .then(function (res) {
+        if (!res || res.refused) {
+          failBox((res && res.sentence) || SVC_PLAIN[res && res.refused] || "Withdrawals are unavailable right now.");
+          return done();
+        }
+        winCoupon = { coupon: res.coupon, signature: res.signature, cumulativeWinningsWei: res.cumulativeWinningsWei };
+        done();
+      })
+      .catch(function (e) {
+        if (e && (e.code === 4001 || e.code === "ACTION_REJECTED")) failBox("You declined the signature in your wallet.");
+        else failBox(SVC_PLAIN.DERIVER_SHORT_READ);
+        done();
+      });
+  }
+
+  // STEP 2 — approve the DYC (only if needed), then redeem. The dashboard's OWN multi-step ceremony (actTopUp's
+  // shape): pre-simulate every leg, narrate each wallet prompt in plain words, decode failures in the WINNINGS
+  // context so the desk answers in its own words. Never reached without a coupon the service actually returned.
+  function actWinningsRedeem() {
+    if (!winCoupon) return;                       // structurally unreachable: the handler is not attached without one
+    var c = cfg(), need = winWithdrawable();
+    if (need == null || need === 0n) { failBox(SVC_PLAIN.NOTHING_TO_WITHDRAW); return; }
+    if (data.win && BigInt(need) < BigInt(data.win.min)) { failBox(ERR_WINNINGS.BelowMinimum); return; }
+    if (winInCooldown()) { failBox(W_REOPENS(whenText(winReopensAt()))); return; }
+    var pg = polGuard(); if (pg) { failBox(pg); return; }   // MP-FIX-3A: a gas-short wallet hears about POL, not DYC
+
+    var dycTxt = fmt(need, data.dycDec || 18), usdTxt = usdtFor(need);
+    confirmStep("Withdraw winnings",
+      W_CONFIRM("<b>" + dycTxt + "</b>", "<b>" + usdTxt + "</b>"),
+      "raw in: " + need.toString() + " wei"
+    ).then(function (go) {
+      if (!go) return;
+      var redeemTx = null;
+      withEthers().then(function () {
+        var provider = new ethersRef.BrowserProvider(window.ethereum);
+        return provider.getSigner().then(function (signer) {
+          var dyc = new ethersRef.Contract(c.dycoin, DYCOIN_ABI, signer);
+          var wd = new ethersRef.Contract(c.winningsDesk, WIN_ABI, signer);
+          var me = W.state.address;
+          return dyc.allowance(me, c.winningsDesk).then(function (allow) {
+            var needApprove = allow < need, nSteps = (needApprove ? 1 : 0) + 1, step = 0;
+            return feeOverrides(provider).then(function (fo) {
+              var chain = Promise.resolve();
+              if (needApprove) {
+                chain = chain.then(function () {
+                  step++; pending(true, "Step " + step + " of " + nSteps + " — Approve DYC");
+                  $("ov-pending-msg").textContent = "Your wallet will ask to approve " + dycTxt + " DYC so the desk can take it. Nothing is withdrawn yet.";
+                  return dyc.approve.staticCall(c.winningsDesk, need).then(function () {
+                    return dyc.approve(c.winningsDesk, need, gasOv(fo, GAS.approve)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                  });
+                });
+              }
+              chain = chain.then(function () {
+                step++; pending(true, "Step " + step + " of " + nSteps + " — Withdraw");
+                $("ov-pending-msg").textContent = "Your wallet will ask to withdraw " + dycTxt + " DYC for " + usdTxt + " USDT.";
+                var args = [need, winCoupon.coupon.cumulativeWinningsWei, winCoupon.coupon.deadline, winCoupon.signature];
+                return wd.redeem.staticCall.apply(wd.redeem, args).then(function () {
+                  return wd.redeem.apply(wd, args.concat([gasOv(fo, GAS.winRedeem)])).then(function (tx) {
+                    persistPending(tx.hash, "Cashed Out", W.state.address);
+                    return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
+                      redeemTx = tx.hash;
+                      pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Cashed Out", ic: "rewards",
+                        details: "Winnings to USDT", amt: dycTxt + " DYC \u2192 " + usdTxt + " USDT", hash: tx.hash });
+                      clearPending(tx.hash);
+                      return rc;
+                    });
+                  });
+                });
+              });
+              return chain.then(function () {
+                pending(false);
+                winCoupon = null;                 // the approval is spent; step 2 is unreachable again until step 1
+                refresh();
+                toast("Withdrawn — " + usdTxt + " USDT is in your wallet.", redeemTx);
+              });
+            });
+          });
+        });
+      }).catch(function (e) {
+        pending(false);
+        if (e === "stop") return;
+        failBox(decodeErr(e, "winnings"));        // the desk's own sentences, never the DropDesk's
+      });
+    });
+  }
+
   function renderRedeem() {
     var host = $("redeem-panel"); if (!host) return;
     var c = cfg();

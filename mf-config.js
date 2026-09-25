@@ -24,7 +24,18 @@ window.DY_MF_CONFIG = {
     dycoinSale: "0x088233d79BD0Df395E364C180F790C2E655F648B",
     dropDesk: "0x28813f882E3DaefC6329Adf85005Fbfd31CaB8fa", // Drop Desk (coupon redemption; owner=timelock, signer=PROD_OWNER)
     usdt: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", // Tether USD on Polygon PoS (6-dec; on-chain symbol reads "USDT0")
+
+    // WINNINGS-4 — the WinningsDesk (won-liquid DYC -> USDT at a fixed 0.008). DEPLOYED NOWHERE YET, so this stays
+    // NULL and the Winnings card renders its "not yet open" face: no contract is read, no coupon is requested, no
+    // call is made to an address that does not exist. Set it (and winningsServiceUrl below) when the desk lands and
+    // the card lights up with zero rebuild - the FRESH-FIRST posture this file was built on.
+    winningsDesk: null,
   },
+
+  // WINNINGS-4 — the approval-bot's winnings endpoints (challenge + coupon). NULL until the service is deployed
+  // with its keyed archive and its own signer key; null keeps the card dormant exactly as a null desk does.
+  // Nothing but the signed challenge ever leaves the page, and no analytics event is attached to this card.
+  winningsServiceUrl: null,
 
   // ── Polygon mainnet read endpoints (W3-MAINNET-1) ──
   // The verified primary is publicnode (CORS-clean, full node, reliable eth_call), drpc a redundant fallback; the
