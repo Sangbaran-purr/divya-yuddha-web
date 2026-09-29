@@ -140,6 +140,7 @@ const STORE_LAW = [
   ["P7 insufficient",    "Not enough [USDC] in this wallet - [USD 20] buys the bundle."],
   ["P8 generic refusal", "The store could not take this order - refresh and try again."],
   ["P9 holder's face",   "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours."],
+  ["P10 reading",        "Reading the store..."],
 ];
 console.log("\n── THE STORE'S LAW · STORE_DESIGN section 11 ruled copy (doc → js/store.js) ──");
 for (const [tag, line] of STORE_LAW) {

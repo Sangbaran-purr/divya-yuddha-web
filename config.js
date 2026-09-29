@@ -17,7 +17,17 @@ window.DY_CONFIG = {
     rpcUrls: ["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"],
     // the SITE READ endpoint (DYWallet.readProvider). Every site read rides this tamed publicnode provider
     // (staticNetwork, fail-fast) regardless of the user's wallet RPC. Writes stay on the wallet signer.
-    readRpcUrls: ["https://polygon-bor-rpc.publicnode.com"],
+    // STORE-READ-1 (2026-09-29) — THE READ ROAD IS A LIST AND IS NOW WALKED. It always was a list; only [0] was
+    // ever used, so a buyer whose DNS could not resolve publicnode saw the store say "stock unavailable" when it
+    // had simply never reached the chain. Order is measured latency from a real browser at https://divyayuddha.games
+    // (392 / 793 / 792 / 1032 ms). All four answered eth_chainId 137, a live eth_call on the PlayStore, and
+    // eth_blockNumber, with CORS open to this origin. KEYLESS ONLY — no key may ever appear in a page.
+    readRpcUrls: [
+      "https://polygon-bor-rpc.publicnode.com",
+      "https://polygon.drpc.org",
+      "https://polygon.gateway.tenderly.co",
+      "https://1rpc.io/matic",
+    ],
     blockExplorerUrls: ["https://polygonscan.com"],
   },
 

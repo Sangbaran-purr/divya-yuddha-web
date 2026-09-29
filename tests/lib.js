@@ -219,7 +219,9 @@ async function storePage(c, player, opts) {
   w.TextEncoder = TextEncoder;
   w.fetch = function (u) { return Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve("") }); };
   const chainId = Number((await c.provider.getNetwork()).chainId);
-  w.localStorage.setItem("dy::readRpcUrl", RPC);
+  // STORE-READ-1: `opts.readUrls` drives the FAILOVER LIST instead of the single-endpoint override. The override
+  // collapses the road to one endpoint by design, so a failover test must clear it and set the list itself.
+  if (!opts.readUrls) w.localStorage.setItem("dy::readRpcUrl", RPC);
   w.localStorage.setItem("dystore::playStoreAddress", c.addrs.ps);
   w.localStorage.setItem("dystore::usdcAddress", c.addrs.usdc);
   w.localStorage.setItem("dystore::usdtAddress", c.addrs.usdt);
@@ -231,6 +233,7 @@ async function storePage(c, player, opts) {
   w.DY_CONFIG.chain.id = chainId;                       // the harness's chain, declared not faked
   w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
   w.DY_CONFIG.contracts.dycoin = c.addrs.dyc;           // the inventory coin under test
+  if (opts.readUrls) w.DY_CONFIG.chain.readRpcUrls = opts.readUrls.slice();
   w.DY_CONFIG.contracts.waveCardSale = null;            // the wave-card tabs are OUT of scope here: dark, not busy
   w.DY_CONFIG.contracts.waveCardMarket = null;
   run(path.join(SITE, "js/wallet.js"));

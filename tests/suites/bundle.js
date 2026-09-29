@@ -98,8 +98,14 @@ async function main() {
     await waitFor("the public stock read landed (no wallet needed)", () => /In stock/.test(tile(w)));
     ok("THE STOCK LINE CARRIES NO COUNT — 'In stock', never 'N bundles'",
        /In stock/.test(tile(w)) && !/bundle[s]? left|998|4500|5000/.test(tile(w)), tile(w).slice(0, 200));
-    ok("before the read lands it says unavailable, never a false Sold out (the first paint)",
-       /stock unavailable - refresh to retry/.test(String(firstPaint)), String(firstPaint).slice(0, 120));
+    // STORE-READ-1 (ruling 7): this check used to assert the first paint said "stock unavailable" — it was
+    // encoding the very defect that sent a buyer away. The INTENT is unchanged and still asserted: the pre-read
+    // paint must never be a false Sold out. What it may say has changed: while the read road is still walking its
+    // endpoints the tile reads P10, and "refresh to retry" is reached only after every endpoint has failed.
+    ok("before the read lands it says it is READING — never a verdict, never a false Sold out (the first paint)",
+       /Reading the store/.test(String(firstPaint))
+       && !/stock unavailable - refresh to retry/.test(String(firstPaint))
+       && !/sold out/i.test(String(firstPaint)), String(firstPaint).slice(0, 120));
 
     await connect(w);
     ok("connected NON-holder: the commitment line and the buy control",

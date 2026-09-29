@@ -440,7 +440,18 @@ async function main() {
       const out = execFileSync("git", ["log", "-1", "--format=%ct"].concat(args), { cwd: SITE, encoding: "utf8" }).trim();
       return out ? Number(out) : 0;
     };
+    // A STAMP BUMPED IN THE WORKING TREE COUNTS AS BUMPED. The comparison is git-history based, which is right for
+    // what gets DEPLOYED — but during a rung the bytes are already committed while the stamp fix is not yet, so the
+    // law would read every in-progress fix as a violation and the suite could never be green before its own commit.
+    // A stamp line changed against HEAD is therefore treated as fresh; once committed, history answers as before.
+    const dirtyStamp = (page, src) => {
+      try {
+        const d = execFileSync("git", ["diff", "HEAD", "--", page], { cwd: SITE, encoding: "utf8" });
+        return d.indexOf(src + "?v=") >= 0;
+      } catch (e) { return false; }
+    };
     const staleIn = (page, list) => list.filter((x) => {
+      if (dirtyStamp(page, x.src)) return false;
       const fileAt = when(["--", x.src]);
       const stampAt = when(["-G", x.src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\?v=", "--", page]);
       return fileAt > stampAt; // bytes moved after the stamp did
@@ -450,18 +461,38 @@ async function main() {
        stale.length === 0, "stale: " + stale.map((x) => x.src + "?v=" + x.v).join(", "));
     ok("I2 · and js/admin.js is stamped at all (an unstamped script can never be busted out of a browser cache)",
        stamped.some((x) => x.src === "js/admin.js"));
-    // STORE-TRACK-1 (owner ruling): the same law now covers the STORE. The store page took a money path and an
-    // analytics tag in one commit; a stale stamp there would serve the old bytes to exactly the buyers the campaign
-    // is counting — the console's lesson, applied where the money is.
+
+    // STORE-READ-1 (owner ruling 8): the law stops being a list of two pages. treasury.html carried
+    // js/store.js?v=s9 for a MONTH after the bytes moved — it drifted precisely because nothing watched it. So the
+    // guard now walks EVERY page that stamps a script, and a new page joins the law by existing.
     {
-      const shtml = fs.readFileSync(path.join(SITE, "store.html"), "utf8");
-      const sstamped = [...shtml.matchAll(/src="([^"?]+)\?v=([A-Za-z0-9]+)"/g)].map((m) => ({ src: m[1], v: m[2] }));
-      const sstale = staleIn("store.html", sstamped);
-      ok("I3 · STORE-TRACK-1 · the bytes-not-tasks law extends to store.html — every script it stamps (" +
-         sstamped.map((x) => x.src).join(", ") + ") carries a stamp at least as new as its own bytes",
-         sstamped.length > 0 && sstale.length === 0, "stale: " + sstale.map((x) => x.src + "?v=" + x.v).join(", "));
-      ok("I4 · and js/store.js is stamped at all — the file the buy road lives in can always be busted out of a cache",
-         sstamped.some((x) => x.src === "js/store.js"));
+      const PAGES = ["index.html", "admin.html", "register.html", "store.html", "treasury.html",
+                     "dashboard.html", "report.html", "rite.html", "mp/hall.html"];
+      const rows = [];
+      for (const page of PAGES) {
+        const h = fs.readFileSync(path.join(SITE, page), "utf8");
+        // a page one directory down references ../config.js — resolve to the repo-root path the git log needs
+        const list = [...h.matchAll(/src="([^"?]+)\?v=([A-Za-z0-9]+)"/g)]
+          .map((m) => ({ src: m[1].replace(/^\.\.\//, ""), v: m[2] }));
+        rows.push({ page, list, stale: staleIn(page, list) });
+      }
+      const anyStale = rows.filter((r) => r.stale.length);
+      ok("I3 · BYTES-NOT-TASKS ACROSS EVERY STAMPED PAGE — no page serves bytes newer than its own stamp",
+         anyStale.length === 0,
+         anyStale.map((r) => r.page + ": " + r.stale.map((x) => x.src + "?v=" + x.v).join(", ")).join(" | "));
+      ok("I4 · and every page that stamps at all stamps something (the law is not vacuous on any of them)",
+         rows.every((r) => r.list.length > 0), rows.filter((r) => !r.list.length).map((r) => r.page).join(", "));
+      // the three files this rung moved must be stamped on EVERY page that loads them
+      const loads = (page, src) => {
+        const h = fs.readFileSync(path.join(SITE, page), "utf8");
+        return h.indexOf(src) >= 0;
+      };
+      for (const src of ["js/wallet.js", "config.js", "js/store.js"]) {
+        const carriers = PAGES.filter((pg) => loads(pg, src + "?v="));
+        const bare = PAGES.filter((pg) => loads(pg, src + '"') || loads(pg, src + "'"));
+        ok("I5 · " + src + " is stamped on all " + carriers.length + " page(s) that load it, and unstamped on none",
+           carriers.length > 0 && bare.length === 0, "unstamped on: " + bare.join(", "));
+      }
     }
   }
 

@@ -206,6 +206,15 @@ P8  the generic refusal (AssetNotAllowed / PriceUnset / ZeroPacks - all
     unreachable from the UI, and rendered rather than left a bare revert)
 The store could not take this order - refresh and try again.
 
+P10 reading (STORE-READ-1, ruled 2026-09-29) - BUSY IS NEVER A VERDICT. The tile
+    used to OPEN on "stock unavailable - refresh to retry": paintBundle ran once
+    before the first read was even attempted, so a buyer whose reads never landed
+    saw a verdict the page had not earned. This sentence holds every unresolved
+    line - stock, the Torana, the weekly headroom - while the read road is still
+    walking its endpoints. "refresh to retry" appears only after every endpoint
+    has failed.
+Reading the store...
+
 THE PRICE IS THE HERO NUMBER (S-BUNDLE-3, dated 2026-09-12): each face carries a
 hero pair - the DYC figure and the price, same size, same gold, the payment assets
 in the muted voice beneath the price. The old body-text line "USD 20 - USDC or

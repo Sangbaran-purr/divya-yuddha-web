@@ -222,25 +222,144 @@ window.DYWallet = (function () {
       });
   }
 
-  // --- RUNG4-FIX-3 — THE SITE READ ROAD. A tamed public JSON-RPC provider (publicnode via chain.readRpcUrls[0]),
-  //     shared by every read surface (store / treasury / rite / this holder gate). staticNetwork:true means NO
-  //     eth_chainId auto-detection → NO "failed to detect network, retry in 1s" loop against a dead endpoint; the
-  //     FetchRequest timeout + maxAttempts 2 fail FAST so a caller renders its busy-sentinel instead of spinning.
-  //     Reads only — NEVER the wallet's BrowserProvider (which rides whatever RPC the wallet registered; dead for
-  //     users on the old rpcUrls). Writes stay on the wallet signer, untouched. Requires ethers loaded (callers
-  //     invoke this inside loadEthers().then). ---
+  // --- RUNG4-FIX-3 / STORE-READ-1 — THE SITE READ ROAD. ONE road, shared by the store, the treasury, the rite and
+  //     the holder gate. Reads only — NEVER the wallet's BrowserProvider (which rides whatever RPC the wallet
+  //     registered). Writes stay on the wallet signer, untouched.
+  //
+  //     WHY THIS EXISTS (STORE-READ-1, 2026-09-29): the road had ONE endpoint. A buyer in the Philippines whose DNS
+  //     never resolved polygon-bor-rpc.publicnode.com saw every read fail with ERR_NAME_NOT_RESOLVED, and the store
+  //     told him "stock unavailable" — a verdict, from a page that had simply never reached the chain. The list in
+  //     config.chain.readRpcUrls was already plural; only [0] was ever used. Now the road WALKS it.
+  //
+  //     THE FALL-THROUGH RULE IS AN ALLOW-LIST, NOT A DENY-LIST. Measured: a genuine revert is CALL_EXCEPTION in
+  //     node, but a browser-blocked host is a bare `TypeError: Failed to fetch` carrying no ethers code at all. Any
+  //     enumeration of "network errors" is therefore wrong on one of the two runtimes. So the rule is inverted: we
+  //     fall through on ANYTHING that is not a contract answer or a contract revert. A revert — CALL_EXCEPTION, or
+  //     any error carrying revert data — is a real answer from a real chain and NEVER moves to the next endpoint.
+  //
+  //     CHAIN CHECK (owner ruling 5): staticNetwork:true skips ethers' own network detection, which is what keeps a
+  //     dead endpoint from spinning the "failed to detect network" loop — but it also means nobody checks the chain.
+  //     So each endpoint is asked eth_chainId ONCE per page visit before its first use; anything but 137 counts as a
+  //     network failure and falls through. Cached in memory for the visit only — never localStorage, so a wrong
+  //     answer can never outlive the tab.
+  var READ_TIMEOUT = 4000;   // per endpoint. ~4x the slowest measured (1032 ms); DNS failures return in ~50 ms.
+  var SCAN_TIMEOUT = 10000;  // the getLogs scan road keeps its tuned budget (owner ruling 3) — scans are legitimately slow.
+  var readPool = {};         // url -> tamed provider (built once per visit)
+  var chainSeen = {};        // url -> true | false   (the once-per-visit eth_chainId verdict)
+  var chainPending = {};     // url -> in-flight verdict promise (single-flight; see chainOk)
+  var lastGood = null;       // the endpoint that last answered; tried first for the rest of the visit
+
+  function readUrls() {
+    // the anvil/proof override still wins, and collapses the road to exactly that one endpoint
+    var over = null; try { over = window.localStorage.getItem("dy::readRpcUrl"); } catch (x) {}
+    if (over) return [over];
+    var list = (CFG.chain.readRpcUrls || []).slice();
+    if (!list.length) list = [CFG.chain.rpcUrls[0]];
+    return list;
+  }
+  function mkTamed(url, timeoutMs) {
+    var e = window.ethers;
+    var req = new e.FetchRequest(url);
+    req.timeout = timeoutMs;
+    req.setThrottleParams({ maxAttempts: 1 }); // fail fast; the NEXT endpoint is the retry
+    return new e.JsonRpcProvider(req, CFG.chain.id, { staticNetwork: true });
+  }
+  function poolFor(url) {
+    if (!readPool[url]) readPool[url] = mkTamed(url, READ_TIMEOUT);
+    return readPool[url];
+  }
+  // A CONTRACT REVERT — the ONLY thing that stops the walk.
+  //
+  // ⚠ CALL_EXCEPTION IS NOT THE DISCRIMINATOR, and believing it was is what sent a buyer away. MEASURED: ethers
+  //   raises CALL_EXCEPTION for ANY json-rpc error returned on eth_call — a rate limit included. A busy public
+  //   endpoint does not fail like a dead one; it answers HTTP 200 with a well-formed JSON-RPC error (-32005 /
+  //   -32029 / -32090, "rate limit", "too many requests"), sometimes carrying a `data` field. Treating that as
+  //   "the chain has spoken" stopped the walk on a server that was merely busy, and the page rendered a verdict
+  //   while two healthy endpoints sat unused.
+  //
+  //   THE REAL SIGNAL IS THE DATA. Measured across every shape: a genuine revert carries `err.data` as 0x-prefixed
+  //   hex ("0x08c379a0…" for Error(string) or a custom-error selector, and "0x" for a bare require(false)); every
+  //   rate-limit shape carries `err.data === null`, whatever its code, message or own `data` field. So: revert hex
+  //   stops the walk, and NOTHING else does.
+  //
+  //   The deliberate trade: a node that reverts with no data field at all also reads as null and will be walked
+  //   past. The cost is that the remaining endpoints are asked and return the same revert, so the caller still
+  //   gets a revert — extra calls, never a wrong answer. The opposite mistake takes the store off the air.
+  var REVERT_HEX = /^0x([0-9a-fA-F][0-9a-fA-F])*$/;
+  function isRevertData(d) { return typeof d === "string" && REVERT_HEX.test(d); }
+  function isContractVerdict(err) {
+    if (!err) return false;
+    if (err.revert) return true;                                   // ethers already decoded a revert reason
+    if (isRevertData(err.data)) return true;                       // revert bytes (including a bare "0x")
+    if (err.error && isRevertData(err.error.data)) return true;    // same, one level down, still hex-gated
+    return false;
+  }
+  // SINGLE-FLIGHT. The bundle fires ~14 reads at once; caching only the VERDICT let all fourteen race past an
+  // unset entry and each ask eth_chainId for itself. The in-flight PROMISE is cached, so the question is asked
+  // exactly once per endpoint per visit no matter how many reads start together.
+  function chainOk(url) {
+    if (chainSeen[url] === true) return Promise.resolve(true);
+    if (chainSeen[url] === false) return Promise.resolve(false);
+    if (chainPending[url]) return chainPending[url];
+    chainPending[url] = poolFor(url).send("eth_chainId", []).then(function (id) {
+      var ok = parseInt(id, 16) === Number(CFG.chain.id);
+      chainSeen[url] = ok; chainPending[url] = null;
+      return ok;
+    }, function () { chainSeen[url] = false; chainPending[url] = null; return false; });
+    return chainPending[url];
+  }
+  // Walk the list. Resolves with the first real answer; rejects with a contract revert immediately; rejects with the
+  // last network error only once EVERY endpoint has failed.
+  function sendWalking(method, params) {
+    var urls = readUrls();
+    if (lastGood && urls.indexOf(lastGood) > 0) {               // session pick first (ruling 6)
+      urls = [lastGood].concat(urls.filter(function (u) { return u !== lastGood; }));
+    }
+    var lastErr = null;
+    function step(i) {
+      if (i >= urls.length) {
+        return Promise.reject(lastErr || new Error("every read endpoint failed"));
+      }
+      var url = urls[i];
+      return chainOk(url).then(function (ok) {
+        if (!ok) {                                              // wrong chain id == a network failure (ruling 5)
+          lastErr = lastErr || new Error("wrong chain id at " + url);
+          return step(i + 1);
+        }
+        return poolFor(url).send(method, params).then(function (res) {
+          lastGood = url;
+          return res;
+        }, function (err) {
+          if (isContractVerdict(err)) throw err;                // a real answer from a real chain — never fall through
+          lastErr = err;
+          return step(i + 1);
+        });
+      });
+    }
+    return step(0);
+  }
   function readProvider() {
     var e = window.ethers;
-    // S-BUNDLE-1 (owner ruling (c), 2026-09-12) — one anvil override, shared by every read surface, mirroring the
-    // Hall's dyhall::readRpcUrl idiom. ABSENT IN PRODUCTION: with the key unset this resolves exactly as before,
-    // so every page's read road is byte-identical. Proof-only, like dyhall::devAccess.
+    var urls = readUrls();
+    // The FRONT provider is a handle, not a transport: its own `send` is replaced, so it never opens a socket of its
+    // own. Every read a Contract makes (eth_call, eth_blockNumber, eth_getLogs) routes through _perform -> send.
+    var front = mkTamed(urls[0], READ_TIMEOUT);
+    front.send = function (method, params) { return sendWalking(method, params); };
+    return front;
+  }
+  // THE SCAN ROAD, UNCHANGED (owner ruling 3): a single tamed endpoint at the tuned 10 s with maxAttempts 2, and the
+  // existing tamedOn(drpc) chunk failover. The 4 s load-read budget must never govern a getLogs walk.
+  function scanProvider() {
+    var e = window.ethers;
     var over = null; try { over = window.localStorage.getItem("dy::readRpcUrl"); } catch (x) {}
     var url = over || (CFG.chain.readRpcUrls && CFG.chain.readRpcUrls[0]) || CFG.chain.rpcUrls[0];
     var req = new e.FetchRequest(url);
-    req.timeout = 10000; // 10s hard cap per request (ethers default is 300s)
-    req.setThrottleParams({ maxAttempts: 2 }); // fail fast — no exponential-backoff retry storm
+    req.timeout = SCAN_TIMEOUT;
+    req.setThrottleParams({ maxAttempts: 2 });
     return new e.JsonRpcProvider(req, CFG.chain.id, { staticNetwork: true });
   }
+  // tests only: forget the visit's pool, chain verdicts and session pick
+  function _resetReadRoad() { readPool = {}; chainSeen = {}; chainPending = {}; lastGood = null; }
 
   // --- RUNG4-FIX-6 — PLAYER SEND FEE FLOOR (owner ruling 2026-08-13; supersedes the D2 no-player-feeOverrides rule
   //     in exactly this scope). Amoy's node floor is 25 gwei on the priority tip; a stale wallet RPC prices ~2 gwei
@@ -317,6 +436,10 @@ window.DYWallet = (function () {
   }
   // deadlineMs is a DURATION (run-start budget); onProgress(scannedTo, deployBlock, latest) is optional.
   function scanLogsResumable(contract, filter, deployBlock, deadlineMs, ckptKey, onProgress) {
+    // STORE-READ-1: rebuild the caller's contract on the SCAN road. Callers build their contracts with
+    // readProvider() (now the 4 s failover road); a getLogs walk must keep the tuned 10 s budget instead, and its
+    // own drpc chunk failover below. Done here so no caller changes and the tuning cannot drift apart.
+    contract = new window.ethers.Contract(contract.target, contract.interface, scanProvider());
     function run() {
       var deadlineAt = Date.now() + (deadlineMs || 18000);
       var ck = ckptGet(ckptKey) || {};
@@ -333,7 +456,7 @@ window.DYWallet = (function () {
             return archiveContract.queryFilter(filter, start, end); // FAILOVER: this chunk on drpc archive
           });
       }
-      return readProvider().getBlockNumber().then(function (latest) {
+      return scanProvider().getBlockNumber().then(function (latest) {
         if (onProgress) { try { onProgress(Math.min(resumeFrom, latest), deployBlock, latest); } catch (e) {} }
         function scanFrom(start) {
           if (start > latest) return Promise.resolve(true); // reached latest → complete
@@ -416,7 +539,9 @@ window.DYWallet = (function () {
     ensureChain: ensureChain,
     checkHolder: checkHolder,
     loadEthers: loadEthers,
-    readProvider: readProvider, // RUNG4-FIX-3 — the shared tamed publicnode read road (store/treasury/rite reuse this)
+    readProvider: readProvider, // RUNG4-FIX-3 / STORE-READ-1 — the shared read road, now WALKING readRpcUrls
+    scanProvider: scanProvider, // STORE-READ-1 — the getLogs road, unchanged at 10 s
+    _resetReadRoad: _resetReadRoad, // tests only
     feeOverrides: feeOverrides, // RUNG4-FIX-6 — player-send fee-field floor (45/30 via publicnode); gasLimit stays wallet
     scanLogsResumable: scanLogsResumable, // RUNG4-FIX-7B — resumable checkpointed getLogs scan (treasury discover + store scanMyListings)
     shortAddr: shortAddr,

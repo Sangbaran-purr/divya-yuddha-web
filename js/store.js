@@ -969,6 +969,9 @@ window.DYStore = (function () {
   var B_P6 = "The store is closed for now.";
   var B_P6B = "The store is sold out for now.";
   var B_P8 = "The store could not take this order - refresh and try again.";
+  // STORE-READ-1 (P10) — BUSY IS NEVER A VERDICT. Held by every unresolved line while the read road walks its
+  // endpoints; "refresh to retry" is reached only after all of them have failed.
+  var B_P10 = "Reading the store…";
   var B_P9 = "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours.";
   // S-BUNDLE-4 — the heading NAMES THE BUNDLE (affordance text, not ruled copy: §11's set is P1-P9)
   var BUNDLE_HEADING = "TORANA + 500 DYC — THE BUNDLE";
@@ -1002,6 +1005,9 @@ window.DYStore = (function () {
 
   // ── THE READS. Every one catches to null; null means BUSY and is rendered as
   //    "unavailable", never as a false Sold out and never as a false non-holder. ──
+  // STORE-READ-1 — true from the moment a read starts until it settles (either way). While it is true no line may
+  // render a failure sentence: the page has not finished asking yet.
+  var bReading = true;
   function readBundle() {
     var gen = ++bGen;
     if (!bundleConfigured()) return Promise.resolve(null);
@@ -1303,6 +1309,7 @@ window.DYStore = (function () {
   // THE STOCK LINE (owner ruling (b)) — no count, ever: one shared pool makes any
   // "N bundles" a fiction. In stock / Sold out / unavailable, nothing more.
   function stockLine(st) {
+    if (bReading) return { cls: "b-stock busy", text: B_P10 };   // still walking the endpoints — not a verdict
     if (!st || st.stock == null || st.open == null) return { cls: "b-stock busy", text: "stock unavailable - refresh to retry" };
     if (st.open === false) return { cls: "b-stock bad", text: B_P6 };
     if (st.packSize != null && st.stock < st.packSize) return { cls: "b-stock bad", text: B_P6B };
@@ -1395,7 +1402,7 @@ window.DYStore = (function () {
       body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
       body.appendChild(priceHero("USD 20"));
       body.appendChild(stockEl);
-      body.appendChild(txt("div", "b-stock busy", "your Torana could not be read - refresh to retry"));
+      body.appendChild(txt("div", "b-stock busy", bReading ? B_P10 : "your Torana could not be read - refresh to retry"));
       body.appendChild(msg); card.appendChild(body); host.appendChild(card); return;
     }
 
@@ -1439,7 +1446,7 @@ window.DYStore = (function () {
       body.appendChild(pick.row);
       var head = st.headroom;
       if (head == null) {
-        body.appendChild(txt("div", "b-stock busy", "your weekly headroom could not be read - refresh to retry"));
+        body.appendChild(txt("div", "b-stock busy", bReading ? B_P10 : "your weekly headroom could not be read - refresh to retry"));
       } else if (head === 0n) {
         var capped = txt("p", "b-cap", bP4(fmtCap(), bWhen(null)));
         body.appendChild(capped);
@@ -1474,11 +1481,14 @@ window.DYStore = (function () {
   function mountBundle() {
     var host = document.getElementById("bundle-body");
     if (!host) return;
-    function refresh() { return readBundle().then(function () { paintBundle(host); }); }
+    function refresh() {
+      bReading = true; paintBundle(host);                       // say we are reading BEFORE we ask
+      return readBundle().then(function () { bReading = false; paintBundle(host); });
+    }
     window.DYWallet.onChange(function () { bReceipt = null; bFlash = null; refresh(); });
     var rb = document.getElementById("b-refresh");
     if (rb) rb.addEventListener("click", function () { bReceipt = null; bFlash = null; refresh(); });
-    paintBundle(host);
+    paintBundle(host);   // opens on P10 (bReading starts true) — never on a verdict
     refresh();
     return refresh;
   }
