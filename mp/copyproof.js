@@ -141,6 +141,8 @@ const STORE_LAW = [
   ["P8 generic refusal", "The store could not take this order - refresh and try again."],
   ["P9 holder's face",   "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours."],
   ["P10 reading",        "Reading the store..."],
+  ["P11 kept reading",   "Couldn't refresh just now - showing the last reading."],
+  ["P12 pre-cast stop",  "Couldn't check this wallet just now - try again in a moment. Nothing was signed."],
 ];
 console.log("\n── THE STORE'S LAW · STORE_DESIGN section 11 ruled copy (doc → js/store.js) ──");
 for (const [tag, line] of STORE_LAW) {
@@ -178,6 +180,7 @@ ok("the stock line is In stock / Sold out / unavailable, and NEVER a count",
    !/bundles left|bundles' worth left|" bundles"/.test(STORE));
 // THE PRE-FLIGHT PRECEDES THE APPROVE — the whole reason P5 may say "Nothing was signed" (GATES 12e).
 const buyRoad = (STORE.split("function bundleBuy(")[1] || "").split("function bundleTopUp(")[0];
+const topRoad = (STORE.split("function bundleTopUp(")[1] || "").split("function bundleReceipt(")[0];
 // THE RECEIVER PROBE is the FIRST act of the buy road, and it is what makes P5's "Nothing was signed" true:
 // buyBundle pulls the stablecoin before it mints, so a simulation with no allowance cannot see a receiver refusal.
 ok("the receiver probe is allowance-free and runs before anything is signed",
@@ -193,12 +196,19 @@ ok("buyBundle.staticCall runs BEFORE stable.approve on the buy road",
 ok("a receiver refusal is the ONE pre-flight error that stops the road (P5)",
    /ERC721InvalidReceiver/.test(buyRoad) && /ERC721InvalidReceiver/.test(STORE.split("function bundleErr(")[1].split("function fmtCap")[0]));
 // P7 IS A READ, not a revert decode — it lands before any approval is offered.
-ok("P7 is reached from a BALANCE READ before any approve",
-   /a\.balance < a\.bundlePrice\) \{[\s\S]{0,160}bP7\(sym, sum\)/.test(buyRoad));
-// EXACT APPROVALS ONLY — never max, never unlimited.
-ok("every approve is the exact price (no MaxUint256 anywhere in the bundle road)",
-   /stable\.approve\(psAddr\(\), a\.bundlePrice, fee\)/.test(STORE) &&
+// STORE-READ-2 — P7 now refuses from the PRE-CAST read, and the read precedes the signer road, so no prompt can
+// precede the refusal. (This guard used to pin `a.balance < a.bundlePrice`, the kept value; that shape is the defect.)
+ok("P7 is reached from a FRESH BALANCE READ before any approve, on both roads",
+   /F\.balance < F\.bundlePrice\) \{[\s\S]{0,120}__p7/.test(buyRoad) &&
+   /F\.balance < total\) \{[\s\S]{0,120}__p7/.test(topRoad) &&
+   /__p7\) \{ preCastStop\(host, bP7\(sym, sum\)\); return; \}/.test(buyRoad) &&
+   buyRoad.indexOf("preCastRead(a, me, false)") < buyRoad.indexOf("signerRoad()") &&
+   topRoad.indexOf("preCastRead(a, me, true)") < topRoad.indexOf("signerRoad()"));
+// EXACT APPROVALS ONLY — never max, never unlimited. And the exact price is now the FRESHLY READ one.
+ok("every approve is the exact FRESH price (no MaxUint256 anywhere in the bundle road)",
+   /stable\.approve\(psAddr\(\), F\.bundlePrice, fee\)/.test(STORE) &&
    /stable\.approve\(psAddr\(\), total, fee\)/.test(STORE) &&
+   /total = F\.packPrice \* BigInt\(packs\)/.test(STORE) &&
    !/MaxUint256|ethers\.MaxUint|0xffffffffffffffff/.test(STORE));
 // THE RECEIPT reads the tokenId from the buy's OWN event, never nextTokenId()-1.
 ok("the tokenId comes from the Bundled event and is verified by ownerOf",

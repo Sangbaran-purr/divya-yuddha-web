@@ -972,6 +972,13 @@ window.DYStore = (function () {
   // STORE-READ-1 (P10) — BUSY IS NEVER A VERDICT. Held by every unresolved line while the read road walks its
   // endpoints; "refresh to retry" is reached only after all of them have failed.
   var B_P10 = "Reading the store…";
+  // STORE-READ-2 (P11) — shown when anything on the tile is a KEPT value because the latest refresh failed. The
+  // numbers stay; the page just stops pretending they are fresh. It clears on the next fully successful read.
+  var B_P11 = "Couldn't refresh just now - showing the last reading.";
+  // STORE-READ-2 (P12) — THE PRE-CAST READ FAILED. A kept value is honest on a tile and dishonest at a wallet prompt,
+  // so the numbers that DECIDE are read again at the tap. If that read cannot be had, the road stops here: a failed
+  // read is not a small balance and not a large allowance, it is no answer, and nothing may be signed against it.
+  var B_P12 = "Couldn't check this wallet just now - try again in a moment. Nothing was signed.";
   var B_P9 = "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours.";
   // S-BUNDLE-4 — the heading NAMES THE BUNDLE (affordance text, not ruled copy: §11's set is P1-P9)
   var BUNDLE_HEADING = "TORANA + 500 DYC — THE BUNDLE";
@@ -1008,42 +1015,103 @@ window.DYStore = (function () {
   // STORE-READ-1 — true from the moment a read starts until it settles (either way). While it is true no line may
   // render a failure sentence: the page has not finished asking yet.
   var bReading = true;
+  // STORE-READ-2 — LAST-KNOWN-GOOD, PER FIELD. A failed read used to be indistinguishable from "the chain said
+  // null": every job caught to null and the all-null result was assigned over `bState`, so one bad refresh erased
+  // numbers the page already had. Proven with no concurrency at all — a good read, then a failing one, and "In
+  // stock" became "stock unavailable". Now each job reports SUCCESS or FAILURE separately from its value: a
+  // successful field overwrites, a failed field keeps what it had, and the retry sentences are reached only when a
+  // field has no good value to show at all (the first-load case).
+  var bStale = false;   // true when anything on screen is a kept value because this refresh failed
+  var bIdent = null;    // { me, chainId } the CURRENT bState belongs to — last-good may never cross a wallet or chain
+
+  function identOf() {
+    var w = window.DYWallet.state || {};
+    return { me: (w.address || null), chainId: (w.chainId == null ? null : String(w.chainId)) };
+  }
+  // RULING 4. Wallet-INDEPENDENT fields (open, stock, cap, packSize, and each asset's bundlePrice/packPrice) are
+  // properties of the contract and may carry across an account switch. Wallet-SPECIFIC fields (torana, headroom,
+  // and each asset's balance/allowance) are read with the buyer's own address and are dropped the moment the
+  // account changes. A CHAIN change drops everything — on another chain not even the contract's own numbers hold.
+  function carryForward(prev) {
+    if (!prev) return null;
+    var now = identOf(), was = bIdent || { me: null, chainId: null };
+    if (was.chainId !== now.chainId) return null;                       // chain changed: nothing carries
+    if (was.me !== now.me) {                                            // account changed: wallet-specific fields go
+      var kept = { ethers: prev.ethers, me: now.me, open: prev.open, stock: prev.stock, cap: prev.cap,
+                   packSize: prev.packSize, torana: undefined, headroom: undefined, asset: {} };
+      ASSETS.forEach(function (a) {
+        var q = prev.asset[a.key] || {};
+        kept.asset[a.key] = { label: a.label, addr: a.addr(), bundlePrice: q.bundlePrice, packPrice: q.packPrice,
+                              balance: undefined, allowance: undefined };
+      });
+      return kept;
+    }
+    return prev;
+  }
+
   function readBundle() {
     var gen = ++bGen;
     if (!bundleConfigured()) return Promise.resolve(null);
+    // the carry-over is decided BEFORE the read, against the identity the old state belongs to
+    var prev = carryForward(bState);
     return loadE().then(function (ethers) {
       var p = readProvider();
       var ps = new ethers.Contract(psAddr(), PS_ABI, p);
       var nft = new ethers.Contract(accessAddr(), BNFT_ABI, p);
       var me = (window.DYWallet.state && window.DYWallet.state.address) || null;
-      var nul = function () { return null; };
+      // every job answers {ok:true,v} or {ok:false} — the value and the verdict, never conflated
+      var mark = function (pr) { return pr.then(function (v) { return { ok: true, v: v }; }, function () { return { ok: false }; }); };
+      var none = Promise.resolve({ ok: true, v: null });   // genuinely nothing to read (no wallet): a real answer
       var jobs = [
-        ps.saleOpen().catch(nul),
-        ps.inventory().catch(nul),
-        ps.capPerWallet().catch(nul),
-        ps.packSize().catch(nul),
-        me ? nft.balanceOf(me).catch(nul) : Promise.resolve(null),
-        me ? ps.topUpRemaining(me).catch(nul) : Promise.resolve(null),
+        mark(ps.saleOpen()),
+        mark(ps.inventory()),
+        mark(ps.capPerWallet()),
+        mark(ps.packSize()),
+        me ? mark(nft.balanceOf(me)) : none,
+        me ? mark(ps.topUpRemaining(me)) : none,
       ];
       ASSETS.forEach(function (a) {
         var t = new ethers.Contract(a.addr(), STABLE_ABI, p);
-        jobs.push(ps.bundlePrice(a.addr()).catch(nul));
-        jobs.push(ps.packPrice(a.addr()).catch(nul));
-        jobs.push(me ? t.balanceOf(me).catch(nul) : Promise.resolve(null));
-        jobs.push(me ? t.allowance(me, psAddr()).catch(nul) : Promise.resolve(null));
+        jobs.push(mark(ps.bundlePrice(a.addr())));
+        jobs.push(mark(ps.packPrice(a.addr())));
+        jobs.push(me ? mark(t.balanceOf(me)) : none);
+        jobs.push(me ? mark(t.allowance(me, psAddr())) : none);
       });
       return Promise.all(jobs).then(function (r) {
         if (gen !== bGen) return null;    // a newer read won
-        var st = { ethers: ethers, me: me, open: r[0], stock: r[1], cap: r[2], packSize: r[3], torana: r[4], headroom: r[5], asset: {} };
+        var stale = false;
+        // a failed field keeps its previous value; only a field with no previous value falls to null
+        var pick = function (res, old) {
+          if (res.ok) return res.v;
+          if (old !== undefined && old !== null) { stale = true; return old; }
+          return null;
+        };
+        var pa = (prev && prev.asset) || {};
+        var st = { ethers: ethers, me: me,
+                   open: pick(r[0], prev && prev.open), stock: pick(r[1], prev && prev.stock),
+                   cap: pick(r[2], prev && prev.cap), packSize: pick(r[3], prev && prev.packSize),
+                   torana: pick(r[4], prev && prev.torana), headroom: pick(r[5], prev && prev.headroom),
+                   asset: {} };
         var i = 6;
         ASSETS.forEach(function (a) {
-          st.asset[a.key] = { label: a.label, addr: a.addr(), bundlePrice: r[i], packPrice: r[i + 1], balance: r[i + 2], allowance: r[i + 3] };
+          var q = pa[a.key] || {};
+          st.asset[a.key] = { label: a.label, addr: a.addr(),
+                              bundlePrice: pick(r[i], q.bundlePrice), packPrice: pick(r[i + 1], q.packPrice),
+                              balance: pick(r[i + 2], q.balance), allowance: pick(r[i + 3], q.allowance) };
           i += 4;
         });
         bState = st;
+        bIdent = identOf();
+        bStale = stale;
         return st;
       });
-    }).catch(function () { return null; });
+    }).catch(function () {
+      // the road itself never answered. Keep whatever was good and say so; erase nothing.
+      if (gen !== bGen) return null;
+      if (prev) { bState = prev; bIdent = identOf(); bStale = true; }
+      else { bState = null; bIdent = identOf(); bStale = false; }   // nothing good to keep: the retry face stands
+      return null;
+    });
   }
 
   // ── THE WINDOW'S DATE (owner ruling (d)) — exact from the wallet's OWN ToppedUp
@@ -1123,24 +1191,92 @@ window.DYStore = (function () {
     ]).then(function (o) { if (timer) clearTimeout(timer); return o; });
   }
 
+  // ── STORE-READ-2 — THE PRE-CAST READ (owner ruling 2026-09-30). ──
+  //
+  //  STORE-READ-2 kept the tile's last-good numbers when a refresh failed, which is right for a TILE and wrong for a
+  //  WALLET PROMPT. The tile says "showing the last reading" (P11) and the reader can take that or refresh; a signature
+  //  cannot. Three of those numbers DECIDE:
+  //    • balance  — the P7 refusal. A kept high balance walks a broke wallet into a revert it paid gas to reach.
+  //    • allowance — approve-or-skip. A kept high allowance SKIPS approve on a wallet that has none: the worst of the
+  //                  three, because the pre-flight then reverts with the buyer's approval already spent on nothing.
+  //    • price    — the approve AMOUNT. A kept low price approves short, and the buy reverts after the approve landed.
+  //  So at the tap, before any prompt, they are read again for THIS address on the walking road. ALL OR NOTHING: a
+  //  rejection is not a number, so it propagates and the road stops at P12 with nothing signed. Never a guess, and
+  //  never a skipped approve on an unknown allowance.
+  //
+  //  Both prices are read on both paths so the write-back below leaves no half-fresh asset behind; headroom is read on
+  //  the top-up path only, where topUpRemaining belongs. NOTE the cap DECISION is not taken from headroom on either
+  //  path — `ps.topUp.staticCall` asks the chain itself, and already did — so headroom here serves the write-back and
+  //  the P4 refusal words, not the gate.
+  function preCastRead(a, me, wantHeadroom) {
+    return loadE().then(function (ethers) {
+      var p = readProvider();
+      var ps = new ethers.Contract(psAddr(), PS_ABI, p);
+      var t = new ethers.Contract(a.addr, STABLE_ABI, p);
+      var jobs = [t.balanceOf(me), t.allowance(me, psAddr()), ps.bundlePrice(a.addr), ps.packPrice(a.addr)];
+      if (wantHeadroom) jobs.push(ps.topUpRemaining(me));
+      return Promise.all(jobs).then(function (r) {
+        return { balance: r[0], allowance: r[1], bundlePrice: r[2], packPrice: r[3],
+                 headroom: wantHeadroom ? r[4] : undefined };
+      });
+    });
+  }
+  // Did the pen change under the read? MetaMask can switch accounts mid-round-trip, and then F belongs to the wallet
+  // that is no longer connected while signerRoad() would hand back the one that is.
+  function sameWallet(me) {
+    var now = (window.DYWallet.state && window.DYWallet.state.address) || null;
+    return now === me;
+  }
+  // The fresh values go back into bState so the tile stops showing the stale ones — but ONLY if the identity the state
+  // belongs to is still the identity we read for. A wallet or chain switch mid-read makes these numbers another
+  // wallet's, and carryForward's whole point is that last-good never crosses that line.
+  function writeBackFresh(assetKey, me, f) {
+    if (!bState || !bState.asset) return;
+    var id = identOf();
+    if (!bIdent || bIdent.me !== id.me || bIdent.chainId !== id.chainId) return;
+    if ((bState.me || null) !== (me || null)) return;
+    var a = bState.asset[assetKey];
+    if (!a) return;
+    a.balance = f.balance; a.allowance = f.allowance;
+    a.bundlePrice = f.bundlePrice; a.packPrice = f.packPrice;
+    if (f.headroom !== undefined) bState.headroom = f.headroom;
+    // bStale is NOT cleared: this read refreshed one asset's four fields, not the stock, cap, torana or the other
+    // asset. P11 stays honest until a whole read succeeds.
+  }
+  // the refusal exits repaint, so the buyer sees the FRESH numbers under the sentence that refused them (the bFlash
+  // idiom bundleTopUp's catch already uses — a paint rebuilds msg/btn, so the text must travel in bFlash, not msg)
+  function preCastStop(host, text) {
+    bFlash = { kind: "bad", text: text };
+    paintBundle(host);
+  }
+
   // =========================== THE ROADS ===========================
   // approve is EXACT (never max); the pre-flight precedes it; the receipt is read from chain.
   function bundleBuy(assetKey, host, msg, btn) {
     var a = bState && bState.asset[assetKey];
     if (!a) return;
-    var sym = a.label, sum = usd6(a.bundlePrice);
+    var sym = a.label, sum = null;
     bFlash = null;
     btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet can be served…";
-    // P7 lands here, from a READ, before any approval is offered
-    if (a.balance != null && a.bundlePrice != null && a.balance < a.bundlePrice) {
-      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = bP7(sym, sum); return;
-    }
-    var dycBefore = null;
-    signerRoad().then(function (r) {
+    var me = (window.DYWallet.state && window.DYWallet.state.address) || null;
+    var dycBefore = null, F = null;
+    // STORE-READ-2 — the pre-cast read comes FIRST. Every decision below reads F, never `a` (the kept tile values).
+    (me ? preCastRead(a, me, false) : Promise.reject(new Error("no wallet")))
+      .then(function (f) { return f; }, function () { var e = new Error("precast"); e.__precast = true; throw e; })
+      .then(function (f) {
+        F = f;
+        writeBackFresh(assetKey, me, f);
+        sum = usd6(F.bundlePrice);
+        if (!sameWallet(me)) { var sw = new Error("precast"); sw.__precast = true; throw sw; }
+        // P7 lands here, from the FRESH read, before any approval is offered
+        if (F.balance < F.bundlePrice) { var p7 = new Error("P7"); p7.__p7 = true; throw p7; }
+        return signerRoad();
+      })
+      .then(function (r) {
       var ps = new r.ethers.Contract(psAddr(), PS_ABI, r.signer);
       var stable = new r.ethers.Contract(a.addr, STABLE_ABI, r.signer);
       // THE RECEIVER PROBE — first, free, and before any approval exists
-      return canReceiveTorana(r.ethers, r.provider, bState.me).then(function (canHold) {
+      return canReceiveTorana(r.ethers, r.provider, me).then(function (canHold) {
         if (!canHold) { var e = new Error("ERC721InvalidReceiver"); e.__receiver = true; throw e; }
         return r;
       }).then(function () { return { r: r, ps: ps, stable: stable }; });
@@ -1156,17 +1292,17 @@ window.DYStore = (function () {
         if (/\bClosed\b|InventoryShort|AlreadyHoldsTorana/.test(s)) throw e;
         return null;                                                   // allowance-short: expected here, continue
       }).then(function () {
-        var need = a.allowance != null && a.allowance >= a.bundlePrice;
+        var need = F.allowance >= F.bundlePrice;   // FRESH — never a kept allowance, so approve is never wrongly skipped
         if (need) return null;
         msg.textContent = "Approve exactly " + sum + " in your wallet…";
-        return window.DYWallet.feeOverrides().then(function (fee) { return stable.approve(psAddr(), a.bundlePrice, fee); })
+        return window.DYWallet.feeOverrides().then(function (fee) { return stable.approve(psAddr(), F.bundlePrice, fee); })
           .then(function (tx) { msg.textContent = "Approving… waiting for confirmation."; return boundedWait(tx); });
       }).then(function () {
         msg.textContent = "Simulating the purchase…";
         return ps.buyBundle.staticCall(a.addr);                        // the real pre-flight, allowance in place
       }).then(function () {
         var dyc = new r.ethers.Contract(CFG.contracts.dycoin, ["function balanceOf(address) view returns (uint256)"], r.provider);
-        return dyc.balanceOf(bState.me).catch(function () { return null; }).then(function (b) {
+        return dyc.balanceOf(me).catch(function () { return null; }).then(function (b) {
           dycBefore = b;
           msg.textContent = "Confirm the purchase in your wallet…";
           return window.DYWallet.feeOverrides().then(function (fee) { return ps.buyBundle(a.addr, fee); });
@@ -1182,6 +1318,9 @@ window.DYStore = (function () {
       track("bundle_purchased", { asset: assetKey });
       return bundleReceipt(w.r, w.o.receipt, dycBefore, host);
     }).catch(function (e) {
+      // STORE-READ-2 — the two ruled stops that are NOT chain errors, and must never be worded as one
+      if (e && e.__precast) { preCastStop(host, B_P12); return; }
+      if (e && e.__p7) { preCastStop(host, bP7(sym, sum)); return; }
       btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = bundleErr(e, { sym: sym, sum: sum });
     });
   }
@@ -1189,14 +1328,25 @@ window.DYStore = (function () {
   function bundleTopUp(assetKey, packs, host, msg, btn) {
     var a = bState && bState.asset[assetKey];
     if (!a) return;
-    var sym = a.label, total = a.packPrice == null ? null : a.packPrice * BigInt(packs);
-    var sum = total == null ? "USD 5" : usd6(total);
+    var sym = a.label, total = null, sum = "USD 5";
     bFlash = null;
     btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet can be served…";
-    if (a.balance != null && total != null && a.balance < total) {
-      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = bP7(sym, sum); return;
-    }
-    signerRoad().then(function (r) {
+    var me = (window.DYWallet.state && window.DYWallet.state.address) || null;
+    var F = null;
+    // STORE-READ-2 — the pre-cast read comes FIRST (headroom included: topUpRemaining belongs to this path). Every
+    // decision below reads F, never `a`.
+    (me ? preCastRead(a, me, true) : Promise.reject(new Error("no wallet")))
+      .then(function (f) { return f; }, function () { var e = new Error("precast"); e.__precast = true; throw e; })
+      .then(function (f) {
+        F = f;
+        writeBackFresh(assetKey, me, f);
+        if (!sameWallet(me)) { var sw = new Error("precast"); sw.__precast = true; throw sw; }
+        total = F.packPrice * BigInt(packs);
+        sum = usd6(total);
+        if (F.balance < total) { var p7 = new Error("P7"); p7.__p7 = true; throw p7; }
+        return signerRoad();
+      })
+      .then(function (r) {
       var ps = new r.ethers.Contract(psAddr(), PS_ABI, r.signer);
       var stable = new r.ethers.Contract(a.addr, STABLE_ABI, r.signer);
       return ps.topUp.staticCall(a.addr, BigInt(packs)).catch(function (e) {
@@ -1204,7 +1354,7 @@ window.DYStore = (function () {
         if (/\bClosed\b|InventoryShort|CapExceeded|NotToranaHolder/.test(s)) throw e;
         return null;                                                   // allowance-short: expected
       }).then(function () {
-        var have = a.allowance != null && total != null && a.allowance >= total;
+        var have = F.allowance >= total;   // FRESH — never a kept allowance, so approve is never wrongly skipped
         if (have) return null;
         msg.textContent = "Approve exactly " + sum + " in your wallet…";
         return window.DYWallet.feeOverrides().then(function (fee) { return stable.approve(psAddr(), total, fee); })
@@ -1224,6 +1374,9 @@ window.DYStore = (function () {
       bFlash = { kind: "ok", text: "Topped up — the DYC is in your wallet." };   // survives the repaint below
       return readBundle().then(function () { paintBundle(host); });
     }).catch(function (e) {
+      // STORE-READ-2 — the two ruled stops that are NOT chain errors, and must never be worded as one
+      if (e && e.__precast) { preCastStop(host, B_P12); return; }
+      if (e && e.__p7) { preCastStop(host, bP7(sym, sum)); return; }
       btn.disabled = false; msg.className = "st-msg bad";
       windowFreesOn(bState).then(function (when) {
         bFlash = { kind: "bad", text: bundleErr(e, { sym: sym, sum: sum, when: when }) };   // `when` already carries its preposition via bWhen
@@ -1360,6 +1513,9 @@ window.DYStore = (function () {
     //   a second price line — §11 says it once.
     var stk = stockLine(st);
     var stockEl = txt("div", stk.cls, stk.text);   // appended by each face, UNDER its own price (S-BUNDLE-2)
+    // P11 rides directly under the stock line on EVERY face, so a kept reading is never passed off as a fresh one.
+    // A fresh element per face: one node cannot be appended to two parents.
+    var staleLine = function () { return (!bReading && bStale) ? txt("div", "b-stock busy", B_P11) : null; };
     var msg = el("div", "st-msg"); msg.id = "b-msg";
     if (bFlash) { msg.className = "st-msg " + (bFlash.kind || ""); msg.textContent = bFlash.text; }
 
@@ -1367,7 +1523,7 @@ window.DYStore = (function () {
     if (bReceipt) {
       card.appendChild(picture(bReceipt.dyc != null ? bReceipt.dyc : 500000000000000000000n));
       body.appendChild(txt("div", "b-title", "TORANA — The Access Card"));
-      body.appendChild(stockEl);
+      body.appendChild(stockEl); (function(){ var sx = staleLine(); if (sx) body.appendChild(sx); })();
       var rc = el("div", "b-receipt");
       rc.appendChild(txt("div", "b-rc-h", bReceipt.mine ? "Torana #" + bReceipt.tokenId + " is yours." : "The purchase landed."));
       rc.appendChild(txt("div", "b-rc-l", bReceipt.dyc != null ? "+ " + (bReceipt.dyc / 1000000000000000000n).toString() + " DYC, liquid, in your wallet." : "+ 500 DYC, liquid, in your wallet."));
@@ -1389,7 +1545,7 @@ window.DYStore = (function () {
       body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
       body.appendChild(priceHero("USD 20"));
       body.appendChild(txt("p", "b-line", B_P1));
-      body.appendChild(stockEl);
+      body.appendChild(stockEl); (function(){ var sx = staleLine(); if (sx) body.appendChild(sx); })();
       var cta = el("button", "st-btn b-connect"); cta.type = "button"; cta.textContent = "Connect wallet";
       cta.onclick = function () { cta.disabled = true; window.DYWallet.connect().catch(function () {}).then(function () { cta.disabled = false; }); };
       body.appendChild(cta); body.appendChild(msg);
@@ -1401,7 +1557,7 @@ window.DYStore = (function () {
       card.appendChild(picture(500000000000000000000n));
       body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
       body.appendChild(priceHero("USD 20"));
-      body.appendChild(stockEl);
+      body.appendChild(stockEl); (function(){ var sx = staleLine(); if (sx) body.appendChild(sx); })();
       body.appendChild(txt("div", "b-stock busy", bReading ? B_P10 : "your Torana could not be read - refresh to retry"));
       body.appendChild(msg); card.appendChild(body); host.appendChild(card); return;
     }
@@ -1422,7 +1578,7 @@ window.DYStore = (function () {
       body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
       body.appendChild(priceHero("USD 20"));
       body.appendChild(txt("p", "b-line", B_P1));
-      body.appendChild(stockEl);
+      body.appendChild(stockEl); (function(){ var sx = staleLine(); if (sx) body.appendChild(sx); })();
       body.appendChild(pick.row);
       body.appendChild(txt("p", "b-commit", B_P2));
       var buy = el("button", "st-btn b-buy"); buy.type = "button"; buy.textContent = "Buy the bundle";
@@ -1442,7 +1598,7 @@ window.DYStore = (function () {
       if (unitUsd) body.appendChild(priceHero(unitUsd));
       body.appendChild(txt("p", "b-line b-p9", B_P9));
       body.appendChild(txt("p", "b-commit", B_P3));
-      body.appendChild(stockEl);
+      body.appendChild(stockEl); (function(){ var sx = staleLine(); if (sx) body.appendChild(sx); })();
       body.appendChild(pick.row);
       var head = st.headroom;
       if (head == null) {
@@ -1478,16 +1634,35 @@ window.DYStore = (function () {
 
   // ── MOUNT. Resume-by-read: every mount, wallet change and refresh re-reads the
   //    chain, so a standing allowance from a dead page simply reappears as state. ──
+  var bRefreshFn = null;   // the mounted tile's refresh, so a test drives the REAL one rather than a copy
   function mountBundle() {
     var host = document.getElementById("bundle-body");
     if (!host) return;
+    var rb = document.getElementById("b-refresh");
+    var inFlight = 0;
+    // PART 3 — the tile's own refresh is shut while a read is running, so the user cannot stack them. Wallet-event
+    // refreshes still run freely; PART 1 keeps whichever finishes last from mattering.
+    function setBtn() { if (rb) rb.disabled = inFlight > 0; }
+    // PART 1 — GEN-GUARD THE PAINT, the grids' own pattern (store.js 394/398, 546/549). Only the NEWEST read may
+    // clear `bReading` or repaint. Without this an older refresh completing would clear the reading state while a
+    // newer read was still in flight — turning "Reading the store…" into a verdict early, which is the very thing
+    // STORE-READ-1 removed.
     function refresh() {
-      bReading = true; paintBundle(host);                       // say we are reading BEFORE we ask
-      return readBundle().then(function () { bReading = false; paintBundle(host); });
+      var myGen = bGen + 1;                                     // the generation readBundle is about to take
+      bReading = true; inFlight++; setBtn(); paintBundle(host);  // say we are reading BEFORE we ask
+      return readBundle().then(function () {
+        inFlight--; setBtn();
+        if (myGen !== bGen) return;                             // superseded — leave the screen to the newer read
+        bReading = false; paintBundle(host);
+      }, function () {
+        inFlight--; setBtn();
+        if (myGen !== bGen) return;
+        bReading = false; paintBundle(host);
+      });
     }
     window.DYWallet.onChange(function () { bReceipt = null; bFlash = null; refresh(); });
-    var rb = document.getElementById("b-refresh");
-    if (rb) rb.addEventListener("click", function () { bReceipt = null; bFlash = null; refresh(); });
+    if (rb) rb.addEventListener("click", function () { if (rb.disabled) return; bReceipt = null; bFlash = null; refresh(); });
+    bRefreshFn = refresh;
     paintBundle(host);   // opens on P10 (bReading starts true) — never on a verdict
     refresh();
     return refresh;
@@ -1496,6 +1671,21 @@ window.DYStore = (function () {
   return {
     mountStore: mountStore,
     mountBundle: mountBundle,
+    _bundleRefresh: function () { return bRefreshFn ? bRefreshFn() : Promise.resolve(); }, // tests: drive the tile's own refresh
+    // tests: what the tile currently BELIEVES (BigInts as strings). The pre-cast write-back is otherwise invisible —
+    // asserting it through this is the difference between proving it and claiming it.
+    _bundleSnapshot: function () {
+      if (!bState) return null;
+      var out = { stale: bStale, headroom: bState.headroom == null ? null : String(bState.headroom), asset: {} };
+      Object.keys(bState.asset || {}).forEach(function (k) {
+        var a = bState.asset[k];
+        out.asset[k] = { balance: a.balance == null ? null : String(a.balance),
+                         allowance: a.allowance == null ? null : String(a.allowance),
+                         bundlePrice: a.bundlePrice == null ? null : String(a.bundlePrice),
+                         packPrice: a.packPrice == null ? null : String(a.packPrice) };
+      });
+      return out;
+    },
     mountTracking: mountTracking,
     track: track,
     captureUtm: captureUtm,

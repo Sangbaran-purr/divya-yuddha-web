@@ -15,9 +15,11 @@ const H = require("../lib");
 
 const SITE = path.resolve(__dirname, "..", "..");
 const DEC = 1000000000000000000n;
+const DEC6 = 1000000n;
 let pass = 0, fail = 0;
 function ok(n, c, d) { if (c) { pass++; console.log("  ✓ " + n); } else { fail++; console.log("  ✖ " + n + (d ? "\n      " + d : "")); } }
 const bodyText = (w) => { const e = w.document.getElementById("bundle-body"); return e ? e.textContent.replace(/\s+/g, " ") : ""; };
+async function connect(w) { await w.DYWallet.connect(); await H.sleep(600); }
 
 // a controllable JSON-RPC endpoint. `hits` counts what it was asked, so "did it fall through?" is observable.
 function rpcServer(mode, upstream) {
@@ -210,6 +212,142 @@ async function run() {
     slow.srv.close(); H.teardown(h);
   }
 
+  // ════════ STORE-READ-2 · A FAILED REFRESH NEVER ERASES WHAT THE PAGE KNEW ════════
+  // The generation guard already protected the WRITE; what it never protected was the QUALITY. Every field caught
+  // to null and the all-null result was assigned over the tile's state, so one bad refresh erased good numbers —
+  // reproduced with no concurrency at all. These drive the real tile against real contracts.
+  const deadList = ["http://127.0.0.1:1"];
+  {
+    const c = await H.chainStore();
+    const good = await rpcServer("ok", RPC);
+    const h = await H.storePage(c, c.player, { readUrls: [good.url] });
+    const w = h.w;
+    await connect(w);
+    await H.until(() => /In stock/.test(bodyText(w)), 20000, "the good first read");
+    ok("K1 · a good read shows the real numbers", /In stock/.test(bodyText(w)) && !/unavailable/.test(bodyText(w)));
+
+    // now every endpoint dies and the tile is refreshed again
+    w.DY_CONFIG.chain.readRpcUrls = deadList.slice();
+    w.DYWallet._resetReadRoad();
+    await w.DYStore._bundleRefresh();
+    ok("K2 · A FAILED REFRESH KEEPS THE NUMBERS — 'In stock' is still there",
+       /In stock/.test(bodyText(w)) && !/stock unavailable/.test(bodyText(w)), bodyText(w).slice(0, 150));
+    ok("K3 · and it says so, quietly, instead of pretending they are fresh",
+       /Couldn't refresh just now - showing the last reading\./.test(bodyText(w)), bodyText(w).slice(0, 200));
+    ok("K4 · the Torana line is kept too, not replaced by its retry sentence",
+       !/your Torana could not be read/.test(bodyText(w)));
+
+    // and the line clears on the next fully successful read
+    w.DY_CONFIG.chain.readRpcUrls = [good.url];
+    w.DYWallet._resetReadRoad();
+    await w.DYStore._bundleRefresh();
+    ok("K5 · the quiet line CLEARS on the next fully successful refresh",
+       /In stock/.test(bodyText(w)) && !/Couldn't refresh just now/.test(bodyText(w)), bodyText(w).slice(0, 150));
+    good.srv.close(); H.teardown(h);
+  }
+  {
+    // THE ROAD ITSELF never answers (not the individual reads): readProvider throws before a single job is made.
+    // The per-field merge cannot help here — there are no fields — so the outer catch must keep the last state.
+    const c = await H.chainStore();
+    const good = await rpcServer("ok", RPC);
+    const h = await H.storePage(c, c.player, { readUrls: [good.url] });
+    const w = h.w;
+    await connect(w);
+    await H.until(() => /In stock/.test(bodyText(w)), 20000, "the good first read");
+    const realRP = w.DYWallet.readProvider;
+    w.DYWallet.readProvider = function () { throw new Error("no read road"); };
+    await w.DYStore._bundleRefresh();
+    ok("K5a · when the ROAD ITSELF fails, the numbers are still kept",
+       /In stock/.test(bodyText(w)) && !/stock unavailable/.test(bodyText(w)), bodyText(w).slice(0, 150));
+    ok("K5b · and the quiet line says so", /Couldn't refresh just now/.test(bodyText(w)), bodyText(w).slice(0, 200));
+    w.DYWallet.readProvider = realRP;
+    good.srv.close(); H.teardown(h);
+  }
+  {
+    // PARTIAL failure: only the wallet-specific reads die. The contract's own numbers must refresh normally.
+    const c = await H.chainStore();
+    const good = await rpcServer("ok", RPC);
+    const h = await H.storePage(c, c.player, { readUrls: [good.url] });
+    const w = h.w;
+    await connect(w);
+    await H.until(() => /In stock/.test(bodyText(w)), 20000, "the good first read");
+    // make ONLY balanceOf fail, by pointing the AccessNFT at an address with no code
+    w.DY_CONFIG.contracts.accessNFT = c.addrs.owner;
+    w.localStorage.setItem("dystore::accessAddress", c.addrs.owner);
+    await w.DYStore._bundleRefresh();
+    ok("K6 · a PARTIAL failure keeps only the failed field — stock still reads fresh",
+       /In stock/.test(bodyText(w)), bodyText(w).slice(0, 150));
+    ok("K7 · and the quiet line is shown because something on screen is a kept value",
+       /Couldn't refresh just now/.test(bodyText(w)), bodyText(w).slice(0, 200));
+    good.srv.close(); H.teardown(h);
+  }
+  {
+    // RULING 4 — last-known-good may never cross a WALLET.
+    const c = await H.chainStore();
+    const good = await rpcServer("ok", RPC);
+    const h = await H.storePage(c, c.player, { readUrls: [good.url] });
+    const w = h.w;
+    await connect(w);
+    await H.until(() => /In stock/.test(bodyText(w)), 20000, "the first wallet's read");
+    const other = ethers.Wallet.createRandom().connect(c.provider);
+    h.eth.__switchTo(other);                       // the account changes, exactly as MetaMask does
+    w.DY_CONFIG.chain.readRpcUrls = deadList.slice();   // and the new wallet's read fails
+    w.DYWallet._resetReadRoad();
+    await w.DYStore._bundleRefresh();
+    const t = bodyText(w);
+    ok("K8 · after an ACCOUNT SWITCH a failed read never shows the previous wallet's Torana",
+       /your Torana could not be read/.test(t), t.slice(0, 220));
+    ok("K9 · but the contract's OWN numbers may carry across the switch", /In stock/.test(t), t.slice(0, 150));
+    good.srv.close(); H.teardown(h);
+  }
+  {
+    // RULING 4 — a CHAIN change drops everything.
+    const c = await H.chainStore();
+    const good = await rpcServer("ok", RPC);
+    const h = await H.storePage(c, c.player, { readUrls: [good.url] });
+    const w = h.w;
+    await connect(w);
+    await H.until(() => /In stock/.test(bodyText(w)), 20000, "the first chain's read");
+    w.DYWallet.state.chainId = 999;                // the wallet moved to another chain
+    w.DY_CONFIG.chain.readRpcUrls = deadList.slice();
+    w.DYWallet._resetReadRoad();
+    await w.DYStore._bundleRefresh();
+    ok("K10 · a CHAIN CHANGE drops everything — no number survives to be shown on another chain",
+       /stock unavailable/.test(bodyText(w)), bodyText(w).slice(0, 180));
+    good.srv.close(); H.teardown(h);
+  }
+  {
+    // PART 1 — two overlapping refreshes; the OLDER finishing last must change nothing and must not clear P10.
+    const c = await H.chainStore();
+    const good = await rpcServer("ok", RPC);
+    const h = await H.storePage(c, c.player, { readUrls: [good.url] });
+    const w = h.w;
+    await H.until(() => /In stock/.test(bodyText(w)), 20000, "the first read");
+    const slow = w.DYStore._bundleRefresh();       // A starts
+    const fast = w.DYStore._bundleRefresh();       // B starts and supersedes it
+    await Promise.all([slow, fast]);
+    ok("K11 · two overlapping refreshes settle on the newest, with nothing broken on screen",
+       /In stock/.test(bodyText(w)), bodyText(w).slice(0, 150));
+    const src = fs.readFileSync(path.join(SITE, "js/store.js"), "utf8");
+    ok("K12 · and the PAINT is generation-guarded, so an older finish cannot clear the reading state",
+       /var myGen = bGen \+ 1;/.test(src) && (src.match(/if \(myGen !== bGen\) return;/g) || []).length === 2);
+    good.srv.close(); H.teardown(h);
+  }
+  {
+    // PART 3 — the tile's own refresh button is shut while a read runs.
+    const c = await H.chainStore();
+    const good = await rpcServer("ok", RPC);
+    const h = await H.storePage(c, c.player, { readUrls: [good.url] });
+    const w = h.w;
+    await H.until(() => /In stock/.test(bodyText(w)), 20000, "the first read");
+    const btn = w.document.getElementById("b-refresh");
+    const p = w.DYStore._bundleRefresh();
+    ok("K13 · the tile's refresh is DISABLED while a read is in flight", btn.disabled === true);
+    await p;
+    ok("K14 · and re-enabled when it settles", btn.disabled === false);
+    good.srv.close(); H.teardown(h);
+  }
+
   // ════════ THE SOURCE LAWS ════════
   {
     const cfg = fs.readFileSync(path.join(SITE, "config.js"), "utf8");
@@ -245,8 +383,11 @@ async function run() {
     const treasury = fs.readFileSync(path.join(SITE, "treasury.html"), "utf8");
     const store = fs.readFileSync(path.join(SITE, "store.html"), "utf8");
     const stampOf = (h, src) => (h.match(new RegExp(src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\?v=([A-Za-z0-9]+)")) || [])[1];
+    // the INTENT is agreement, not a literal version: pinning "s15" here would break on every future bump and
+    // teach the next person to edit the test rather than read it.
     ok("X6 · treasury.html and store.html agree on the js/store.js stamp (treasury lagged a month at s9)",
-       stampOf(treasury, "js/store.js") === stampOf(store, "js/store.js") && stampOf(store, "js/store.js") === "s15",
+       !!stampOf(store, "js/store.js") && stampOf(treasury, "js/store.js") === stampOf(store, "js/store.js")
+       && stampOf(treasury, "js/store.js") !== "s9",
        stampOf(treasury, "js/store.js") + " vs " + stampOf(store, "js/store.js"));
   }
 

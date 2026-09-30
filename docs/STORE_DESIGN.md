@@ -215,6 +215,30 @@ P10 reading (STORE-READ-1, ruled 2026-09-29) - BUSY IS NEVER A VERDICT. The tile
     has failed.
 Reading the store...
 
+P11 the kept reading (STORE-READ-2, ruled 2026-09-30) - A FAILED REFRESH MUST
+    NOT ERASE WHAT THE PAGE ALREADY KNEW. Every field used to catch to null and
+    the all-null result was written over the tile's state, so one bad refresh
+    turned "In stock" into "stock unavailable" - reproduced with no concurrency
+    at all. Now a successful field overwrites and a failed field keeps its last
+    good value; this line says so, under the stock line, on every face. It
+    clears on the next fully successful read. The retry sentences remain for the
+    only case that earns them: a field with no good value to show.
+Couldn't refresh just now - showing the last reading.
+
+P12 the pre-cast stop (STORE-READ-2, ruled 2026-09-30) - A KEPT VALUE IS HONEST
+    ON A TILE AND DISHONEST AT A WALLET PROMPT. P11 keeps the numbers on screen,
+    which is right for a reader and wrong for a signature: three of those numbers
+    DECIDE. The balance refuses (P7); the allowance decides whether approve is
+    asked for at all - a kept high allowance SKIPS it, and the pre-flight then
+    reverts with the buyer's gas already spent; the price sets the approve AMOUNT,
+    and a kept low price approves short. So at the tap, before any prompt, those
+    numbers are read again from chain for the connected wallet, on the walking
+    road, and every decision uses THOSE. A failed pre-cast read is not a small
+    balance and not a large allowance - it is no answer, so the road stops here
+    and nothing is signed. Never a guess; never a skipped approve on an unknown
+    allowance.
+Couldn't check this wallet just now - try again in a moment. Nothing was signed.
+
 THE PRICE IS THE HERO NUMBER (S-BUNDLE-3, dated 2026-09-12): each face carries a
 hero pair - the DYC figure and the price, same size, same gold, the payment assets
 in the muted voice beneath the price. The old body-text line "USD 20 - USDC or
@@ -287,3 +311,34 @@ touches besides this doc. The image serves TWO pages from the one place -
 rite.html's TORANA presentation piece and the store tile's picture column - so
 the swap corrects both at once, and neither page needed an edit. No test reads
 the JPEG's pixels; the suites are unchanged and green.
+
+## THE GRIDS RUNG - FOLLOW-UPS CARRIED FORWARD (2026-09-30)
+
+STORE-READ-1 and STORE-READ-2 were ruled TILE-ONLY. Two things were found while
+proving the tile that belong to the grids rung, and are written down here so they
+are not rediscovered later as if they were new.
+
+1. THE WAVE-CARD SALE GRID DECIDES A TRANSACTION FROM A CACHED READ. This is the
+   same defect class STORE-READ-2 closed on the bundle roads, reached through a
+   different variable, so `bState` does not appear in it and item 5's grep does
+   not find it. `buyAllowance` is a module-level cache of `allowance(me, sale)`
+   (js/store.js, set once per render) and it decides Approve-vs-Buy; `row.price`
+   is a cached `priceOf(cardId)` and it is the approve AMOUNT. A revoked
+   allowance therefore SKIPS approve, and a risen price approves short.
+   Lower severity than the bundle case: `sale.buy.staticCall` catches both before
+   anything is signed, so the cost is a wasted approve and a refusal, never funds.
+   THE FIX IS THE ONE ALREADY BUILT: re-read allowance and price at the tap,
+   decide from those, and stop at P12 if the read cannot be had. The market buy
+   road (`dyc.allowance(me, market)`) and the list road
+   (`nft.isApprovedForAll(me, market)`) ALREADY read fresh on click - they are the
+   pattern to copy, not to change.
+   The wave-card grid and the market grid also still erase their rendered numbers
+   on a failed refresh, the tile's own STORE-READ-2 defect; the same per-field
+   merge is the answer.
+
+2. P7 SAYS "buys the bundle" ON THE TOP-UP ROAD. bP7 is one ruled line with two
+   slots, and the top-up road passes its own sum into it, so a holder short of
+   USDC reads "Not enough USDC in this wallet - USD 5 buys the bundle." It is
+   accurate about the money and wrong about the thing. PRE-EXISTING, not a
+   STORE-READ-2 regression - the same call stood before the pre-cast read went in.
+   Deferred by ruling; it needs either a second ruled line or a slot for the noun.
