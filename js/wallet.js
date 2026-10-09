@@ -370,25 +370,48 @@ window.DYWallet = (function () {
   //     maxPriorityFeePerGas}. ---
   var FEE_FLOOR_MAX = 45000000000n; // 45 gwei — maxFeePerGas floor (ceremony ceiling)
   var FEE_FLOOR_TIP = 30000000000n; // 30 gwei — maxPriorityFeePerGas floor (> Amoy's 25 gwei node minimum)
-  var FEE_HEADROOM = 2n; // 2x over the live signal
-  function feeFloor(ceil, prio) {
-    if (ceil < FEE_FLOOR_MAX) ceil = FEE_FLOOR_MAX;
-    if (prio < FEE_FLOOR_TIP) prio = FEE_FLOOR_TIP;
-    if (ceil < prio) ceil = prio; // maxFee must be ≥ priority
-    return { maxFeePerGas: ceil, maxPriorityFeePerGas: prio };
+  // FEE-1 (owner-adopted 2026-10-09) — THE RULE, and the ONLY fee code on the site (the dashboard and the Hall call it):
+  //     tip    = max(the network's suggested tip, 30 gwei)
+  //     maxFee = max(2 × latest base fee + tip, 45 gwei)
+  //   EIP-1559 charges base + tip, capped at maxFee, so the 2× headroom sits on the CAP (which a base-fee spike may
+  //   use and which is otherwise never charged), never on the tip. RUNG4-FIX-6 sent tip = maxFee = 2 × (network price):
+  //   every send paid its whole cap, measured on mainnet at 3.0-3.3× the base fee (7 player transactions, 0.550 POL
+  //   paid where 0.230 was fair). It also compounded wherever the suggestion is learned from recent tips (anvil:
+  //   3 -> 999,911 gwei over a dozen sends). The 45/30 floor stands on EVERY path; a failed read is the floor, never a
+  //   doubled guess; the tip can never exceed maxFee.
+  function feeFromNetwork(baseFee, suggestedTip) {
+    var base = (typeof baseFee === "bigint" && baseFee >= 0n) ? baseFee : null;
+    var sug = (typeof suggestedTip === "bigint" && suggestedTip >= 0n) ? suggestedTip : 0n;
+    var tip = sug > FEE_FLOOR_TIP ? sug : FEE_FLOOR_TIP;
+    if (base === null) return { maxFeePerGas: FEE_FLOOR_MAX > tip ? FEE_FLOOR_MAX : tip, maxPriorityFeePerGas: tip, baseFee: null };
+    var cap = 2n * base + tip;
+    if (cap < FEE_FLOOR_MAX) cap = FEE_FLOOR_MAX;
+    if (tip > cap) tip = cap;                                   // structurally unreachable (cap >= tip); kept as the law
+    return { maxFeePerGas: cap, maxPriorityFeePerGas: tip, baseFee: base };
+  }
+  function feeFloor() { return feeFromNetwork(null, 0n); }
+  // the two network numbers, from the read road (publicnode first — never the wallet's own, sometimes stale, RPC)
+  function feeRead() {
+    // through the PUBLIC handle, which is readProvider itself in every page — and lets a proof hand it a dead road
+    var p = (window.DYWallet && window.DYWallet.readProvider) ? window.DYWallet.readProvider() : readProvider();
+    return Promise.all([p.getBlock("latest"), p.send("eth_maxPriorityFeePerGas", [])]).then(function (r) {
+      var blk = r[0], sug = r[1];
+      if (!blk || blk.baseFeePerGas == null) throw new Error("no base fee");
+      return feeFromNetwork(BigInt(blk.baseFeePerGas), BigInt(sug));
+    });
   }
   function feeOverrides() {
-    return readProvider()
-      .getFeeData()
-      .then(function (fd) {
-        var gp = fd.gasPrice || 0n;
-        var mf = fd.maxFeePerGas || 0n;
-        var basis = gp > mf ? gp : mf;
-        return feeFloor(basis * FEE_HEADROOM, basis * FEE_HEADROOM); // basis 0n → the explicit floor applies
-      })
-      .catch(function () {
-        return feeFloor(0n, 0n); // fee read failed → the explicit 45/30 floor, NEVER {} (Amoy rejects sub-floor tips)
-      });
+    return feeRead().then(function (f) {
+      return { maxFeePerGas: f.maxFeePerGas, maxPriorityFeePerGas: f.maxPriorityFeePerGas };
+    }).catch(function () {
+      var f = feeFloor();                                      // the read failed: the explicit 45/30, NEVER {} and never a guess
+      return { maxFeePerGas: f.maxFeePerGas, maxPriorityFeePerGas: f.maxPriorityFeePerGas };
+    });
+  }
+  // what a send is EXPECTED to cost per gas (base + tip), for estimates shown to a player — or null when unread
+  function feeEstimate() {
+    return feeRead().then(function (f) { return { perGas: f.baseFee + f.maxPriorityFeePerGas, maxFeePerGas: f.maxFeePerGas }; })
+      .catch(function () { return null; });
   }
 
   // --- RUNG4-FIX-7B — THE RESUMABLE, CHECKPOINTED getLogs SCAN LAW. publicnode/drpc hang on a single getLogs > ~10k
@@ -542,7 +565,9 @@ window.DYWallet = (function () {
     readProvider: readProvider, // RUNG4-FIX-3 / STORE-READ-1 — the shared read road, now WALKING readRpcUrls
     scanProvider: scanProvider, // STORE-READ-1 — the getLogs road, unchanged at 10 s
     _resetReadRoad: _resetReadRoad, // tests only
-    feeOverrides: feeOverrides, // RUNG4-FIX-6 — player-send fee-field floor (45/30 via publicnode); gasLimit stays wallet
+    feeOverrides: feeOverrides, // FEE-1 — the ONE player-send fee rule (tip = max(suggested, 30), maxFee = max(2×base + tip, 45)); gasLimit stays wallet
+    feeEstimate: feeEstimate,   // FEE-1 — expected cost per gas (base + tip) for estimates, or null when unread
+    _feeFromNetwork: feeFromNetwork, // tests: the pure rule
     scanLogsResumable: scanLogsResumable, // RUNG4-FIX-7B — resumable checkpointed getLogs scan (treasury discover + store scanMyListings)
     shortAddr: shortAddr,
   };

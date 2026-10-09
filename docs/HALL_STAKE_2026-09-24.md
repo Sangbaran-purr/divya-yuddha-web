@@ -75,6 +75,8 @@ decimals (on-chain `decimals()` = 18, matching the Hall's `DEC = 1e18` ✓), the
    *"Couldn't read your balance — tap to retry"*, the row **stays actionable**, and the tap re-reads.
    Only a balance actually read and actually short says "insufficient liquid DYC".
 5. **The pre-flight line** in every staked sheet: *"Liquid DYC: 500 DYC · network fee: ~0.069 POL"*, before the act.
+   *(FEE-1, 2026-10-09: now* "network fee (estimate): ~0.069 POL" *— the expected cost, (base fee + tip) × 260,000 gas,
+   from the site's one fee rule in js/wallet.js; the old figure priced the whole cap.)*
    Either number may be unknown, and an unknown one draws **—** — never a figure nobody read.
 
 **The fee number:** a seat is two casts (approve ~60k + lock ~200k gas). The price comes from the **read** road, not

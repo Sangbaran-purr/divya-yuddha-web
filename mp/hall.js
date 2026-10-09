@@ -640,9 +640,13 @@
   //  renderSheet() draws nothing when no sheet is open.
   function afterRead() { render(); try { renderSheet(); } catch (e) {} }
   function readLiquidAgain() { loadEthers().then(function (ethers) { readLiquid(ethers); readFeeHint(ethers); }).catch(function () {}); }
+  //  FEE-1 — the hint is the EXPECTED cost: (base fee + tip) × SIT_GAS, from the site's one fee rule (js/wallet.js),
+  //  labelled an estimate where it is shown. (The old hint priced the whole cap, maxFeePerGas, which the old rule did
+  //  in fact always pay.) Unknown stays unknown: no rule loaded or no read → the line draws "—".
   function readFeeHint(ethers) {
-    return readProvider(ethers).getFeeData().then(function (fd) {
-      var per = fd && (fd.maxFeePerGas || fd.gasPrice); if (!per) return;
+    var est = (window.DYWallet && window.DYWallet.feeEstimate) ? window.DYWallet.feeEstimate() : Promise.resolve(null);
+    return est.then(function (fe) {
+      var per = fe && fe.perGas; if (!per) return;
       var wei = BigInt(per) * SIT_GAS;
       var pol = Number(wei) / 1e18;
       feeHint = (pol < 0.001 ? pol.toFixed(4) : pol.toFixed(3)).replace(/0+$/, "").replace(/\.$/, "");
@@ -863,7 +867,7 @@
   function preflightLine() {
     var liq = liquid == null ? "—" : dycOf(liquid) + " DYC";
     var fee = feeHint == null ? "—" : "~" + feeHint + " POL";
-    return '<div class="hall-preflight state-line">Liquid DYC: <b>' + liq + '</b> · network fee: <b>' + fee + '</b></div>';
+    return '<div class="hall-preflight state-line">Liquid DYC: <b>' + liq + '</b> · network fee (estimate): <b>' + fee + '</b></div>';
   }
   function sheetOverlay(inner, titleCls) {
     return '<div class="hall-sheet-overlay" id="hall-sheet-overlay"><div class="hall-sheet ' + (titleCls || "") + '" role="dialog" aria-modal="true">' + inner +

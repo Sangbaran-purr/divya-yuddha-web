@@ -317,7 +317,7 @@ window.DYDash = (function () {
   // chain reads). Same-repo Pages file, same cache-busting road as the allowlist. Empty [] is the normal state.
   var awaitingList = []; // cached [{ wallet, dyc }] — dyc is a whole-DYC string
   var sendRevealed = false; // S-P2P-1b: Send-panel reveal state — collapsed toggle vs revealed form are mutually exclusive
-  var WAIT_CONFIRMS = 1, WAIT_TIMEOUT_MS = 75000, FEE_HEADROOM = 2n;
+  var WAIT_CONFIRMS = 1, WAIT_TIMEOUT_MS = 75000;
 
   var ethersRef = null;
   var disconnected = false; // local "forget wallet" (EIP-1193 has no disconnect)
@@ -824,13 +824,9 @@ window.DYDash = (function () {
   // =========================================================================
   //  ACTIONS (pre-check → staticCall pre-sim → confirm → send → wait)
   // =========================================================================
-  function feeOverrides(provider) {
-    return provider.getFeeData().then(function (fd) {
-      var gp = fd.gasPrice || 0n, mf = fd.maxFeePerGas || 0n, basis = gp > mf ? gp : mf;
-      if (basis === 0n) return {};
-      return { maxFeePerGas: basis * FEE_HEADROOM, maxPriorityFeePerGas: basis * FEE_HEADROOM };
-    }).catch(function () { return {}; });
-  }
+  // FEE-1 — the dashboard's own copy is gone: it calls the ONE site rule (js/wallet.js). The `provider` argument is kept
+  // so every call site stays byte-identical; the fee fields come from the read road, the fixed gas limits stay here.
+  function feeOverrides(provider) { return W.feeOverrides(); }
   function polGuard() {
     // repeat the fee guidance in plain words when POL is low
     if (data.pol != null && data.pol < POL_MIN) {

@@ -86,8 +86,8 @@ async function storeConnect(w) {
 }
 async function boughtBundle(c) { return (await c.nft.balanceOf(c.player.address)) > 0n; }
 
-// THE HARNESS'S FEE RESET. The pages set maxPriorityFeePerGas = maxFee × 2 (js/wallet.js feeOverrides, RUNG4-FIX-6 —
-// pre-existing, out of this rung's scope, reported). On anvil the suggested tip is read from RECENT blocks' tips, so
+// THE HARNESS'S FEE RESET. Written when the pages set maxPriorityFeePerGas = maxFee × 2 (RUNG4-FIX-6, since replaced by
+// FEE-1's one rule, which no longer amplifies — tests/suites/fees.js C1/C2). Kept: it costs nothing and isolates cases. On anvil the suggested tip is read from RECENT blocks' tips, so
 // every page transaction raises the next suggestion: a dozen real buys on one chain compound the tip to ~1e6 gwei and
 // drain even the 10,000-ETH owner (measured: 3 → 61 → 244 → 976 → … → 999,911 gwei). The suites before this one never
 // ran that many page transactions on one anvil. Each case here starts from empty blocks (the tip history forgets) and
@@ -671,7 +671,7 @@ async function run() {
     ok("X4 · STAMPS: store.js s17, store.css s7, invite.js i1, mf-config mf7 on store.html",
        /js\/store\.js\?v=s17/.test(sh) && /css\/store\.css\?v=s7/.test(sh) && /js\/invite\.js\?v=i1/.test(sh) && /mf-config\.js\?v=mf7/.test(sh));
     ok("X5 · STAMPS: dashboard.js mf31, dashboard.css mf7, invite.js i1, mf-config mf7 on dashboard.html",
-       /js\/dashboard\.js\?v=mf32/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf7/.test(dh));
+       /js\/dashboard\.js\?v=mf33/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf7/.test(dh));
     ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s17, report mf-config mf7)",
        /js\/store\.js\?v=s17/.test(th) && /mf-config\.js\?v=mf7/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));
