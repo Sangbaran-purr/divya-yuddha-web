@@ -16,6 +16,8 @@ const SITE = H.SITE;
 const BOT = path.join(H.W3, "services", "approval-bot", "src");
 const botCodes = require(path.join(BOT, "invites", "codes.js"));
 const { makeCouponSigner } = require(path.join(BOT, "winnings", "coupon.js"));
+const { makeInvitesStore, makeMemoryInvitesSource } = require(path.join(BOT, "invites", "store.js"));
+const { makeInvitesService } = require(path.join(BOT, "invites", "service.js"));
 const DEC = 1000000000000000000n, DEC6 = 1000000n;
 
 let pass = 0, fail = 0;
@@ -407,6 +409,33 @@ async function run() {
     };
     return { stub, seen };
   }
+  // rung 3b — /invites/code answered by the BOT'S OWN SERVICE (web3 0cfa3fc): real signed code and binding records in
+  // its store, its list builder, its "paid" read from the REAL desk's invitePaid. Only the deriver's verdict (the
+  // chain scan, proven in the bot's own suites) is given: these purchases, in chain order, with these statuses.
+  async function botCodeStub(c, chainId, plan) {
+    const nowS = Math.floor(Date.now() / 1000);
+    const tdC = botCodes.codeRequestTypedData(chainId, c.player.address, nowS - 86400 * 30);
+    const sigC = await c.player.signTypedData(tdC.domain, tdC.types, tdC.message);
+    const code = botCodes.codeFromSignature(sigC);
+    const binds = [], items = [];
+    for (const it of plan) {
+      const b = ethers.Wallet.createRandom();
+      const td = botCodes.bindingTypedData(chainId, b.address, code, nowS - 86400 * 29);
+      binds.push([b.address, code, String(nowS - 86400 * 29), "5", await b.signTypedData(td.domain, td.types, td.message), ""]);
+      items.push({ affiliate: c.player.address.toLowerCase(), buyer: b.address.toLowerCase(), ts: nowS - 86400 * it.daysAgo,
+                   unlockAt: nowS - 86400 * it.daysAgo + 7 * 86400, reward: 250n * DEC, status: it.status });
+    }
+    const store = makeInvitesStore({ chainId, source: makeMemoryInvitesSource({ codes: [[code, c.player.address, String(nowS - 86400 * 30), "4", sigC, ""]], bindings: binds }), log: () => {} });
+    await store.load();
+    const svc = makeInvitesService({ store, deriver: { derive: async () => ({ ok: true, items }) }, chainId, clock: { now: () => Date.now() },
+      toranaBalanceOf: async () => 1n, headNumber: async () => 1, deskInvitePaid: (w) => c.desk.invitePaid(w) });
+    const short = items.map((x) => x.buyer.slice(0, 6) + "…" + x.buyer.slice(-4));
+    return { short, stub: { "/invites/code": async (init) => {
+      const r = await svc.issueCode(JSON.parse(init.body));
+      return r.ok ? Object.assign({ code: r.code, existing: !!r.existing }, Array.isArray(r.invites) ? { invites: r.invites } : {}) : { refused: r.refused };
+    } } };
+  }
+
   // the bot's /winnings/* routes, the coupon signed by the BOT'S OWN SIGNER MODULE
   function deskStub(c, chainId, cumW, cumI, extra) {
     const signer = makeCouponSigner({ privateKey: c.signer.privateKey, chainId: chainId, deskAddress: c.addrs.desk });
@@ -520,8 +549,9 @@ async function run() {
     opts = opts || {};
     const c = await H.chainWinnings({ torana: true });
     const chainId = await chainIdOf(c);
-    const d = deskStub(c, chainId, cumW, cumI, opts.invites ? codeStub(chainId, { invites: opts.invites }).stub : null);
-    const h = await H.dashboardPage(c, c.player, { winnings: { desk: c.addrs.desk, service: "https://bot.test" }, invite: opts.invites ? "https://bot.test" : null, svc: d.stub });
+    const bot = opts.botPlan ? await botCodeStub(c, chainId, opts.botPlan) : null;
+    const d = deskStub(c, chainId, cumW, cumI, bot ? bot.stub : (opts.invites ? codeStub(chainId, { invites: opts.invites }).stub : null));
+    const h = await H.dashboardPage(c, c.player, { winnings: { desk: c.addrs.desk, service: "https://bot.test" }, invite: (opts.invites || bot) ? "https://bot.test" : null, svc: d.stub });
     const w = h.w;
     await dashConnect(w);
     const pre = { dyc: await c.dyc.balanceOf(c.player.address), usdt: await c.usdt.balanceOf(c.player.address),
@@ -535,7 +565,7 @@ async function run() {
     H.click(w, "#ov-confirm-go");
     await waitFor("the redemption (" + label + ")", async () => (await c.desk.lastRedeem(c.player.address)) > 0n, 30000);
     await H.sleep(400);
-    return { c, h, w, pre, card, confirm,
+    return { c, h, w, pre, card, confirm, bot,
              post: { dyc: await c.dyc.balanceOf(c.player.address), usdt: await c.usdt.balanceOf(c.player.address),
                      allow: await c.dyc.allowance(c.player.address, c.addrs.desk), sends: sends(h),
                      redeemed: await c.desk.redeemed(c.player.address), invitePaid: await c.desk.invitePaid(c.player.address) } };
@@ -571,19 +601,18 @@ async function run() {
     H.teardown(r.h);
   }
   {
-    // after a real invite-only withdrawal, the list marks the paid reward "Paid" — from the desk's own invitePaid
-    const now = Math.floor(Date.now() / 1000);
-    const items = [
-      { buyer: "0x1111000000000000000000000000000000002222", ts: now - 10 * 86400, unlockAt: now - 3 * 86400, status: "unlocked", rewardWei: (250n * DEC).toString() },
-      { buyer: "0x3333000000000000000000000000000000004444", ts: now - 8 * 86400, unlockAt: now - 1 * 86400, status: "unlocked", rewardWei: (250n * DEC).toString() },
-    ];
-    const r = await withdraw("pay one, then read the list", 0n, 250n * DEC, { invites: items });
+    // after a real invite-only withdrawal, the BOT'S list (its own service, its "paid" from the REAL desk) marks the
+    // OLDEST unlocked reward "Paid" — and the page shows exactly what the bot says
+    const r = await withdraw("pay one, then read the list", 0n, 250n * DEC,
+      { botPlan: [{ daysAgo: 20, status: "unlocked" }, { daysAgo: 12, status: "unlocked" }, { daysAgo: 2, status: "pending" }] });
     await r.w.DYDash._refresh(); await H.sleep(800);
     H.click(r.w, "#inv-get");
     await waitFor("the code", () => !!q(r.w, "#inv-code"));
     const rows = Array.from(r.w.document.querySelectorAll(".inv-row")).map((x) => x.textContent.replace(/\s+/g, " ").trim());
-    ok("WD10 · 'Paid' comes from the desk: the EARLIEST unlocked reward is Paid, the next is Ready to withdraw",
-       rows.some((x) => x.indexOf("0x1111…2222") >= 0 && /Paid$/.test(x)) && rows.some((x) => x.indexOf("0x3333…4444") >= 0 && /Ready to withdraw$/.test(x)), rows.join(" | "));
+    const [oldest, next, pend] = r.bot.short;
+    ok("WD10 · THE BOT'S LIST, AS-IS: 'Paid' lands on the OLDEST unlocked reward, the next is Ready to withdraw, the pending one waits",
+       rows.some((x) => x.indexOf(oldest) >= 0 && /Paid$/.test(x)) && rows.some((x) => x.indexOf(next) >= 0 && /Ready to withdraw$/.test(x))
+       && rows.some((x) => x.indexOf(pend) >= 0 && /Unlocks on/.test(x)), rows.join(" | ") + " :: oldest " + oldest);
     // the SAME lifetime ceiling asked for again: the card subtracts what the desk has already paid, so nothing is left
     H.click(r.w, "#win-coupon");
     await waitFor("the second approval", () => /Approval received/.test(txt(r.w, "#win-coupon")));
@@ -607,6 +636,24 @@ async function run() {
     H.teardown(h);
   }
 
+  {
+    const r = await withdraw("pay one and a half", 0n, 375n * DEC,
+      { botPlan: [{ daysAgo: 20, status: "unlocked" }, { daysAgo: 12, status: "unlocked" }] });
+    await r.w.DYDash._refresh(); await H.sleep(800);
+    H.click(r.w, "#inv-get");
+    await waitFor("the code", () => !!q(r.w, "#inv-code"));
+    const rows = Array.from(r.w.document.querySelectorAll(".inv-row")).map((x) => x.textContent.replace(/\s+/g, " ").trim());
+    const tot = txt(r.w, "#inv-totals");
+    ok("WD12 · A PARTLY PAID REWARD stays unlocked (Ready), and the totals split it by the bot's paidWei: Paid 375, Ready 125",
+       rows.some((x) => x.indexOf(r.bot.short[0]) >= 0 && /Paid$/.test(x)) && rows.some((x) => x.indexOf(r.bot.short[1]) >= 0 && /Ready to withdraw$/.test(x))
+       && /Paid\s*375\.00 DYC/.test(tot) && /Ready\s*125\.00 DYC/.test(tot) && /Earned\s*500\.00 DYC/.test(tot), rows.join(" | ") + " :: " + tot);
+    H.teardown(r.h);
+  }
+  {
+    const dash = fs.readFileSync(path.join(SITE, "js", "dashboard.js"), "utf8");
+    ok("WD13 · the site no longer re-derives the payout split (one source: the bot)", !/function invStatuses|covered\[x\.key\]|run \+= BigInt\(x\.rewardWei\)/.test(dash));
+  }
+
   // ═══════════════ X · SOURCE LAWS AND STAMPS ═══════════════
   {
     const dash = fs.readFileSync(path.join(SITE, "js", "dashboard.js"), "utf8");
@@ -624,7 +671,7 @@ async function run() {
     ok("X4 · STAMPS: store.js s17, store.css s7, invite.js i1, mf-config mf7 on store.html",
        /js\/store\.js\?v=s17/.test(sh) && /css\/store\.css\?v=s7/.test(sh) && /js\/invite\.js\?v=i1/.test(sh) && /mf-config\.js\?v=mf7/.test(sh));
     ok("X5 · STAMPS: dashboard.js mf31, dashboard.css mf7, invite.js i1, mf-config mf7 on dashboard.html",
-       /js\/dashboard\.js\?v=mf31/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf7/.test(dh));
+       /js\/dashboard\.js\?v=mf32/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf7/.test(dh));
     ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s17, report mf-config mf7)",
        /js\/store\.js\?v=s17/.test(th) && /mf-config\.js\?v=mf7/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));

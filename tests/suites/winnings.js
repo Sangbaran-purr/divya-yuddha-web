@@ -236,7 +236,7 @@ async function run() {
     ok("X3 · the coupon POST sends nonce + signature and nothing else",
        /JSON\.stringify\(\{ nonce: ch\.nonce, signature: sig \}\)/.test(dash));
     ok("X4 · STAMPS BUMPED — dashboard.js, dashboard.css and mf-config.js all carry a new ?v= (AFFILIATE-1 rung 3)",
-       /js\/dashboard\.js\?v=mf31/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf7/.test(html));
+       /js\/dashboard\.js\?v=mf32/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf7/.test(html));
     ok("X5 · the shipped config keeps BOTH switches null (the card ships dormant)",
        /winningsDesk: null/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8"))
        && /winningsServiceUrl: null/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8")));

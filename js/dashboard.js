@@ -1595,21 +1595,14 @@ window.DYDash = (function () {
   function invVisible() {
     return !!(invSvcBase() && window.DYInvite && isConnected() && data && data.torana != null && BigInt(data.torana) > 0n);
   }
-  // an item's state, in plain words. "Paid" is decided from the desk's own ledger: unlocked rewards are paid in the
-  // order they unlocked, so the earliest ones whose running sum fits under invitePaid are the paid ones.
-  function invStatuses(items) {
-    var paid = (data.win && data.win.invitePaid != null) ? BigInt(data.win.invitePaid) : null;
-    var deskOpen = !winDormant() && !!data.win;
-    var unlocked = items.filter(function (x) { return x.status === "unlocked"; })
-      .sort(function (a, b) { return Number(a.unlockAt) - Number(b.unlockAt); });
-    var covered = {}, run = 0n;
-    if (paid != null) unlocked.forEach(function (x) { run += BigInt(x.rewardWei); if (run <= paid) covered[x.key] = true; });
-    return function (x) {
-      if (x.status === "held") return I_HELD;
-      if (x.status === "pending") return I_UNLOCKS_ON(dateFmt(Number(x.unlockAt)));
-      if (covered[x.key]) return I_PAID;
-      return deskOpen ? I_READY : I_WAITING_DESK;
-    };
+  // an item's state, in plain words — THE BOT'S STATUS, AS-IS (rung 3b). The bot lays the desk's own invitePaid over
+  // the unlocked rewards oldest first and says "paid" per reward; this page used to redo that split itself and, given
+  // the bot's list, put "Paid" on the wrong purchase. One source now: the bot. A partly paid reward is "unlocked".
+  function invStatus(x) {
+    if (x.status === "paid") return I_PAID;
+    if (x.status === "held") return I_HELD;
+    if (x.status === "pending") return I_UNLOCKS_ON(dateFmt(Number(x.unlockAt)));
+    return (!winDormant() && !!data.win) ? I_READY : I_WAITING_DESK;
   }
   function invShort(a) { var s = String(a || ""); return /^0x[0-9a-fA-F]{40}$/.test(s) ? shortAddr(s) : s; }
 
@@ -1647,13 +1640,16 @@ window.DYDash = (function () {
   function invListHtml() {
     if (invItems == null) return "<p class='win-note' id='inv-list-note'>" + esc(I_UNSHOWN) + "</p>";
     if (!invItems.length) return "<p class='win-note' id='inv-list-note'>" + esc(I_NONE) + "</p>";
-    var status = invStatuses(invItems), dec = data.dycDec || 18;
+    var dec = data.dycDec || 18;
     var tot = { all: 0n, ready: 0n, pending: 0n, held: 0n, paid: 0n };
     var rows = invItems.slice().sort(function (a, b) { return Number(b.ts) - Number(a.ts); }).map(function (x) {
-      var st = status(x), r = BigInt(x.rewardWei);
+      var st = invStatus(x), r = BigInt(x.rewardWei), pw = BigInt(x.paidWei || "0");
+      if (pw > r) pw = r;
       tot.all += r;
-      if (st === I_PAID) tot.paid += r; else if (st === I_HELD) tot.held += r;
-      else if (x.status === "pending") tot.pending += r; else tot.ready += r;
+      // the totals follow the desk's own figure (paidWei): a partly paid reward splits between Paid and Ready
+      if (x.status === "held") tot.held += r;
+      else if (x.status === "pending") tot.pending += r;
+      else { tot.paid += pw; tot.ready += r - pw; }
       return "<tr class='inv-row'><td class='inv-buyer'>" + esc(invShort(x.buyer)) + "</td>"
         + "<td class='inv-date'>" + esc(dateFmt(Number(x.ts))) + "</td>"
         + "<td class='inv-amt'>" + fmt(r, dec) + " DYC</td>"
@@ -1697,7 +1693,8 @@ window.DYDash = (function () {
         }
         invCode = window.DYInvite.normCode(res.code);
         invItems = Array.isArray(res.invites) ? res.invites.map(function (x, k) {
-          return { key: k, buyer: x.buyer, ts: x.ts, unlockAt: x.unlockAt, status: x.status, rewardWei: String(x.rewardWei || "0") };
+          return { key: k, buyer: x.buyer, ts: x.ts, unlockAt: x.unlockAt, status: x.status,
+                   rewardWei: String(x.rewardWei || "0"), paidWei: String(x.paidWei || "0") };
         }) : null;
         done();
       })

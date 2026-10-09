@@ -113,12 +113,16 @@ Torana read runs only when the service is configured. "Get my invite code" signs
 (`js/invite.js`, proven equal to the bot's struct) and posts it; the bot recovers the wallet. The card shows the code,
 the share link `https://divyayuddha.games/store.html?invite=CODE&utm_source=invite&utm_medium=torana&utm_campaign=invite`
 with a copy button, the invited purchases (buyer SHORTENED, date, reward, status in plain words) and totals in DYC and
-USD. "Paid" is decided from the desk's own `invitePaid`: unlocked rewards are paid in unlock order.
+USD. **Statuses are the bot's, taken as-is (rung 3b):** the bot lays the desk's own `invitePaid` over the unlocked
+rewards oldest first and says `paid` per reward; the page maps `paid` → "Paid", `unlocked` → "Ready to withdraw" (or
+the desk-not-open line while the desk is dormant), `pending` → "Unlocks on [date]", `held` → "Held for review". A partly
+paid reward is `unlocked`; the totals split it by the bot's `paidWei` (Paid = what the desk paid, Ready = the rest).
+The page used to redo the split itself and, given the bot's list, put "Paid" on the wrong purchase - one source now.
 
-⚠ **THE LIST NEEDS ONE BOT FIELD THAT DOES NOT EXIST YET.** The bot's `/invites/code` answers `{ code, existing }`
-today. The card reads an optional `invites: [{ buyer, ts, unlockAt, status, rewardWei }]` beside the code (status =
-the deriver's own `pending | unlocked | held`; buyer shortened server-side). Until the bot sends it the card shows the
-code and link and says the purchases can't be shown right now - it never invents a list.
+**The list comes from the bot** (web3 rung 2b, `0cfa3fc`): `/invites/code` answers `{ code, existing, invites }`
+with `invites: [{ buyer, ts, unlockAt, status, rewardWei, paidWei }]`, buyers shortened by the bot - the full address
+never leaves it. When the bot omits the list (a failed read on its side) the card says the purchases can't be shown
+right now - it never invents one.
 
 **Never "affiliate", never "referral"** in this scheme's copy. The sidebar's "Referrals" link is a different, older
 thing and is untouched.
