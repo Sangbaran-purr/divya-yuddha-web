@@ -153,9 +153,12 @@ async function chainWinnings(opts) {
   await (await usdt.approve(deskAddr, ethers.MaxUint256)).wait();
   if (opts.reserve !== 0n) await (await desk.fundDesk(opts.reserve == null ? 500n * DEC6 : opts.reserve)).wait();
   if (opts.paused) await (await desk.pause()).wait();
+  // AFFILIATE-1 rung 3 — the Torana gate of the invites card reads the REAL AccessNFT (owner is a minter)
+  const nft = await (F("AccessNFT")).deploy(ownerAddr, "ipfs://torana/"); await nft.waitForDeployment();
+  if (opts.torana) await (await nft.mint(player.address)).wait();
 
-  return { provider, owner, player, desk, dyc, usdt, signer, treasury,
-           addrs: { desk: deskAddr, dyc: await dyc.getAddress(), usdt: await usdt.getAddress(), treasury, owner: ownerAddr } };
+  return { provider, owner, player, desk, dyc, usdt, signer, treasury, nft,
+           addrs: { desk: deskAddr, dyc: await dyc.getAddress(), usdt: await usdt.getAddress(), treasury, owner: ownerAddr, nft: await nft.getAddress() } };
 }
 
 // ── WINNINGS-4 — THE DASHBOARD'S PAGE, in jsdom: dashboard.html's REAL markup and the REAL scripts in page order.
@@ -177,7 +180,7 @@ async function dashboardPage(c, player, opts) {
     w.__fetches.push(String(u));
     const svc = opts.svc || {};
     for (const key of Object.keys(svc)) {
-      if (String(u).indexOf(key) >= 0) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(svc[key](init)) });
+      if (String(u).indexOf(key) >= 0) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(svc[key](init)) });   // (a promise from the handler is awaited by json())
     }
     return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
   };
@@ -196,7 +199,10 @@ async function dashboardPage(c, player, opts) {
   // the two switches. Absent => the DORMANT face the site ships today.
   w.DY_MF_CONFIG.contracts.winningsDesk = (opts.winnings && opts.winnings.desk) || null;
   w.DY_MF_CONFIG.winningsServiceUrl = (opts.winnings && opts.winnings.service) || null;
+  w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null;            // AFFILIATE-1: absent => the card stays hidden
+  if (c.addrs && c.addrs.nft) w.DY_CONFIG.contracts.accessNFT = c.addrs.nft;
   run(path.join(SITE, "js/wallet.js"));
+  run(path.join(SITE, "js/invite.js"));
   run(path.join(SITE, "js/dashboard.js"));
   w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
   w.DYDash.mount();            // dashboard.html's inline boot, which jsdom (runScripts: outside-only) will not run
@@ -217,7 +223,19 @@ async function storePage(c, player, opts) {
   const eth = makeEthereum(player, c.provider);
   w.ethereum = eth;
   w.TextEncoder = TextEncoder;
-  w.fetch = function (u) { return Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve("") }); };
+  // AFFILIATE-1 rung 3 — every fetch is RECORDED (a dormant face must make none to the invite service); `opts.svc`
+  // stands in for the bot's routes, and `opts.svcDown` makes every call to it fail as a dead host does.
+  w.__fetches = []; w.__fetchBodies = [];
+  w.fetch = function (u, init) {
+    w.__fetches.push(String(u));
+    if (init && init.body) w.__fetchBodies.push({ url: String(u), body: JSON.parse(init.body) });
+    if (opts.svcDown && /bot\.test/.test(String(u))) return Promise.reject(new TypeError("Failed to fetch"));
+    const svc = opts.svc || {};
+    for (const key of Object.keys(svc)) {
+      if (String(u).indexOf(key) >= 0) return Promise.resolve(svc[key](init)).then((b) => ({ ok: true, status: 200, json: () => Promise.resolve(b) }));
+    }
+    return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
+  };
   const chainId = Number((await c.provider.getNetwork()).chainId);
   // STORE-READ-1: `opts.readUrls` drives the FAILOVER LIST instead of the single-endpoint override. The override
   // collapses the road to one endpoint by design, so a failover test must clear it and set the list itself.
@@ -228,8 +246,20 @@ async function storePage(c, player, opts) {
   w.localStorage.setItem("dystore::accessAddress", c.addrs.nft);
   w.localStorage.setItem("dystore::waitMs", String(opts.waitMs || 20000));
   for (const [k, v] of Object.entries(opts.ls || {})) w.localStorage.setItem(k, v);
+  // AFFILIATE-1 — storage REFUSED for the keys a page is about to add (a quota-full or locked-down store throws on
+  // exactly the new write). The page's own guards must absorb it; the harness's own keys above are already in.
+  // (patched on Storage.PROTOTYPE: assigning st.getItem would only store an ITEM named "getItem" — Storage's named
+  //  properties — and nothing would ever throw. Found that way.)
+  if (opts.lsThrowFor) {
+    const P = w.Storage.prototype, gi = P.getItem, si = P.setItem, re = opts.lsThrowFor;
+    P.getItem = function (k) { if (re.test(k)) throw new Error("SecurityError: storage refused"); return gi.call(this, k); };
+    P.setItem = function (k, v) { if (re.test(k)) throw new Error("QuotaExceededError"); return si.call(this, k, v); };
+    w.__lsThrowArmed = true;
+  }
   const run = (p) => w.eval(fs.readFileSync(p, "utf8"));
   run(path.join(SITE, "config.js"));
+  run(path.join(SITE, "mf-config.js"));                // store.html's order: config, mf-config (AFFILIATE-1)
+  w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null; // absent => the DORMANT store the site ships
   w.DY_CONFIG.chain.id = chainId;                       // the harness's chain, declared not faked
   w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
   w.DY_CONFIG.contracts.dycoin = c.addrs.dyc;           // the inventory coin under test
@@ -239,8 +269,11 @@ async function storePage(c, player, opts) {
   run(path.join(SITE, "js/wallet.js"));
   run(path.join(SITE, "js/cards.js"));
   run(path.join(SITE, "js/wave-registry.js"));
+  run(path.join(SITE, "js/invite.js"));
   run(path.join(SITE, "js/store.js"));
   w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
+  w.DYStore.mountInvite();     // store.html's order: the strip comes first (a no-op without ?invite=)
+  if (opts.tracking) w.DYStore.mountTracking();
   w.DYStore.mountStore();
   w.DYStore.mountBundle();
   w.DYWallet.init();
@@ -255,6 +288,8 @@ function makeEthereum(player, provider) {
     selectedAddress: player.address.toLowerCase(),
     __wallet: player,                       // the CURRENT pen
     __calls: [],                            // every method the wallet was asked for (prompt auditing)
+    __typed: [],                            // every EIP-712 payload the page asked the wallet to sign
+    __declineTyped: false,                  // set true to make the wallet decline the next typed-data prompt
     // switch the wallet the way MetaMask does: the pen changes AND accountsChanged fires
     __switchTo(w) {
       eth.__wallet = w;
@@ -265,6 +300,15 @@ function makeEthereum(player, provider) {
       eth.__calls.push(method);
       if (method === "eth_accounts" || method === "eth_requestAccounts") return eth.__wallet ? [eth.__wallet.address] : [];
       if (method === "personal_sign") return eth.__wallet.signMessage(ethers.getBytes(params[0]));
+      // AFFILIATE-1 rung 3 — EIP-712, signed by the CURRENT pen exactly as MetaMask would: ethers' BrowserProvider
+      // sends the full payload (types incl. EIP712Domain); the domain type is dropped before signing, as ethers does.
+      if (method === "eth_signTypedData_v4") {
+        const payload = typeof params[1] === "string" ? JSON.parse(params[1]) : params[1];
+        const types = Object.assign({}, payload.types); delete types.EIP712Domain;
+        eth.__typed.push(payload);
+        if (eth.__declineTyped) { const e = new Error("User rejected the request."); e.code = 4001; throw e; }
+        return eth.__wallet.signTypedData(payload.domain, types, payload.message);
+      }
       if (method === "eth_sendTransaction" && params && params[0]) params[0].from = eth.__wallet.address;
       return provider.send(method, params || []);
     },

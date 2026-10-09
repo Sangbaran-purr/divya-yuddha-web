@@ -1,6 +1,8 @@
 "use strict";
 // WINNINGS-4 — the dashboard's fifth card: dormant by default, and honest when it is not.
 // The desk under test is the REAL WinningsDesk bytecode on anvil; only the approval-bot's HTTP routes are stubbed.
+// AFFILIATE-1 rung 3: the desk is now web3 fc5d117 (one DeskCoupon, two parts), and every coupon here is signed by the
+// approval bot's OWN signer module — the suite was red at HEAD because it still signed the retired WinningsCoupon.
 const fs = require("fs");
 const path = require("path");
 const { ethers } = require("ethers");
@@ -14,13 +16,16 @@ const txt = (w, sel) => { const e = w.document.querySelector(sel); return e ? e.
 const cardText = (w) => txt(w, "#winnings-body");
 async function settle(w, ms) { await H.sleep(ms == null ? 400 : ms); }
 
-// the coupon the stubbed service returns, signed by the desk's REAL winningsSigner key
+// the coupon the stubbed service returns, signed THE BOT'S WAY: its own signer module (web3 aa53ae7) with the desk's
+// REAL winningsSigner key. `ttl` shifts the signer's clock, so a negative one yields an already-dead coupon.
+const { makeCouponSigner } = require(path.join(H.W3, "services", "approval-bot", "src", "winnings", "coupon.js"));
 async function couponFor(c, wallet, cumulative, ttl) {
-  const deadline = Math.floor(Date.now() / 1000) + (ttl == null ? 4 * 3600 : ttl);
-  const domain = { name: "WinningsDesk", version: "1", chainId: Number((await c.provider.getNetwork()).chainId), verifyingContract: c.addrs.desk };
-  const types = { WinningsCoupon: [{ name: "wallet", type: "address" }, { name: "cumulativeWinningsWei", type: "uint256" }, { name: "deadline", type: "uint256" }] };
-  const coupon = { wallet: ethers.getAddress(wallet), cumulativeWinningsWei: cumulative.toString(), deadline };
-  return { coupon, signature: await c.signer.signTypedData(domain, types, coupon), cumulativeWinningsWei: cumulative.toString() };
+  const shift = ttl == null ? 0 : (ttl - 4 * 3600) * 1000;
+  const signer = makeCouponSigner({ privateKey: c.signer.privateKey, chainId: Number((await c.provider.getNetwork()).chainId),
+    deskAddress: c.addrs.desk, clock: { now: () => Date.now() + shift } });
+  const s = await signer.sign(wallet, cumulative, 0n);
+  return { coupon: s.coupon, signature: s.signature, cumulativeWinningsWei: s.coupon.cumulativeWinningsWei,
+           cumulativeInviteWei: s.coupon.cumulativeInviteWei, deadline: s.coupon.deadline };
 }
 // a service stub: the two routes, and a record of what the page actually sent
 function svcStub(c, wallet, cumulative, opts) {
@@ -158,7 +163,7 @@ async function run() {
       ["ISSUANCE_PAUSED", "Withdrawals are paused for a moment."],
       ["GEO_DENIED", "Withdrawals aren't available from your location."],
       ["KYC_REQUIRED", "Withdrawals need identity verification first."],
-      ["NOTHING_TO_WITHDRAW", "You have no winnings to withdraw yet."],
+      ["NOTHING_TO_WITHDRAW", "You have nothing to withdraw yet."],   // S3, amended at AFFILIATE-1 rung 3
     ];
     for (const [reason, sentence] of cases) {
       const c = await H.chainWinnings();
@@ -230,8 +235,8 @@ async function run() {
     ok("X2 · the desk read is gated on the desk existing", /if \(c\.winningsDesk\) \{/.test(dash));
     ok("X3 · the coupon POST sends nonce + signature and nothing else",
        /JSON\.stringify\(\{ nonce: ch\.nonce, signature: sig \}\)/.test(dash));
-    ok("X4 · STAMPS BUMPED — dashboard.js, dashboard.css and mf-config.js all carry a new ?v=",
-       /js\/dashboard\.js\?v=mf30/.test(html) && /css\/dashboard\.css\?v=mf6/.test(html) && /mf-config\.js\?v=mf6/.test(html));
+    ok("X4 · STAMPS BUMPED — dashboard.js, dashboard.css and mf-config.js all carry a new ?v= (AFFILIATE-1 rung 3)",
+       /js\/dashboard\.js\?v=mf31/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf7/.test(html));
     ok("X5 · the shipped config keeps BOTH switches null (the card ships dormant)",
        /winningsDesk: null/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8"))
        && /winningsServiceUrl: null/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8")));

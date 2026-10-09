@@ -10,9 +10,9 @@
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1g" />
-    <link rel="stylesheet" href="css/dashboard.css?v=mf6" />
+    <link rel="stylesheet" href="css/dashboard.css?v=mf7" />
     <script src="config.js?v=s18"></script>
-    <script src="mf-config.js?v=mf6"></script>
+    <script src="mf-config.js?v=mf7"></script>
   </head>
   <body class="dash">
     <!-- S-DASH-NAV-1 — the shared house header/nav (S-NAV-1), reused verbatim: seven doors, mobile dropdown, and the
@@ -148,8 +148,15 @@
         <!-- WINNINGS-4 — the fifth card. NOT a fifth balance: winnings are a TAG on liquid DYC the player already
              holds, which is why it sits beside the four and not among them. Ships DORMANT (winningsDesk null). -->
         <div class="panel-box winnings-panel" id="winnings-panel">
-          <div class="sec-label"><span class="sec-num">&#9733;</span> WINNINGS &middot; WITHDRAW AS USDT</div>
+          <div class="sec-label"><span class="sec-num">&#9733;</span> WITHDRAW &middot; WINNINGS + INVITE REWARDS, AS USDT</div>
           <div id="winnings-body"></div>
+        </div>
+
+        <!-- AFFILIATE-1 rung 3 — the Torana Invites card. HIDDEN until inviteServiceUrl is set AND the connected wallet
+             holds a Torana; dormant, it is never shown and nothing is read for it. -->
+        <div class="panel-box winnings-panel invites-panel" id="invites-panel" style="display:none">
+          <div class="sec-label"><span class="sec-num">&#10022;</span> TORANA INVITES</div>
+          <div id="invites-body"></div>
         </div>
 
         <!-- 3 + 4 -->
@@ -235,7 +242,8 @@
     </div>
 
     <script src="js/wallet.js?v=s1p"></script>
-    <script src="js/dashboard.js?v=mf30"></script>
+    <script src="js/invite.js?v=i1"></script>
+    <script src="js/dashboard.js?v=mf31"></script>
     <script>
       window.DYDash.mount();
     </script>

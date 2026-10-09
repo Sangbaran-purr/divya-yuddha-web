@@ -246,3 +246,11 @@
 .b-rc-h { font-family: "Cinzel", Georgia, serif; font-size: 1.05rem; color: #a8dcae; }
 .b-rc-l { font-size: .9rem; color: rgba(240, 232, 214, .85); }
 .b-rc-tx { font-size: .8rem; color: rgba(232, 200, 116, .8); }
+
+/* AFFILIATE-1 rung 3 — Torana Invites on the bundle tile. Quiet by design: the line is a note, the ask is a small
+   panel with two equal buttons, and Skip is never smaller than Sign. Invisible unless inviteServiceUrl is set. */
+.b-invited { color: var(--gold-aged, #6b5426); font-size: 0.78rem; letter-spacing: 0.04em; margin-top: 0.15rem; }
+.b-invite-ask { border: 1px solid rgba(200, 160, 80, 0.28); border-radius: 6px; padding: 0.6rem 0.7rem; margin: 0.5rem 0; }
+.b-invite-ask .b-line { margin: 0 0 0.5rem; }
+.b-invite-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.b-invite-row .st-btn { flex: 1 1 8rem; }

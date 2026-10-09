@@ -989,6 +989,128 @@ window.DYStore = (function () {
   function bWhen(exact) { return exact && !/^within /.test(exact) ? "on " + exact : (exact || "within 7 days"); }
   function bP7(sym, sum) { return "Not enough " + sym + " in this wallet - " + sum + " buys the bundle."; }
 
+  // ═══════════════════ AFFILIATE-1 rung 3 · TORANA INVITES (the store's half) ═══════════════════
+  // A holder shares store.html?invite=CODE. The visitor's browser remembers the FIRST code it saw for 30 days, shows
+  // one quiet line, and — when the visitor taps Buy without a Torana — asks for one free signature FIRST (an
+  // InviteBinding, js/invite.js) with a visible Skip. THE INVITE IS NEVER A BLOCKER: a skip, a declined signature, a
+  // refusal and a dead service all walk straight on to the normal buy, with at most one plain sentence. The buy road
+  // itself (pre-cast read, approve, buy) is not touched: the invite step resolves before bundleBuy is ever called.
+  //
+  // DORMANT BY CONFIG: mf-config.js `inviteServiceUrl: null` (the site's shipped state) keeps every face below
+  // invisible and makes no call. The one thing that runs regardless is the STRIP: a code in the address bar is removed
+  // before the analytics tag is injected, so the code never reaches Plausible (the STORE-TRACK-1 zero-PII law — utm
+  // tags only), whether the road is live or not.
+  //
+  // §11 (ruled in docs/STORE_DESIGN.md, pinned by mp/copyproof.js):
+  function bInvitedBy(code) { return "Invited by " + code; }
+  function bInviteAsk(code) { return "You were invited by " + code + ". Sign a free invite before you buy - it costs nothing and moves no money."; }
+  var B_INV_OK = "Invite recorded.";
+  var B_INV_SOFT = "The invite couldn't be recorded - your purchase goes ahead as normal.";
+  var INVITE_KEY = "dystore::invite";          // localStorage: { code, at } — the code only, never a wallet
+  var INVITE_TTL_MS = 30 * 24 * 3600 * 1000;    // 30 days
+  var inviteSettled = {};                        // wallet(lower) -> true once the step ran this page (signed, skipped, refused)
+
+  function inviteSvc() {
+    var o = null; try { o = window.localStorage.getItem("dystore::inviteServiceUrl"); } catch (e) { o = null; }
+    var u = o || (window.DY_MF_CONFIG && window.DY_MF_CONFIG.inviteServiceUrl) || null;
+    return u ? String(u).replace(/\/+$/, "") : null;
+  }
+  function inviteLib() { return window.DYInvite || null; }
+  function inviteLive() { return !!(inviteSvc() && inviteLib()); }
+  // every read and write guarded: private mode / disabled storage leaves the page working, just without the memory
+  function inviteRead() {
+    var raw = null; try { raw = window.localStorage.getItem(INVITE_KEY); } catch (e) { return null; }
+    if (!raw) return null;
+    var o = null; try { o = JSON.parse(raw); } catch (e) { return null; }
+    var lib = inviteLib();
+    var code = lib && o ? lib.normCode(o.code) : null;
+    var at = o ? Number(o.at) : NaN;
+    if (!code || !Number.isFinite(at) || Date.now() - at > INVITE_TTL_MS || at > Date.now() + 60000) return null;
+    return { code: code, at: at };
+  }
+  function inviteWrite(code) {
+    try { window.localStorage.setItem(INVITE_KEY, JSON.stringify({ code: code, at: Date.now() })); } catch (e) { /* no memory, no harm */ }
+  }
+  // FIRST PAINT, BEFORE THE TAG: read ?invite=, strip it from the address bar, and (when live) remember it unless a
+  // remembered code is still within its 30 days — the FIRST code a browser saw wins.
+  function mountInvite() {
+    var q = String((window.location && window.location.search) || "");
+    var m = q.match(/[?&]invite=([^&#]*)/);
+    if (!m) return;
+    var rawCode = m[1];
+    try {
+      var rest = q.replace(/([?&])invite=[^&#]*&?/, "$1").replace(/[?&]$/, "");
+      var url = window.location.pathname + rest + (window.location.hash || "");
+      if (window.history && window.history.replaceState) window.history.replaceState(window.history.state, "", url);
+    } catch (e) { /* a refused rewrite leaves the address as it was */ }
+    if (!inviteLive()) return;                                     // dormant: stripped, never remembered
+    var code = null; try { code = inviteLib().normCode(decodeURIComponent(rawCode)); } catch (e) { code = null; }
+    if (!code) return;
+    if (inviteRead()) return;                                      // the first code seen still stands
+    inviteWrite(code);
+  }
+  // the quiet line, on the faces that carry a Buy (or will, once connected)
+  function invitedLine() {
+    if (!inviteLive()) return null;
+    var r = inviteRead();
+    return r ? txt("p", "b-line b-invited", bInvitedBy(r.code)) : null;
+  }
+  function inviteApplies(st) {
+    if (!inviteLive() || !st || !st.me || st.torana !== 0n) return false;
+    if (inviteSettled[String(st.me).toLowerCase()]) return false;
+    return !!inviteRead();
+  }
+  // THE STEP. Always RESOLVES (never rejects): every exit leads to the buy.
+  function inviteFirst(host, msg, btn) {
+    var st = bState;
+    if (!inviteApplies(st)) return Promise.resolve();
+    var code = inviteRead().code, me = st.me, key = String(me).toLowerCase();
+    return new Promise(function (resolve) {
+      btn.disabled = true;
+      var box = el("div", "b-invite-ask");
+      box.appendChild(txt("p", "b-line", bInviteAsk(code)));
+      var row = el("div", "b-invite-row");
+      var sign = el("button", "st-btn b-invite-sign"); sign.type = "button"; sign.textContent = "Sign invite (free)";
+      var skip = el("button", "st-btn b-invite-skip"); skip.type = "button"; skip.textContent = "Skip";
+      row.appendChild(sign); row.appendChild(skip); box.appendChild(row);
+      msg.parentNode.insertBefore(box, msg);
+      var finished = false;
+      // The step's ONE sentence gets its OWN line, beside #b-msg rather than in it: the buy road writes its progress
+      // into #b-msg the moment it starts, which wiped the sentence before anyone could read it (found by
+      // tests/suites/invites.js SB9). The line lives until the tile next repaints.
+      function finish(sentence, kind) {
+        if (finished) return; finished = true;
+        inviteSettled[key] = true;
+        if (box.parentNode) box.parentNode.removeChild(box);
+        if (sentence) {
+          var note = txt("div", "st-msg b-invite-note" + (kind ? " " + kind : ""), sentence);
+          msg.parentNode.insertBefore(note, msg);
+        }
+        resolve();
+      }
+      skip.onclick = function () { finish(""); };
+      sign.onclick = function () {
+        sign.disabled = true; skip.disabled = true;
+        var signedAt = inviteLib().nowS();
+        signerRoad().then(function (r) {
+          var td = inviteLib().bindingTypedData(CFG.chain.id, me, code, signedAt, r.ethers);
+          return r.signer.signTypedData(td.domain, td.types, td.message);
+        }).then(function (sig) {
+          return fetch(inviteSvc() + "/invites/bind", {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ buyer: me, code: code, signedAt: signedAt, signature: sig }),
+          }).then(function (res) { return res.json().catch(function () { return null; }); });
+        }).then(function (res) {
+          if (res && !res.refused && res.code) finish(B_INV_OK, "ok");   // the bot answers { code, existing } on success
+          else finish(B_INV_SOFT);                              // a refusal, by any name, is one plain sentence
+        }, function (e) {
+          if (e && (e.code === 4001 || e.code === "ACTION_REJECTED")) finish("");   // declined = skipped
+          else finish(B_INV_SOFT);                              // the service is down: the buy goes on
+        });
+      };
+    });
+  }
+
   function bLs(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
   function psAddr() { return bLs("dystore::playStoreAddress") || (CFG.contracts && CFG.contracts.playStore); }
   function usdcAddr() { return bLs("dystore::usdcAddress") || (CFG.contracts && CFG.contracts.usdc); }
@@ -1545,6 +1667,7 @@ window.DYStore = (function () {
       body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
       body.appendChild(priceHero("USD 20"));
       body.appendChild(txt("p", "b-line", B_P1));
+      (function () { var iv = invitedLine(); if (iv) body.appendChild(iv); })();   // AFFILIATE-1: dormant => null
       body.appendChild(stockEl); (function(){ var sx = staleLine(); if (sx) body.appendChild(sx); })();
       var cta = el("button", "st-btn b-connect"); cta.type = "button"; cta.textContent = "Connect wallet";
       cta.onclick = function () { cta.disabled = true; window.DYWallet.connect().catch(function () {}).then(function () { cta.disabled = false; }); };
@@ -1578,6 +1701,7 @@ window.DYStore = (function () {
       body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
       body.appendChild(priceHero("USD 20"));
       body.appendChild(txt("p", "b-line", B_P1));
+      (function () { var iv = invitedLine(); if (iv) body.appendChild(iv); })();   // AFFILIATE-1: dormant => null
       body.appendChild(stockEl); (function(){ var sx = staleLine(); if (sx) body.appendChild(sx); })();
       body.appendChild(pick.row);
       body.appendChild(txt("p", "b-commit", B_P2));
@@ -1586,7 +1710,10 @@ window.DYStore = (function () {
       buy.disabled = !!closed;
       buy.onclick = function () {
         track("bundle_buy_click", { asset: pick.chosen });   // STORE-TRACK-1: intent, before any wallet prompt
-        bundleBuy(pick.chosen, host, msg, buy);
+        // AFFILIATE-1: the free invite signature comes FIRST when one applies; the step always resolves, so the
+        // buy road below runs exactly as it did — the invite can delay it by a tap, never stop it.
+        var chosen = pick.chosen;
+        inviteFirst(host, msg, buy).then(function () { bundleBuy(chosen, host, msg, buy); });
       };
       body.appendChild(buy);
     } else {
@@ -1687,6 +1814,7 @@ window.DYStore = (function () {
       return out;
     },
     mountTracking: mountTracking,
+    mountInvite: mountInvite,       // AFFILIATE-1: BEFORE mountTracking, so the code is off the URL before the tag lands
     track: track,
     captureUtm: captureUtm,
     currentUtm: currentUtm,

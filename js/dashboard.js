@@ -50,15 +50,19 @@ window.DYDash = (function () {
   ];
   // WINNINGS-4 — the WinningsDesk surface the card reads and the ceremony sends.
   var WIN_ABI = [
-    "function redeem(uint256 amount, uint256 cumulativeWinningsWei, uint256 deadline, bytes sig) returns (uint256 usdtOut)",
+    // AFFILIATE-1 rung 3 — the desk of web3 fc5d117: ONE DeskCoupon carries two lifetime ceilings (winnings, invite
+    // rewards); one redeem draws from either or both. Only the winnings part pulls DYC (to the treasury); the invite
+    // part moves no DYC at all, so an invite-only withdrawal never asks for an approval.
+    "function redeem(uint256 winningsAmount, uint256 inviteAmount, uint256 cumulativeWinningsWei, uint256 cumulativeInviteWei, uint256 deadline, bytes sig) returns (uint256 usdtOut)",
     "function redeemed(address) view returns (uint256)",
+    "function invitePaid(address) view returns (uint256)",
     "function lastRedeem(address) view returns (uint256)",
     "function reserve() view returns (uint256)",
     "function paused() view returns (bool)",
     "function quote(uint256) view returns (uint256 usdtOut, uint256 dycUsed)",
     "function MIN_REDEEM() view returns (uint256)",
     "function COOLDOWN() view returns (uint256)",
-    "event Redeemed(address indexed wallet, uint256 dycUsed, uint256 usdtOut, uint256 newRedeemed)",
+    "event Redeemed(address indexed wallet, uint256 winningsDycUsed, uint256 inviteDycPaid, uint256 usdtOut, uint256 newRedeemed, uint256 newInvitePaid)",
   ];
   var DESK_ABI = [
     "function quote(uint256) view returns (uint256 usdtOut, uint256 dycUsed)",
@@ -112,6 +116,7 @@ window.DYDash = (function () {
     // DIFFERENT selector from RoiRedemption's no-arg one — both are listed, and ethers resolves the overload.
     "error BelowMinimum(uint256 dycUsed, uint256 minimum)",
     "error EntitlementExhausted(uint256 requested, uint256 remaining)",
+    "error InviteEntitlementExhausted(uint256 requested, uint256 remaining)",
     "error CooldownActive(uint256 readyAt)",
     "error ReserveInsufficient(uint256 need, uint256 have)",
     "error BadRateIdentity()",
@@ -190,6 +195,40 @@ window.DYDash = (function () {
   function W_CONFIRM(dyc, usdt) { return "Withdraw " + dyc + " DYC and receive " + usdt + " USDT. The DYC returns to the treasury."; }
   function W_REOPENS(when) { return "Your next withdrawal opens at " + when + "."; }
 
+  // ── AFFILIATE-1 rung 3 · THE WITHDRAW CARD'S NEW LINES (DASHBOARD_DESIGN_v1 §11, pinned by mp/copyproof.js) ──
+  var V_LEAD = "Withdraw your winnings and your Torana Invites rewards here, as USDT.";
+  var V_INVITE_NOTE = "Invite rewards are paid in USDT - no DYC leaves your wallet for them.";
+  function V_CONFIRM_BOTH(w, i, usdt) { return "Withdraw " + w + " DYC of winnings and " + i + " DYC of invite rewards, and receive " + usdt + " USDT. The winnings DYC returns to the treasury."; }
+  function V_CONFIRM_INVITE(i, usdt) { return "Withdraw " + i + " DYC of invite rewards and receive " + usdt + " USDT. No DYC leaves your wallet."; }
+
+  // ── AFFILIATE-1 rung 3 · THE TORANA INVITES CARD (DASHBOARD_DESIGN_v1 §11). The scheme's copy never borrows the
+  //    words of the older Referrals link (a different thing, left exactly as it was) — copyproof AF1-AF3 hold it. ──
+  var I_LEAD = "Share your invite link. When a friend buys their first bundle through it, you earn 10% of what they paid.";
+  var I_PAID_AS = "Rewards are counted in DYC at 0.008 and paid as USDT from the Withdraw card.";
+  var I_UNLOCK = "A reward unlocks 7 days after your friend's purchase.";
+  var I_FIRST = "Only a friend's first bundle counts, and only if they have never held a Torana.";
+  var I_FREE = "Your friend signs a free invite before they buy - it costs them nothing.";
+  var I_REVIEW = "More than 25 rewards in one month are checked by hand before they unlock.";
+  var I_NONE = "No invited purchases yet.";
+  var I_UNSHOWN = "Your invited purchases can't be shown right now.";
+  var I_COPIED = "Link copied.";
+  function I_UNLOCKS_ON(date) { return "Unlocks on " + date; }
+  var I_READY = "Ready to withdraw";
+  var I_PAID = "Paid";
+  var I_HELD = "Held for review";
+  var I_WAITING_DESK = "Unlocked - withdrawals open when the desk does.";
+  // the invite service's own refusals (approval-bot src/invites/service.js), in the site's words
+  var INV_SVC = {
+    RECORD_UNAVAILABLE: "Invites are unavailable for a moment. Try again shortly.",
+    STALE_SIGNATURE: "That signature has expired. Sign again.",
+    BAD_SIGNATURE: "That signature couldn't be verified. Sign again.",
+    NO_TORANA: "Invite codes are for Torana holders.",
+    CODE_COLLISION: "Please sign once more to create your code.",
+    TRY_AGAIN: "We can't check that right now - nothing is lost. Try again shortly.",
+    NOT_CONFIGURED: "Invites are not open yet.",
+  };
+  var INV_FALLBACK = "Invites are unavailable right now.";
+
   // The winnings desk's OWN sentences. Consulted BEFORE ERR_PLAIN whenever the failing road was a winnings one —
   // without this, ExpiredCoupon and BadSignature would answer in the DropDesk's words, because they are the same
   // selectors. A withdrawal approval lives 4 HOURS; a drop coupon lives 90 DAYS. Saying the wrong one is a lie.
@@ -197,6 +236,7 @@ window.DYDash = (function () {
     CooldownActive: "You have already withdrawn today. Only one withdrawal per wallet every 24 hours.",
     BelowMinimum: "The minimum withdrawal is 125 DYC (USD 1).",
     EntitlementExhausted: "You have withdrawn all of your winnings so far.",
+    InviteEntitlementExhausted: "You have withdrawn all of your invite rewards so far.",
     ExpiredCoupon: "This withdrawal approval has expired. Approvals last 4 hours - ask for a fresh one.",
     EnforcedPause: "Withdrawals are paused for a moment.",
     ReserveInsufficient: "The cash-out desk's reserve can't cover this right now. Try a smaller amount or check back later.",
@@ -212,7 +252,7 @@ window.DYDash = (function () {
     ISSUANCE_PAUSED: "Withdrawals are paused for a moment.",
     SCREENING_STALE: "Withdrawals are paused for a moment.",
     RATE_LIMITED: "You've just asked for one - give it a minute and try again.",
-    NOTHING_TO_WITHDRAW: "You have no winnings to withdraw yet.",
+    NOTHING_TO_WITHDRAW: "You have nothing to withdraw yet.",   // S3, amended at AFFILIATE-1 rung 3 (two parts now)
     BAD_CHALLENGE: "That sign-in couldn't be verified. Start again.",
     GEO_DENIED: "Withdrawals aren't available from your location.",
     KYC_REQUIRED: "Withdrawals need identity verification first.",
@@ -304,6 +344,10 @@ window.DYDash = (function () {
       // deploy can never produce a card that asks a wallet to sign against a desk that isn't there.
       winningsDesk: oc.winningsDesk || fc.winningsDesk || null,
       winningsServiceUrl: o.winningsServiceUrl || FILE.winningsServiceUrl || null,
+      // AFFILIATE-1 rung 3 — NULL today: the Torana Invites card stays invisible and no call is made. The Torana read
+      // that gates the card runs only when this is set.
+      inviteServiceUrl: o.inviteServiceUrl || FILE.inviteServiceUrl || null,
+      accessNFT: oc.accessNFT || fc.accessNFT || (PLAYER && PLAYER.contracts && PLAYER.contracts.accessNFT) || null,
       usdt: oc.usdt || fc.usdt || null,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
       readRpcUrlFallbacks: (o.readRpcUrlFallbacks || FILE.readRpcUrlFallbacks || []),
@@ -672,9 +716,15 @@ window.DYDash = (function () {
         // WINNINGS (WINNINGS-4) — read ONLY when the desk exists. Dormant => not a single call is made.
         if (c.winningsDesk) {
           var wd = new ethersRef.Contract(c.winningsDesk, WIN_ABI, provider);
-          jobs.push(Promise.all([wd.redeemed(addr), wd.lastRedeem(addr), wd.reserve(), wd.paused(), wd.MIN_REDEEM(), wd.COOLDOWN()])
-            .then(function (r) { data.win = { redeemed: r[0], lastRedeem: r[1], reserve: r[2], paused: r[3], min: r[4], cooldown: r[5] }; })
+          jobs.push(Promise.all([wd.redeemed(addr), wd.lastRedeem(addr), wd.reserve(), wd.paused(), wd.MIN_REDEEM(), wd.COOLDOWN(), wd.invitePaid(addr)])
+            .then(function (r) { data.win = { redeemed: r[0], lastRedeem: r[1], reserve: r[2], paused: r[3], min: r[4], cooldown: r[5], invitePaid: r[6] }; })
             .catch(function () { data.winErr = true; })); // the busy-sentinel law: unknown renders "—", never a guess
+        }
+        // TORANA (AFFILIATE-1 rung 3) — read ONLY when the invite service is configured: the card it gates is for
+        // holders alone, and a dormant road makes no call at all.
+        if (c.inviteServiceUrl && c.accessNFT) {
+          var tn = new ethersRef.Contract(c.accessNFT, ["function balanceOf(address) view returns (uint256)"], provider);
+          jobs.push(tn.balanceOf(addr).then(function (b) { data.torana = b; }).catch(function () { data.toranaErr = true; }));
         }
         // STAKING + REWARDS
         if (c.holderStaking) {
@@ -1318,18 +1368,22 @@ window.DYDash = (function () {
   //  THE ORDER IS THE SAFETY: a coupon is requested first, and `redeem` is only reachable from a coupon the
   //  service actually returned. There is no path that sends a transaction without one.
   // ═══════════════════════════════════════════════════════════════════════
-  var winCoupon = null;   // { coupon:{wallet,cumulativeWinningsWei,deadline}, signature, cumulativeWinningsWei }
+  var winCoupon = null;   // { coupon:{wallet,cumulativeWinningsWei,cumulativeInviteWei,deadline}, signature, cumulativeWinningsWei, cumulativeInviteWei }
   var winBusy = false;
 
   function winSvcBase() { var u = cfg().winningsServiceUrl; return u ? String(u).replace(/\/+$/, "") : null; }
   function winDormant() { return !cfg().winningsDesk || !winSvcBase(); }
 
-  // what the wallet may still draw: the signed cumulative minus what the desk says it has already redeemed
-  function winWithdrawable() {
+  // AFFILIATE-1 rung 3 — what the wallet may still draw, PER PART: each signed cumulative minus the desk's own
+  // monotone ledger for that part (redeemed / invitePaid). The two are never netted against each other.
+  function winParts() {
     if (!winCoupon || !data.win) return null;
-    var cum = BigInt(winCoupon.cumulativeWinningsWei), done = BigInt(data.win.redeemed);
-    return cum > done ? cum - done : 0n;
+    var cw = BigInt(winCoupon.cumulativeWinningsWei || "0"), ci = BigInt(winCoupon.cumulativeInviteWei || "0");
+    var dw = BigInt(data.win.redeemed), di = BigInt(data.win.invitePaid == null ? 0 : data.win.invitePaid);
+    var w = cw > dw ? cw - dw : 0n, i = ci > di ? ci - di : 0n;
+    return { w: w, i: i, total: w + i };
   }
+  function winWithdrawable() { var p = winParts(); return p ? p.total : null; }
   function winReopensAt() {
     if (!data.win || !data.win.lastRedeem || BigInt(data.win.lastRedeem) === 0n) return 0;
     return Number(data.win.lastRedeem) + Number(data.win.cooldown);
@@ -1341,13 +1395,15 @@ window.DYDash = (function () {
   function usdtFor(dycWei) { return fmt(BigInt(dycWei) / 125000000000000n, 6, 6); }  // the desk's own RATE_DIVISOR
 
   function renderWinnings() {
+    renderInvites();                              // the invites card rides every repaint of its sibling
     var host = $("winnings-body"); if (!host) return;
     var c = cfg();
 
     // DORMANT — the shipped state. No contract is read, no coupon asked for, nothing signed.
     if (winDormant()) {
-      host.innerHTML = "<p class='win-lead'>" + esc(W_LEAD) + "</p>"
+      host.innerHTML = "<p class='win-lead'>" + esc(V_LEAD) + "</p>"
         + "<p class='win-dormant'>" + esc(W_DORMANT) + "</p>"
+        + "<p class='win-note'>" + esc(W_LEAD) + "</p>"
         + "<div class='win-facts'><span class='win-fact'>" + esc(W_RATE) + "</span>"
         + "<span class='win-fact'>" + esc(W_FLOOR) + "</span>"
         + "<span class='win-fact'>" + esc(W_CADENCE) + "</span></div>"
@@ -1355,19 +1411,26 @@ window.DYDash = (function () {
       return;
     }
     if (!isConnected()) {
-      host.innerHTML = "<p class='win-lead'>" + esc(W_LEAD) + "</p><div class='notlive'>Connect your wallet to see your winnings.</div>";
+      host.innerHTML = "<p class='win-lead'>" + esc(V_LEAD) + "</p><div class='notlive'>Connect your wallet to see what you can withdraw.</div>";
       return;
     }
 
     // EVERY NUMBER SHOWN WAS READ. A failed read renders "—" (the busy-sentinel law), never a zero that looks real.
     var unknown = !!data.winErr || !data.win;
-    var avail = winWithdrawable();
-    var amtTxt = unknown ? "—" : (avail == null ? "—" : fmt(avail, data.dycDec || 18));
-    var usdTxt = (unknown || avail == null) ? "—" : usdtFor(avail);
+    var parts = unknown ? null : winParts();
+    var dec = data.dycDec || 18;
+    var amtTxt = parts ? fmt(parts.total, dec) : "—";
+    var usdTxt = parts ? usdtFor(parts.total) : "—";
+    var wTxt = parts ? fmt(parts.w, dec) + " DYC" : "—";
+    var iTxt = parts ? fmt(parts.i, dec) + " DYC" : "—";
 
-    var h = "<p class='win-lead'>" + esc(W_LEAD) + "</p>"
+    var h = "<p class='win-lead'>" + esc(V_LEAD) + "</p>"
       + "<div class='win-amt'>" + amtTxt + "<span class='u'>DYC</span></div>"
       + "<div class='win-usdt'>" + (usdTxt === "—" ? "—" : "&#8776; " + usdTxt + " USDT") + "</div>"
+      + "<div class='win-parts'>"
+      + "<div class='win-part'><span class='win-part-k'>Winnings</span><span class='win-part-v' id='win-part-w'>" + wTxt + "</span></div>"
+      + "<div class='win-part'><span class='win-part-k'>Invite rewards</span><span class='win-part-v' id='win-part-i'>" + iTxt + "</span></div>"
+      + "</div>"
       + "<div class='win-facts'>"
       + "<span class='win-fact'>" + esc(W_RATE) + "</span>"
       + "<span class='win-fact'>" + esc(W_FLOOR) + "</span>"
@@ -1388,8 +1451,9 @@ window.DYDash = (function () {
       + "<button class='rite-btn' id='win-redeem'" + (winCoupon && !winInCooldown() && !unknown ? "" : " disabled") + ">"
       + "<span class='win-step-num'>2</span>Withdraw as USDT</button>"
       + "</div>"
-      + "<p class='win-note'>" + esc(W_TREASURY) + " " + esc(W_FACILITY) + "</p>"
-      + "<p class='win-note'>" + esc(W_FRESH) + "</p>";
+      + "<p class='win-note'>" + esc(W_LEAD) + " " + esc(W_TREASURY) + "</p>"
+      + "<p class='win-note'>" + esc(V_INVITE_NOTE) + "</p>"
+      + "<p class='win-note'>" + esc(W_FACILITY) + " " + esc(W_FRESH) + "</p>";
 
     host.innerHTML = h;
     if ($("win-coupon")) $("win-coupon").onclick = actWinningsCoupon;
@@ -1421,10 +1485,13 @@ window.DYDash = (function () {
       })
       .then(function (res) {
         if (!res || res.refused) {
-          failBox((res && res.sentence) || SVC_PLAIN[res && res.refused] || "Withdrawals are unavailable right now.");
+          // the SITE's ruled sentence wins for a known reason (rung 3 owns this copy); the service's own words
+          // stand in only for a reason this page has never heard of
+          failBox(SVC_PLAIN[res && res.refused] || (res && res.sentence) || "Withdrawals are unavailable right now.");
           return done();
         }
-        winCoupon = { coupon: res.coupon, signature: res.signature, cumulativeWinningsWei: res.cumulativeWinningsWei };
+        winCoupon = { coupon: res.coupon, signature: res.signature,
+                      cumulativeWinningsWei: res.cumulativeWinningsWei, cumulativeInviteWei: res.cumulativeInviteWei || "0" };
         done();
       })
       .catch(function (e) {
@@ -1434,21 +1501,25 @@ window.DYDash = (function () {
       });
   }
 
-  // STEP 2 — approve the DYC (only if needed), then redeem. The dashboard's OWN multi-step ceremony (actTopUp's
-  // shape): pre-simulate every leg, narrate each wallet prompt in plain words, decode failures in the WINNINGS
-  // context so the desk answers in its own words. Never reached without a coupon the service actually returned.
+  // STEP 2 — approve the DYC (only if needed, and ONLY for the winnings part), then redeem both parts in one call.
+  // The dashboard's OWN multi-step ceremony (actTopUp's shape): pre-simulate every leg, narrate each wallet prompt in
+  // plain words, decode failures in the WINNINGS context so the desk answers in its own words. Never reached without
+  // a coupon the service actually returned.
   function actWinningsRedeem() {
     if (!winCoupon) return;                       // structurally unreachable: the handler is not attached without one
-    var c = cfg(), need = winWithdrawable();
-    if (need == null || need === 0n) { failBox(SVC_PLAIN.NOTHING_TO_WITHDRAW); return; }
-    if (data.win && BigInt(need) < BigInt(data.win.min)) { failBox(ERR_WINNINGS.BelowMinimum); return; }
+    var c = cfg(), parts = winParts();
+    if (!parts || parts.total === 0n) { failBox(SVC_PLAIN.NOTHING_TO_WITHDRAW); return; }
+    if (data.win && parts.total < BigInt(data.win.min)) { failBox(ERR_WINNINGS.BelowMinimum); return; }
     if (winInCooldown()) { failBox(W_REOPENS(whenText(winReopensAt()))); return; }
     var pg = polGuard(); if (pg) { failBox(pg); return; }   // MP-FIX-3A: a gas-short wallet hears about POL, not DYC
 
-    var dycTxt = fmt(need, data.dycDec || 18), usdTxt = usdtFor(need);
-    confirmStep("Withdraw winnings",
-      W_CONFIRM("<b>" + dycTxt + "</b>", "<b>" + usdTxt + "</b>"),
-      "raw in: " + need.toString() + " wei"
+    var dec = data.dycDec || 18;
+    var wTxt = fmt(parts.w, dec), iTxt = fmt(parts.i, dec), dycTxt = fmt(parts.total, dec), usdTxt = usdtFor(parts.total);
+    var sentence = parts.i === 0n ? W_CONFIRM("<b>" + wTxt + "</b>", "<b>" + usdTxt + "</b>")
+      : parts.w === 0n ? V_CONFIRM_INVITE("<b>" + iTxt + "</b>", "<b>" + usdTxt + "</b>")
+      : V_CONFIRM_BOTH("<b>" + wTxt + "</b>", "<b>" + iTxt + "</b>", "<b>" + usdTxt + "</b>");
+    confirmStep("Withdraw", sentence,
+      "raw in: winnings " + parts.w.toString() + " wei, invite rewards " + parts.i.toString() + " wei"
     ).then(function (go) {
       if (!go) return;
       var redeemTx = null;
@@ -1458,30 +1529,34 @@ window.DYDash = (function () {
           var dyc = new ethersRef.Contract(c.dycoin, DYCOIN_ABI, signer);
           var wd = new ethersRef.Contract(c.winningsDesk, WIN_ABI, signer);
           var me = W.state.address;
-          return dyc.allowance(me, c.winningsDesk).then(function (allow) {
-            var needApprove = allow < need, nSteps = (needApprove ? 1 : 0) + 1, step = 0;
+          // THE INVITE PART MOVES NO DYC: with no winnings part there is nothing to approve, so the allowance is not
+          // even read and no approval prompt can appear.
+          var allowP = parts.w > 0n ? dyc.allowance(me, c.winningsDesk) : Promise.resolve(null);
+          return allowP.then(function (allow) {
+            var needApprove = parts.w > 0n && allow < parts.w, nSteps = (needApprove ? 1 : 0) + 1, step = 0;
             return feeOverrides(provider).then(function (fo) {
               var chain = Promise.resolve();
               if (needApprove) {
                 chain = chain.then(function () {
                   step++; pending(true, "Step " + step + " of " + nSteps + " — Approve DYC");
-                  $("ov-pending-msg").textContent = "Your wallet will ask to approve " + dycTxt + " DYC so the desk can take it. Nothing is withdrawn yet.";
-                  return dyc.approve.staticCall(c.winningsDesk, need).then(function () {
-                    return dyc.approve(c.winningsDesk, need, gasOv(fo, GAS.approve)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                  $("ov-pending-msg").textContent = "Your wallet will ask to approve " + wTxt + " DYC so the desk can take it. Nothing is withdrawn yet.";
+                  return dyc.approve.staticCall(c.winningsDesk, parts.w).then(function () {
+                    return dyc.approve(c.winningsDesk, parts.w, gasOv(fo, GAS.approve)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
                   });
                 });
               }
               chain = chain.then(function () {
                 step++; pending(true, "Step " + step + " of " + nSteps + " — Withdraw");
                 $("ov-pending-msg").textContent = "Your wallet will ask to withdraw " + dycTxt + " DYC for " + usdTxt + " USDT.";
-                var args = [need, winCoupon.coupon.cumulativeWinningsWei, winCoupon.coupon.deadline, winCoupon.signature];
+                var args = [parts.w, parts.i, winCoupon.coupon.cumulativeWinningsWei, winCoupon.coupon.cumulativeInviteWei,
+                            winCoupon.coupon.deadline, winCoupon.signature];
                 return wd.redeem.staticCall.apply(wd.redeem, args).then(function () {
                   return wd.redeem.apply(wd, args.concat([gasOv(fo, GAS.winRedeem)])).then(function (tx) {
                     persistPending(tx.hash, "Cashed Out", W.state.address);
                     return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
                       redeemTx = tx.hash;
                       pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Cashed Out", ic: "rewards",
-                        details: "Winnings to USDT", amt: dycTxt + " DYC \u2192 " + usdTxt + " USDT", hash: tx.hash });
+                        details: "Withdrawn as USDT", amt: dycTxt + " DYC → " + usdTxt + " USDT", hash: tx.hash });
                       clearPending(tx.hash);
                       return rc;
                     });
@@ -1503,6 +1578,134 @@ window.DYDash = (function () {
         failBox(decodeErr(e, "winnings"));        // the desk's own sentences, never the DropDesk's
       });
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  AFFILIATE-1 rung 3 — THE TORANA INVITES CARD
+  //  Holders only, and only when the invite service is configured: otherwise the panel stays hidden and nothing is
+  //  read or asked. "Get my invite code" signs an InviteCodeRequest (js/invite.js — the bot's own struct) and posts it;
+  //  the bot recovers the wallet and answers with the code (one per wallet, permanent). The list of invited purchases
+  //  is whatever the service returns beside the code; buyers arrive and are shown SHORTENED, never in full.
+  // ═══════════════════════════════════════════════════════════════════════
+  var invCode = null;      // the code, once the service answered
+  var invItems = null;     // [{ buyer, ts, unlockAt, status: pending|unlocked|held, rewardWei }] or null = not provided
+  var invBusy = false;
+
+  function invSvcBase() { var u = cfg().inviteServiceUrl; return u ? String(u).replace(/\/+$/, "") : null; }
+  function invVisible() {
+    return !!(invSvcBase() && window.DYInvite && isConnected() && data && data.torana != null && BigInt(data.torana) > 0n);
+  }
+  // an item's state, in plain words. "Paid" is decided from the desk's own ledger: unlocked rewards are paid in the
+  // order they unlocked, so the earliest ones whose running sum fits under invitePaid are the paid ones.
+  function invStatuses(items) {
+    var paid = (data.win && data.win.invitePaid != null) ? BigInt(data.win.invitePaid) : null;
+    var deskOpen = !winDormant() && !!data.win;
+    var unlocked = items.filter(function (x) { return x.status === "unlocked"; })
+      .sort(function (a, b) { return Number(a.unlockAt) - Number(b.unlockAt); });
+    var covered = {}, run = 0n;
+    if (paid != null) unlocked.forEach(function (x) { run += BigInt(x.rewardWei); if (run <= paid) covered[x.key] = true; });
+    return function (x) {
+      if (x.status === "held") return I_HELD;
+      if (x.status === "pending") return I_UNLOCKS_ON(dateFmt(Number(x.unlockAt)));
+      if (covered[x.key]) return I_PAID;
+      return deskOpen ? I_READY : I_WAITING_DESK;
+    };
+  }
+  function invShort(a) { var s = String(a || ""); return /^0x[0-9a-fA-F]{40}$/.test(s) ? shortAddr(s) : s; }
+
+  function renderInvites() {
+    var panel = $("invites-panel"), host = $("invites-body");
+    if (!panel || !host) return;
+    if (!invVisible()) { panel.style.display = "none"; host.innerHTML = ""; return; }
+    panel.style.display = "";
+    var h = "<p class='win-lead'>" + esc(I_LEAD) + "</p>"
+      + "<div class='win-facts'><span class='win-fact'>" + esc(I_PAID_AS) + "</span>"
+      + "<span class='win-fact'>" + esc(I_UNLOCK) + "</span></div>"
+      + "<p class='win-note'>" + esc(I_FIRST) + " " + esc(I_FREE) + "</p>";
+    if (!invCode) {
+      h += "<div class='win-steps'><button class='rite-btn' id='inv-get'" + (invBusy ? " disabled" : "") + ">Get my invite code</button></div>";
+    } else {
+      var link = window.DYInvite.inviteLink(invCode);
+      h += "<div class='inv-code'><span class='inv-code-k'>Your invite code</span><span class='inv-code-v' id='inv-code'>" + esc(invCode) + "</span></div>"
+        + "<div class='inv-link'><input class='inv-link-in' id='inv-link' readonly value='" + esc(link) + "' />"
+        + "<button class='rite-btn' id='inv-copy'>Copy link</button></div>";
+      h += invListHtml();
+      h += "<p class='win-note'>" + esc(I_REVIEW) + "</p>";
+    }
+    host.innerHTML = h;
+    if ($("inv-get")) $("inv-get").onclick = actInviteCode;
+    if ($("inv-copy")) $("inv-copy").onclick = function () {
+      var v = $("inv-link").value;
+      var ok = function () { toast(I_COPIED); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(ok, function () { $("inv-link").select(); });
+        else { $("inv-link").select(); document.execCommand && document.execCommand("copy"); ok(); }
+      } catch (e) { $("inv-link").select(); }
+    };
+  }
+
+  function invListHtml() {
+    if (invItems == null) return "<p class='win-note' id='inv-list-note'>" + esc(I_UNSHOWN) + "</p>";
+    if (!invItems.length) return "<p class='win-note' id='inv-list-note'>" + esc(I_NONE) + "</p>";
+    var status = invStatuses(invItems), dec = data.dycDec || 18;
+    var tot = { all: 0n, ready: 0n, pending: 0n, held: 0n, paid: 0n };
+    var rows = invItems.slice().sort(function (a, b) { return Number(b.ts) - Number(a.ts); }).map(function (x) {
+      var st = status(x), r = BigInt(x.rewardWei);
+      tot.all += r;
+      if (st === I_PAID) tot.paid += r; else if (st === I_HELD) tot.held += r;
+      else if (x.status === "pending") tot.pending += r; else tot.ready += r;
+      return "<tr class='inv-row'><td class='inv-buyer'>" + esc(invShort(x.buyer)) + "</td>"
+        + "<td class='inv-date'>" + esc(dateFmt(Number(x.ts))) + "</td>"
+        + "<td class='inv-amt'>" + fmt(r, dec) + " DYC</td>"
+        + "<td class='inv-status'>" + esc(st) + "</td></tr>";
+    });
+    var usd = function (w) { return "&#8776; USD " + fmt(w / 125000000000000n, 6, 2); };
+    return "<table class='inv-table'><tbody>" + rows.join("") + "</tbody></table>"
+      + "<div class='inv-totals' id='inv-totals'>"
+      + "<div class='win-part'><span class='win-part-k'>Earned</span><span class='win-part-v'>" + fmt(tot.all, dec) + " DYC " + usd(tot.all) + "</span></div>"
+      + "<div class='win-part'><span class='win-part-k'>Ready</span><span class='win-part-v'>" + fmt(tot.ready, dec) + " DYC " + usd(tot.ready) + "</span></div>"
+      + "<div class='win-part'><span class='win-part-k'>Unlocking</span><span class='win-part-v'>" + fmt(tot.pending, dec) + " DYC " + usd(tot.pending) + "</span></div>"
+      + "<div class='win-part'><span class='win-part-k'>Held</span><span class='win-part-v'>" + fmt(tot.held, dec) + " DYC " + usd(tot.held) + "</span></div>"
+      + "<div class='win-part'><span class='win-part-k'>Paid</span><span class='win-part-v'>" + fmt(tot.paid, dec) + " DYC " + usd(tot.paid) + "</span></div>"
+      + "</div>";
+  }
+
+  // GET MY INVITE CODE — sign the bot's InviteCodeRequest as the CONNECTED wallet, post it, show what comes back.
+  // The wallet field is part of the SIGNED message; the bot recovers the signer and refuses any mismatch.
+  function actInviteCode() {
+    var base = invSvcBase(); if (!base || invBusy) return;
+    invBusy = true; renderInvites();
+    var done = function () { invBusy = false; renderInvites(); };
+    var issuedAt = window.DYInvite.nowS();
+    withEthers()
+      .then(function () { return new ethersRef.BrowserProvider(window.ethereum).getSigner(); })
+      .then(function (sg) {
+        return sg.getAddress().then(function (me) {
+          var td = window.DYInvite.codeRequestTypedData(PLAYER.chain.id, me, issuedAt, ethersRef);
+          return sg.signTypedData(td.domain, td.types, td.message).then(function (sig) {
+            return fetch(base + "/invites/code", {
+              method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ wallet: td.message.wallet, issuedAt: issuedAt, signature: sig }),
+            }).then(function (r) { return r.json(); });
+          });
+        });
+      })
+      .then(function (res) {
+        if (!res || res.refused || !res.code) {
+          failBox(INV_SVC[res && res.refused] || INV_FALLBACK);
+          return done();
+        }
+        invCode = window.DYInvite.normCode(res.code);
+        invItems = Array.isArray(res.invites) ? res.invites.map(function (x, k) {
+          return { key: k, buyer: x.buyer, ts: x.ts, unlockAt: x.unlockAt, status: x.status, rewardWei: String(x.rewardWei || "0") };
+        }) : null;
+        done();
+      })
+      .catch(function (e) {
+        if (e && (e.code === 4001 || e.code === "ACTION_REJECTED")) failBox("You declined the signature in your wallet.");
+        else failBox(INV_SVC.TRY_AGAIN);
+        done();
+      });
   }
 
   function renderRedeem() {

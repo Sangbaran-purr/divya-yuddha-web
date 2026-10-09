@@ -277,6 +277,42 @@ FIFTY BRONZE TABLES IS ARITHMETIC, not flourish: the Hall's BRONZE tier
 stakes 10 DYC a table, so 500 DYC is fifty of them. If the tier moves,
 P1 moves with it.
 
+P13-P16  TORANA INVITES (AFFILIATE-1 rung 3, 2026-10-09). Shown ONLY when
+mf-config inviteServiceUrl is set; dormant (null, the shipped state) none of
+them can appear and no call is made.
+
+P13 invited-by (one quiet line under P1, on the disconnected and non-holder faces)
+Invited by [CODE]
+
+P14 the invite step (before the buy road, with a Sign button and a Skip button)
+You were invited by [CODE]. Sign a free invite before you buy - it costs nothing and moves no money.
+
+P15 invite recorded
+Invite recorded.
+
+P16 invite not recorded (a refusal of any kind, or the service is down)
+The invite couldn't be recorded - your purchase goes ahead as normal.
+
+  P13/P14 [CODE]  the remembered code: 8 symbols from the bot's alphabet
+                  (no 0/O/1/I/L), validated on capture; anything else is ignored
+
+THE INVITE IS NEVER A BLOCKER. Skip, a declined signature (no sentence), a
+refusal (P16) and a dead service (P16) all continue straight into the normal buy
+road; the road itself - pre-cast read, approve, buy - is unchanged and runs
+only after the step resolves. The step appears only when an invite is
+remembered, the service is configured and the connected wallet holds no Torana.
+
+MEMORY: the FIRST code a browser sees is kept for 30 days (localStorage
+"dystore::invite", the code and a timestamp - never a wallet). A later link
+does not replace it until it expires. Every storage read and write is
+guarded: with storage refused the page works, just without the memory.
+
+THE CODE NEVER REACHES PLAUSIBLE: store.html strips ?invite= from the address
+bar (history.replaceState) BEFORE the analytics tag is injected, whether the
+road is live or dormant, and no tracked event carries it. Only the utm tags
+travel (the STORE-TRACK-1 zero-PII law). The invite link a holder shares is
+store.html?invite=CODE&utm_source=invite&utm_medium=torana&utm_campaign=invite.
+
 =====================================================
 ## ART-TORANA-1 (2026-09-13) - THE CARD'S TEXT, CORRECTED
 =====================================================

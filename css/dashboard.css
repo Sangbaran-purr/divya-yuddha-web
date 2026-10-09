@@ -888,3 +888,17 @@ body.report { background: radial-gradient(120% 90% at 50% -10%, rgba(40,30,12,.3
 .win-step-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;
   border:1px solid rgba(201,162,74,.5);color:var(--gold);font-size:.72rem;margin-right:7px}
 .win-done{color:var(--green,#7fb069)}
+
+/* ── AFFILIATE-1 rung 3 — the combined Withdraw card's two lines, and the Torana Invites card. ── */
+.win-parts{display:flex;flex-direction:column;gap:4px;margin:12px 0 2px}
+.win-part{display:flex;justify-content:space-between;gap:12px;font-size:.9rem;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.win-part-v{color:var(--ink)}
+.invites-panel .inv-code{display:flex;align-items:baseline;gap:12px;margin:14px 0 8px}
+.inv-code-k{font-size:.86rem;color:var(--ink-2)}
+.inv-code-v{font-size:1.5rem;letter-spacing:.18em;color:var(--gold);font-variant-numeric:tabular-nums}
+.inv-link{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.inv-link-in{flex:1 1 16rem;min-width:0;background:transparent;border:1px solid rgba(200,160,80,.3);border-radius:6px;color:var(--ink-2);padding:7px 9px;font-size:.8rem}
+.inv-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:.86rem}
+.inv-table td{padding:6px 4px;border-top:1px solid rgba(200,160,80,.14);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.inv-status{text-align:right;color:var(--ink)}
+.inv-totals{margin-top:10px}

@@ -85,7 +85,7 @@ Every line below is asserted verbatim against the source.
 
 - We can't confirm your winnings right now - nothing is lost. Try again shortly.
 - You've just asked for one - give it a minute and try again.
-- You have no winnings to withdraw yet.
+- You have nothing to withdraw yet. *(S3, amended at AFFILIATE-1 rung 3 - was "You have no winnings to withdraw yet."; the card now withdraws two things)*
 - That sign-in couldn't be verified. Start again.
 - Withdrawals aren't available from your location.
 - Withdrawals need identity verification first.
@@ -94,3 +94,72 @@ Every line below is asserted verbatim against the source.
 **The gas sentence** (MP-FIX-3A shape — a gas-short wallet hears about POL, never about DYC)
 
 - You need a small amount of POL for network fees. Add a little POL to your wallet and try again.
+
+## 12. AFFILIATE-1 rung 3 (2026-10-09) - ONE WITHDRAW CARD, AND THE TORANA INVITES CARD
+
+The desk is web3 `fc5d117`: one `DeskCoupon(wallet, cumulativeWinningsWei, cumulativeInviteWei, deadline)` carries two
+lifetime ceilings, and `redeem(winningsAmount, inviteAmount, cumW, cumI, deadline, sig)` draws from either or both. The
+service is the approval bot at `aa53ae7` (`/winnings/coupon` now returns `cumulativeInviteWei`; `/invites/code` and
+`/invites/bind`).
+
+**The Withdraw card** replaces the Winnings card in place (same panel, same two-step ceremony, same guards). It shows
+a winnings line and an invite-rewards line, each the signed cumulative minus the desk's own ledger for that part
+(`redeemed`, `invitePaid`) - never netted against each other. Minimum 125 DYC across both, one withdrawal per 24
+hours (the desk's shared cooldown). **Only the winnings part needs a DYC approval.** With no winnings part the
+allowance is not even read, so an invite-only withdrawal can never ask for an approval.
+
+**The Torana Invites card** is shown only when `inviteServiceUrl` is set AND the connected wallet holds a Torana. Its
+Torana read runs only when the service is configured. "Get my invite code" signs the bot's `InviteCodeRequest`
+(`js/invite.js`, proven equal to the bot's struct) and posts it; the bot recovers the wallet. The card shows the code,
+the share link `https://divyayuddha.games/store.html?invite=CODE&utm_source=invite&utm_medium=torana&utm_campaign=invite`
+with a copy button, the invited purchases (buyer SHORTENED, date, reward, status in plain words) and totals in DYC and
+USD. "Paid" is decided from the desk's own `invitePaid`: unlocked rewards are paid in unlock order.
+
+⚠ **THE LIST NEEDS ONE BOT FIELD THAT DOES NOT EXIST YET.** The bot's `/invites/code` answers `{ code, existing }`
+today. The card reads an optional `invites: [{ buyer, ts, unlockAt, status, rewardWei }]` beside the code (status =
+the deriver's own `pending | unlocked | held`; buyer shortened server-side). Until the bot sends it the card shows the
+code and link and says the purchases can't be shown right now - it never invents a list.
+
+**Never "affiliate", never "referral"** in this scheme's copy. The sidebar's "Referrals" link is a different, older
+thing and is untouched.
+
+### Ruled copy (pinned by `mp/copyproof.js`)
+
+**The Withdraw card**
+
+- Withdraw your winnings and your Torana Invites rewards here, as USDT.
+- Invite rewards are paid in USDT - no DYC leaves your wallet for them.
+- Withdraw [900] DYC of winnings and [250] DYC of invite rewards, and receive [9.200000] USDT. The winnings DYC returns to the treasury.
+- Withdraw [250] DYC of invite rewards and receive [2.000000] USDT. No DYC leaves your wallet.
+- Connect your wallet to see what you can withdraw.
+- You have withdrawn all of your invite rewards so far.
+
+(A winnings-only withdrawal keeps W9 above, word for word.)
+
+**The Torana Invites card**
+
+- Share your invite link. When a friend buys their first bundle through it, you earn 10% of what they paid.
+- Rewards are counted in DYC at 0.008 and paid as USDT from the Withdraw card.
+- A reward unlocks 7 days after your friend's purchase.
+- Only a friend's first bundle counts, and only if they have never held a Torana.
+- Your friend signs a free invite before they buy - it costs them nothing.
+- More than 25 rewards in one month are checked by hand before they unlock.
+- No invited purchases yet.
+- Your invited purchases can't be shown right now.
+- Link copied.
+- Unlocks on [date]
+- Ready to withdraw
+- Paid
+- Held for review
+- Unlocked - withdrawals open when the desk does.
+
+**The invite service's refusals** (`INV_SVC`)
+
+- Invites are unavailable for a moment. Try again shortly.
+- That signature has expired. Sign again.
+- That signature couldn't be verified. Sign again.
+- Invite codes are for Torana holders.
+- Please sign once more to create your code.
+- We can't check that right now - nothing is lost. Try again shortly.
+- Invites are not open yet.
+- Invites are unavailable right now.

@@ -37,6 +37,12 @@ window.DY_MF_CONFIG = {
   // Nothing but the signed challenge ever leaves the page, and no analytics event is attached to this card.
   winningsServiceUrl: null,
 
+  // AFFILIATE-1 rung 3 — the approval-bot's Torana Invites endpoints (/invites/code, /invites/bind). NULL until the
+  // service runs them: null keeps the store's "Invited by" line, its invite step and the dashboard's Torana Invites
+  // card INVISIBLE, and makes ZERO calls. (The store still strips a ?invite= code from the address bar either way,
+  // so a code can never reach the analytics tag.) Loaded by store.html AND dashboard.html.
+  inviteServiceUrl: null,
+
   // ── Polygon mainnet read endpoints (W3-MAINNET-1) ──
   // The verified primary is publicnode (CORS-clean, full node, reliable eth_call), drpc a redundant fallback; the
   // connected wallet remains the last-resort rescue. Tried in order (FallbackProvider, quorum 1). No API key needed.

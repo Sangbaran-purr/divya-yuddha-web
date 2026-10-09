@@ -143,6 +143,11 @@ const STORE_LAW = [
   ["P10 reading",        "Reading the store..."],
   ["P11 kept reading",   "Couldn't refresh just now - showing the last reading."],
   ["P12 pre-cast stop",  "Couldn't check this wallet just now - try again in a moment. Nothing was signed."],
+  // AFFILIATE-1 rung 3 — Torana Invites on the store
+  ["P13 invited-by",     "Invited by [CODE]"],
+  ["P14 invite step",    "You were invited by [CODE]. Sign a free invite before you buy - it costs nothing and moves no money."],
+  ["P15 recorded",       "Invite recorded."],
+  ["P16 not recorded",   "The invite couldn't be recorded - your purchase goes ahead as normal."],
 ];
 console.log("\n── THE STORE'S LAW · STORE_DESIGN section 11 ruled copy (doc → js/store.js) ──");
 for (const [tag, line] of STORE_LAW) {
@@ -298,12 +303,42 @@ const DASH_LAW = [
   ["E7 bad signature",   "This withdrawal approval couldn't be verified. It may be from an old signing key - ask for a fresh one."],
   ["S1 deriver refusal", "We can't confirm your winnings right now - nothing is lost. Try again shortly."],
   ["S2 rate limited",    "You've just asked for one - give it a minute and try again."],
-  ["S3 nothing yet",     "You have no winnings to withdraw yet."],
+  ["S3 nothing yet",     "You have nothing to withdraw yet."],   // amended at AFFILIATE-1 rung 3: two parts now
   ["S4 bad challenge",   "That sign-in couldn't be verified. Start again."],
   ["S5 geo",             "Withdrawals aren't available from your location."],
   ["S6 kyc",             "Withdrawals need identity verification first."],
   ["S7 not served",      "This wallet can't be served."],
   ["G1 gas",             "You need a small amount of POL for network fees. Add a little POL to your wallet and try again."],
+  // AFFILIATE-1 rung 3 — the combined Withdraw card
+  ["V1 lead",            "Withdraw your winnings and your Torana Invites rewards here, as USDT."],
+  ["V2 invite note",     "Invite rewards are paid in USDT - no DYC leaves your wallet for them."],
+  ["V3 confirm both",    "Withdraw [900] DYC of winnings and [250] DYC of invite rewards, and receive [9.200000] USDT. The winnings DYC returns to the treasury."],
+  ["V4 confirm invite",  "Withdraw [250] DYC of invite rewards and receive [2.000000] USDT. No DYC leaves your wallet."],
+  ["V5 connect",         "Connect your wallet to see what you can withdraw."],
+  ["E8 invite exhausted", "You have withdrawn all of your invite rewards so far."],
+  // AFFILIATE-1 rung 3 — the Torana Invites card
+  ["I1 lead",            "Share your invite link. When a friend buys their first bundle through it, you earn 10% of what they paid."],
+  ["I2 paid as",         "Rewards are counted in DYC at 0.008 and paid as USDT from the Withdraw card."],
+  ["I3 unlock",          "A reward unlocks 7 days after your friend's purchase."],
+  ["I4 first bundle",    "Only a friend's first bundle counts, and only if they have never held a Torana."],
+  ["I5 free",            "Your friend signs a free invite before they buy - it costs them nothing."],
+  ["I6 review",          "More than 25 rewards in one month are checked by hand before they unlock."],
+  ["I7 none",            "No invited purchases yet."],
+  ["I8 unshown",         "Your invited purchases can't be shown right now."],
+  ["I9 copied",          "Link copied."],
+  ["I10 unlocks on",     "Unlocks on [date]"],
+  ["I11 ready",          "Ready to withdraw"],
+  ["I12 paid",           "Paid"],
+  ["I13 held",           "Held for review"],
+  ["I14 desk not open",  "Unlocked - withdrawals open when the desk does."],
+  ["N1 unavailable",     "Invites are unavailable for a moment. Try again shortly."],
+  ["N2 stale",           "That signature has expired. Sign again."],
+  ["N3 bad signature",   "That signature couldn't be verified. Sign again."],
+  ["N4 no torana",       "Invite codes are for Torana holders."],
+  ["N5 collision",       "Please sign once more to create your code."],
+  ["N6 try again",       "We can't check that right now - nothing is lost. Try again shortly."],
+  ["N7 not open",        "Invites are not open yet."],
+  ["N8 fallback",        "Invites are unavailable right now."],
 ];
 console.log("\n── THE DASHBOARD'S LAW · DASHBOARD_DESIGN_v1 section 11 ruled copy (doc → js/dashboard.js) ──");
 for (const [tag, line] of DASH_LAW) {
@@ -316,6 +351,25 @@ ok("W-TRAP — the winnings expiry does NOT use the DropDesk's 90-day wording",
    DASH.indexOf("Approvals last 4 hours") >= 0
    && DASH.indexOf("Coupons are valid for 90 days") >= 0
    && DASH.indexOf("ExpiredCoupon: \"This withdrawal approval has expired") >= 0);
+
+// AFFILIATE-1 rung 3 — THE NEW SCHEME NEVER SAYS "affiliate" OR "referral". The words belong to the older, separate
+// Referrals link (left untouched); the invite scheme's own copy must not borrow them. Checked over every ruled line
+// this rung added AND over the two source blocks that render them, so a stray sentence outside the law is caught too.
+{
+  const NEW_LINES = STORE_LAW.filter((r) => /^P1[3-6] /.test(r[0])).concat(DASH_LAW.filter((r) => /^(V\d|E8|I\d|N\d)/.test(r[0])));
+  ok("AF0 · the new-scheme line set was located (4 store + 28 dashboard)", NEW_LINES.length === 32, String(NEW_LINES.length));
+  ok("AF1 · no ruled invite line says affiliate or referral", NEW_LINES.every((r) => !/affiliat|referr/i.test(r[1])),
+     NEW_LINES.filter((r) => /affiliat|referr/i.test(r[1])).map((r) => r[0]).join(", "));
+  const storeBlock = (STORE.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0];
+  const dashBlock = (DASH.split("AFFILIATE-1 rung 3 · THE WITHDRAW CARD'S NEW LINES")[1] || "").split("var INV_FALLBACK")[0]
+    + (DASH.split("AFFILIATE-1 rung 3 — THE TORANA INVITES CARD")[1] || "").split("function renderRedeem()")[0];
+  const strings = (src) => (src.match(/"(?:[^"\\]|\\.)*"/g) || []).join(" ");
+  ok("AF2 · the source blocks were located", storeBlock.length > 1500 && dashBlock.length > 3000, storeBlock.length + " / " + dashBlock.length);
+  ok("AF3 · and no string literal in either block says affiliate or referral",
+     !/affiliat|referr/i.test(strings(storeBlock)) && !/affiliat|referr/i.test(strings(dashBlock)));
+  ok("AF4 · the Referrals link is untouched (its toast still names the separate rewards platform)",
+     DASH.indexOf('toast("Referrals live on the separate rewards platform.")') >= 0);
+}
 
 // WINNINGS-4: THREE pairs now (Hall, Store, Dashboard). RULED_N counts the first two; DASH_LAW is the third and
 // is added here so the arithmetic printed below is the true one, not an inherited one.
