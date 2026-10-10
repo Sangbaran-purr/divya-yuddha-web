@@ -990,25 +990,32 @@ window.DYStore = (function () {
   function bP7(sym, sum) { return "Not enough " + sym + " in this wallet - " + sum + " buys the bundle."; }
 
   // ═══════════════════ AFFILIATE-1 rung 3 · TORANA INVITES (the store's half) ═══════════════════
-  // A holder shares store.html?invite=CODE. The visitor's browser remembers the FIRST code it saw for 30 days, shows
-  // one quiet line, and — when the visitor taps Buy without a Torana — asks for one free signature FIRST (an
-  // InviteBinding, js/invite.js) with a visible Skip. THE INVITE IS NEVER A BLOCKER: a skip, a declined signature, a
-  // refusal and a dead service all walk straight on to the normal buy, with at most one plain sentence. The buy road
-  // itself (pre-cast read, approve, buy) is not touched: the invite step resolves before bundleBuy is ever called.
+  // A holder shares store.html?invite=CODE. The visitor's browser remembers the FIRST code it saw for 30 days and shows
+  // one quiet line. INVITE-STEP-2 (owner ruling 2026-10-10): the free invite signature is PART OF BUY — no separate box,
+  // no Skip. When a code is remembered, the service is configured and the connected wallet holds no Torana, tapping Buy
+  // first asks the wallet for the free InviteBinding signature (js/invite.js), then walks straight into the normal buy
+  // road (pre-cast read, approve, buy) in the same tap.
+  //   • The buyer REJECTS the signature  -> the purchase does NOT start; one ruled sentence; Buy stays ready to retry.
+  //   • The failure is OURS (service unreachable or slow, NOT_CONFIGURED) or the bot answers that the invite CAN'T APPLY
+  //     (already bound elsewhere, not eligible, code unknown or killed, the buyer owns the code) -> never a blocker: the
+  //     buy proceeds, with at most the ruled "couldn't be recorded" sentence.
+  //   • Recorded (or can't apply) -> remembered for that wallet beside the code, so it is never asked again.
+  // The buy road itself is not touched: the gate resolves BEFORE bundleBuy is called, and only decides whether it is.
   //
-  // DORMANT BY CONFIG: mf-config.js `inviteServiceUrl: null` (the site's shipped state) keeps every face below
-  // invisible and makes no call. The one thing that runs regardless is the STRIP: a code in the address bar is removed
-  // before the analytics tag is injected, so the code never reaches Plausible (the STORE-TRACK-1 zero-PII law — utm
-  // tags only), whether the road is live or not.
+  // DORMANT BY CONFIG: with `inviteServiceUrl` unset every face below is invisible and no call is made. The STRIP runs
+  // regardless: a code in the address bar is removed before the analytics tag is injected, so it never reaches
+  // Plausible (the STORE-TRACK-1 zero-PII law — utm tags only).
   //
   // §11 (ruled in docs/STORE_DESIGN.md, pinned by mp/copyproof.js):
   function bInvitedBy(code) { return "Invited by " + code; }
-  function bInviteAsk(code) { return "You were invited by " + code + ". Sign a free invite before you buy - it costs nothing and moves no money."; }
+  var B_INV_SIGNING = "Sign the free invite in your wallet...";
   var B_INV_OK = "Invite recorded.";
   var B_INV_SOFT = "The invite couldn't be recorded - your purchase goes ahead as normal.";
-  var INVITE_KEY = "dystore::invite";          // localStorage: { code, at } — the code only, never a wallet
+  var B_INV_DECLINED = "The invite signature is free and moves no money - please sign it to continue with your purchase.";
+  var INVITE_KEY = "dystore::invite";          // localStorage: { code, at, done: [wallets] } — never sent anywhere
   var INVITE_TTL_MS = 30 * 24 * 3600 * 1000;    // 30 days
-  var inviteSettled = {};                        // wallet(lower) -> true once the step ran this page (signed, skipped, refused)
+  var INVITE_BIND_TIMEOUT_MS = Number(bLs("dystore::inviteTimeoutMs")) || 10000;   // a slow service is a failure of OURS
+  var inviteSettled = {};                        // wallet(lower) -> true once settled THIS page (incl. a dead service)
 
   function inviteSvc() {
     var o = null; try { o = window.localStorage.getItem("dystore::inviteServiceUrl"); } catch (e) { o = null; }
@@ -1026,10 +1033,17 @@ window.DYStore = (function () {
     var code = lib && o ? lib.normCode(o.code) : null;
     var at = o ? Number(o.at) : NaN;
     if (!code || !Number.isFinite(at) || Date.now() - at > INVITE_TTL_MS || at > Date.now() + 60000) return null;
-    return { code: code, at: at };
+    var done = (o && Array.isArray(o.done)) ? o.done.filter(function (w) { return typeof w === "string"; }) : [];
+    return { code: code, at: at, done: done };
   }
-  function inviteWrite(code) {
-    try { window.localStorage.setItem(INVITE_KEY, JSON.stringify({ code: code, at: Date.now() })); } catch (e) { /* no memory, no harm */ }
+  function inviteWrite(code, at, done) {
+    try { window.localStorage.setItem(INVITE_KEY, JSON.stringify(done && done.length ? { code: code, at: at || Date.now(), done: done } : { code: code, at: at || Date.now() })); } catch (e) { /* no memory, no harm */ }
+  }
+  // this wallet's invite is settled for good (recorded, or the bot says it can't apply): never ask it again
+  function inviteMarkDone(me) {
+    var r = inviteRead(); if (!r) return;
+    var w = String(me).toLowerCase();
+    if (r.done.indexOf(w) < 0) inviteWrite(r.code, r.at, r.done.concat([w]));
   }
   // FIRST PAINT, BEFORE THE TAG: read ?invite=, strip it from the address bar, and (when live) remember it unless a
   // remembered code is still within its 30 days — the FIRST code a browser saw wins.
@@ -1057,57 +1071,60 @@ window.DYStore = (function () {
   }
   function inviteApplies(st) {
     if (!inviteLive() || !st || !st.me || st.torana !== 0n) return false;
-    if (inviteSettled[String(st.me).toLowerCase()]) return false;
-    return !!inviteRead();
+    var w = String(st.me).toLowerCase();
+    if (inviteSettled[w]) return false;
+    var r = inviteRead();
+    return !!r && r.done.indexOf(w) < 0;
   }
-  // THE STEP. Always RESOLVES (never rejects): every exit leads to the buy.
-  function inviteFirst(host, msg, btn) {
+  // The step's ONE sentence gets its OWN line beside #b-msg, never in it: the buy road writes its progress into #b-msg
+  // the moment it starts, which wiped the sentence before anyone could read it (found by tests/suites/invites.js SB9).
+  function inviteNote(msg, sentence, kind) {
+    var old = msg.parentNode && msg.parentNode.querySelector(".b-invite-note");
+    if (old) old.parentNode.removeChild(old);
+    if (!sentence) return;
+    msg.parentNode.insertBefore(txt("div", "st-msg b-invite-note" + (kind ? " " + kind : ""), sentence), msg);
+  }
+  // THE GATE. Resolves true (go on to the buy) or false (the buyer declined to sign: do NOT buy). Never rejects.
+  function inviteGate(host, msg, btn) {
     var st = bState;
-    if (!inviteApplies(st)) return Promise.resolve();
+    if (!inviteApplies(st)) return Promise.resolve(true);
     var code = inviteRead().code, me = st.me, key = String(me).toLowerCase();
-    return new Promise(function (resolve) {
-      btn.disabled = true;
-      var box = el("div", "b-invite-ask");
-      box.appendChild(txt("p", "b-line", bInviteAsk(code)));
-      var row = el("div", "b-invite-row");
-      var sign = el("button", "st-btn b-invite-sign"); sign.type = "button"; sign.textContent = "Sign invite (free)";
-      var skip = el("button", "st-btn b-invite-skip"); skip.type = "button"; skip.textContent = "Skip";
-      row.appendChild(sign); row.appendChild(skip); box.appendChild(row);
-      msg.parentNode.insertBefore(box, msg);
-      var finished = false;
-      // The step's ONE sentence gets its OWN line, beside #b-msg rather than in it: the buy road writes its progress
-      // into #b-msg the moment it starts, which wiped the sentence before anyone could read it (found by
-      // tests/suites/invites.js SB9). The line lives until the tile next repaints.
-      function finish(sentence, kind) {
-        if (finished) return; finished = true;
+    btn.disabled = true;
+    msg.className = "st-msg"; msg.textContent = B_INV_SIGNING;
+    var signedAt = inviteLib().nowS();
+    return signerRoad().then(function (r) {
+      var td = inviteLib().bindingTypedData(CFG.chain.id, me, code, signedAt, r.ethers);
+      return r.signer.signTypedData(td.domain, td.types, td.message);
+    }).then(function (sig) {
+      // the bind: a slow or dead service is OUR failure — it never holds the buyer
+      var post = fetch(inviteSvc() + "/invites/bind", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ buyer: me, code: code, signedAt: signedAt, signature: sig }),
+      }).then(function (res) { return res.json().catch(function () { return null; }); });
+      var late = new Promise(function (res) { setTimeout(function () { res({ __timeout: true }); }, INVITE_BIND_TIMEOUT_MS); });
+      return Promise.race([post, late]).then(function (res) {
         inviteSettled[key] = true;
-        if (box.parentNode) box.parentNode.removeChild(box);
-        if (sentence) {
-          var note = txt("div", "st-msg b-invite-note" + (kind ? " " + kind : ""), sentence);
-          msg.parentNode.insertBefore(note, msg);
+        if (res && !res.refused && !res.__timeout && res.code) {            // the bot answers { code, existing } on success
+          inviteMarkDone(me); inviteNote(msg, B_INV_OK, "ok");
+        } else {
+          // a named refusal means the invite can't apply to this wallet — remember it; a timeout or no answer is ours
+          if (res && res.refused && res.refused !== "NOT_CONFIGURED" && res.refused !== "INTERNAL") inviteMarkDone(me);
+          inviteNote(msg, B_INV_SOFT);
         }
-        resolve();
+        msg.textContent = "";
+        return true;
+      }, function () {
+        inviteSettled[key] = true; inviteNote(msg, B_INV_SOFT); msg.textContent = "";   // the service is down: buy on
+        return true;
+      });
+    }, function (e) {
+      if (e && (e.code === 4001 || e.code === "ACTION_REJECTED")) {
+        // the buyer said no to a FREE signature: no purchase starts; Buy is ready to try again
+        msg.textContent = ""; inviteNote(msg, B_INV_DECLINED, "bad"); btn.disabled = false;
+        return false;
       }
-      skip.onclick = function () { finish(""); };
-      sign.onclick = function () {
-        sign.disabled = true; skip.disabled = true;
-        var signedAt = inviteLib().nowS();
-        signerRoad().then(function (r) {
-          var td = inviteLib().bindingTypedData(CFG.chain.id, me, code, signedAt, r.ethers);
-          return r.signer.signTypedData(td.domain, td.types, td.message);
-        }).then(function (sig) {
-          return fetch(inviteSvc() + "/invites/bind", {
-            method: "POST", headers: { "content-type": "application/json" },
-            body: JSON.stringify({ buyer: me, code: code, signedAt: signedAt, signature: sig }),
-          }).then(function (res) { return res.json().catch(function () { return null; }); });
-        }).then(function (res) {
-          if (res && !res.refused && res.code) finish(B_INV_OK, "ok");   // the bot answers { code, existing } on success
-          else finish(B_INV_SOFT);                              // a refusal, by any name, is one plain sentence
-        }, function (e) {
-          if (e && (e.code === 4001 || e.code === "ACTION_REJECTED")) finish("");   // declined = skipped
-          else finish(B_INV_SOFT);                              // the service is down: the buy goes on
-        });
-      };
+      inviteSettled[key] = true; inviteNote(msg, B_INV_SOFT); msg.textContent = "";      // the wallet could not sign: ours
+      return true;
     });
   }
 
@@ -1710,10 +1727,10 @@ window.DYStore = (function () {
       buy.disabled = !!closed;
       buy.onclick = function () {
         track("bundle_buy_click", { asset: pick.chosen });   // STORE-TRACK-1: intent, before any wallet prompt
-        // AFFILIATE-1: the free invite signature comes FIRST when one applies; the step always resolves, so the
-        // buy road below runs exactly as it did — the invite can delay it by a tap, never stop it.
+        // INVITE-STEP-2: the free invite signature comes FIRST when one applies, in the same tap. Only the buyer
+        // declining it stops the buy (go === false); every failure of ours lets the unchanged buy road run.
         var chosen = pick.chosen;
-        inviteFirst(host, msg, buy).then(function () { bundleBuy(chosen, host, msg, buy); });
+        inviteGate(host, msg, buy).then(function (go) { if (go) bundleBuy(chosen, host, msg, buy); });
       };
       body.appendChild(buy);
     } else {

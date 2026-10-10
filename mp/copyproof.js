@@ -145,9 +145,11 @@ const STORE_LAW = [
   ["P12 pre-cast stop",  "Couldn't check this wallet just now - try again in a moment. Nothing was signed."],
   // AFFILIATE-1 rung 3 — Torana Invites on the store
   ["P13 invited-by",     "Invited by [CODE]"],
-  ["P14 invite step",    "You were invited by [CODE]. Sign a free invite before you buy - it costs nothing and moves no money."],
   ["P15 recorded",       "Invite recorded."],
   ["P16 not recorded",   "The invite couldn't be recorded - your purchase goes ahead as normal."],
+  // INVITE-STEP-2 — the signature is part of Buy (P14 and its box retired)
+  ["P17 declined",       "The invite signature is free and moves no money - please sign it to continue with your purchase."],
+  ["P18 signing",        "Sign the free invite in your wallet..."],
 ];
 console.log("\n── THE STORE'S LAW · STORE_DESIGN section 11 ruled copy (doc → js/store.js) ──");
 for (const [tag, line] of STORE_LAW) {
@@ -356,8 +358,11 @@ ok("W-TRAP — the winnings expiry does NOT use the DropDesk's 90-day wording",
 // Referrals link (left untouched); the invite scheme's own copy must not borrow them. Checked over every ruled line
 // this rung added AND over the two source blocks that render them, so a stray sentence outside the law is caught too.
 {
-  const NEW_LINES = STORE_LAW.filter((r) => /^P1[3-6] /.test(r[0])).concat(DASH_LAW.filter((r) => /^(V\d|E8|I\d|N\d)/.test(r[0])));
-  ok("AF0 · the new-scheme line set was located (4 store + 28 dashboard)", NEW_LINES.length === 32, String(NEW_LINES.length));
+  const NEW_LINES = STORE_LAW.filter((r) => /^P1[3-8] /.test(r[0])).concat(DASH_LAW.filter((r) => /^(V\d|E8|I\d|N\d)/.test(r[0])));
+  ok("AF0 · the new-scheme line set was located (5 store + 28 dashboard)", NEW_LINES.length === 33, String(NEW_LINES.length));
+  // INVITE-STEP-2: the retired box and its sentence are gone from the source and the doc's ruled set
+  ok("AF5 · the retired invite box is gone: no Skip, no Sign button, no P14 sentence in store.js",
+     !/b-invite-ask|b-invite-skip|b-invite-sign|Sign a free invite before you buy/.test(STORE));
   ok("AF1 · no ruled invite line says affiliate or referral", NEW_LINES.every((r) => !/affiliat|referr/i.test(r[1])),
      NEW_LINES.filter((r) => /affiliat|referr/i.test(r[1])).map((r) => r[0]).join(", "));
   const storeBlock = (STORE.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0];

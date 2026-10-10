@@ -152,7 +152,7 @@ async function run() {
     H.click(w, ".b-buy");
     await waitFor("the bundle bought", () => boughtBundle(c), 30000);
     ok("SD4 · dormant: Buy goes straight down the normal road (no invite step) and the bundle lands",
-       await boughtBundle(c) && !q(w, ".b-invite-ask") && h.eth.__typed.length === 0);
+       await boughtBundle(c) && !q(w, ".b-invite-ask") && !q(w, ".b-invite-note") && h.eth.__typed.length === 0);
     ok("SD5 · DORMANT MEANS SILENT — not one request to the invite service", toBot(w).length === 0, JSON.stringify(toBot(w)));
     H.teardown(h);
   }
@@ -229,32 +229,46 @@ async function run() {
     }
   }
 
-  // ═══════════════ SB · THE INVITE STEP — every exit reaches the normal buy ═══════════════
+  // ═══════════════ SB · INVITE-STEP-2 — the free signature is PART OF BUY ═══════════════
+  // One tap on Buy: the wallet is asked for the free InviteBinding FIRST, then the normal buy road runs in the same tap.
+  // Only the buyer declining stops the purchase; every failure of ours and every "can't apply" answer lets it run.
+  const P15 = "Invite recorded.";
+  const P16 = "The invite couldn't be recorded - your purchase goes ahead as normal.";
+  const P17 = "The invite signature is free and moves no money - please sign it to continue with your purchase.";
+  const firstIdx = (h, m) => h.eth.__calls.indexOf(m);
+  const noBox = (w) => !q(w, ".b-invite-ask") && !q(w, ".b-invite-skip") && !q(w, ".b-invite-sign");
   async function buyCase(label, opts) {
+    opts = opts || {};
     const c = await H.chainStore();
     const chainId = Number((await c.provider.getNetwork()).chainId);
     const code = await realCode(ethers.Wallet.createRandom(), chainId);
     await (await c.usdc.mint(c.player.address, 25n * DEC6)).wait();
     const s = bindStub(chainId, { refuse: opts.refuse });
-    const h = await H.storePage(c, c.player, { invite: "https://bot.test", svc: s.stub, svcDown: !!opts.down,
-      ls: { "dystore::invite": JSON.stringify({ code: code, at: Date.now() }) } });
+    if (opts.hang) s.stub["/invites/bind"] = () => new Promise(() => {});             // a service that never answers
+    const rec = { code: code, at: Date.now() };
+    if (opts.doneFor) rec.done = [opts.doneFor.toLowerCase()];
+    const ls = Object.assign({ "dystore::invite": JSON.stringify(rec) }, opts.noInvite ? { "dystore::invite": "" } : {}, opts.ls || {});
+    if (opts.noInvite) delete ls["dystore::invite"];
+    const h = await H.storePage(c, c.player, { invite: "https://bot.test", svc: s.stub, svcDown: !!opts.down, ls });
     const w = h.w;
     if (opts.decline) h.eth.__declineTyped = true;
     await storeConnect(w);
     H.click(w, ".b-buy");
-    await waitFor("the invite step", () => !!q(w, ".b-invite-ask"));
-    const ask = txt(w, ".b-invite-ask");
-    const before = { sends: sends(h), typed: h.eth.__typed.length };
-    if (opts.skip) H.click(w, ".b-invite-skip"); else H.click(w, ".b-invite-sign");
-    await waitFor("the bundle bought (" + label + ")", () => boughtBundle(c), 40000);
-    return { c, h, w, s, code, chainId, ask, before };
+    if (opts.stopAtDecline) {
+      await waitFor("the declined sentence", () => txt(w, ".b-invite-note") === P17, 15000);
+      return { c, h, w, s, code, chainId };
+    }
+    let notes = [];
+    const t0 = Date.now();
+    while (!(await boughtBundle(c)) && Date.now() - t0 < 40000) { const n = txt(w, ".b-invite-note"); if (n && notes.indexOf(n) < 0) notes.push(n); if (!noBox(w)) notes.push("BOX!"); await H.sleep(80); }
+    return { c, h, w, s, code, chainId, notes, bought: await boughtBundle(c) };
   }
   {
-    const r = await buyCase("sign", {});
-    ok("SB1 · the step comes FIRST: the ask is shown and NOTHING has been sent or signed yet",
-       r.before.sends === 0 && r.before.typed === 0, JSON.stringify(r.before));
-    ok("SB2 · the ask is the ruled sentence, with Sign and a visible Skip",
-       r.ask.indexOf("You were invited by " + r.code + ". Sign a free invite before you buy - it costs nothing and moves no money.") >= 0 && /Skip/.test(r.ask), r.ask);
+    const r = await buyCase("sign");
+    ok("SB1 · ONE TAP: the wallet is asked for the free signature FIRST, before any transaction, and the buy follows in the same tap",
+       r.bought && firstIdx(r.h, "eth_signTypedData_v4") >= 0 && firstIdx(r.h, "eth_signTypedData_v4") < firstIdx(r.h, "eth_sendTransaction"),
+       r.h.eth.__calls.filter((m) => /sign|send/i.test(m)).join(","));
+    ok("SB2 · NO BOX: no invite panel, no Sign button, no Skip ever renders", r.notes.indexOf("BOX!") < 0 && noBox(r.w));
     ok("SB3 · ONE typed-data signature, and its payload EQUALS the bot's binding struct",
        r.h.eth.__typed.length === 1 && canon(r.h.eth.__typed[0]) === canon(botCodes.bindingTypedData(r.chainId, r.c.player.address, r.code, Number(r.h.eth.__typed[0].message.signedAt))),
        JSON.stringify(r.h.eth.__typed[0] && r.h.eth.__typed[0].message));
@@ -262,24 +276,89 @@ async function run() {
        r.s.seen.calls === 1 && r.s.seen.results[0].ok && r.s.seen.results[0].buyer === r.c.player.address, JSON.stringify(r.s.seen.results));
     const body = r.w.__fetchBodies.find((x) => /invites\/bind/.test(x.url)).body;
     ok("SB5 · the bind carries buyer, code, signedAt, signature — nothing else", Object.keys(body).sort().join(",") === "buyer,code,signature,signedAt");
-    ok("SB6 · then the NORMAL buy ran to a real Torana, with the ruled 'Invite recorded.' on the way",
-       await boughtBundle(r.c) && r.h.eth.__typed.length === 1);
+    ok("SB6 · recorded: 'Invite recorded.' on its own line, and the wallet is REMEMBERED beside the code",
+       r.notes.indexOf(P15) >= 0 && (JSON.parse(r.w.localStorage.getItem("dystore::invite")).done || []).indexOf(r.c.player.address.toLowerCase()) >= 0, JSON.stringify(r.notes));
     H.teardown(r.h);
   }
   {
-    const r = await buyCase("skip", { skip: true });
-    ok("SB7 · SKIP: no signature, no call to the service, and the bundle still lands",
-       r.h.eth.__typed.length === 0 && r.s.seen.calls === 0 && await boughtBundle(r.c));
+    // THE BUYER DECLINES: no purchase; the ruled sentence; Buy ready; the retry signs and buys
+    const r = await buyCase("declined", { decline: true, stopAtDecline: true });
+    await H.sleep(800);
+    ok("SB7 · A DECLINED SIGNATURE STOPS THE PURCHASE: no transaction, no call to the service, no Torana",
+       firstIdx(r.h, "eth_sendTransaction") < 0 && r.s.seen.calls === 0 && !(await boughtBundle(r.c)), r.h.eth.__calls.join(","));
+    ok("SB8 · it says so in the ruled words (P17), and Buy is ready to try again",
+       txt(r.w, ".b-invite-note") === P17 && q(r.w, ".b-buy") && q(r.w, ".b-buy").disabled === false, txt(r.w, ".b-invite-note"));
+    r.h.eth.__declineTyped = false;
+    H.click(r.w, ".b-buy");
+    await waitFor("the retry bought", () => boughtBundle(r.c), 40000);
+    ok("SB9 · THE RETRY asks again, records the invite, and buys", r.h.eth.__typed.length === 2 && r.s.seen.calls === 1 && await boughtBundle(r.c));
+    H.teardown(r.h);
+  }
+  // OUR failures, and every answer that the invite CAN'T APPLY: the buy proceeds with at most P16
+  for (const [label, opts, remembered] of [
+    ["the service is DOWN", { down: true }, false],
+    ["the service is SLOW (no answer within the timeout)", { hang: true, ls: { "dystore::inviteTimeoutMs": "1500" } }, false],
+    ["NOT_CONFIGURED", { refuse: "NOT_CONFIGURED" }, false],
+    ["ALREADY_BOUND (to another code)", { refuse: "ALREADY_BOUND" }, true],
+    ["HELD_TORANA (not eligible)", { refuse: "HELD_TORANA" }, true],
+    ["ALREADY_BOUGHT (not eligible)", { refuse: "ALREADY_BOUGHT" }, true],
+    ["CODE_UNKNOWN", { refuse: "CODE_UNKNOWN" }, true],
+    ["CODE_KILLED", { refuse: "CODE_KILLED" }, true],
+    ["SELF_BINDING (the buyer owns the code)", { refuse: "SELF_BINDING" }, true],
+  ]) {
+    const r = await buyCase(label, opts);
+    const done = (JSON.parse(r.w.localStorage.getItem("dystore::invite") || "{}").done || []).indexOf(r.c.player.address.toLowerCase()) >= 0;
+    ok("SB10 · " + label + " → the buy PROCEEDS, P16 shown" + (remembered ? ", and this wallet is not asked again" : ", and the next visit may try again"),
+       r.bought && r.h.eth.__typed.length === 1 && r.notes.indexOf(P16) >= 0 && done === remembered, JSON.stringify({ bought: r.bought, notes: r.notes, done }));
     H.teardown(r.h);
   }
   {
-    const r = await buyCase("refused", { refuse: "ALREADY_BOUND" });
-    ok("SB8 · A REFUSED BIND (already bound) still reaches the buy, and the bundle lands", r.s.seen.calls === 1 && await boughtBundle(r.c));
+    // a wallet whose invite is already settled (recorded or can't apply) skips straight to the buy, on a fresh load
+    const c0 = await H.chainStore();   // only to learn the player address the harness uses
+    const r = await buyCase("already settled", { doneFor: c0.player.address });
+    ok("SB11 · ALREADY SETTLED WALLET: no signature asked, no call to the service, straight to the buy",
+       r.bought && r.h.eth.__typed.length === 0 && r.s.seen.calls === 0);
     H.teardown(r.h);
   }
   {
-    // the refusal's ONE sentence must be READABLE while the buy road runs: it sits on its own line, beside the
-    // road's own progress text, until the receipt repaints the tile
+    // asked at most once per wallet per page load: a service failure settles this page, so the next Buy goes straight on
+    const c = await H.chainStore();
+    const chainId = Number((await c.provider.getNetwork()).chainId);
+    const code = await realCode(ethers.Wallet.createRandom(), chainId);
+    const s = bindStub(chainId);
+    const h = await H.storePage(c, c.player, { invite: "https://bot.test", svc: s.stub, svcDown: true,
+      ls: { "dystore::invite": JSON.stringify({ code: code, at: Date.now() }) } });
+    await storeConnect(h.w);
+    H.click(h.w, ".b-buy");
+    await waitFor("P7 (no USDC)", () => tile(h.w).indexOf("Not enough") >= 0, 20000);
+    await (await c.usdc.mint(c.player.address, 25n * DEC6)).wait();
+    await h.w.DYStore._bundleRefresh();
+    await waitFor("the buy button back", () => q(h.w, ".b-buy") && !q(h.w, ".b-buy").disabled);
+    H.click(h.w, ".b-buy");
+    await waitFor("the bundle bought", () => boughtBundle(c), 30000);
+    ok("SB12 · ASKED ONCE PER PAGE: after a failure of ours, the next Buy on the page goes straight down the road",
+       h.eth.__typed.length === 1 && await boughtBundle(c));
+    H.teardown(h);
+  }
+  {
+    const r = await buyCase("no invite", { noInvite: true });
+    ok("SB13 · NO INVITE REMEMBERED: Buy is today's Buy — no signature, no call to the service, the bundle lands",
+       r.bought && r.h.eth.__typed.length === 0 && r.s.seen.calls === 0 && r.notes.length === 0);
+    H.teardown(r.h);
+  }
+  {
+    // a HOLDER never sees any of it: their face has no Buy at all
+    const c = await H.chainStore();
+    await (await c.nft.mint(c.player.address)).wait();
+    const chainId = Number((await c.provider.getNetwork()).chainId);
+    const code = await realCode(ethers.Wallet.createRandom(), chainId);
+    const h = await H.storePage(c, c.player, { invite: "https://bot.test", ls: { "dystore::invite": JSON.stringify({ code: code, at: Date.now() }) } });
+    await storeConnect(h.w);
+    ok("SB14 · a Torana holder is never asked (no Buy, no line)", !q(h.w, ".b-buy") && noBox(h.w) && tile(h.w).indexOf("Invited by") < 0);
+    H.teardown(h);
+  }
+  {
+    // the refusal's sentence stays READABLE while the buy road runs (its own line beside #b-msg)
     const c = await H.chainStore();
     const chainId = Number((await c.provider.getNetwork()).chainId);
     const code = await realCode(ethers.Wallet.createRandom(), chainId);
@@ -289,56 +368,11 @@ async function run() {
       ls: { "dystore::invite": JSON.stringify({ code: code, at: Date.now() }) } });
     await storeConnect(h.w);
     H.click(h.w, ".b-buy");
-    await waitFor("the invite step", () => !!q(h.w, ".b-invite-ask"));
-    H.click(h.w, ".b-invite-sign");
-    const P16 = "The invite couldn't be recorded - your purchase goes ahead as normal.";
     const both = await waitFor("P16 on its own line WHILE the road writes its progress",
       () => (txt(h.w, ".b-invite-note") === P16 && txt(h.w, "#b-msg").length > 0) ? { msg: txt(h.w, "#b-msg") } : null, 15000).catch(() => null);
     await waitFor("the bundle bought", () => boughtBundle(c), 40000);
-    ok("SB9 · a refusal is ONE plain sentence (P16) on its own line, readable while the buy road runs — and the buy lands",
+    ok("SB15 · P16 is ONE plain sentence on its own line, readable while the buy road runs — and the buy lands",
        !!both && await boughtBundle(c) && s.seen.calls === 1, JSON.stringify(both));
-    H.teardown(h);
-  }
-  {
-    const r = await buyCase("down", { down: true });
-    ok("SB10 · THE SERVICE IS DOWN: the buy still lands", await boughtBundle(r.c) && r.h.eth.__typed.length === 1);
-    H.teardown(r.h);
-  }
-  {
-    const r = await buyCase("declined", { decline: true });
-    ok("SB11 · A DECLINED SIGNATURE is a skip: nothing posted, the bundle lands", r.s.seen.calls === 0 && await boughtBundle(r.c));
-    H.teardown(r.h);
-  }
-  {
-    // the step runs ONCE per wallet per page: a second Buy after a failure does not ask again
-    const c = await H.chainStore();
-    const chainId = Number((await c.provider.getNetwork()).chainId);
-    const code = await realCode(ethers.Wallet.createRandom(), chainId);
-    const s = bindStub(chainId);
-    const h = await H.storePage(c, c.player, { invite: "https://bot.test", svc: s.stub,
-      ls: { "dystore::invite": JSON.stringify({ code: code, at: Date.now() }) } });
-    await storeConnect(h.w);
-    H.click(h.w, ".b-buy");
-    await waitFor("the invite step", () => !!q(h.w, ".b-invite-ask"));
-    H.click(h.w, ".b-invite-skip");
-    await waitFor("P7 (no USDC)", () => tile(h.w).indexOf("Not enough") >= 0, 20000);
-    await (await c.usdc.mint(c.player.address, 25n * DEC6)).wait();
-    await h.w.DYStore._bundleRefresh();
-    await waitFor("the buy button back", () => q(h.w, ".b-buy") && !q(h.w, ".b-buy").disabled);
-    H.click(h.w, ".b-buy");
-    await waitFor("the bundle bought", () => boughtBundle(c), 30000);
-    ok("SB12 · ASKED ONCE: after a skip, the next Buy goes straight down the road", h.eth.__typed.length === 0 && await boughtBundle(c));
-    H.teardown(h);
-  }
-  {
-    // a HOLDER never sees the step: their face has no Buy at all
-    const c = await H.chainStore();
-    await (await c.nft.mint(c.player.address)).wait();
-    const chainId = Number((await c.provider.getNetwork()).chainId);
-    const code = await realCode(ethers.Wallet.createRandom(), chainId);
-    const h = await H.storePage(c, c.player, { invite: "https://bot.test", ls: { "dystore::invite": JSON.stringify({ code: code, at: Date.now() }) } });
-    await storeConnect(h.w);
-    ok("SB13 · a Torana holder is never asked (no Buy, no step, no line)", !q(h.w, ".b-buy") && !q(h.w, ".b-invite-ask") && tile(h.w).indexOf("Invited by") < 0);
     H.teardown(h);
   }
 
@@ -361,9 +395,7 @@ async function run() {
     const realQ = w.plausible;
     w.plausible = function (name, o) { events.push({ name, o: JSON.parse(JSON.stringify(o || {})) }); };
     await storeConnect(w);
-    H.click(w, ".b-buy");
-    await waitFor("the invite step", () => !!q(w, ".b-invite-ask"));
-    H.click(w, ".b-invite-sign");
+    H.click(w, ".b-buy");                                      // INVITE-STEP-2: the signature is part of this tap
     await waitFor("the bundle bought", () => boughtBundle(c), 40000);
     await waitFor("the purchase event", () => events.some((e) => e.name === "bundle_purchased"), 15000).catch(() => null);
     const queued = (realQ && realQ.q ? Array.from(realQ.q).map((a) => JSON.stringify(Array.from(a))) : []).join(" ");
@@ -669,12 +701,12 @@ async function run() {
        !/plausible|track\(/.test((dash.split("AFFILIATE-1 rung 3 — THE TORANA INVITES CARD")[1] || "").split("function renderRedeem()")[0]));
     ok("X3 · the store's invite step carries no analytics call either",
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
-    ok("X4 · STAMPS: store.js s17, store.css s7, invite.js i1, mf-config mf8 on store.html",
-       /js\/store\.js\?v=s17/.test(sh) && /css\/store\.css\?v=s7/.test(sh) && /js\/invite\.js\?v=i1/.test(sh) && /mf-config\.js\?v=mf8/.test(sh));
+    ok("X4 · STAMPS: store.js s18, store.css s8, invite.js i1, mf-config mf8 on store.html",
+       /js\/store\.js\?v=s18/.test(sh) && /css\/store\.css\?v=s8/.test(sh) && /js\/invite\.js\?v=i1/.test(sh) && /mf-config\.js\?v=mf8/.test(sh));
     ok("X5 · STAMPS: dashboard.js mf33, dashboard.css mf7, invite.js i1, mf-config mf8 on dashboard.html",
        /js\/dashboard\.js\?v=mf33/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf8/.test(dh));
-    ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s17, report mf-config mf8)",
-       /js\/store\.js\?v=s17/.test(th) && /mf-config\.js\?v=mf8/.test(rh));
+    ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s18, report mf-config mf8)",
+       /js\/store\.js\?v=s18/.test(th) && /mf-config\.js\?v=mf8/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));
   }
 

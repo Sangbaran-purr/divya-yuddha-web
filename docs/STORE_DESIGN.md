@@ -277,33 +277,48 @@ FIFTY BRONZE TABLES IS ARITHMETIC, not flourish: the Hall's BRONZE tier
 stakes 10 DYC a table, so 500 DYC is fifty of them. If the tier moves,
 P1 moves with it.
 
-P13-P16  TORANA INVITES (AFFILIATE-1 rung 3, 2026-10-09). Shown ONLY when
+P13-P18  TORANA INVITES (AFFILIATE-1 rung 3, 2026-10-09; INVITE-STEP-2, 2026-10-10). Shown ONLY when
 mf-config inviteServiceUrl is set; dormant (null, the shipped state) none of
 them can appear and no call is made.
 
 P13 invited-by (one quiet line under P1, on the disconnected and non-holder faces)
 Invited by [CODE]
 
-P14 the invite step (before the buy road, with a Sign button and a Skip button)
-You were invited by [CODE]. Sign a free invite before you buy - it costs nothing and moves no money.
-
 P15 invite recorded
 Invite recorded.
 
-P16 invite not recorded (a refusal of any kind, or the service is down)
+P16 invite not recorded (the invite can't apply, or the failure is ours)
 The invite couldn't be recorded - your purchase goes ahead as normal.
 
-  P13/P14 [CODE]  the remembered code: 8 symbols from the bot's alphabet
+P17 the buyer declined the free signature (the purchase does NOT start)
+The invite signature is free and moves no money - please sign it to continue with your purchase.
+
+P18 while the wallet asks for the free signature
+Sign the free invite in your wallet...
+
+P14 RETIRED 2026-10-10 (INVITE-STEP-2): "You were invited by [CODE]. Sign a free invite before you buy - it costs
+nothing and moves no money." went with the separate invite box and its Sign / Skip buttons.
+
+  P13 [CODE]      the remembered code: 8 symbols from the bot's alphabet
                   (no 0/O/1/I/L), validated on capture; anything else is ignored
 
-THE INVITE IS NEVER A BLOCKER. Skip, a declined signature (no sentence), a
-refusal (P16) and a dead service (P16) all continue straight into the normal buy
-road; the road itself - pre-cast read, approve, buy - is unchanged and runs
-only after the step resolves. The step appears only when an invite is
-remembered, the service is configured and the connected wallet holds no Torana.
+THE INVITE SIGNATURE IS PART OF BUY (INVITE-STEP-2, owner ruling 2026-10-10).
+There is no separate box and no Skip. When an invite is remembered, the
+service is configured and the connected wallet holds no Torana, tapping Buy
+first asks the wallet for the free signature (P18), then continues into the
+normal buy road in the same tap. ONLY the buyer declining the signature stops
+the purchase (P17; Buy stays ready to try again). Every failure of OURS - the
+service unreachable or slower than 10 seconds, NOT_CONFIGURED - and every
+answer that the invite can't apply (already bound elsewhere, not eligible,
+code unknown or killed, the buyer owns the code) continues to the buy with
+P16. A recorded invite says P15. A wallet whose invite was recorded, or can't
+apply, is remembered beside the code and never asked again; a dead service is
+settled for that page only. The road itself - pre-cast read, approve, buy - is
+unchanged: the gate decides only whether it starts.
 
 MEMORY: the FIRST code a browser sees is kept for 30 days (localStorage
-"dystore::invite", the code and a timestamp - never a wallet). A later link
+"dystore::invite": the code, a timestamp, and the wallets whose invite is
+settled - kept in this browser only, never sent anywhere). A later link
 does not replace it until it expires. Every storage read and write is
 guarded: with storage refused the page works, just without the memory.
 
