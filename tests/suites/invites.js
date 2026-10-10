@@ -464,7 +464,8 @@ async function run() {
     const dash = fs.readFileSync(path.join(SITE, "js", "dashboard.js"), "utf8");
     ok("DD4 · the Torana read is gated on the invite service being configured (no read while dormant)",
        /if \(c\.inviteServiceUrl && c\.accessNFT\) \{/.test(dash));
-    ok("DD5 · the shipped config keeps inviteServiceUrl null", /inviteServiceUrl: null,/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8")));
+    ok("DD5 · the shipped config carries the LIVE invite service (WINNINGS-5 switch-on); the dormant face above is the harness with it unset",
+       /inviteServiceUrl: "https:\/\/approval-bot-cxa2\.onrender\.com",/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8")));
     H.teardown(h);
   }
   {
@@ -668,12 +669,12 @@ async function run() {
        !/plausible|track\(/.test((dash.split("AFFILIATE-1 rung 3 — THE TORANA INVITES CARD")[1] || "").split("function renderRedeem()")[0]));
     ok("X3 · the store's invite step carries no analytics call either",
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
-    ok("X4 · STAMPS: store.js s17, store.css s7, invite.js i1, mf-config mf7 on store.html",
-       /js\/store\.js\?v=s17/.test(sh) && /css\/store\.css\?v=s7/.test(sh) && /js\/invite\.js\?v=i1/.test(sh) && /mf-config\.js\?v=mf7/.test(sh));
-    ok("X5 · STAMPS: dashboard.js mf31, dashboard.css mf7, invite.js i1, mf-config mf7 on dashboard.html",
-       /js\/dashboard\.js\?v=mf33/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf7/.test(dh));
-    ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s17, report mf-config mf7)",
-       /js\/store\.js\?v=s17/.test(th) && /mf-config\.js\?v=mf7/.test(rh));
+    ok("X4 · STAMPS: store.js s17, store.css s7, invite.js i1, mf-config mf8 on store.html",
+       /js\/store\.js\?v=s17/.test(sh) && /css\/store\.css\?v=s7/.test(sh) && /js\/invite\.js\?v=i1/.test(sh) && /mf-config\.js\?v=mf8/.test(sh));
+    ok("X5 · STAMPS: dashboard.js mf33, dashboard.css mf7, invite.js i1, mf-config mf8 on dashboard.html",
+       /js\/dashboard\.js\?v=mf33/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf8/.test(dh));
+    ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s17, report mf-config mf8)",
+       /js\/store\.js\?v=s17/.test(th) && /mf-config\.js\?v=mf8/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));
   }
 

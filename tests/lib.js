@@ -196,10 +196,10 @@ async function dashboardPage(c, player, opts) {
   w.DY_MF_CONFIG.readRpcUrlFallbacks = [];
   w.DY_MF_CONFIG.contracts.dycoin = c.addrs.dyc;
   for (const k of ["vestingVault", "holderStaking", "roiRedemption", "dycoinSale", "dropDesk"]) w.DY_MF_CONFIG.contracts[k] = null;
-  // the two switches. Absent => the DORMANT face the site ships today.
+  // the two switches, set EXPLICITLY (the shipped config is live since WINNINGS-5). Absent => the dormant face.
   w.DY_MF_CONFIG.contracts.winningsDesk = (opts.winnings && opts.winnings.desk) || null;
   w.DY_MF_CONFIG.winningsServiceUrl = (opts.winnings && opts.winnings.service) || null;
-  w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null;            // AFFILIATE-1: absent => the card stays hidden
+  w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null;            // set EXPLICITLY: the shipped config is live (WINNINGS-5); absent => the dormant face, and no test ever reaches the real bot
   if (c.addrs && c.addrs.nft) w.DY_CONFIG.contracts.accessNFT = c.addrs.nft;
   run(path.join(SITE, "js/wallet.js"));
   run(path.join(SITE, "js/invite.js"));
@@ -259,7 +259,7 @@ async function storePage(c, player, opts) {
   const run = (p) => w.eval(fs.readFileSync(p, "utf8"));
   run(path.join(SITE, "config.js"));
   run(path.join(SITE, "mf-config.js"));                // store.html's order: config, mf-config (AFFILIATE-1)
-  w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null; // absent => the DORMANT store the site ships
+  w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null; // set EXPLICITLY: the shipped config is live (WINNINGS-5); absent => the dormant store face
   w.DY_CONFIG.chain.id = chainId;                       // the harness's chain, declared not faked
   w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
   w.DY_CONFIG.contracts.dycoin = c.addrs.dyc;           // the inventory coin under test

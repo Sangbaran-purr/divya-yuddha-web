@@ -235,11 +235,13 @@ async function run() {
     ok("X2 · the desk read is gated on the desk existing", /if \(c\.winningsDesk\) \{/.test(dash));
     ok("X3 · the coupon POST sends nonce + signature and nothing else",
        /JSON\.stringify\(\{ nonce: ch\.nonce, signature: sig \}\)/.test(dash));
-    ok("X4 · STAMPS BUMPED — dashboard.js, dashboard.css and mf-config.js all carry a new ?v= (AFFILIATE-1 rung 3)",
-       /js\/dashboard\.js\?v=mf33/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf7/.test(html));
-    ok("X5 · the shipped config keeps BOTH switches null (the card ships dormant)",
-       /winningsDesk: null/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8"))
-       && /winningsServiceUrl: null/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8")));
+    ok("X4 · STAMPS BUMPED — dashboard.js, dashboard.css and mf-config.js all carry their current ?v= (WINNINGS-5 switch-on)",
+       /js\/dashboard\.js\?v=mf33/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf8/.test(html));
+    // WINNINGS-5 (2026-10-10): the desk is LIVE. The shipped config now carries the real desk and the live bot — and
+    // nothing else: a typo here would point every player's withdrawal at the wrong contract or service.
+    ok("X5 · the shipped config carries the LIVE desk and the live bot (WINNINGS-5 switch-on)",
+       /winningsDesk: "0x2F424C37937160E646138392CE986aF1C0e65947"/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8"))
+       && /winningsServiceUrl: "https:\/\/approval-bot-cxa2\.onrender\.com"/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8")));
   }
 
   console.log("──\n" + (fail === 0 ? "ALL GREEN — " + pass + "/" + (pass + fail) : "FAILURES — " + fail + " of " + (pass + fail)));
