@@ -143,6 +143,8 @@
     .mint-body .rung-img{grid-column:1 / -1;width:100%;max-width:320px;margin-top:8px}
   }
   @media (max-width:560px){.mint-body .cards-strip{grid-template-columns:repeat(2,1fr);gap:14px}}
+  /* SITE-AUDIT-1 — on a phone the section titles WRAP (they ran off a 375px screen and scrolled the page sideways) */
+  @media (max-width:560px){.mint-body .rule-title{gap:10px}.mint-body .rule-title h2{white-space:normal;letter-spacing:.12em;text-align:center;font-size:20px;min-width:0}}
 </style>
 </head>
 <body class="mint">
@@ -164,7 +166,7 @@
         <a href="game/index.html?v=07c3530">The Game</a>
       </div>
       <div id="nav-decl">
-        <a class="rite-btn" href="rite.html">Declare Yourself<span class="sub">begin here</span></a>
+        <a class="rite-btn" href="rite.html">Play free<span class="sub">connect wallet</span></a>
       </div>
       <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu">
         <span></span><span></span><span></span>
@@ -191,12 +193,13 @@
   <div class="wrap">
     <div class="hero-copy">
       <h1>The Mint</h1>
-      <p class="thesis">One coin moves this world — the marketplace trades in it, the tables will stake it, the treasury answers to it. <em>The Mint is where it is first struck into your hands.</em></p>
+      <p class="thesis">One coin moves this world — the marketplace trades in it, the tables stake it, the treasury answers to it. <em>The Mint is where it is first struck into your hands.</em></p>
       <div class="cta-row">
         <a class="cta primary" href="#rite">Take the Buyer's Rite</a>
         <a class="cta ghost" href="#plain">Read the Plain Words</a>
       </div>
-      <p class="status">sale status: <b>announced at sale-open</b> · open worldwide · sold by DY&nbsp;Animation</p>
+      <!-- SITE-AUDIT-1 — the round and price are READ FROM CHAIN by js/mintstatus.js; this is only the fallback -->
+      <p class="status" id="mint-status">sale status: <b>see your dashboard</b> for the live round and price · open worldwide · sold by DY&nbsp;Animation</p>
     </div>
   </div>
 </div>
@@ -217,13 +220,13 @@
         <span class="sig">༄</span>
         <h3>It Earns, Once Woken</h3>
         <p>Vested DYC earns staking rewards <b>after you activate it</b> — one tap in your dashboard. Rewards run to a hard lifetime ceiling of 2× per position. It does not earn before activation.</p>
-        <a class="phase" href="treasury.html">ACTIVATE TO EARN</a>
+        <a class="phase" href="dashboard.html">ACTIVATE TO EARN</a>
       </div>
       <div class="use">
         <span class="sig">⚔</span>
-        <h3>It Will Sit at the Tables</h3>
-        <p>Staked player-versus-player arrives in Phase B — matches with the coin on the line, matched by skill, refereed by the server. <b>Named here because it is coming, not yet here.</b></p>
-        <span class="phase">PHASE B</span>
+        <h3>It Sits at the Tables</h3>
+        <p>Stake DYC in the Hall — tables of 10, 50, 200 or 1,000 DYC, or challenge a friend (10–10,000). 5% rake on decided staked matches. <b>Torana holders only.</b></p>
+        <span class="phase">LIVE NOW</span>
       </div>
     </div>
   </div>
@@ -253,10 +256,10 @@
     <div class="ladder">
       <div class="rung">
         <div class="lamp">I</div>
-        <img class="rung-img" loading="lazy" src="assets/mint/buyers-rite-01_720.jpg" width="720" height="900" alt="Station I — Declare Yourself">
+        <img class="rung-img" loading="lazy" src="assets/mint/buyers-rite-01_720.jpg" width="720" height="900" alt="Station I — Register">
         <div>
-          <h3>Declare Yourself <small>register — four details, kept off the chain</small></h3>
-          <p>Every buyer registers first: <b>name, email, phone, address</b>. Registration is what unlocks the ability to buy.</p>
+          <h3>Register <small>three details, kept off the chain</small></h3>
+          <p>Every buyer registers first: <b>name, email and wallet address</b>. Registration is what unlocks the ability to buy.</p>
           <div class="law">“Your details are collected by DY Animation to operate the sale and its partner programs, and are never published on-chain.”</div>
         </div>
       </div>
@@ -294,14 +297,13 @@
   <!-- S-MINT-2: terms backdrop (master docs/design/mint/mint-terms-backdrop-v1.png). Left panels seat the table; table keeps its opaque panel for guaranteed legibility. -->
   <img class="terms-img" loading="lazy" src="assets/mint/mint-terms-backdrop_1440.jpg" alt="" aria-hidden="true">
   <div class="wrap">
-    <p class="kicker">numbers awaiting the owner's word stand as carved slots — never guessed</p>
     <div class="rule-title"><h2>The Terms</h2><span class="gem">◈</span></div>
     <div class="terms">
       <div class="trow"><div class="k">Seller</div><div class="v">DY Animation — the project's owning entity, the issuer named on every public document.</div></div>
       <div class="trow"><div class="k">Who May Buy</div><div class="v">The sale is open to buyers everywhere. No country is fenced out.</div></div>
-      <div class="trow"><div class="k">Sale Price</div><div class="v"><span class="await">Announced at sale-open</span></div></div>
-      <div class="trow"><div class="k">Sale Dates</div><div class="v"><span class="await">Announced at sale-open</span></div></div>
-      <div class="trow"><div class="k">Vesting</div><div class="v"><span class="await">Published with the price</span><small>Vested coin earns only after activation — station IV of the rite.</small></div></div>
+      <div class="trow"><div class="k">Sale Price</div><div class="v" id="mint-price">Read live from the sale contract — see your dashboard.</div></div>
+      <div class="trow"><div class="k">Sale Dates</div><div class="v" id="mint-dates">The sale opens in rounds — your dashboard shows the round that is open now.</div></div>
+      <div class="trow"><div class="k">Vesting</div><div class="v">15% of each purchase arrives liquid; 85% vests linearly across the two years after exchange listing.<small>Vested coin earns only after activation — station IV of the rite.</small></div></div>
       <div class="trow"><div class="k">Exchange Listing</div><div class="v">The initial DEX seed is 100M DYC at no less than the public sale price.</div></div>
       <div class="trow"><div class="k">Liquidity</div><div class="v">At least <b>1,000,000 USD</b> in total, added in four phases.</div></div>
       <div class="trow"><div class="k">Cash-Out Desk</div><div class="v">Pays USDT for reward-column DYC at a fixed <b>0.010 USDT per DYC</b> — a facility, funded at DY Animation's discretion. Read the plain words below.</div></div>
@@ -329,7 +331,7 @@
       </div>
       <div class="oath">
         <h4>Two Coins, One Wall</h4>
-        <p>DYC is money: the marketplace, and staking when it opens. The play-token earned at the tables is reward alone. <b>Neither ever becomes the other.</b></p>
+        <p>DYC is money: the store, the marketplace, and the stakes at the Hall's tables. <b>A play-reward token is planned; it will never become DYC.</b></p>
       </div>
     </div>
   </div>
@@ -337,10 +339,11 @@
 
 <!-- ═══════════ FOOT GATE ═══════════ -->
 <div class="foot-cta">
-  <div class="rule-title"><h2>The Mint Awaits Its Hour</h2><span class="gem">◈</span></div>
-  <p>When the word is given, the rite opens here. Until then, the Store already trades in the coin — the world it moves is live.</p>
+  <div class="rule-title"><h2 id="mint-foot-title">The Mint</h2><span class="gem">◈</span></div>
+  <p id="mint-foot-copy">Buy DYC in your dashboard while a sale round is open. The Store already trades in the coin — the world it moves is live.</p>
   <div class="cta-row">
-    <a class="cta primary" href="store.html">Visit the Store</a>
+    <a class="cta primary" href="dashboard.html#buy-panel">Buy DYC</a>
+    <a class="cta ghost" href="store.html">Visit the Store</a>
   </div>
 </div>
 
@@ -391,6 +394,10 @@
   </div>
 </footer>
 
+<script src="config.js?v=s18"></script>
+<script src="mf-config.js?v=mf8"></script>
+<script src="js/mintstatus.js?v=t1"></script>
+<script>try { window.DYMintStatus.mount(); } catch (e) {}</script>
 <script>
   /* S-NAV-1 — mobile nav dropdown: toggle open/close, close on selection, outside tap, Escape. */
   (function () {

@@ -166,6 +166,45 @@ async function run() {
     ok("RT21 · claimOpen on + a HOLDER: the holder's Enter only, no claim button", !shown($(r.w, "rite-claim")));
   }
 
+  // ── SITE-AUDIT-1 part 3: the approval copy is for REGISTERED wallets only ──
+  const APPROVAL = /Checking for your approval|Approval usually appears|No mark on this wallet|begin at the register/;
+  {
+    const c = await H.chainStore();
+    const r = await H.ritePage(c, c.player, {});
+    const w = r.w;
+    await settle(w, () => /play solo/.test(btnText(w)), 15000, "the solo Enter");
+    await H.sleep(2500);                                    // the allowlist read lands and two would-be countdown ticks pass
+    const page = txt($(w, "rite-msg")) + " | " + txt($(w, "rite-line"));
+    ok("RT22 · an UNREGISTERED non-holder sees the solo line and Enter — no approval copy, no register door, no countdown",
+       !APPROVAL.test(page) && txt($(w, "rite-msg")) === "" && !shown($(w, "rite-register")) && !$(w, "rite-countdown") &&
+       ![...w.__timers.values()].includes(1000) &&            // and NO approval-countdown ticker is running at all
+       shown($(w, "rite-doorline")) && /play solo/.test(btnText(w)), page);
+  }
+  {
+    const c = await H.chainStore();
+    const r = await H.ritePage(c, c.player, { ls: { ["dy::presaleRegistered:" + c.player.address.toLowerCase()]: String(Date.now()) } });
+    const w = r.w;
+    await settle(w, () => /Checking for your approval/.test(txt($(w, "rite-line"))), 15000, "the approval countdown");
+    await H.sleep(2200);
+    ok("RT23 · a REGISTERED non-holder still sees the approval countdown (and the solo Enter beside it)",
+       /Checking for your approval/.test(txt($(w, "rite-line"))) && /next check in 4[0-4]s/.test(txt($(w, "rite-line"))) && /play solo/.test(btnText(w)) &&
+       [...w.__timers.values()].includes(1000),
+       txt($(w, "rite-line")));
+  }
+  {
+    const c = await H.chainStore();
+    const r = await H.ritePage(c, c.player, { allowlist: [{ wallet: c.player.address }] });
+    const w = r.w;
+    await settle(w, () => shown($(w, "rite-buy")), 15000, "the buy door");
+    ok("RT24 · an APPROVED wallet: 'Your presale approval is live — buy DYC in your dashboard.' and no free-claim line",
+       txt($(w, "rite-msg")) === "Your presale approval is live — buy DYC in your dashboard." && txt($(w, "rite-line")) === "" && shown($(w, "rite-buy")),
+       txt($(w, "rite-msg")) + " | " + txt($(w, "rite-line")));
+  }
+  ok("RT25 · the rite's no-script default line is 'Connect a Polygon wallet to play free.'",
+     /<p id="rite-msg" class="rite-state-msg">Connect a Polygon wallet to play free\.<\/p>/.test(fs.readFileSync(path.join(SITE, "rite.html"), "utf8")));
+  ok("RT26 · register.html records the wallet it puts into the form (the rite's registered signal)",
+     /function markFilled\(addr\) \{[\s\S]{0,600}localStorage\.setItem\("dy::presaleRegistered:" \+ String\(addr\)\.toLowerCase\(\)/.test(fs.readFileSync(path.join(SITE, "register.html"), "utf8")));
+
   // ═══════════════ HT · THE HALL ═══════════════
   console.log("\n── HT · the Hall: the Torana still opens it ──");
   const c = await H.chainStore();
@@ -210,10 +249,16 @@ async function run() {
   const base = execFileSync("git", ["log", "-1", "--format=%H", "--grep=^FREE-PLAY-1 (rung 2)"], { cwd: SITE }).toString().trim();
   const ref = base ? base + "~1" : "HEAD";
   const head = (f) => execFileSync("git", ["show", ref + ":" + f], { cwd: SITE, maxBuffer: 64 * 1024 * 1024 }).toString();
-  ok("DG1 · game/ is byte-identical to before FREE-PLAY-1 (the redirect, the shim, the copy)",
-     ["game/index.html", "game/STAMP", "game/SNAPSHOT.md"].every((f) => head(f) === fs.readFileSync(path.join(SITE, f), "utf8")));
-  ok("DG2 · scripts/sync_game.sh is byte-identical (the pass check still redirects a passless visit to the rite)",
-     head("scripts/sync_game.sh") === fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8") &&
+  // SITE-AUDIT-1 re-applied the injected S3 block (the Store roundel relink), so the copy is compared OUTSIDE that
+  // block: the game itself, the gate preamble and the stamp are unchanged since before FREE-PLAY-1.
+  const outsideS3 = (t) => t.replace(/<!-- DYW-S3-SUPPRESS-START[\s\S]*?<!-- DYW-S3-SUPPRESS-END -->/, "<S3/>");
+  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block (the game, the redirect, the stamp)",
+     outsideS3(head("game/index.html")) === outsideS3(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")) &&
+     head("game/STAMP") === fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8"));
+  // SITE-AUDIT-1 grew the sync script (GAME_REF + the Store relink); the GATE it injects must not have moved
+  const gateBlock = (t) => (t.match(/<!-- DYW-GATE-START[\s\S]*?<!-- DYW-S3-SUPPRESS-START/) || [""])[0];
+  ok("DG2 · the sync script's gate preamble is unchanged since before FREE-PLAY-1 (a passless visit still goes to the rite)",
+     gateBlock(head("scripts/sync_game.sh")) === gateBlock(fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8")) && gateBlock(head("scripts/sync_game.sh")).length > 200 &&
      /if \(!sessionStorage\.getItem\("dyw_pass"\)\) \{ location\.replace\("\.\.\/rite\.html"\); return; \}/.test(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")));
   const demo = fs.readFileSync(path.join(SITE, "demo/index.html"), "utf8"), demoHead = head("demo/index.html");
   ok("DG3 · the demo still seeds the pass and its mark the same way; ONLY its button changed ('Play free' → the rite)",
@@ -225,7 +270,7 @@ async function run() {
   const rite = fs.readFileSync(path.join(SITE, "rite.html"), "utf8"), hallHtml = fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8");
   ok("ST1 · rite.html loads js/solotrack.js?v=t1 (after wallet.js, before the page's own script)",
      /<script src="js\/wallet\.js\?v=s1q"><\/script>\s*<script src="js\/solotrack\.js\?v=t1"><\/script>\s*<script>/.test(rite));
-  ok("ST2 · mp/hall.html loads hall.js?v=h32 (the gate screen moved)", /<script src="hall\.js\?v=h32"><\/script>/.test(hallHtml));
+  ok("ST2 · mp/hall.html loads hall.js?v=h33 (the gate screen moved, then the stake parse)", /<script src="hall\.js\?v=h33"><\/script>/.test(hallHtml));
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));   // the runner's own format
   process.exit(fail ? 1 : 0);

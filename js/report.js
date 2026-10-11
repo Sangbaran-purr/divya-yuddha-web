@@ -149,7 +149,7 @@ window.DYReport = (function () {
           "<div class='rep-figrow'><span>Buyers <span class='rep-src'>from event logs</span></span><b>" + (buyers == null ? "—" : buyers) + "</b></div>" +
           "<div class='rep-verifyrow'>" + verify(c.dycoinSale, "Verify the sale contract") + "</div>";
       });
-    }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the sale — the contract address may be wrong for this network.</div>"; });
+    }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the sale right now — refresh to retry.</div>"; });
   }
   function roundBlock(name, price, sold, cap) {
     var pct = pctOf(sold, cap);
@@ -228,7 +228,7 @@ window.DYReport = (function () {
       b.innerHTML =
         "<div class='rep-big'><span class='rep-biglabel'>USDT reserve backing redemptions</span><span class='rep-bigval'>" + fmtUsd(reserve) + " <em>USDT</em></span></div>" +
         "<div class='rep-figrow'><span>Total redeemed — USDT paid <span class='rep-src'>from event logs</span></span><b>" + (red == null ? "—" : fmtUsd(red.usdt) + " USDT") + "</b></div>" +
-        "<div class='rep-figrow'><span>Total redeemed — DYC retired <span class='rep-src'>from event logs</span></span><b>" + (red == null ? "—" : fmtDyc(red.dyc) + " DYC") + "</b></div>" +
+        "<div class='rep-figrow'><span>Total redeemed — DYC returned to the pool <span class='rep-src'>from event logs</span></span><b>" + (red == null ? "—" : fmtDyc(red.dyc) + " DYC") + "</b></div>" +
         "<div class='rep-note'>The desk holds only USDT and moves no DYC. Redeeming ROI returns that DYC to the reward pool, so redemptions extend the pool's runway rather than draining it.</div>" +
         "<div class='rep-verifyrow'>" + verify(c.roiRedemption, "Verify the desk contract") + "</div>";
     }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the desk.</div>"; });

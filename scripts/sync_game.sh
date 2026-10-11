@@ -40,8 +40,11 @@ if [ ! -f "$GAME_REPO/index.html" ] || [ ! -d "$GAME_REPO/assets/cards" ]; then
   exit 1
 fi
 
-SRC_COMMIT="$(git -C "$GAME_REPO" rev-parse HEAD)"
-SRC_SHORT="$(git -C "$GAME_REPO" rev-parse --short HEAD)"
+# SITE-AUDIT-1 — GAME_REF pins the archived commit (default HEAD, unchanged). Used to re-apply an injection change
+# without moving the game copy off the ruled export commit (e.g. GAME_REF=07c3530 bash scripts/sync_game.sh).
+GAME_REF="${GAME_REF:-HEAD}"
+SRC_COMMIT="$(git -C "$GAME_REPO" rev-parse "$GAME_REF")"
+SRC_SHORT="$(git -C "$GAME_REPO" rev-parse --short "$GAME_REF")"
 SRC_DATE="$(git -C "$GAME_REPO" show -s --format=%ci "$SRC_COMMIT")"
 SRC_DIRTY="$(git -C "$GAME_REPO" status --short | wc -l | tr -d ' ')"
 
@@ -215,9 +218,28 @@ cat > "$PRE" <<'PREAMBLE'
         var m = s.replace(/\+\d+\s*coins\s*·\s*\+\d+\s*Amsha\s*·\s*/, ""); if (m !== s) qs[j].textContent = m; }
     } catch (e) {}
   }
+  // (6) SITE-AUDIT-1 — the game's Store roundels read "Store — coming soon", but on this site the Store is LIVE
+  //     (../store.html). Relink them: a capture-phase listener reaches the click before the game's own onclick toast,
+  //     and the lock glyph + "coming soon" title are dropped. Navigates the TOP window (the game may sit in a frame).
+  function storeRoundels(){ return document.querySelectorAll('.roundel[title^="Store"]'); }
+  function relinkStore(){
+    try {
+      var rs = storeRoundels();
+      for (var k = 0; k < rs.length; k++){ var r = rs[k];
+        r.classList.remove("locked"); r.removeAttribute("data-soon"); r.title = "Store"; r.setAttribute("aria-label", "Store");
+        var lk = r.querySelector(".rlock"); if (lk) lk.remove(); }
+    } catch (e) {}
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target && e.target.closest ? e.target.closest('.roundel[title^="Store"]') : null;
+    if (!t) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    var to = new URL("../store.html", location.href).href;
+    try { window.top.location.href = to; } catch (err) { location.href = to; }
+  }, true);
   var pending = false;
-  function schedule(){ if (pending) return; pending = true; requestAnimationFrame(function(){ pending = false; scrub(); }); }
-  function boot(){ scrub(); try { new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true }); } catch (e) {} }
+  function schedule(){ if (pending) return; pending = true; requestAnimationFrame(function(){ pending = false; scrub(); relinkStore(); }); }
+  function boot(){ scrub(); relinkStore(); try { new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true }); } catch (e) {} }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
 </script>

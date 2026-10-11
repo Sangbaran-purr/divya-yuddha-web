@@ -93,7 +93,7 @@
         <p class="reg-lede">Register the wallet you'll buy with. We'll email you a one-tap confirmation link — your
           wallet is approved for the presale <b>only after</b> you click it.</p>
         <ol class="reg-steps">
-          <li>Fill in the form below (your <b>email</b> and <b>wallet address</b> are required).</li>
+          <li>Fill in the form below (your <b>name</b>, <b>email</b> and <b>wallet address</b> are required).</li>
           <li>Check your inbox for a confirmation email and click the link (it's valid for <b>48 hours</b>).</li>
           <li>That's it — your wallet is added to the allowlist automatically. No signing and no gas here.</li>
         </ol>
@@ -115,7 +115,8 @@
         <p class="reg-fallback">Form not loading? <a id="reg-open" href="#" target="_blank" rel="noopener">Open it in a new tab →</a></p>
 
         <!-- S-REG-NAV — post-confirmation orientation: the natural next door from here is The Rite (voucher status + BUY COIN). -->
-        <p class="reg-nextstep">Submitted? Once your email is confirmed, your pass appears at <a href="rite.html">The Rite →</a></p>
+        <p class="reg-nextstep">Submitted? Once your email is confirmed, your presale approval shows on <a href="rite.html">The Rite →</a></p>
+        <p class="reg-nextstep">Presale buyers also receive a Torana.</p>
 
         <div class="reg-privacy">
           <b>Your privacy.</b> We collect only what the form asks, and we use it only to run the presale allowlist and
@@ -167,6 +168,10 @@
         function frameSrc(addr) { return addr ? FORM_EMBED_URL + "&" + WALLET_ENTRY + "=" + encodeURIComponent(addr) : FORM_EMBED_URL; }
         function short(a) { return a ? a.slice(0, 6) + "…" + a.slice(-4) : ""; }
         function markFilled(addr) {
+          // SITE-AUDIT-1 — remember that THIS wallet was put into the registration form, so the rite shows its
+          // approval countdown only to a wallet that registered (no public read of pending registrations exists;
+          // an approved wallet is also recognised from the allowlist). Browser-local, the address only, never sent.
+          try { localStorage.setItem("dy::presaleRegistered:" + String(addr).toLowerCase(), String(Date.now())); } catch (e) {}
           if (note) note.textContent = "Wallet address filled from your connected wallet.";
           if (btn) { btn.textContent = "✓ " + short(addr); btn.disabled = true; btn.classList.add("filled"); }
         }

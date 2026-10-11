@@ -1,7 +1,7 @@
 "use strict";
 // M-P2 local proof — the wrapper driving the BYTE-IDENTICAL engine with the deal AND the moves fed from OUTSIDE.
 // Requires the game repo's canonical src/engine.js DIRECTLY (strongest byte-identity — no copy at all). The browser
-// dark page (mp/index.html) loads the sync-produced game/src/engine.js instead; both are the same engine bytes.
+// dark page (mp/rig.html, formerly mp/index.html) loads the sync-produced game/src/engine.js instead; both are the same engine bytes.
 //
 //   node mp/proof.js        (run from the site repo root)
 const path = require("path");

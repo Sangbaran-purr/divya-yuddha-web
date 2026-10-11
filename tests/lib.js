@@ -431,6 +431,11 @@ async function ritePage(c, player, opts) {
   if (opts.analytics === false) w.DY_CONFIG.analytics = { enabled: false };
   if (opts.claimOpen) w.DY_CONFIG.claimOpen = true;      // FREE-PLAY-1 (ruling 2) — the free claim switched on
   w.__navs = navs;                                       // one entry per navigation Enter attempted (jsdom cannot navigate)
+  // SITE-AUDIT-1 — the page's LIVE timers, observable: id -> delay (a cleared timer leaves the map)
+  w.__timers = new Map();
+  const si = w.setInterval.bind(w), ci = w.clearInterval.bind(w);
+  w.setInterval = function (fn, ms) { const id = si(fn, ms); w.__timers.set(id, ms); return id; };
+  w.clearInterval = function (id) { w.__timers.delete(id); return ci(id); };
   run(fs.readFileSync(path.join(SITE, "js/wallet.js"), "utf8"));
   run(fs.readFileSync(path.join(SITE, "js/solotrack.js"), "utf8"));
   for (const code of inline) run(code);

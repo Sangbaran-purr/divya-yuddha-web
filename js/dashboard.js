@@ -645,13 +645,13 @@ window.DYDash = (function () {
       (CLAIM_UI_ON
         ? "<div class='card-actions'><button class='btn-g btn-purple btn-block' id='act-rclaim'" + (claimable > 0n ? "" : " disabled") + ">Collect Rewards</button></div>" +
           // S-COLLECT-RENAME: kill the cash expectation at the source — collecting is an on-chain column move, not a payout.
-          "<div class='note' style='margin-top:10px;line-height:1.5'>Collecting moves your earned rewards to your cash-out balance. Cash payouts are made through the affiliate platform.</div>"
+          "<div class='note' style='margin-top:10px;line-height:1.5'>Collecting moves your rewards into your collected balance. Collected rewards can be played at the tables or cashed out as USDT when the desk is funded.</div>"
         : "<div class='note' style='margin-top:10px;line-height:1.5'>Rewards are credited by DY Animation on request — reach us by email at <a href='mailto:" + CLAIM_CONTACTS.email + "'>" + esc(CLAIM_CONTACTS.email) + "</a>.<br>Collections are processed in multiples of 1,000 DYC.</div>") +
       (hasDesk
         ? "<button class='btn-g btn-block' id='act-cashout' style='margin-top:10px'" + (roiCol > 0n && deskFunded ? "" : " disabled") + ">Cash Out (USDT)<br><span style='font-size:.8rem;opacity:.85'>" +
           fmt(roiCol) + " DYC → " + (data.cashoutUsdt != null ? fmt(data.cashoutUsdt, 6) : "—") + " USDT</span></button>" +
           "<div class='desk-status " + (deskFunded ? "funded" : "empty") + "'><span class='dot'></span>" +
-          (deskFunded ? "Desk Funded <span style='opacity:.7'>(sufficient USDT reserve)</span>" : "ROI cash-out moved to the affiliate program for this region.") + "</div>"
+          (deskFunded ? "Desk Funded <span style='opacity:.7'>(sufficient USDT reserve)</span>" : "Cash-out is closed for now — the USDT reserve is empty. Your collected rewards stay safe and playable.") + "</div>"
         : "<div class='note'>Cash-out desk not yet live.</div>");
     if ($("act-rclaim")) $("act-rclaim").onclick = actClaimRewards;
     if ($("act-cashout")) $("act-cashout").onclick = actCashOut;
@@ -1031,7 +1031,7 @@ window.DYDash = (function () {
       simFn: function (k) { return k.redeem.staticCall(amt); },
       sendFn: function (k, o) { return k.redeem(amt, o); },
       title: "Cash out to USDT",
-      body: "Cash out <b>" + fmt(amt) + " DYC</b> for <b>" + (usdt != null ? fmt(usdt, 6) : "—") + " USDT</b> at the fixed 0.010 rate.",
+      body: "Cash out <b>" + fmt(amt) + " DYC</b> for <b>" + (usdt != null ? fmt(usdt, 6) : "—") + " USDT</b> at 0.010 USDT per DYC — the fixed rate for staking rewards. (Game winnings and invite rewards withdraw at 0.008 on the Withdraw card.)",
       raw: "raw in: " + amt.toString() + " wei",
     });
   }
@@ -1713,7 +1713,7 @@ window.DYDash = (function () {
       "<div class='redeem-amt'>" + amt + " <span class='redeem-unit'>DYC</span></div>"
       + "<div class='redeem-sub'>A drop is waiting for your wallet — <b>" + daysLeft + " day" + (daysLeft === 1 ? "" : "s") + "</b> left to claim.</div>"
       + "<button class='rite-btn' id='redeem-btn'>Redeem my drop</button>"
-      + "<div class='redeem-note'>One tap sends it straight to your wallet — no approval, no fee token needed.</div>";
+      + "<div class='redeem-note'>One tap sends it straight to your wallet — no approval needed, just a little POL for the network fee.</div>";
     $("redeem-btn").onclick = function () { actRedeem(cp); };
   }
   function actRedeem(cp) {

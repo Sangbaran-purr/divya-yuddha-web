@@ -239,7 +239,7 @@ window.DYTreasury = (function () {
     if (status === "busy") {
       markEl.innerHTML =
         '<div class="tre-mark-coin tre-mark-dim" aria-hidden="true"></div>' +
-        '<div class="tre-mark-text"><b>Access mark</b>' +
+        '<div class="tre-mark-text"><b>Torana — your Access Card</b>' +
         '<span class="tre-mark-sub bad">unavailable — the chain is busy. Refresh to retry.</span></div>';
       return;
     }
@@ -250,10 +250,10 @@ window.DYTreasury = (function () {
       '" src="assets/tokens/access_mark.webp" width="56" height="56" alt="" aria-hidden="true" />';
     markEl.innerHTML =
       coin +
-      '<div class="tre-mark-text"><b>Access Card</b>' +
+      '<div class="tre-mark-text"><b>Torana — your Access Card</b>' +
       (held
-        ? '<span class="tre-mark-sub held">held in your name — the mark is lit.</span>'
-        : '<span class="tre-mark-sub">not yet held. <a href="rite.html">Forge one at the rite.</a></span>') +
+        ? '<span class="tre-mark-sub held">held in your name — the Hall\'s tables are open to you.</span>'
+        : '<span class="tre-mark-sub">not yet held. <a href="store.html#bundle">Get it in the store: a Torana and 500 DYC for USD 20.</a></span>') +
       "</div>";
   }
 
@@ -594,7 +594,7 @@ window.DYTreasury = (function () {
       if (!s.hasProvider) {
         setChrome(false, false, false, false);
         statusEl.innerHTML =
-          'You carry no wallet. <a href="rite.html">Forge your key at the rite.</a>';
+          'No wallet in this browser — install a wallet to see your holdings.';
         renderHall(hall, "empty");
         cacheAddr = null;
         return;

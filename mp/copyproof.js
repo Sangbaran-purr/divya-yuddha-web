@@ -262,15 +262,21 @@ ok("the rite's second door is hidden by default and revealed with the ruled line
 // the smallest true words, rule 3's own two sentences untouched, and the false words must survive on no page.
 const LAW_OF_GATE = "One per wallet, bound to you alone, yours to burn. It is dropped to presale buyers and sold in the store - a Torana and 500 DYC for USD 20.";
 ok("R7 · the corrected Law of the Gate is ruled in the amendment", norm(RULINGS).indexOf(norm(LAW_OF_GATE)) >= 0);
-ok("R7 · index.html carries it verbatim (only the em dash differs, as the page's typography does)",
-   norm(INDEX).indexOf(norm(LAW_OF_GATE).replace(" - ", " \u2014 ")) >= 0);   // the page's own em dash
+// SITE-AUDIT-1 (amendment 2026-10-11b) — R7's clause now rides the MERGED Torana bullet; the old two-part carriage is
+// RETIRED from the page (it survives as the doc's quotation), and the merged sentence is pinned below (SA1/SA2).
+ok("R7 · the old two-part carriage is GONE from the page (merged by amendment 2026-10-11b)",
+   detagFP(INDEX).indexOf(norm(LAW_OF_GATE).replace(" - ", " \u2014 ")) < 0);
 ok('R7 · "never sold" appears NOWHERE on any page - it survives only as the quotation of what it replaced',
    !/never sold/.test(INDEX) && !/never sold/.test(RITE) && !/never sold/.test(HALL) &&
    (RULINGS.match(/never sold/g) || []).length === 1);
 // the homepage sets the first sentence in <strong>, so the comparison is made on the TEXT, not the markup
 const detag = (h) => norm(String(h).replace(/<[^>]*>/g, " "));
 // FREE-PLAY-1 — the homepage carries rule 3 SCOPED TO THE HALL (its other two sentences and R7's clause unchanged)
-ok("R7/FP · the homepage's Law carries rule 3 scoped to the Hall", detag(INDEX).indexOf(norm(RULE3_HALL)) >= 0);
+const TORANA_MERGED = "The Torana opens the Hall. It is sold in the store - a Torana and 500 DYC for USD 20 - and dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage. One per wallet, bound to you alone, yours to burn.";
+ok("SA1 · the merged Torana bullet is ruled (amendment 2026-10-11b)", /AMENDMENT 2026-10-11b \(SITE-AUDIT-1\) - THE TORANA BULLET, MERGED/.test(RULINGS) &&
+   norm(RULINGS).indexOf(norm(TORANA_MERGED)) >= 0);
+ok("SA2 · index.html's Law carries the merged bullet verbatim (the page sets the dashes as em dashes)",
+   detag(INDEX).indexOf(norm(TORANA_MERGED).split(" - ").join(" \u2014 ")) >= 0);
 ok("the rite's status line names the store (the claim stays shut)",
    norm(RITE).indexOf(norm("The Rite is not yet open. The Torana can be bought now in the store - a Torana and 500 DYC for USD 20.")) >= 0 &&
    /claimOpen/.test(RITE));
@@ -281,7 +287,7 @@ ok("FP0 · the amendment is recorded", /AMENDMENT 2026-10-11 \(FREE-PLAY-1\) - S
 const FP = [
   // [id, ruled sentence, where the code carries it, a matcher on that source]
   ["FP1 rule 1",      "The game is free to play solo for any wallet connected on Polygon. The Torana unlocks multiplayer: every Hall table, free and staked.", null, null],
-  ["FP2 rule 3 hall", RULE3_HALL, "index.html", (l) => detag(INDEX).indexOf(norm(l)) >= 0],
+  ["FP2 rule 3 hall", RULE3_HALL, null, null],   // carried on the page only inside the merged bullet since 2026-10-11b (SA2)
   ["FP3 hall gate",   "Tables against other players need a Torana - solo play stays free.", "mp/hall.js", (l) => norm(HALL).indexOf(norm(l)) >= 0],
   ["FP4 rite solo",   "Solo play is free - enter now. Tables against other players need a Torana.", "rite.html", (l) => norm(RITE).indexOf(norm(l)) >= 0],
   ["FP5 rite connect","Connect a Polygon wallet to play free.", "rite.html", (l) => norm(RITE).indexOf(norm(l)) >= 0],
@@ -314,6 +320,30 @@ ok("FP16 · the rite's solo line follows the same visibility law as the old door
 ok("FP17 · the no-wallet guidance is the rite's own words on the Hall's connect card",
    ["Wallet not responding — pull down to refresh this tab, then Retry.", "No wallet in this browser. ", "Open in MetaMask →",
     "You carry no key. ", "— install a wallet, then Retry."].every((w) => RITE.indexOf(w) >= 0 && HALL.indexOf(w) >= 0));
+
+// ═══ SITE-AUDIT-1 batch 1 (2026-10-11) — FALSE STATEMENTS, RETIRED FOR GOOD ═══
+console.log("\n── SITE-AUDIT-1 · the false statements stay gone (every player page and its scripts) ──");
+{
+  const R = (f) => { try { return fs.readFileSync(path.resolve(__dirname, "..", f), "utf8"); } catch (e) { return ""; } };
+  // player-visible text only: HTML comments are stripped, so a comment may quote what it replaced
+  const visible = (f) => R(f).replace(/<!--[\s\S]*?-->/g, "");
+  const PAGES = ["index.html", "rite.html", "store.html", "dashboard.html", "treasury.html", "report.html", "explore.html",
+                 "mint.html", "register.html", "demo/index.html", "mp/hall.html"];
+  const SCRIPTS = ["js/store.js", "js/dashboard.js", "js/treasury.js", "js/report.js", "js/explore.js", "js/mintstatus.js", "mp/hall.js"];
+  const stripJsComments = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
+  const ALL = PAGES.map((f) => [f, visible(f)]).concat(SCRIPTS.map((f) => [f, stripJsComments(R(f))]));
+  const BANNED = ["free Access token", "Phase B", "PHASE B", "for this region", "no fee token needed", "Forge one at the rite",
+                  "Forge your key at the rite", "announced at sale-open", "staking when it opens", "Claims are not yet open",
+                  "DYC retired", "free card claim opens later", "faucet.polygon.technology", "One free Access token",
+                  "Free, one per hand", "the contract address may be wrong"];
+  for (const b of BANNED) {
+    const hits = ALL.filter(([, t]) => t.indexOf(b) >= 0).map(([f]) => f);
+    ok("SA3 · no page or page script says \"" + b + "\"", hits.length === 0, hits.join(", "));
+  }
+  const DASH_HTML = visible("dashboard.html");
+  ok("SA4 · the dashboard's Buy DYC link goes to the Buy panel (the presale is open — never 'Coming soon')",
+     /<a href="#buy-panel"><svg[^>]*>[\s\S]*?<\/svg>Buy DYC<\/a>/.test(DASH_HTML) && !/data-soon[^>]*>[\s\S]{0,400}?Buy DYC/.test(DASH_HTML));
+}
 
 console.log("\n── advisory · other quoted doc lines (not section-11 ruled copy) ──");
 const lawSet = new Set(LAW.map(([, l]) => norm(l)));

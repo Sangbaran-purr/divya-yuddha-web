@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Divya Yuddha — The Rite</title>
-    <meta name="description" content="Take the rite: claim your free Access token — one per hand, bound to you alone." />
+    <meta name="description" content="Connect a Polygon wallet to play Divya Yuddha free. The Torana opens the Hall's tables — a Torana and 500 DYC for USD 20." />
     <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" sizes="512x512" href="assets/brand/icon-512.png" />
     <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Divya Yuddha — The Rite" />
-    <meta property="og:description" content="Claim your free Access token — one per hand, bound to you alone." />
+    <meta property="og:description" content="Play free, solo. The Torana opens multiplayer." />
     <meta property="og:image" content="https://divyayuddha.games/assets/plates/facade.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
@@ -374,7 +374,7 @@
 
         <!-- the threshold stone: state message + the one action -->
         <div class="rite-threshold">
-          <p id="rite-msg" class="rite-state-msg">The rite admits you to nothing you did not already own — it is only your name at the gate.</p>
+          <p id="rite-msg" class="rite-state-msg">Connect a Polygon wallet to play free.</p>
           <button id="rite-action" class="rite-btn" type="button">
             Declare Yourself<span class="sub">connect wallet</span>
           </button>
@@ -603,13 +603,19 @@
           if (btn && !soloEnterShown) btn.hidden = true;
           if (reg) reg.hidden = true;
           if (buy) buy.hidden = false;
-          msg.textContent = "Your pass is live.";
-          line.textContent = "The free card claim opens later — this page will announce it.";
+          msg.textContent = "Your presale approval is live — buy DYC in your dashboard.";
+          line.textContent = "";
         }
         // S-LIVE-FIX-1 (C2): while connected-and-unapproved, re-check the allowlist every 45s so the buy door appears
         // on its own once approval lands (bounded by the Fastly edge's ~10-min TTL). Stops on voucher found / state change.
         var voucherPoll = null;
         function stopVoucherPoll() { if (voucherPoll) { clearInterval(voucherPoll); voucherPoll = null; } }
+        // SITE-AUDIT-1 — did THIS wallet register for the presale? register.html records the wallet it put into the
+        // form (browser-local); an approved wallet is also on the allowlist. Only such a wallet sees the approval
+        // countdown — a solo player who never registered sees the solo line and Enter, nothing about approval.
+        function registeredHere(who) {
+          try { return !!localStorage.getItem("dy::presaleRegistered:" + String(who || "").toLowerCase()); } catch (e) { return false; }
+        }
         function sortNoMark(who) {
           fetchAllowlist().then(function (list) {
             var cur = window.DYWallet.state;
@@ -818,12 +824,16 @@
             // in allowlist.json — the same match dashboard.js ships — swaps in the buy door.
             soloEnterShown = true;
             setBtn("Enter", "play solo — free", { onClick: enterSolo });
-            showRegisterRoad();
             var who = s.address;
+            // SITE-AUDIT-1 — the register road (its "No mark…" message and the approval countdown) is ONLY for a wallet
+            // that registered. Anyone else sees the ruled solo line and Enter; an approved voucher still surfaces.
+            if (registeredHere(who)) showRegisterRoad();
+            else msg.textContent = "";
             sortNoMark(who); // immediate check (race/staleness-guarded inside)
             // C2 / S-FEED-5 (LANE B): a 1s ticker shows a live countdown; every 45s it fires the real allowlist
             // re-check (same cadence). Stops on state change (guarded here + inside sortNoMark).
             stopVoucherPoll();
+            if (registeredHere(who)) {   // SITE-AUDIT-1 — the countdown runs only for a wallet that registered
             var reSecs = 45;
             voucherPoll = setInterval(function () {
               var cur = window.DYWallet.state;
@@ -833,6 +843,7 @@
               if (reSecs <= 0) { if (cd) cd.textContent = "checking now…"; reSecs = 45; sortNoMark(who); return; }
               if (cd) cd.textContent = "next check in " + reSecs + "s";
             }, 1000);
+            }
           }
         });
 

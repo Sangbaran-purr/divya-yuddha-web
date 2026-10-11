@@ -11,11 +11,24 @@ window.DYExplore = (function () {
   var LABEL = { devas: "Devas", asuras: "Asuras", nagas: "Nagas", vanaras: "Vanaras" };
   var TYPE_RANK = { Hero: 0, Unit: 1, Astra: 2, Mantra: 3, Artifact: 4, Token: 5 }; // Token band LAST
 
-  // RULED COPY — verbatim, set via textContent (never reworded)
-  var COPY_LAUNCH = "The founding cards. Every Access Card holds them all — one TORANA, the full launch set, playable.";
-  var COPY_WAVE = "The expansion. Wave cards are individual NFTs — owned one by one. Claims are not yet open; the Rite will announce.";
+  // Section copy, set via textContent. SITE-AUDIT-1 (owner-approved 2026-10-11): the launch line no longer ties the
+  // launch set to the Torana (solo is free), and the wave line names where wave cards are actually got.
+  var COPY_LAUNCH = "The founding cards — the full launch set, free to play solo.";
+  var COPY_WAVE = "The expansion. Wave cards are individual NFTs — owned one by one. Buy them in the Store or trade them in the Market, priced in DYC.";
   var COPY_FOOT = "Ownership never buys win-rate.";
-  var BADGE = { launch: "ACCESS", wave1: "NFT", token: "IN-GAME TOKEN — NOT AN NFT" };
+  var BADGE = { launch: "LAUNCH SET", wave1: "NFT", token: "IN-GAME TOKEN — NOT AN NFT" };
+
+  // SITE-AUDIT-1 — CARD NAMES COME FROM THE GAME'S OWN REGISTRIES, never rebuilt from a file name (which loses
+  // apostrophes, commas and spaces: "Ramas Signet", "Drummerofthe Host"). Wave cards: js/wave-registry.js (its
+  // `name` is the engine's display name, keyed here by the art stem). Launch cards: js/cards.js. A stem neither
+  // registry knows (the Rakta token) falls back to the file name.
+  var NAMES = (function () {
+    var m = {};
+    function add(art, name) { if (art && name) m[String(art).replace(/\.png$/, "")] = name; }
+    try { var w = (window.DY_WAVE_REGISTRY && window.DY_WAVE_REGISTRY.byId) || {}; for (var k in w) if (w[k]) add(w[k].art, w[k].name); } catch (e) {}
+    try { var c = (window.DY_CARDS && window.DY_CARDS.byId) || {}; for (var j in c) if (c[j]) add(c[j].frame, c[j].name); } catch (e) {}
+    return m;
+  })();
 
   var built = {}; // faction -> built node (cached)
   var combinedByFac = {}; // faction -> combined ordered card list (for the lightbox)
@@ -42,7 +55,7 @@ window.DYExplore = (function () {
   function parse(stem) {
     var m = stem.match(/^(Devas|Asuras|Nagas|Vanaras)_(Hero|Unit|Astra|Mantra|Artifact|Token)_([A-Za-z0-9]+)(?:_P(\d+))?_r([A-Za-z]+)$/);
     if (!m) return null;
-    return { faction: m[1].toLowerCase(), type: m[2], name: respace(m[3]), power: m[4] ? Number(m[4]) : null, rarity: m[5], stem: stem };
+    return { faction: m[1].toLowerCase(), type: m[2], name: NAMES[stem] || respace(m[3]), power: m[4] ? Number(m[4]) : null, rarity: m[5], stem: stem };
   }
   function respace(s) {
     return s.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");

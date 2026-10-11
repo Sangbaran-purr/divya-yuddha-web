@@ -467,7 +467,8 @@ async function main() {
     // guard now walks EVERY page that stamps a script, and a new page joins the law by existing.
     {
       const PAGES = ["index.html", "admin.html", "register.html", "store.html", "treasury.html",
-                     "dashboard.html", "report.html", "rite.html", "mp/hall.html"];
+                     "dashboard.html", "report.html", "rite.html", "mp/hall.html",
+                     "mint.html", "explore.html"];   // SITE-AUDIT-1: the two pages that gained scripts join the law
       const rows = [];
       for (const page of PAGES) {
         const h = fs.readFileSync(path.join(SITE, page), "utf8");
@@ -487,7 +488,7 @@ async function main() {
         const h = fs.readFileSync(path.join(SITE, page), "utf8");
         return h.indexOf(src) >= 0;
       };
-      for (const src of ["js/wallet.js", "config.js", "js/store.js", "js/solotrack.js"]) {   // FREE-PLAY-1: the rite's tag file joins the law
+      for (const src of ["js/wallet.js", "config.js", "js/store.js", "js/solotrack.js", "js/mintstatus.js", "js/explore.js", "js/treasury.js", "js/report.js"]) {   // FREE-PLAY-1: the rite's tag file joins the law
         const carriers = PAGES.filter((pg) => loads(pg, src + "?v="));
         const bare = PAGES.filter((pg) => loads(pg, src + '"') || loads(pg, src + "'"));
         ok("I5 · " + src + " is stamped on all " + carriers.length + " page(s) that load it, and unstamped on none",

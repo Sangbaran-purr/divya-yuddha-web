@@ -30,7 +30,7 @@
 - Return-to-gate gem-mark (bottom-left, safe-area aware). Skipped when the page is framed with ?wire=1 (the Hall's battle frame): a tap there would navigate the battle away mid-match (S-HALL-WIRE-1 R5).
 
 ## Notes at sync time
-- Source working tree dirty files: 7 (ignored by the archive method).
+- Source working tree dirty files: 4 (ignored by the archive method).
 - game/ in-repo size: 2256 KB.
 
 ## Entry-link stamps (S8 flag-1)

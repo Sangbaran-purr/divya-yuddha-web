@@ -886,7 +886,7 @@ window.DYStore = (function () {
       actions.hidden = false;
       if (!s.hasProvider) {
         connectBtn.hidden = true; refreshBtn.hidden = true; walletEl.hidden = false;
-        walletEl.innerHTML = 'You carry no wallet — you may still browse. <a href="rite.html">Forge your key at the rite.</a>';
+        walletEl.innerHTML = 'No wallet in this browser — you may still browse. Install a wallet to buy.';
       } else if (!s.connected) {
         connectBtn.hidden = false; refreshBtn.hidden = true; walletEl.hidden = true;
       } else if (!s.chainOk) {

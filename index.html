@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Divya Yuddha — The Gate</title>
-    <meta name="description" content="Own the cards. The companion threshold to Divya Yuddha — Battle of the Celestials." />
+    <meta name="description" content="Play Divya Yuddha free, solo. Own the cards. The Torana opens multiplayer." />
     <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" sizes="512x512" href="assets/brand/icon-512.png" />
     <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Divya Yuddha — Battle of the Celestials" />
-    <meta property="og:description" content="Own the cards. The companion threshold to the war." />
+    <meta property="og:description" content="Play Divya Yuddha free, solo. Own the cards. The Torana opens multiplayer." />
     <meta property="og:image" content="https://divyayuddha.games/assets/plates/facade.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
@@ -114,13 +114,13 @@
             <span class="btn-sub" id="doorway-sub">your name at the gate</span>
           </div>
           <div class="doorway-col">
-            <h2 class="doorway-title">Claim Your Access</h2>
-            <p class="doorway-copy">One free Access token, one per hand, bound to you alone. Take the rite.</p>
-            <a class="plate-btn doorway-cta" href="rite.html" aria-label="Claim access — take the rite">
-              <img class="plate-face" src="assets/brand/ui/btn_claim_access.webp" width="560" height="236" alt="" aria-hidden="true" />
-              <span class="sr-only">Claim Access</span>
-            </a>
-            <span class="btn-sub">take the rite</span>
+            <!-- SITE-AUDIT-1 (owner-approved 2026-10-11): the Torana is no longer a free claim (the claim is closed) — it is
+                 bought in the store. The old "Claim Access" plate has those words baked into its image, so a plain gold
+                 text button stands here until a "Get a Torana" plate is exported. -->
+            <h2 class="doorway-title">Get a Torana</h2>
+            <p class="doorway-copy">The Torana opens the Hall — tables against other players. A Torana and 500 DYC for USD 20 in the store.</p>
+            <a class="rite-btn doorway-cta doorway-cta-text" href="store.html#bundle" aria-label="Get a Torana — in the store" style="display:block;text-decoration:none">Get a Torana<span class="sub">in the store</span></a>
+            <span class="btn-sub">USD 20 · with 500 DYC</span>
           </div>
         </div>
       </section>
@@ -138,9 +138,11 @@
                    S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 (R7) — the old closing clause became FALSE on 2026-09-12,
                    when the Torana went on sale in the store. Rule 3's own two sentences are untouched; only that clause is replaced,
                    by the smallest true words. The amendment quotes what it replaced. -->
-              <li><strong>The Torana opens the Hall.</strong> It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage. One per wallet, bound to you alone, yours to burn. It is dropped to presale buyers and sold in the store — a Torana and 500 DYC for USD 20.</li>
-              <li><strong>The cards are owned.</strong> Every wave card is an NFT. Trade them on the marketplace in DYCoin, or earn them at the table — three cards a season, and three alone.</li>
-              <li><strong>Two coins, one wall.</strong> DYCoin is money: the marketplace, and staking when it opens. The play-token is reward alone, redeemed toward the earnable three through verified play. Neither ever becomes the other.</li>
+              <!-- SITE-AUDIT-1 / RULINGS_2026-08-27 amendment 2026-10-11b — the Torana bullet MERGED: the store road (the main one)
+                   first, the presale drop second, said once each. Rule 3's Hall-scoped sentences re-ruled in that amendment. -->
+              <li><strong>The Torana opens the Hall.</strong> It is sold in the store — a Torana and 500 DYC for USD 20 — and dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage. One per wallet, bound to you alone, yours to burn.</li>
+              <li><strong>The cards are owned.</strong> Every wave card is an NFT. Buy them in the Store, or trade them on the marketplace in DYCoin. Earning cards through play is planned — three a season.</li>
+              <li><strong>Two coins, one wall.</strong> DYCoin is money: the marketplace, the store, and the stakes at the Hall's tables. A play-reward token is planned; it will never become DYC.</li>
               <li><strong>Rank is not for sale.</strong> XP measures the player, and sets the bots you face. Player-versus-player tables and staking are live in the Hall, for Torana holders.</li>
             </ul>
           </div>
@@ -212,12 +214,12 @@
               <img src="assets/plates/card_rite.webp" width="900" height="675" loading="lazy" decoding="async" alt="A robed figure raising a glowing light before a fiery gate, flanked by stone guardians." />
             </div>
             <h3 class="scene-title">The Rite</h3>
-            <p class="scene-copy">The Access token is your key. Free, one per hand, bound to you alone.</p>
-            <a class="plate-btn scene-cta" href="rite.html" aria-label="Learn the rite — claim access">
+            <p class="scene-copy">The Torana opens the Hall. One per wallet, bound to you alone — with 500 DYC for USD 20 in the store.</p>
+            <a class="plate-btn scene-cta" href="rite.html" aria-label="Learn the rite — get a Torana">
               <img class="plate-face" src="assets/brand/ui/btn_learn_rite.webp" width="560" height="232" alt="" aria-hidden="true" />
               <span class="sr-only">Learn the Rite</span>
             </a>
-            <span class="btn-sub">claim access</span>
+            <span class="btn-sub">get a Torana</span>
           </article>
         </div>
       </section>
@@ -332,10 +334,11 @@
         function setDoorway(connected) {
           if (!doorwayDecl) return;
           if (connected) {
-            doorwayDecl.innerHTML = '<span class="declared">Declared</span>';
+            // SITE-AUDIT-1 — no dead end: once connected, the next step is the free solo game (through the rite's Enter).
+            doorwayDecl.innerHTML = '<span class="declared">Connected</span>';
             doorwayDecl.className = "plate-btn doorway-cta declared-state";
             doorwayDecl.disabled = true;
-            if (doorwaySub) doorwaySub.textContent = "your name is at the gate";
+            if (doorwaySub) doorwaySub.innerHTML = '<a href="rite.html">play solo — free</a>';
           } else {
             doorwayDecl.innerHTML =
               '<img class="plate-face" src="assets/brand/ui/btn_connect_wallet.webp" width="560" height="232" alt="" aria-hidden="true" /><span class="sr-only">Connect Wallet</span>';

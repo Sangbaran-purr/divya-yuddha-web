@@ -1896,12 +1896,19 @@
     ceremonyJoin({ tableId: t.id, faction: selectedFaction, escrowMatchId: t.escrowMatchId, stakeWei: t.stake, opponent: t.opener, tier: t.tier, friend: t.friend });
   }
   function doCancel() { ceremonyCancel(sheet.ctx.table); }
+  // SITE-AUDIT-1 — the stake field's own label prints "10 - 10,000", so "1,000" (or "1 000") must read as 1000, not
+  //   NaN. Commas, spaces and underscores are digit grouping; anything else non-numeric still fails the range check.
+  function parseStakeInput(str) {
+    var t = String(str == null ? "" : str).replace(/[,\s_]/g, "");
+    if (!/^\d+(\.\d+)?$/.test(t)) return 0n;
+    try { return BigInt(Math.trunc(Number(t))); } catch (e) { return 0n; }
+  }
   function doFriendCreate() {
     var host = $("hall-sheet-host");
     var stakeStr = (host.querySelector("#hall-friend-stake") || {}).value || "";
     var opp = ((host.querySelector("#hall-friend-opp") || {}).value || "").trim();
     sheet.ctx = sheet.ctx || {}; sheet.ctx.stakeInput = stakeStr; sheet.ctx.opponent = opp; sheet.ctx.err = null;
-    var n; try { n = BigInt(Math.trunc(Number(stakeStr))); } catch (e) { n = 0n; }
+    var n = parseStakeInput(stakeStr);
     if (!(n >= 10n && n <= 10000n)) { sheet.ctx.err = "stake must be 10 - 10,000 DYC"; renderSheet(); return; }
     if (!/^0x[0-9a-fA-F]{40}$/.test(opp)) { sheet.ctx.err = "enter your friend's full wallet address (0x…)"; renderSheet(); return; }
     if (!selectedFaction) { sheet.ctx.err = "choose your faction"; renderSheet(); return; }
@@ -2035,6 +2042,7 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
   window.DYHall = {
     TIERS: TIERS,
+    _parseStake: parseStakeInput,   // SITE-AUDIT-1 — exposed for the stake-parsing proof
     _state: function () {
       return {
         accessState: accessState, feedState: feedState, selectedTier: selectedTier, tables: tables, me: me,
