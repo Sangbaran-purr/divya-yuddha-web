@@ -303,6 +303,8 @@
       /* S-RITE-4 — the action box is a bare .rite-btn (display:inline-block), which overrides the UA [hidden] rule; this
          id+[hidden] selector (id beats class) lets the voucher branch actually hide the sleeping "Rite Opens Soon" box. */
       #rite-action[hidden] { display: none; }
+      /* FREE-PLAY-1 (ruling 2) — the free-claim button stands BESIDE Enter when the claim opens; the same guard. */
+      #rite-claim[hidden] { display: none; }
       .rite-register:hover,
       .rite-register:focus-visible {
         color: var(--gold-burnished);
@@ -376,6 +378,9 @@
           <button id="rite-action" class="rite-btn" type="button">
             Declare Yourself<span class="sub">connect wallet</span>
           </button>
+          <!-- FREE-PLAY-1 (ruling 2, 2026-10-11) — when config.claimOpen is on, the free claim stands BESIDE the solo Enter
+               for a non-holder on Polygon; the claim never replaces Enter. Hidden in every other state. -->
+          <button id="rite-claim" class="rite-btn" type="button" hidden></button>
           <!-- S-DECL-2 — the register door made prominent; revealed only in the connected-no-mark sorting state. -->
           <a id="rite-register" class="rite-btn rite-register" href="register.html" hidden>REGISTER FOR THE PRESALE</a>
           <!-- S-RITE-3 (Option A) — the buy door; revealed only when a LIVE voucher (allowlist.json) is found for this wallet. Same lit-gold CTA chrome. -->
@@ -482,6 +487,7 @@
         var thread = document.getElementById("rite-thread");
         var msg = document.getElementById("rite-msg");
         var btn = document.getElementById("rite-action");
+        var claimBtn = document.getElementById("rite-claim"); // FREE-PLAY-1 (ruling 2) — the claim, beside Enter
         var line = document.getElementById("rite-line");
         var reg = document.getElementById("rite-register");
         var buy = document.getElementById("rite-buy");
@@ -716,6 +722,7 @@
           if (btn) btn.hidden = false; // S-RITE-4 — the action box is visible in EVERY state except the voucher branch (which hides it)
           stopVoucherPoll(); // S-LIVE-FIX-1 (C2) — every state change stops the poll; the no-mark branch restarts it if still unapproved
           soloEnterShown = false; // FREE-PLAY-1 — only the connected-on-Polygon non-holder state sets it
+          if (claimBtn) { claimBtn.hidden = true; claimBtn.onclick = null; } // FREE-PLAY-1 (ruling 2) — the claim shows only beside a solo Enter
 
           if (!s.hasProvider) {
             if (!s.absenceConcluded) {
@@ -761,12 +768,16 @@
           }
           // connected + on Amoy -> is this hand already a bearer?
           if (s.isHolder === null && s.holderReadFailed) {
-            // S-GATE-1 (P5) — the seal could not be READ (dead/throttled RPC). Busy, not a verdict:
-            // no pass, no door line, no game. A manual re-read only (no auto-loop).
+            // S-GATE-1 (P5) — the seal could not be READ (dead/throttled RPC). Busy, not a verdict: no door line.
+            // FREE-PLAY-1 (ruling 1, 2026-10-11) — busy never removes SOLO: this wallet is connected on Polygon, which
+            // is all solo asks, so Enter ("play solo — free") stands; the Hall gate and the match server still guard
+            // multiplayer. The busy line keeps its manual re-read (no auto-loop), now as a link beside Enter.
             msg.textContent = "The gate could not read your seal.";
-            setBtn("Refresh", "busy — try the read again", {
-              onClick: function () { line.textContent = "Reading your seal…"; window.DYWallet.checkHolder(); },
-            });
+            soloEnterShown = true;
+            setBtn("Enter", "play solo — free", { onClick: enterSolo });
+            line.innerHTML = '<a href="#" id="rite-reread">Read the seal again</a>';
+            var rr = document.getElementById("rite-reread");
+            if (rr) rr.onclick = function (e) { e.preventDefault(); line.textContent = "Reading your seal…"; window.DYWallet.checkHolder(); };
             return;
           }
           if (s.isHolder === null) {
@@ -792,11 +803,14 @@
           if (CFG.claimOpen) {
             // (future) a real authorized-minter/sale module wires here; on its
             // success it calls window.__celebrateClaim(). Not present in S1.
-            setBtn("Take the Rite", "free · one per hand · bound to you alone", {
-              onClick: function () {
-                line.textContent = "The rite module is not yet wired.";
-              },
-            });
+            // FREE-PLAY-1 (ruling 2, 2026-10-11) — the claim stands BESIDE the solo Enter; it never replaces it.
+            soloEnterShown = true;
+            setBtn("Enter", "play solo — free", { onClick: enterSolo });
+            if (claimBtn) {
+              claimBtn.innerHTML = 'Take the Rite<span class="sub">free · one per hand · bound to you alone</span>';
+              claimBtn.hidden = false;
+              claimBtn.onclick = function () { line.textContent = "The rite module is not yet wired."; };
+            }
             msg.textContent = "The rite is open. Claim your Access token — free, one per hand.";
           } else {
             // S-DECL-1 (R1) / S-RITE-3 (Option A) — connected-no-mark: the rite sorts on the LIVE voucher.

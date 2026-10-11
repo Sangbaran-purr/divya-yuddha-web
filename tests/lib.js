@@ -429,6 +429,7 @@ async function ritePage(c, player, opts) {
   w.DY_CONFIG.contracts.accessNFT = c.addrs.nft;
   w.DY_CONFIG.contracts.dycoin = c.addrs.dyc;
   if (opts.analytics === false) w.DY_CONFIG.analytics = { enabled: false };
+  if (opts.claimOpen) w.DY_CONFIG.claimOpen = true;      // FREE-PLAY-1 (ruling 2) — the free claim switched on
   w.__navs = navs;                                       // one entry per navigation Enter attempted (jsdom cannot navigate)
   run(fs.readFileSync(path.join(SITE, "js/wallet.js"), "utf8"));
   run(fs.readFileSync(path.join(SITE, "js/solotrack.js"), "utf8"));

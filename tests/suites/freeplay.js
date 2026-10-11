@@ -119,6 +119,53 @@ async function run() {
     ok("RT15 · a live voucher shows BUY YOUR COIN and KEEPS the solo Enter", shown($(w, "rite-buy")) && shown($(w, "rite-action")) && /play solo/.test(btnText(w)));
   }
 
+  // ── ruling 1: the seal cannot be READ (busy) — solo stands anyway ──
+  {
+    const c = await H.chainStore();
+    const r = await H.ritePage(c, c.player, { url: "https://divyayuddha.games/rite.html?utm_source=ig", ls: { "dy::readRpcUrl": "http://127.0.0.1:1" } });
+    const w = r.w;
+    await settle(w, () => /could not read your seal/.test(txt($(w, "rite-msg"))), 20000, "the busy state");
+    ok("RT16 · Torana read FAILING on Polygon (busy): the busy line stays AND Enter 'play solo — free' stands",
+       txt($(w, "rite-msg")) === "The gate could not read your seal." && btnText(w) === "Enterplay solo — free" && shown($(w, "rite-action")) &&
+       /Read the seal again/.test(txt($(w, "rite-line"))) && !shown($(w, "rite-doorline")), btnText(w) + " | " + txt($(w, "rite-line")));
+    H.click(w, "#rite-action"); H.click(w, "#rite-action");
+    const calls = plausibleCalls(w);
+    ok("RT17 · …Enter sets the pass and solo_start fires ONCE, tags only",
+       w.sessionStorage.getItem("dyw_pass") === "1" && calls.length === 1 && calls[0][0] === "solo_start" &&
+       JSON.stringify(calls[0][1]) === JSON.stringify({ props: { utm_source: "ig" } }), JSON.stringify(calls));
+  }
+  // ── ruling 2: the free claim switched on — it stands BESIDE Enter ──
+  {
+    const c = await H.chainStore();
+    const r = await H.ritePage(c, c.player, { claimOpen: true });
+    const w = r.w;
+    await settle(w, () => shown($(w, "rite-claim")), 15000, "the claim button");
+    ok("RT18 · claimOpen on: a non-holder on Polygon sees BOTH the free-claim button and Enter",
+       shown($(w, "rite-claim")) && /Take the Rite/.test(txt($(w, "rite-claim"))) && shown($(w, "rite-action")) && btnText(w) === "Enterplay solo — free",
+       txt($(w, "rite-claim")) + " | " + btnText(w));
+    H.click(w, "#rite-action");
+    ok("RT19 · …and Enter still plays solo (the pass is set)", w.sessionStorage.getItem("dyw_pass") === "1");
+  }
+  {
+    const c = await H.chainStore();
+    const r1 = await H.ritePage(c, c.player, { claimOpen: true, wrongChain: true });
+    await settle(r1.w, () => /Cross to Polygon/.test(btnText(r1.w)), 15000, "the switch");
+    const r2 = await H.ritePage(c, c.player, { claimOpen: true, notConnected: true });
+    await settle(r2.w, () => /Declare Yourself/.test(btnText(r2.w)), 15000, "the connect button");
+    await H.sleep(600);
+    ok("RT20 · claimOpen on + wrong chain / not connected: unchanged — no Enter, no claim button, no pass",
+       /Cross to Polygon/.test(btnText(r1.w)) && !shown($(r1.w, "rite-claim")) && /Declare Yourself/.test(btnText(r2.w)) && !shown($(r2.w, "rite-claim")) &&
+       r1.w.sessionStorage.getItem("dyw_pass") === null && r2.w.sessionStorage.getItem("dyw_pass") === null);
+  }
+  {
+    // a holder with claimOpen on: the claim is never offered to someone who holds one
+    const c = await H.chainStore();
+    await (await c.nft.mint(c.player.address)).wait();
+    const r = await H.ritePage(c, c.player, { claimOpen: true });
+    await settle(r.w, () => /the hall of war/.test(btnText(r.w)), 15000, "the holder's Enter");
+    ok("RT21 · claimOpen on + a HOLDER: the holder's Enter only, no claim button", !shown($(r.w, "rite-claim")));
+  }
+
   // ═══════════════ HT · THE HALL ═══════════════
   console.log("\n── HT · the Hall: the Torana still opens it ──");
   const c = await H.chainStore();
@@ -159,8 +206,11 @@ async function run() {
 
   // ═══════════════ DG · WHAT DOES NOT MOVE ═══════════════
   console.log("\n── DG · the game redirect, the sync script and the demo are unchanged ──");
-  const head = (f) => execFileSync("git", ["show", "HEAD:" + f], { cwd: SITE, maxBuffer: 64 * 1024 * 1024 }).toString();
-  ok("DG1 · game/ is byte-identical to the last commit (the redirect, the shim, the copy)",
+  // the BASE is the commit just before FREE-PLAY-1 rung 2 (found by its subject, so it stays right as commits land)
+  const base = execFileSync("git", ["log", "-1", "--format=%H", "--grep=^FREE-PLAY-1 (rung 2)"], { cwd: SITE }).toString().trim();
+  const ref = base ? base + "~1" : "HEAD";
+  const head = (f) => execFileSync("git", ["show", ref + ":" + f], { cwd: SITE, maxBuffer: 64 * 1024 * 1024 }).toString();
+  ok("DG1 · game/ is byte-identical to before FREE-PLAY-1 (the redirect, the shim, the copy)",
      ["game/index.html", "game/STAMP", "game/SNAPSHOT.md"].every((f) => head(f) === fs.readFileSync(path.join(SITE, f), "utf8")));
   ok("DG2 · scripts/sync_game.sh is byte-identical (the pass check still redirects a passless visit to the rite)",
      head("scripts/sync_game.sh") === fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8") &&

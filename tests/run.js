@@ -48,7 +48,7 @@ const SUITES = [
   // STORE-READ-2 — the pre-cast read (the BUY road, not the read road: real buys, so its own anvil and its own cap)
   { name: "precast",       file: path.join(__dirname, "suites", "precast.js"), chain: true, expect: 31 },
   // FREE-PLAY-1 rung 2 — solo is free (the rite's Enter for any wallet on Polygon); the Torana opens the Hall
-  { name: "freeplay",      file: path.join(__dirname, "suites", "freeplay.js"), chain: true, expect: 26 },
+  { name: "freeplay",      file: path.join(__dirname, "suites", "freeplay.js"), chain: true, expect: 32 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)
   // MP-FIX-2: the Hall steps back while a match is live — the frame's bands, the collapse, and the lobby's safety
   // (source + mutants; no chain and no network — the pixels are proven in a browser and written into the rung).
