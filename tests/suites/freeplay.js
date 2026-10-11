@@ -105,8 +105,9 @@ async function run() {
     const r = await H.ritePage(c, c.player, { url: "https://divyayuddha.games/rite.html?utm_source=ig" });
     const w = r.w;
     await settle(w, () => /the hall of war/.test(btnText(w)), 15000, "the holder's Enter");
-    ok("RT13 · a HOLDER is unchanged: 'You bear the mark. The door is yours.' + Enter 'the hall of war', no solo line, no second door",
-       txt($(w, "rite-msg")) === "You bear the mark. The door is yours." && btnText(w) === "Enterthe hall of war" && !shown($(w, "rite-doorline")) && !shown($(w, "rite-buyline")));
+    ok("RT13 · a HOLDER is unchanged: 'You bear the mark. The door is yours.' + Enter 'the hall of war', no solo line, no second door, no presale link",
+       txt($(w, "rite-msg")) === "You bear the mark. The door is yours." && btnText(w) === "Enterthe hall of war" && !shown($(w, "rite-doorline")) && !shown($(w, "rite-buyline")) &&
+       !shown($(w, "rite-presale")));
     H.click(w, "#rite-action");
     ok("RT14 · …the holder's Enter sets the pass and fires NO solo_start", w.sessionStorage.getItem("dyw_pass") === "1" && plausibleCalls(w).length === 0, JSON.stringify(plausibleCalls(w)));
   }
@@ -178,6 +179,9 @@ async function run() {
     ok("RT22 · an UNREGISTERED non-holder sees the solo line and Enter — no approval copy, no register door, no countdown",
        !APPROVAL.test(page) && txt($(w, "rite-msg")) === "" && !shown($(w, "rite-register")) && !$(w, "rite-countdown") &&
        ![...w.__timers.values()].includes(1000) &&            // and NO approval-countdown ticker is running at all
+       shown($(w, "rite-presale")) && $(w, "rite-presale").getAttribute("href") === "register.html" &&
+       $(w, "rite-presale").tagName === "A" && !$(w, "rite-presale").classList.contains("rite-btn") &&   // the quiet presale road
+       /Register for the presale/.test(txt($(w, "rite-presale"))) && shown($(w, "rite-action")) &&
        shown($(w, "rite-doorline")) && /play solo/.test(btnText(w)), page);
   }
   {
@@ -188,7 +192,7 @@ async function run() {
     await H.sleep(2200);
     ok("RT23 · a REGISTERED non-holder still sees the approval countdown (and the solo Enter beside it)",
        /Checking for your approval/.test(txt($(w, "rite-line"))) && /next check in 4[0-4]s/.test(txt($(w, "rite-line"))) && /play solo/.test(btnText(w)) &&
-       [...w.__timers.values()].includes(1000),
+       [...w.__timers.values()].includes(1000) && !shown($(w, "rite-presale")),
        txt($(w, "rite-line")));
   }
   {
@@ -197,7 +201,8 @@ async function run() {
     const w = r.w;
     await settle(w, () => shown($(w, "rite-buy")), 15000, "the buy door");
     ok("RT24 · an APPROVED wallet: 'Your presale approval is live — buy DYC in your dashboard.' and no free-claim line",
-       txt($(w, "rite-msg")) === "Your presale approval is live — buy DYC in your dashboard." && txt($(w, "rite-line")) === "" && shown($(w, "rite-buy")),
+       txt($(w, "rite-msg")) === "Your presale approval is live — buy DYC in your dashboard." && txt($(w, "rite-line")) === "" && shown($(w, "rite-buy")) &&
+       !shown($(w, "rite-presale")),
        txt($(w, "rite-msg")) + " | " + txt($(w, "rite-line")));
   }
   ok("RT25 · the rite's no-script default line is 'Connect a Polygon wallet to play free.'",

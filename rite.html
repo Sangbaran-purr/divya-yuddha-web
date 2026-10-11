@@ -305,6 +305,11 @@
       #rite-action[hidden] { display: none; }
       /* FREE-PLAY-1 (ruling 2) — the free-claim button stands BESIDE Enter when the claim opens; the same guard. */
       #rite-claim[hidden] { display: none; }
+      /* SITE-AUDIT-1 (owner decision 1) — the presale road for an unregistered solo player: a QUIET text link under
+         Enter, never a button (Enter stays the one primary action). */
+      .rite-presale { display: block; margin-top: 0.75rem; font-size: 0.85rem; letter-spacing: 0.04em; color: var(--gold-aged); text-decoration: underline; text-underline-offset: 3px; }
+      .rite-presale:hover, .rite-presale:focus-visible { color: var(--gold-burnished); }
+      .rite-presale[hidden] { display: none; }
       .rite-register:hover,
       .rite-register:focus-visible {
         color: var(--gold-burnished);
@@ -381,6 +386,8 @@
           <!-- FREE-PLAY-1 (ruling 2, 2026-10-11) — when config.claimOpen is on, the free claim stands BESIDE the solo Enter
                for a non-holder on Polygon; the claim never replaces Enter. Hidden in every other state. -->
           <button id="rite-claim" class="rite-btn" type="button" hidden></button>
+          <!-- SITE-AUDIT-1 (owner decision 1, 2026-10-11) — shown ONLY to a connected, unregistered non-holder, under Enter. -->
+          <a id="rite-presale" class="rite-presale" href="register.html" hidden>Register for the presale →</a>
           <!-- S-DECL-2 — the register door made prominent; revealed only in the connected-no-mark sorting state. -->
           <a id="rite-register" class="rite-btn rite-register" href="register.html" hidden>REGISTER FOR THE PRESALE</a>
           <!-- S-RITE-3 (Option A) — the buy door; revealed only when a LIVE voucher (allowlist.json) is found for this wallet. Same lit-gold CTA chrome. -->
@@ -488,6 +495,7 @@
         var msg = document.getElementById("rite-msg");
         var btn = document.getElementById("rite-action");
         var claimBtn = document.getElementById("rite-claim"); // FREE-PLAY-1 (ruling 2) — the claim, beside Enter
+        var presaleLink = document.getElementById("rite-presale"); // SITE-AUDIT-1 (decision 1) — the quiet presale road
         var line = document.getElementById("rite-line");
         var reg = document.getElementById("rite-register");
         var buy = document.getElementById("rite-buy");
@@ -602,6 +610,7 @@
           // door rides BESIDE it. Only the old sleeping "Rite Opens Soon" box was ever meant to hide here.
           if (btn && !soloEnterShown) btn.hidden = true;
           if (reg) reg.hidden = true;
+          if (presaleLink) presaleLink.hidden = true;   // SITE-AUDIT-1 — already approved: no "Register for the presale"
           if (buy) buy.hidden = false;
           msg.textContent = "Your presale approval is live — buy DYC in your dashboard.";
           line.textContent = "";
@@ -729,6 +738,7 @@
           stopVoucherPoll(); // S-LIVE-FIX-1 (C2) — every state change stops the poll; the no-mark branch restarts it if still unapproved
           soloEnterShown = false; // FREE-PLAY-1 — only the connected-on-Polygon non-holder state sets it
           if (claimBtn) { claimBtn.hidden = true; claimBtn.onclick = null; } // FREE-PLAY-1 (ruling 2) — the claim shows only beside a solo Enter
+          if (presaleLink) presaleLink.hidden = true; // SITE-AUDIT-1 (decision 1) — only the unregistered non-holder state reveals it
 
           if (!s.hasProvider) {
             if (!s.absenceConcluded) {
@@ -828,7 +838,7 @@
             // SITE-AUDIT-1 — the register road (its "No mark…" message and the approval countdown) is ONLY for a wallet
             // that registered. Anyone else sees the ruled solo line and Enter; an approved voucher still surfaces.
             if (registeredHere(who)) showRegisterRoad();
-            else msg.textContent = "";
+            else { msg.textContent = ""; if (presaleLink) presaleLink.hidden = false; }   // the quiet presale road, under Enter
             sortNoMark(who); // immediate check (race/staleness-guarded inside)
             // C2 / S-FEED-5 (LANE B): a 1s ticker shows a live countdown; every 45s it fires the real allowlist
             // re-check (same cadence). Stops on state change (guarded here + inside sortNoMark).
