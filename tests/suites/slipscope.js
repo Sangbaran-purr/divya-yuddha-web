@@ -349,7 +349,7 @@ async function main() {
     await H.until(() => (w2.document.querySelector('[data-settle="' + newer.id + '"]') || {}).disabled, 8000, "the newer row casting").catch(() => {});
     const castSlots = (st2().pending || []).map((e) => e.slot).filter((x) => String(x).indexOf("settle") === 0);
     const castingRow = w2.document.querySelector('[data-settle="' + newer.id + '"]');
-    ok("L6 · the cast row alone shows casting…", !!castingRow && castingRow.disabled && castingRow.textContent.indexOf("casting") >= 0);
+    ok("L6 · the cast row alone shows confirm in your wallet…", !!castingRow && castingRow.disabled && castingRow.textContent.indexOf("confirm in your wallet") >= 0);   // SITE-AUDIT-1 batch 2: "casting…" → "confirm in your wallet…"
     const duringOlder = rows(w2).filter((r) => r.indexOf('data-settle="' + older.id + '"') >= 0)[0];
     ok("L7 · the OTHER row's markup is BYTE-IDENTICAL — no false 'casting', no false 'settled'", duringOlder === beforeOlder);
 

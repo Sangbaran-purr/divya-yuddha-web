@@ -62,7 +62,7 @@ async function chain() {
   await esc.waitForDeployment();
   const escAddr = await esc.getAddress(), dycAddr = await dyc.getAddress();
   await (await dyc.mint(player.address, 1000n * DEC)).wait();
-  return { provider, player, escAddr, dycAddr, esc, dyc };
+  return { provider, player, escAddr, dycAddr, esc, dyc, referee, owner };   // SITE-AUDIT-1 batch 2: the referee signs results in the refund proofs
 }
 
 async function server(escAddr, dycAddr) {

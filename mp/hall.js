@@ -145,7 +145,7 @@
     if (!me) { accessState = "connect"; return render(); } // no wallet = quiet connect card, no floor
     // R5 applies on BOTH pass roads — this bypass called startFeed() directly, which would have started (and so
     // signed) B's session without a click. The guard belongs wherever the session can start.
-    if (devAccessBypass()) { accessState = "pass"; if (!signInNeeded) startFeed(); loadEthers().then(function (e) { readLiquid(e); readFeeHint(e); }).catch(function () {}); return render(); } // proof-only bypass (still reads liquid for affordability)
+    if (devAccessBypass()) { accessState = "pass"; readMyStakes(); if (!signInNeeded) startFeed(); loadEthers().then(function (e) { readLiquid(e); readFeeHint(e); }).catch(function () {}); return render(); } // proof-only bypass (still reads liquid for affordability)
     accessState = "init"; render();
     loadEthers().then(function (ethers) {
       var acc = CFG.contracts && CFG.contracts.accessNFT;
@@ -153,6 +153,7 @@
       return new ethers.Contract(acc, ACCESS_ABI, readProvider(ethers)).balanceOf(me).then(function (bal) {
         if (gen !== gateGen) return;                          // read-generation guard
         accessState = (bal && bal > 0n) ? "pass" : "gateless";
+        readMyStakes();                                       // SITE-AUDIT-1 batch 2 — both faces show "Your stakes"
         if (accessState === "pass") {
           try { sessionStorage.setItem("dyw_pass", "1"); } catch (e) {} // G5 — a Hall holder carries the same site pass, so PRACTICE into the game copy isn't bounced to the rite
           readLiquid(ethers); readFeeHint(ethers);
@@ -257,7 +258,7 @@
         if (v && v.me && !signedInAs) signedInAs = v.me;      // B1 — the recovered connected-wallet identity
         // surface a server refusal honestly (FREE tier-0, join-not-locked, loss backstop) — de-duped so it shows once.
         if (v && v.lastReject && v.lastReject !== seenReject) {
-          seenReject = v.lastReject; lastServerError = v.lastReject;
+          seenReject = v.lastReject; lastServerError = plainServer(v.lastReject);
           freeOpenPending = false;              // M1 — a refusal ends the wait; the sheet HOLDS its error, as today
           // B2 — a refusal ({error}) arriving while an open record waits in step:"server" surfaces the ruled
           //   affordance. It NEVER clears the record: the stake is locked and still needs finishing or refunding.
@@ -346,8 +347,13 @@
   // ── THE RULED MONEY COPY (docs/LOBBY_DESIGN.md section 11, VERBATIM — only the bracket slots are filled). ──
   var FACTIONS = ["devas", "asuras", "vanaras", "nagas"];
   function dycOf(wei) { try { return (BigInt(wei) / DEC).toString(); } catch (e) { return "0"; } }
+  // SITE-AUDIT-1 batch 2 (LOBBY_DESIGN amendment 2026-10-11) — the refund is a BUTTON either player presses, never
+  //   "automatic"; and a JOINER cannot cancel (their lock starts the match), so the joiner's sheets get their own text.
   function COMMITMENT(stakeWei) {
-    return "Your " + dycOf(stakeWei) + " DYC locks in escrow now. It returns in full if you cancel before anyone sits, or on a draw. The winner takes the pot minus the 5% platform fee. If a finished match is somehow never settled, the chain refunds both players automatically after 24 hours - locked stakes can never be stranded.";
+    return "Your " + dycOf(stakeWei) + " DYC locks in escrow now. It returns in full if you cancel before anyone sits, or on a draw. The winner takes the pot minus the 5% platform fee. If a match is never settled, either player can refund both stakes here, 24 hours after it started - locked stakes can never be stranded.";
+  }
+  function COMMITMENT_JOIN(stakeWei) {
+    return "Your " + dycOf(stakeWei) + " DYC locks in escrow and the match begins. A draw returns it in full. The winner takes the pot minus the 5% platform fee. If a match is never settled, either player can refund both stakes here, 24 hours after it started.";
   }
   var BOTH_STAKES = "Once both stakes lock, the match begins.";
   //  MP-FIX-3A — the three sentences this rung adds. Each names ONE truth; none of them stands in for another.
@@ -380,8 +386,11 @@
   // is, clears the player of a typo, and invites the retry the code entry survives for.
   var FRIEND_UNREACHABLE = "could not reach the table server - your code is fine, try again in a moment";
   function FRIEND_LOCK(addr) { return "private table - visible only by this code, and only " + addr + " can take the seat."; }
-  var LIMIT_SET_TEXT = "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this.";
-  function LIMIT_BLOCK(headroomWei) { return "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: " + dycOf(headroomWei) + " DYC."; }
+  // SITE-AUDIT-1 batch 2 (LOBBY_DESIGN amendment 2026-10-11) — the words follow the server's ledger exactly: the UTC day,
+  //   NET (earlier wins offset losses), friend challenges included, blocked when a stake would PASS the limit.
+  var LIMIT_SET_TEXT = "Staked tables (friend challenges included) close for you whenever a stake would take today's net losses past this limit. Wins earlier in the day count against losses. The day resets at midnight UTC. Free tables stay open. Only you can set or change this.";
+  function LIMIT_BLOCK(headroomWei) { return "This stake would take you past your daily limit - you can still lose " + dycOf(headroomWei) + " DYC today. It resets at midnight UTC."; }
+  function LIMIT_ROOM(remWei, capWei) { return dycOf(remWei) + " of " + dycOf(capWei) + " DYC left before your limit"; }
 
   // ── THE ESCROW ROAD (browser signer; the store's signerRoad shape) ──
   function escrowAddr() { return lsGet("dyhall::stakeEscrowAddress") || (CFG.stakeEscrow && CFG.stakeEscrow.address) || ""; }
@@ -403,12 +412,16 @@
   var ESCROW_ERRORS = [
     "error BadStake()", "error SelfMatch()", "error NotOpen()", "error NotMatched()",
     "error NotExpectedOpponent()", "error LedgerUnset()", "error BadBounds()",
+    "error NotOpener()", "error TimeoutNotReached()", "error BadRefereeSig()",   // SITE-AUDIT-1 batch 2 — decoded, so they map to plain words
   ];
   var DYC_FULL_ABI = ["function approve(address,uint256) returns (bool)", "function allowance(address,address) view returns (uint256)", "function balanceOf(address) view returns (uint256)"].concat(ERC20_ERRORS);
   var ESC_ABI = ERC20_ERRORS.concat(ESCROW_ERRORS).concat([
     "function openMatch(uint256,address,uint8) returns (uint256)",
     "function joinMatch(uint256,uint8)",
     "function cancelMatch(uint256)",
+    "function abortMatch(uint256)",                                              // SITE-AUDIT-1 batch 2 — the 24h refund
+    "function nextMatchId() view returns (uint256)",
+    "function settleTimeout() view returns (uint256)",
     "function settle(uint256,uint8,bytes)",
     "function matches(uint256) view returns (address playerA, address playerB, uint256 stake, uint8 srcA, uint8 srcB, address expectedOpponent, uint64 matchedAt, uint8 state)",
     "event MatchOpened(uint256 indexed id, address indexed opener, uint256 stake, address expectedOpponent, uint8 source)",
@@ -723,10 +736,29 @@
   }
   //  (b) THE DYC SHORTAGE, decoded — with the wallet's own numbers when the error carries them.
   function revertOf(e) { var f = errChain(e).filter(function (n) { return n.revert && n.revert.name; })[0]; return f ? f.revert : null; }
+  var ESCROW_PLAIN = {
+    NotOpen: "this table is no longer open",
+    SelfMatch: "you can't join your own table",
+    NotExpectedOpponent: "this private table is for another wallet",
+    BadStake: "that stake isn't allowed",
+    TimeoutNotReached: "refund opens 24 hours after the match started",
+    NotMatched: "this match is already settled or refunded",
+    NotOpener: "only the player who opened this table can cancel it",
+  };
+  var WALLET_FALLBACK = "the wallet step didn't go through - nothing moved; try again";
+  // the match server's own words, shown to players, translated here (no server change): the result-signing failures
+  //   become the ruled unconfirmed-result line, the chain-read refusal a plain sentence; anything else passes through.
+  function plainServer(t) {
+    var x = String(t == null ? "" : t);
+    if (/referee could not sign/i.test(x)) return RESULT_UNCONFIRMED;
+    if (/referee cannot read the chain/i.test(x)) return "The table server couldn't check the chain - try again in a moment.";
+    return x;
+  }
   function ceremonyMsg(e) {
     if (e && e.crossAccount) return e.message;   // S-HALL-ACCOUNT-1 — the §11 line passes through verbatim
     if (e && e.wrongChain) return e.message;     // MP-FIX-3A (3) — the guard's own plain sentence
-    var m = errText(e) || "the cast failed";
+    var m = errText(e) || WALLET_FALLBACK;
+    if (m === "no wallet in this browser") return m;   // the Hall's own plain sentence (signerRoad) passes through
     if (/user rejected|denied/i.test(m)) return "you declined the wallet prompt";
     if (isGasShort(e)) return NEED_POL(feeHint);
     var rv = revertOf(e);
@@ -737,8 +769,9 @@
     //  an allowance that came up short is NOT a shortage of DYC — saying so would repeat the very fault this rung
     //  is fixing. It is an approval that did not land, and it has its own sentence.
     if (rv && rv.name === "ERC20InsufficientAllowance") return "The approval did not land - try the table again.";
-    if (rv && rv.name) return String(rv.name).replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
-    return String(m).slice(0, 140);   // (c) everything else passes through, uncollapsed
+    // SITE-AUDIT-1 batch 2 — the escrow's errors in plain words; anything unrecognised gets the one honest fallback
+    if (rv && rv.name && ESCROW_PLAIN[rv.name]) return ESCROW_PLAIN[rv.name];
+    return WALLET_FALLBACK;
   }
 
   // ── RESUME (on load, after the gate passes) — complete or abandon a pending ceremony cleanly. ──
@@ -816,7 +849,11 @@
           else { resumeNote = "your stake is locked at that table — reload to finish taking the seat."; }
           return;
         }
-        resumeNote = "a seat you started is no longer joinable — your stake is refundable on chain.";
+        // SITE-AUDIT-1 batch 2 — the escrow is NOT matched with me as the joiner: either my join never landed (nothing was
+        //   locked) or it landed and the match has since finished (settled or refunded) — say which.
+        var finished = String(mm.playerB).toLowerCase() === me && (Number(mm.state) === 3 || Number(mm.state) === 4);
+        resumeNote = finished ? "that match has already finished - check your wallet."
+                              : "a seat you started was taken or closed - nothing was locked, your DYC is still in your wallet.";
       }).catch(function () { resumeNote = "could not read the escrow for a seat you started; your stake is safe."; });
     }
     return Promise.resolve();   // pre-lock join draft: nothing cast, nothing at risk, no surprise wallet prompt
@@ -867,7 +904,7 @@
   function preflightLine() {
     var liq = liquid == null ? "—" : dycOf(liquid) + " DYC";
     var fee = feeHint == null ? "—" : "~" + feeHint + " POL";
-    return '<div class="hall-preflight state-line">Liquid DYC: <b>' + liq + '</b> · network fee (estimate): <b>' + fee + '</b></div>';
+    return '<div class="hall-preflight state-line">Your DYC: <b>' + liq + '</b> · network fee (estimate): <b>' + fee + '</b></div>';
   }
   function sheetOverlay(inner, titleCls) {
     return '<div class="hall-sheet-overlay" id="hall-sheet-overlay"><div class="hall-sheet ' + (titleCls || "") + '" role="dialog" aria-modal="true">' + inner +
@@ -887,7 +924,7 @@
       var cls = "hall-tier-row" + (sheet.ctx && sheet.ctx.tierId === t.id ? " on" : "") + (unread ? " unread" : (aff ? "" : " unaffordable"));
       var right = isFree ? '<span class="hall-tier-note">no stake - human opponent</span>'
         : unread ? '<span class="hall-tier-note">' + BALANCE_UNREAD + '</span>'
-        : (aff ? '<span class="hall-tier-usd">~' + t.usd + '</span>' : '<span class="hall-tier-note">insufficient liquid DYC</span>');
+        : (aff ? '<span class="hall-tier-usd">~' + t.usd + '</span>' : '<span class="hall-tier-note">not enough DYC</span>');
       rows += '<button class="' + cls + '" data-tier-row="' + t.id + '"' + (unread ? ' data-liquid-retry="1"' : (aff ? "" : " aria-disabled=\"true\"")) + '>' +
         medallionImg(t.medallion, "hall-medallion " + t.cls) + '<span class="hall-tier-label">' + t.label + '</span>' +
         '<span class="hall-tier-stake">' + (isFree ? "no stake" : (Number(BigInt(t.stake) / DEC)) + " DYC") + '</span>' + right + '</button>';
@@ -921,7 +958,7 @@
     var free = !t.staked;
     var pot = free ? 0n : BigInt(t.stake) * 2n, fee = pot * 5n / 100n, win = pot - fee;
     var sigil = t.faction && FACTION_SIGIL[t.faction] ? sigilImg(FACTION_SIGIL[t.faction], "hall-sigil") : "";
-    var commit = free ? "" : '<p class="hall-commit-text state-line">' + COMMITMENT(t.stake) + '</p>';
+    var commit = free ? "" : '<p class="hall-commit-text state-line">' + COMMITMENT_JOIN(t.stake) + '</p>';
     if (!free && crossesLimit(t.stake)) commit += '<p class="hall-limit-block state-line">' + LIMIT_BLOCK(headroomWei()) + '</p>';
     var canAct = free ? !!selectedFaction : (selectedFaction && affordable(t.stake) && !crossesLimit(t.stake));
     var act = ceremony ? ceremonyStrip(ceremony) : '<button class="hall-act hall-act-join" data-join-do="1"' + (canAct ? "" : " disabled") + '>TAKE THIS SEAT</button>';
@@ -978,7 +1015,7 @@
         '<button class="hall-sheet-switch" data-sheet-switch="friend">create a private table instead</button>', "hall-sheet-friendjoin");
     }
     var sigil = t.faction && FACTION_SIGIL[t.faction] ? sigilImg(FACTION_SIGIL[t.faction], "hall-sigil") : "";
-    var commit = '<p class="hall-commit-text state-line">' + COMMITMENT(t.stake) + '</p>';
+    var commit = '<p class="hall-commit-text state-line">' + COMMITMENT_JOIN(t.stake) + '</p>';
     if (crossesLimit(t.stake)) commit += '<p class="hall-limit-block state-line">' + LIMIT_BLOCK(headroomWei()) + '</p>';
     var canAct = selectedFaction && affordable(t.stake) && !crossesLimit(t.stake);
     var act = ceremony ? ceremonyStrip(ceremony) : '<button class="hall-act hall-act-friend-join" data-friend-join="1"' + (canAct ? "" : " disabled") + '>YOU SIGN YOUR HALF OF THE POT</button>';
@@ -993,7 +1030,7 @@
   function limitSheetHTML() {
     var ctx = sheet.ctx || {};
     var has = lossLimit && lossLimit.cap != null;
-    var cur = has ? '<p class="state-line">Today: ' + dycOf(lossLimit.remaining) + ' of ' + dycOf(lossLimit.cap) + ' DYC remaining.</p>' : "";
+    var cur = has ? '<p class="state-line">Today: ' + LIMIT_ROOM(lossLimit.remaining, lossLimit.cap) + '.</p>' : "";
     return sheetOverlay(
       '<h2 class="hall-sheet-title">SET YOUR LIMIT</h2>' + cur +
       '<p class="hall-limit-copy state-line">' + LIMIT_SET_TEXT + '</p>' +
@@ -1106,7 +1143,14 @@
   var mullPick = {};          // mulligan toss selections
 
   // ── the RULED settlement copy (docs/LOBBY_DESIGN.md section 11 → 8c, VERBATIM; only the [slots] filled) ──
-  var ABORT_LINE = "unclaimed pots refund both players automatically after 24 hours.";
+  // SITE-AUDIT-1 batch 2 (amendment 2026-10-11) — "refund automatically" was never true: abortMatch is a call someone
+  //   makes. Each result now says what its player can do, and the winner is told the 24-hour clock is theirs to beat.
+  var WIN_WARNING = "Collect within 24 hours of the match start - after that, either player can refund both stakes instead.";
+  var DRAW_NOW = "Either player can collect the refund now.";
+  var RESULT_UNCONFIRMED = "The result could not be confirmed. 24 hours after the match started, either player can refund both stakes here.";
+  var COLLECT_BTN = function (total) { return "COLLECT " + total + " DYC"; };
+  var REFUND_BTN = "REFUND BOTH STAKES";
+  var CONFIRM_WALLET = "confirm in your wallet…";
   //  S-HALL-ELSEWHERE-1 — §11 amendment 2026-09-10a. Its reader holds a live stake in a battle they cannot see;
   //  what they are told here is what they believe about that stake. Verbatim from LOBBY_DESIGN.md.
   var SEATED_ELSEWHERE_LINE = "Your warrior is already seated - the battle is live in another window.";
@@ -1116,7 +1160,7 @@
   function SLIPS_HEADER(n) { return "You have " + n + " unsettled pots waiting - each one can be collected here."; }
   function WON_LINE(total, fee) { return "You won. Collect " + total + " DYC - " + fee + " to the treasury."; }
   function WON_SETTLED(total) { return "settled - " + total + " DYC in your wallet"; }
-  var DRAW_LINE = "A draw - both stakes return in full.";
+  var DRAW_LINE = "A draw - both stakes return in full once either player collects the refund.";
   function FORFEIT_LINE(total) { return "Your opponent left the table. The pot is yours - collect " + total + " DYC."; }
   var FREE_LINE = "no stakes at this table";
   //  S-HALL-FREE-1 — the refusal when the engine cannot be vouched for. Ordinary copy, not §11: it makes no
@@ -1145,7 +1189,7 @@
         });
       }).then(function (tx) { mergePendingSlot(slot, { settleTxHash: tx.hash }); return tx.wait(); })
         .then(function () { return esc.matches(BigInt(slip.escrowMatchId)); })
-        .then(function (mm) { settleState[eid] = { settled: true, terminalState: Number(mm.state) }; clearPendingSlot(slot); markSlipSettled(eid); readLiquidAgain(); renderCurrent(); });
+        .then(function (mm) { settleState[eid] = { settled: true, terminalState: Number(mm.state) }; clearPendingSlot(slot); markSlipSettled(eid); readLiquidAgain(); renderCurrent(); readMyStakes(); });
     }).catch(function (e) { settleState[eid] = { casting: false, error: ceremonyMsg(e) }; renderCurrent(); });
   }
   // resume a settle interrupted between cast and confirmation (P4): if already SETTLED on chain, resolve; else re-offer.
@@ -1159,6 +1203,126 @@
       clearPendingSlot(slot);
     }).catch(function () { clearPendingSlot(slot); });
   }
+
+  // ══ SITE-AUDIT-1 batch 2 — "YOUR STAKES": every escrow you are in that is still OPEN or MATCHED, READ FROM THE CHAIN ══
+  //  No server, no event logs, no local storage: matches(id) for the newest ids, kept where you are a player. So a
+  //  stake is found after a reload, on another device, and while the match server is down. Shown on the Hall home AND
+  //  on the gate screen (recovering a stake is not playing). Owner rulings 2026-10-11:
+  //   · OPEN table you opened → Cancel and refund (cancelMatch).
+  //   · MATCHED with a stored WIN or DRAW → Collect (the settle ceremony, with its own dry run).
+  //   · MATCHED with a stored LOSS → no refund is offered (the contract would allow it; the Hall never invites it).
+  //   · MATCHED, no stored result: before 24h a countdown; from 24h "Refund both stakes" (abortMatch).
+  //  Every send is preceded by a DRY RUN (staticCall): a doomed call never reaches the wallet, and its reason is
+  //  told in plain words.
+  var stakes = null;          // { rows:[{ id, state, stake, opener, matchedAt, timeout }], now: chain seconds, at: ms }
+  var stakesRead = "idle";    // idle | reading | ok | failed
+  var stakesGen = 0;
+  var stakeAct = {};          // escrow id -> { busy, error, done }
+  var STAKE_SCAN_MAX = 300;   // the newest ids scanned (29 exist today)
+  function readMyStakes() {
+    var who = me, gen = ++stakesGen;
+    if (!who || !escrowAddr()) return Promise.resolve();
+    stakesRead = "reading";
+    return loadEthers().then(function (ethers) {
+      var pr = readProvider(ethers);
+      var esc = new ethers.Contract(escrowAddr(), ESC_ABI, pr);
+      return Promise.all([esc.nextMatchId(), esc.settleTimeout(), pr.getBlock("latest")]).then(function (r) {
+        var n = Number(r[0]), timeout = Number(r[1]), now = Number(r[2].timestamp);
+        var ids = []; for (var i = n - 1; i >= Math.max(1, n - STAKE_SCAN_MAX); i--) ids.push(i);
+        return Promise.all(ids.map(function (id) { return esc.matches(BigInt(id)).then(function (m) { return { id: id, m: m }; }); })).then(function (all) {
+          if (gen !== stakesGen || who !== me) return;
+          var rows = [];
+          all.forEach(function (x) {
+            var m = x.m, st = Number(m.state), a = String(m.playerA).toLowerCase(), b = String(m.playerB).toLowerCase();
+            if ((st !== 1 && st !== 2) || (a !== who && b !== who)) return;     // OPEN=1, MATCHED=2, and mine
+            rows.push({ id: String(x.id), state: st, stake: m.stake.toString(), opener: a === who, matchedAt: Number(m.matchedAt), timeout: timeout });
+          });
+          stakes = { rows: rows, now: now, at: Date.now() }; stakesRead = "ok";
+          if (!matchView) render();
+        });
+      });
+    }).catch(function () { if (gen !== stakesGen) return; stakesRead = "failed"; if (!matchView) render(); });
+  }
+  function nowSec() { return stakes ? stakes.now + Math.floor((Date.now() - stakes.at) / 1000) : Math.floor(Date.now() / 1000); }
+  function fmtLeft(sec) {
+    sec = Math.max(0, Math.floor(sec)); var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    return h > 0 ? h + "h " + m + "m" : (m > 0 ? m + "m" : "less than a minute");
+  }
+  // the result this browser holds for an escrow (matchclient files it under dy_mp_slip_<id>); null if none / settled
+  function storedResult(eid) {
+    try { var s = JSON.parse(window.localStorage.getItem("dy_mp_slip_" + eid) || "null"); return (s && !s.settled) ? s : null; } catch (e) { return null; }
+  }
+  // the panel's own lines (LOBBY_DESIGN amendment 2026-10-11, pinned)
+  function STAKE_OPEN(dyc, id) { return "Your " + dyc + " DYC table #" + id + " is waiting for an opponent."; }
+  function STAKE_WAIT(dyc, id, left) { return "Your " + dyc + " DYC is locked in match #" + id + ". Refund opens in " + left + "."; }
+  function STAKE_REFUNDABLE(id) { return "Match #" + id + " was never settled - either player can refund both stakes now."; }
+  function STAKE_LOST(id) { return "You lost match #" + id + " - the winner collects the pot."; }
+  function REFUND_TOO_EARLY(left) { return "Refund opens 24 hours after the match started - in " + left + "."; }
+  var CANCEL_BTN = "Cancel and refund";
+  var STAKES_HEAD = "Your stakes";
+  var STAKES_UNREAD = "Couldn't read your stakes from the chain";
+
+  function stakeRowHtml(r) {
+    var eid = r.id, dyc = dycOf(r.stake), act = stakeAct[eid] || {}, line, after = "", btn = "";
+    var b = function (kind, label, off) { return '<button class="hall-act hall-stake-act" data-stake-act="' + kind + '" data-eid="' + eid + '"' + (off || act.busy ? " disabled" : "") + '>' + (act.busy ? CONFIRM_WALLET : label) + '</button>'; };
+    if (r.state === 1) { line = STAKE_OPEN(dyc, eid); btn = r.opener ? b("cancel", CANCEL_BTN) : ""; }
+    else {
+      var res = storedResult(eid), left = r.matchedAt + r.timeout - nowSec();
+      var pot = BigInt(r.stake) * 2n, total = pot - pot * 5n / 100n;
+      if (res && res.result === 2) { line = DRAW_LINE; after = DRAW_NOW; btn = b("collect", REFUND_BTN); }
+      else if (res && res.youWon) { line = res.forfeit ? FORFEIT_LINE(dycOf(total)) : WON_LINE(dycOf(total), dycOf(pot * 5n / 100n)); after = WIN_WARNING; btn = b("collect", COLLECT_BTN(dycOf(total))); }
+      else if (res) { line = STAKE_LOST(eid); }                                   // a stored LOSS: never a refund
+      else if (left > 0) { line = STAKE_WAIT(dyc, eid, fmtLeft(left)); btn = b("refund", REFUND_BTN, true); }
+      else { line = STAKE_REFUNDABLE(eid); btn = b("refund", REFUND_BTN); }
+    }
+    var sc = settleStateFor(eid), err = act.error || (sc && sc.error) || "";
+    return '<div class="hall-stake" data-eid="' + eid + '"><div class="hall-settle-line">' + line + '</div>' +
+      (after ? '<div class="hall-settle-abort state-line">' + after + '</div>' : "") +
+      (btn ? '<div class="hall-settle-act">' + btn + '</div>' : "") +
+      (err ? '<div class="hall-settle-err state-line">' + err + '</div>' : "") + '</div>';
+  }
+  // on the home a row whose result already has its strip above is not drawn twice
+  function homeHasStrip(eid) { return lobbySlips().some(function (x) { return String(x.escrowMatchId) === String(eid); }); }
+  function stakesPanel(onGate) {
+    if (stakesRead === "failed") return '<div class="hall-stakes"><div class="hall-stakes-head">' + STAKES_HEAD + '</div><p class="state-line warn">' + STAKES_UNREAD + ' - <button class="hall-retry" data-act="stakes-retry">try again</button>.</p></div>';
+    if (!stakes || !stakes.rows.length) return "";
+    var rows = onGate ? stakes.rows : stakes.rows.filter(function (r) { return !homeHasStrip(r.id); });
+    if (!rows.length) return "";
+    return '<div class="hall-stakes"><div class="hall-stakes-head">' + STAKES_HEAD + '</div>' + rows.map(stakeRowHtml).join("") + '</div>';
+  }
+  function stakeAction(kind, eid) {
+    var row = stakes && stakes.rows.filter(function (x) { return x.id === String(eid); })[0];
+    if (!row || (stakeAct[eid] && stakeAct[eid].busy)) return Promise.resolve();
+    if (kind === "collect") { var res = storedResult(eid); return res && res.slip ? Promise.resolve(ceremonySettle(res.slip)) : Promise.resolve(); }
+    stakeAct[eid] = { busy: true, error: null }; render();
+    return signerRoad().then(function (r) {
+      var esc = escContract(r), id = BigInt(eid);
+      var fn = kind === "cancel" ? esc.cancelMatch : esc.abortMatch;
+      return fn.staticCall(id).then(function () {                                // the DRY RUN — refused here, nothing is sent
+        return feeOverrides().then(function (fee) { return fn(id, fee); });
+      }).then(function (tx) { return tx.wait(); }).then(function () {
+        if (kind === "cancel") { var t = tables.filter(function (x) { return String(x.escrowMatchId) === String(eid); })[0]; if (t && client) { try { client.close(t.id); } catch (e) {} } }
+        stakeAct[eid] = { busy: false, done: true }; readLiquidAgain(); return readMyStakes();
+      });
+    }).catch(function (e) {
+      var rv = revertOf(e), msg = ceremonyMsg(e);
+      if (rv && rv.name === "TimeoutNotReached") msg = REFUND_TOO_EARLY(fmtLeft(row.matchedAt + row.timeout - nowSec()));
+      stakeAct[eid] = { busy: false, error: msg }; render();
+    });
+  }
+  function wireStakes() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-stake-act]"), function (btn) {
+      if (btn.disabled) return;
+      btn.onclick = function () { stakeAction(btn.getAttribute("data-stake-act"), btn.getAttribute("data-eid")); };
+    });
+    var rt = document.querySelector('[data-act="stakes-retry"]'); if (rt) rt.onclick = function () { readMyStakes(); };
+  }
+  // a countdown row redraws itself (chain time moves on; the button opens at exactly 24h)
+  var stakesTick = setInterval(function () {
+    if (matchView || !stakes) return;
+    if (stakes.rows.some(function (r) { return r.state === 2 && !storedResult(r.id); })) render();
+  }, 30000);
+  if (stakesTick && stakesTick.unref) stakesTick.unref();
 
   // ── THE MATCH SCREEN (ported from wire.html; neutral hall-* hooks) ──
   function factionSigilSmall(f) { return f && FACTION_SIGIL[f] ? sigilImg(FACTION_SIGIL[f], "hall-sigil") : ""; }
@@ -1207,24 +1371,26 @@
 
   function settlementStrip(s) {
     if (!s) return "";
-    if (s.error) return '<div class="hall-settle warn"><div class="hall-settle-line">' + s.error + '</div><div class="hall-settle-abort state-line">' + ABORT_LINE + '</div></div>';
+    if (s.error) return '<div class="hall-settle warn"><div class="hall-settle-line">' + plainServer(s.error) + '</div></div>';
     if (s.stake == null) { // FREE (no stake) — result + the one ruled line
       return '<div class="hall-settle"><div class="hall-settle-line state-line">' + FREE_LINE + '</div></div>';
     }
     var stake = BigInt(s.stake), pot = stake * 2n, rake = pot * 5n / 100n, total = pot - rake;
     var ss = settleStateFor(s.escrowMatchId);   // S-HALL-SLIP-LIST-1 — THIS row's state, never the page's
     var settled = ss && ss.settled, casting = ss && ss.casting, castErr = ss && ss.error;
-    var line, showCast = false;
+    var line, showCast = false, after = "";
     if (settled) {
       line = (s.result === 2) ? DRAW_LINE : (s.youWon ? WON_SETTLED(dycOf(total)) : "This match is settled.");
-    } else if (s.result === 2) { line = DRAW_LINE; showCast = true; }
-    else if (s.youWon) { line = s.forfeit ? FORFEIT_LINE(dycOf(total)) : WON_LINE(dycOf(total), dycOf(rake)); showCast = true; }
-    else { line = "You lost this match - the winner collects the pot."; }
-    var cast = showCast ? '<div class="hall-settle-act"><button class="hall-act hall-settle-cast" data-settle="' + String(s.escrowMatchId) + '"' + (casting ? " disabled" : "") + '>' + (casting ? "casting…" : "CAST SETTLE") + '</button></div>' : "";
+    } else if (s.result === 2) { line = DRAW_LINE; showCast = true; after = DRAW_NOW; }
+    else if (s.youWon) { line = s.forfeit ? FORFEIT_LINE(dycOf(total)) : WON_LINE(dycOf(total), dycOf(rake)); showCast = true; after = WIN_WARNING; }
+    else { line = "You lost this match - the winner collects the pot."; }   // ruled: no refund is offered on a stored loss
+    var label = casting ? CONFIRM_WALLET : (s.result === 2 ? REFUND_BTN : COLLECT_BTN(dycOf(total)));
+    var cast = showCast ? '<div class="hall-settle-act"><button class="hall-act hall-settle-cast" data-settle="' + String(s.escrowMatchId) + '"' + (casting ? " disabled" : "") + '>' + label + '</button></div>' : "";
     var err = castErr ? '<div class="hall-settle-err state-line">' + castErr + '</div>' : "";
     return '<div class="hall-settle"><div class="hall-settle-line">' + line + '</div>' +
-      '<div class="hall-settle-abort state-line">' + ABORT_LINE + '</div>' + cast + err + '</div>';
+      (after ? '<div class="hall-settle-abort state-line">' + after + '</div>' : "") + cast + err + '</div>';
   }
+
 
   function outcomeLine(v) {
     return v.outcome.kind === "result"
@@ -1268,7 +1434,7 @@
         h += '<div class="state-line">targets for <b>' + pendingPlay.name + '</b>:</div>' + pendingPlay.options.map(function (o) { return '<button class="hall-tgt" data-idx="' + o.idx + '">' + o.n + '</button>'; }).join("") + ' <button class="hall-cancelplay" data-cancelplay="1">cancel</button>';
       } else {
         h += v.myHand.map(function (c) { return '<button class="hall-hand' + (c.playable ? " playable" : "") + '" data-i="' + c.i + '"' + (c.playable ? "" : " disabled") + '>' + c.n + ' <span class="state-line">' + (c.p || "") + '</span></button>'; }).join("");
-        h += '<div class="hall-controls-act"><button class="hall-act hall-pass" data-pass="1"' + (v.myTurn ? "" : " disabled") + '>Pass round</button> <button class="hall-concede" data-concede="1"' + (v.myTurn ? "" : " disabled") + '>Concede</button></div>';
+        h += '<div class="hall-controls-act"><button class="hall-act hall-pass" data-pass="1"' + (v.myTurn ? "" : " disabled") + '>Pass round</button></div>';
       }
       h += '</div>';
     }
@@ -1309,7 +1475,8 @@
     Array.prototype.forEach.call(document.querySelectorAll(".hall-tgt"), function (b) { b.onclick = function () { var i = pendingPlay.i, idx = Number(b.getAttribute("data-idx")); pendingPlay = null; client.play(i, idx); }; });
     var cp = document.querySelector("[data-cancelplay]"); if (cp) cp.onclick = function () { pendingPlay = null; renderMatchScreen(); };
     var ps = document.querySelector("[data-pass]"); if (ps && !ps.disabled) ps.onclick = function () { client.pass(); };
-    var cc = document.querySelector("[data-concede]"); if (cc && !cc.disabled) cc.onclick = function () { client.concede(); };
+    // SITE-AUDIT-1 batch 2 — no Concede button: the server plays "concede" as a Pass (design A1), so it only duplicated
+    //   "Pass round" while its name promised something else.
     var st = document.querySelector("[data-settle]"); if (st && !st.disabled) st.onclick = function () { var s = slipForMatch(v); if (s && s.slip) ceremonySettle(s.slip); }; // S-HALL-SLIP-SCOPE-1 — the match screen casts only its own match's slip
     var lv = document.querySelector("[data-leave]"); if (lv) lv.onclick = function () { leaveMatch(v); }; // S-HALL-SLIP-SCOPE-1 — only this match's own slip promotes on leave
   }
@@ -1600,10 +1767,10 @@
   function render() {
     var root = $("hall-root"); if (!root) return;
     if (!matchView) syncFrameHost();   // S-HALL-WIRE-1 — no match on screen, no frame (every road out: leave, lobby, re-key, wallet gone)
-    if (accessState === "init") { root.innerHTML = '<div class="hall-busy" role="status">reading the gate…</div>'; return; }
+    if (accessState === "init") { root.innerHTML = '<div class="hall-busy" role="status">Checking your Torana…</div>'; return; }
     if (accessState === "connect") { root.innerHTML = connectCard(); wireConnect(); return; }
-    if (accessState === "busy") { root.innerHTML = '<div class="hall-gate hall-busy" role="status">The gate is not answering right now — <button class="hall-retry" id="hall-retry">refresh to retry</button>.</div>'; wireRetry(); return; }
-    if (accessState === "gateless") { root.innerHTML = gateScreen(); return; }
+    if (accessState === "busy") { root.innerHTML = '<div class="hall-gate hall-busy" role="status">Couldn\'t check your Torana just now — <button class="hall-retry" id="hall-retry">refresh to retry</button>.</div>'; wireRetry(); return; }
+    if (accessState === "gateless") { root.innerHTML = gateScreen() + stakesPanel(true); wireGateSolo(); wireStakes(); return; }
     // accessState === "pass"
     if (matchView) { sheet = null; renderSheet(); renderMatchScreen(); return; } // L3 — a live match: the battle in the browser
     // the Hall (lobby). A settlement slip (resume-after-reload, or after leaving the over screen) rides on top — pre-settle
@@ -1624,8 +1791,8 @@
     //   while this one is up, so the two never coexist.
     var engineLine = engineNote ? '<div class="hall-empty-line state-line warn hall-engine-note">' + engineNote + '</div>' : "";
     var seatedLine = seatedElsewhere ? '<div class="hall-empty-line state-line hall-seated-elsewhere">' + SEATED_ELSEWHERE_LINE + '</div>' : "";
-    root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + engineLine + seatedLine + pendingSlip + rail() + doors() + floor();
-    wireHall();
+    root.innerHTML = header() + '<div class="hall-covenant state-line">EVERY SEAT HERE IS HUMAN.</div>' + engineLine + seatedLine + pendingSlip + stakesPanel(false) + rail() + doors() + floor();
+    wireHall(); wireStakes();
     // S-HALL-SLIP-LIST-1 — one wiring per row, each closed over ITS OWN slip. data-settle carries the escrow id, so
     //   N buttons never collide and a row's cast can only ever settle that row.
     Array.prototype.forEach.call(document.querySelectorAll(".hall-lobby-settle [data-settle]"), function (b) {
@@ -1665,16 +1832,28 @@
     //   (web3 services/match-server FP1), so the page and the server can never disagree. Ruled words.
     return '<div class="hall-gate">' +
       '<p class="hall-gate-line">Tables against other players need a Torana - solo play stays free.</p>' +
+      // SITE-AUDIT-1 batch 2 — the free road, from here: on Polygon straight into the game (the rite's own pass), on
+      //   any other network to the rite (which switches it first). No analytics here.
+      '<p class="hall-gate-line hall-gate-solo"><a id="hall-solo" href="../rite.html">Play solo (free) →</a></p>' +
       // S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 — THE SECOND DOOR, unchanged: the Torana can be BOUGHT.
       '<p class="hall-gate-line hall-gate-buy"><a href="../store.html#bundle">Or buy it now: a Torana and 500 DYC for USD 20.</a></p></div>';
   }
 
+  function wireGateSolo() {
+    var a = document.getElementById("hall-solo"); if (!a) return;
+    a.onclick = function (e) {
+      var st = window.DYWallet && window.DYWallet.state;
+      if (!(st && st.connected && st.chainOk)) return;                          // the link itself goes to the rite
+      e.preventDefault();
+      try { window.sessionStorage.setItem("dyw_pass", "1"); window.sessionStorage.removeItem("dyw_demo"); } catch (x) {}
+      return readStamp().then(function (v) { window.location.href = "../game/index.html" + (v ? "?v=" + v : ""); });
+    };
+  }
   function header() {
     var liq = liquid == null ? "—" : (liquid / DEC).toString() + " DYC";
     var lim;
     if (lossLimit && lossLimit.cap != null) {
-      var rem = (BigInt(lossLimit.remaining) / DEC).toString(), cap = (BigInt(lossLimit.cap) / DEC).toString();
-      lim = '<button class="hall-limit-set" data-act="limit-sheet">today: ' + rem + ' of ' + cap + ' DYC remaining</button>';
+      lim = '<button class="hall-limit-set" data-act="limit-sheet">today: ' + LIMIT_ROOM(lossLimit.remaining, lossLimit.cap) + '</button>';
     } else {
       lim = '<button class="hall-limit-invite" data-act="limit-sheet">set a daily limit</button>';
     }
@@ -1685,7 +1864,7 @@
     if (resumeNote) who += '<div class="hall-resume-note state-line">' + resumeNote + '</div>';
     if (accountNote && !signInNeeded) who += '<div class="hall-account-note state-line">' + accountNote + '</div>';   // S-HALL-ACCOUNT-1 (R2; the card carries it while it is up)
     return '<div class="hall-header">' +
-      '<div class="hall-liquid"><span class="hall-liquid-label">Liquid</span> <b>' + liq + '</b>' + who + '</div>' +
+      '<div class="hall-liquid"><span class="hall-liquid-label">Your DYC</span> <b>' + liq + '</b>' + who + '</div>' +
       '<div class="hall-limit">' + lim + '</div></div>';
   }
 
@@ -2043,6 +2222,9 @@
   window.DYHall = {
     TIERS: TIERS,
     _parseStake: parseStakeInput,   // SITE-AUDIT-1 — exposed for the stake-parsing proof
+    _stakes: function () { return { read: stakesRead, rows: stakes ? stakes.rows.slice() : null }; },   // batch 2 proofs
+    _stakeAction: stakeAction,
+    _readStakes: readMyStakes,
     _state: function () {
       return {
         accessState: accessState, feedState: feedState, selectedTier: selectedTier, tables: tables, me: me,

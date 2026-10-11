@@ -26,7 +26,7 @@ const grab = (re, what) => { const m = SRC.match(re); if (!m) throw new Error("h
 // ── lift the SHIPPED functions and run them; never a re-implementation ───────────────────────────────────────
 const DEC_SRC = grab(/var DEC = [^\n]*/, "DEC");
 const COPY_SRC = grab(/  var BALANCE_UNREAD[\s\S]*?var WRONG_CHAIN = [^\n]*/, "the ruled copy");
-const MSG_SRC = grab(/  function errText\(e\)[\s\S]*?return String\(m\)\.slice\(0, 140\);   \/\/ \(c\)[^\n]*\n  \}/, "ceremonyMsg");
+const MSG_SRC = grab(/  function errText\(e\)[\s\S]*?    return WALLET_FALLBACK;\n  \}/, "ceremonyMsg");   // SITE-AUDIT-1 batch 2: ends at the plain fallback
 const PRE_SRC = grab(/  function preflightLine\(\) \{[\s\S]*?\n  \}/, "preflightLine");
 const READ_SRC = grab(/  var HALL_READ_FALLBACKS = [\s\S]*?function readRpcUrls\(\) \{[\s\S]*?\n  \}/, "readRpcUrls");
 const LIQ_SRC = grab(/  function readLiquid\(ethers\) \{[\s\S]*?\n  \}/, "readLiquid");
@@ -64,8 +64,15 @@ const E_OTHER = { message: "could not coalesce error" };
   ok("A6 · the wrong-network refusal passes through as its own plain sentence",
      B.ceremonyMsg(Object.assign(new Error(B.WRONG_CHAIN), { wrongChain: true })) === B.WRONG_CHAIN);
   ok("A7 · a declined prompt is still a declined prompt", B.ceremonyMsg(E_REJECT) === "you declined the wallet prompt");
-  ok("A8 · everything else passes through UNCOLLAPSED — never dressed as money",
-     B.ceremonyMsg(E_OTHER) === "could not coalesce error", B.ceremonyMsg(E_OTHER));
+  // SITE-AUDIT-1 batch 2 (ruled 2026-10-11) — the escrow's own errors come out in the ruled plain sentences
+  const rvE = (name) => ({ code: "CALL_EXCEPTION", shortMessage: "execution reverted", revert: { name: name, args: [] } });
+  ok("A10 · the escrow's errors read as plain sentences (never a raw error name)",
+     B.ceremonyMsg(rvE("NotOpen")) === "this table is no longer open" && B.ceremonyMsg(rvE("NotMatched")) === "this match is already settled or refunded" &&
+     B.ceremonyMsg(rvE("TimeoutNotReached")) === "refund opens 24 hours after the match started" && B.ceremonyMsg(rvE("NotOpener")) === "only the player who opened this table can cancel it" &&
+     B.ceremonyMsg(rvE("SomethingNew")) === "the wallet step didn't go through - nothing moved; try again", B.ceremonyMsg(rvE("NotOpen")));
+  // SITE-AUDIT-1 batch 2 (ruled 2026-10-11) — the raw pass-through became ONE plain fallback (still never money words)
+  ok("A8 · anything unrecognised gets the plain fallback — never raw library text, never dressed as money",
+     B.ceremonyMsg(E_OTHER) === "the wallet step didn't go through - nothing moved; try again", B.ceremonyMsg(E_OTHER));
   ok("A9 · with the fee unread the POL sentence still tells the truth, without inventing a figure",
      !/~/.test(boot({ feeHint: null }).ceremonyMsg(E_ETHERS_GAS)) && POL.test(boot({ feeHint: null }).ceremonyMsg(E_ETHERS_GAS)),
      boot({ feeHint: null }).ceremonyMsg(E_ETHERS_GAS));
@@ -113,8 +120,8 @@ const E_OTHER = { message: "could not coalesce error" };
   ok("C3 · and the row stays ACTIONABLE — no aria-disabled, and it carries the retry hook",
      !/aria-disabled/.test(unread) && /data-liquid-retry="1"/.test(unread), unread.slice(0, 200));
   ok("C4 · a balance we READ and that is short still says insufficient, and still disables",
-     /insufficient liquid DYC/.test(poor) && /aria-disabled/.test(poor), poor.slice(0, 160));
-  ok("C5 · a wallet that can afford it is offered the table", !/insufficient/i.test(rich) && !/aria-disabled/.test(rich));
+     /not enough DYC/.test(poor) && /aria-disabled/.test(poor), poor.slice(0, 160));   // SITE-AUDIT-1 batch 2 wording
+  ok("C5 · a wallet that can afford it is offered the table", !/insufficient|not enough DYC/i.test(rich) && !/aria-disabled/.test(rich));
   // MUTANT — collapse unknown back into short and C1/C3 go red
   const collapsed = rowSrc.replace("var unread = !isFree && balanceUnread();", "var unread = false;");
   const mut = new Function("CFG", "liquid", "stakeWei", [DEC_SRC, DYCOF, COPY_SRC,
@@ -123,7 +130,7 @@ const E_OTHER = { message: "could not coalesce error" };
     'var rows="", sheet={ctx:{}}, t={id:"bronze",stake:stakeWei,usd:"$0.10",medallion:"m",cls:"c",label:"BRONZE"};',
     'function medallionImg(){ return ""; }', collapsed, "return rows;"].join("\n"))({ chain: {} }, null, STAKE);
   ok("C6 · MUTANT — treat an unknown balance as a short one and the unread row goes red",
-     /insufficient liquid DYC/.test(mut) && /aria-disabled/.test(mut));
+     /not enough DYC/.test(mut) && /aria-disabled/.test(mut));
 }
 
 // ═══ D. THE CAST IS CHAIN-GUARDED ═══
@@ -182,9 +189,9 @@ const E_OTHER = { message: "could not coalesce error" };
     ok("F1 · both numbers known — both shown", /500 DYC/.test(both) && /~0\.069 POL/.test(both), both);
     ok("F2 · neither known — two sentinels, and no digit anywhere", /—/.test(neither) && !/\d/.test(neither.replace(/<[^>]+>/g, "")), neither);
     ok("F3 · one known — the unknown one is still a sentinel, never a stale or invented figure",
-       /Liquid DYC: <b>—<\/b>/.test(halfKnown) && /~0\.069 POL/.test(halfKnown), halfKnown);
+       /Your DYC: <b>—<\/b>/.test(halfKnown) && /~0\.069 POL/.test(halfKnown), halfKnown);
     ok("F4 · a zero balance is a READ zero and prints as one (the sentinel means unknown, not empty)",
-       /Liquid DYC: <b>0 DYC<\/b>/.test(boot({ liquid: 0n }).preflightLine()));
+       /Your DYC: <b>0 DYC<\/b>/.test(boot({ liquid: 0n }).preflightLine()));
 
     console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));
     if (fail) process.exitCode = 1;

@@ -30,7 +30,7 @@ const ESCA = ["function matches(uint256) view returns (address,address,uint256,u
 
 // the ruled lines this suite reads out of the DOM (docs/LOBBY_DESIGN.md §11 → hall.js, verbatim)
 const LOST_LINE = "You lost this match - the winner collects the pot.";
-const DRAW_LINE = "A draw - both stakes return in full.";
+const DRAW_LINE = "A draw - both stakes return in full once either player collects the refund.";   // SITE-AUDIT-1 batch 2 (ruled)
 const net = (stakeWei) => { const pot = BigInt(stakeWei) * 2n, rake = pot * 5n / 100n; return { total: (pot - rake) / DEC, fee: rake / DEC }; };
 const wonLine = (stakeWei) => { const n2 = net(stakeWei); return "You won. Collect " + n2.total + " DYC - " + n2.fee + " to the treasury."; };
 const settledLine = (stakeWei) => "settled - " + net(stakeWei).total + " DYC in your wallet";
@@ -382,8 +382,11 @@ async function main() {
        !!m7.A.w.document.querySelector(".hall-frame-settle [data-settle]"), f.slice(0, 160));
     H.teardown(m7.A); H.teardown(m7.B);
   }
-  ok("P5c · every variant above the frame comes from the text battle's OWN settlementStrip — re-homed, not re-written (§11 untouched)",
-     NOW_HALL.indexOf('settlementStrip(slipForMatch(v)) +') >= 0 && fn(HEAD_HALL, "settlementStrip") === fn(NOW_HALL, "settlementStrip"));
+  // SITE-AUDIT-1 batch 2 re-ruled the strip's words (LOBBY_DESIGN amendment 2026-10-11), so the pre-K5 byte pin no
+  //   longer applies; the law it guarded still does: the frame RE-HOMES the one strip, it never grows a second one.
+  ok("P5c · every variant above the frame comes from the text battle's OWN settlementStrip — re-homed, not re-written",
+     NOW_HALL.indexOf('settlementStrip(slipForMatch(v)) +') >= 0 && (NOW_HALL.match(/function settlementStrip\(/g) || []).length === 1 &&
+     fn(NOW_HALL, "settlementStrip").indexOf("WIN_WARNING") >= 0 && fn(NOW_HALL, "settlementStrip").indexOf("DRAW_NOW") >= 0);
 
   clearTimeout(WATCHDOG);
   servers.forEach((s) => { try { s.srv.close(); } catch (e) {} });

@@ -124,7 +124,7 @@ async function main() {
     if (cancelBtn) { cancelBtn.click(); await H.sleep(200); const d = w.document.querySelector("[data-cancel-do]"); if (d) d.click(); }
     await H.until(() => st().liquid == null, 40000, "the busy sentinel");
     ok("P3 · a DEAD RPC on the re-read → the busy idiom, never a stale number", st().liquid == null);
-    ok("P3 · and the header renders the sentinel, not the old figure", /Liquid —/.test(body(w)), body(w).slice(0, 90));
+    ok("P3 · and the header renders the sentinel, not the old figure", /Your DYC —/.test(body(w)), body(w).slice(0, 90));
     H.teardown(w); B.srv.close();
   }
 

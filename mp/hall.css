@@ -513,6 +513,12 @@ body > * { position: relative; z-index: 1; }
 
 /* ══ SCREEN 8 — THE SETTLEMENT STRIP ══ big / line / quiet, and D8's cast as the primary plate. */
 .hall-settle, .hall-lobby-settle { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+/* SITE-AUDIT-1 batch 2 — "Your stakes": the escrows you are in, read from the chain (home + gate screen) */
+.hall-stakes { padding: 14px 16px; margin: 10px 0; display: flex; flex-direction: column; gap: 12px; border: 1px solid rgba(201, 162, 74, .28); }
+.hall-stakes-head { font-family: Cinzel, serif; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--hi); }
+.hall-stake { display: flex; flex-direction: column; gap: 6px; }
+.hall-stake + .hall-stake { border-top: 1px solid rgba(201, 162, 74, .14); padding-top: 10px; }
+.hall-gate-solo a { color: var(--hi); }
 /* The strip's first line IS the ruled money sentence — hall.js emits no separate title element, so it is
    lifted by WEIGHT and INK only. It is never transformed: an uppercased ruled sentence is not the ruled
    sentence, and copyproof + p7dom read these words through doc, code and DOM alike. */

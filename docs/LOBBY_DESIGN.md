@@ -507,3 +507,110 @@ with its own ruled settlement line and its own cast. A cast on one row
 settles that row alone; the list re-renders one shorter and the header
 disappears at exactly one. Inside a live match nothing changes: only a
 slip whose matchId is THAT match renders there (S-HALL-SLIP-SCOPE-1).
+
+=====================================================
+## AMENDMENT 2026-10-11 (SITE-AUDIT-1 batch 2) - THE REFUND IS A BUTTON; PLAIN WORDS
+=====================================================
+Owner-ruled 2026-10-11 on the SITE-AUDIT-1 audit. Two facts drove it:
+(1) StakeEscrow's abortMatch is a CALL someone makes - nothing refunds
+"automatically"; anyone may make it once 24 hours have passed since the
+JOIN (matchedAt), on a MATCHED match, refunding both stakes; (2) the
+contract cannot tell a decided-but-uncollected match from an undecided
+one, so after 24 hours a decided pot can be refunded instead of paid.
+Every line below replaces the one quoted before it (section 11 above
+stands as the record of what it said).
+
+THE COMMITMENT (5) - opener sheets. Was: "Your [50] DYC locks in escrow
+now. It returns in full if you cancel before anyone sits, or on a draw.
+The winner takes the pot minus the 5% platform fee. If a finished match
+is somehow never settled, the chain refunds both players automatically
+after 24 hours - locked stakes can never be stranded." Now:
+
+  "Your [50] DYC locks in escrow now. It returns in full if you cancel before anyone sits, or on a draw. The winner takes the pot minus the 5% platform fee. If a match is never settled, either player can refund both stakes here, 24 hours after it started - locked stakes can never be stranded."
+
+THE COMMITMENT - joiner sheets (NEW: a joiner cannot cancel; their lock
+starts the match):
+
+  "Your [50] DYC locks in escrow and the match begins. A draw returns it in full. The winner takes the pot minus the 5% platform fee. If a match is never settled, either player can refund both stakes here, 24 hours after it started."
+
+THE RESULT STRIP (8c). The draw line, was "A draw - both stakes return in
+full.", now:
+
+  "A draw - both stakes return in full once either player collects the refund."
+
+The abort line, was "unclaimed pots refund both players automatically
+after 24 hours.", is RETIRED and replaced per result:
+
+  WIN:  "Collect within 24 hours of the match start - after that, either player can refund both stakes instead."
+  DRAW: "Either player can collect the refund now."
+  LOSS: no line, and NO refund is ever offered on a stored loss.
+  ERROR (the result could not be signed): "The result could not be confirmed. 24 hours after the match started, either player can refund both stakes here."
+
+THE ACT (8c, was "CAST SETTLE" / "casting..."): a win reads "COLLECT [95]
+DYC", a draw "REFUND BOTH STAKES", and while the wallet is open "confirm
+in your wallet...".
+
+YOUR STAKES (NEW) - every escrow the player is in that is still OPEN or
+MATCHED, read from the CHAIN (no server, no event logs, no local
+storage), on the Hall home AND the non-holder gate screen. Its lines:
+
+  "Your stakes"
+  "Your [10] DYC table #[27] is waiting for an opponent."   [Cancel and refund] - the opener only
+  "Your [10] DYC is locked in match #[31]. Refund opens in [3h 10m]."   [REFUND BOTH STAKES], disabled until 24h
+  "Match #[31] was never settled - either player can refund both stakes now."   [REFUND BOTH STAKES]
+  "You lost match #[31] - the winner collects the pot."   (no button)
+  "Refund opens 24 hours after the match started - in [3h 10m]."   (a refund tried early, refused by the dry run)
+  "Couldn't read your stakes from the chain"
+
+A stored win or draw shows the result strip's own lines and act. Every
+action is DRY-RUN first (a doomed call never reaches the wallet).
+
+THE RESUMED JOIN (was "a seat you started is no longer joinable - your
+stake is refundable on chain."), now split by what the escrow says:
+
+  "a seat you started was taken or closed - nothing was locked, your DYC is still in your wallet."
+  "that match has already finished - check your wallet."
+
+THE DAILY LIMIT (9). The words now follow the server's ledger exactly
+(the UTC day; NET - earlier wins offset losses; friend challenges
+included; blocked when a stake would PASS the limit). The setting text,
+was "Once your net losses today reach this, the staked tables close for
+you until midnight UTC. Free tables and friend practice stay open. Only
+you can set or change this.", now:
+
+  "Staked tables (friend challenges included) close for you whenever a stake would take today's net losses past this limit. Wins earlier in the day count against losses. The day resets at midnight UTC. Free tables stay open. Only you can set or change this."
+
+The block, was "Your daily limit is reached - the staked tables reopen at
+midnight UTC. Remaining headroom today: [X] DYC.", now:
+
+  "This stake would take you past your daily limit - you can still lose [X] DYC today. It resets at midnight UTC."
+
+The room left (header + sheet): "[X] of [Y] DYC left before your limit".
+
+PLAIN WORDS. Header "Liquid" -> "Your DYC" (the pre-flight "Your DYC:");
+the tier note "insufficient liquid DYC" -> "not enough DYC"; "reading the
+gate..." -> "Checking your Torana..."; "The gate is not answering right
+now" -> "Couldn't check your Torana just now". The escrow's errors in
+plain words: "this table is no longer open" (NotOpen), "you can't join
+your own table" (SelfMatch), "this private table is for another wallet"
+(NotExpectedOpponent), "that stake isn't allowed" (BadStake), "refund
+opens 24 hours after the match started" (TimeoutNotReached), "this match
+is already settled or refunded" (NotMatched), "only the player who opened
+this table can cancel it" (NotOpener); anything else: "the wallet step
+didn't go through - nothing moved; try again". The match server's own
+words are translated in the Hall: a result it could not sign reads the
+ERROR line above; "the referee cannot read the chain" reads "The table
+server couldn't check the chain - try again in a moment."
+
+THE GATE SCREEN gains the free road (FREE-PLAY-1's screen, amended):
+
+  "Play solo (free) →"
+
+On Polygon it carries the rite's own pass straight into the game; on any
+other network it goes to the rite, which switches the network first. No
+analytics on the Hall.
+
+CONCEDE is REMOVED: the match server plays "concede" as a Pass (MULTI-
+PLAYER_DESIGN A1), so the button only duplicated "Pass round" while its
+name promised more.
+

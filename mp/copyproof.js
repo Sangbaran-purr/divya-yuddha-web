@@ -54,14 +54,28 @@ function inDoc(line) { return norm(DOC).indexOf(norm(line)) >= 0; }
 // ── THE LAW: section 11's enumerated set, each line quoted from the doc it is ruled in.
 const LAW = [
   ["2b covenant",        "EVERY SEAT HERE IS HUMAN."],
-  ["5 commitment",       "Your [50] DYC locks in escrow now. It returns in full if you cancel before anyone sits, or on a draw. The winner takes the pot minus the 5% platform fee. If a finished match is somehow never settled, the chain refunds both players automatically after 24 hours - locked stakes can never be stranded."],
+  // SITE-AUDIT-1 batch 2 (LOBBY_DESIGN amendment 2026-10-11) — the refund is a BUTTON, never "automatic"
+  ["5 commitment",       "Your [50] DYC locks in escrow now. It returns in full if you cancel before anyone sits, or on a draw. The winner takes the pot minus the 5% platform fee. If a match is never settled, either player can refund both stakes here, 24 hours after it started - locked stakes can never be stranded."],
+  ["5 commitment joiner", "Your [50] DYC locks in escrow and the match begins. A draw returns it in full. The winner takes the pot minus the 5% platform fee. If a match is never settled, either player can refund both stakes here, 24 hours after it started."],
   ["6 both-stakes",      "Once both stakes lock, the match begins."],
   ["7 friend-lock",      "private table - visible only by this code, and only [0xFRIEND...] can take the seat."],
   ["8c won",             "You won. Collect [95] DYC - [5] to the treasury."],
   ["8c settled",         "settled - [95] DYC in your wallet"],
-  ["8c draw",            "A draw - both stakes return in full."],
+  ["8c draw",            "A draw - both stakes return in full once either player collects the refund."],
   ["8c forfeit",         "Your opponent left the table. The pot is yours - collect [95] DYC."],
-  ["8c abort",           "unclaimed pots refund both players automatically after 24 hours."],
+  ["8c win warning",     "Collect within 24 hours of the match start - after that, either player can refund both stakes instead."],
+  ["8c draw now",        "Either player can collect the refund now."],
+  ["8c unconfirmed",     "The result could not be confirmed. 24 hours after the match started, either player can refund both stakes here."],
+  ["stakes head",        "Your stakes"],
+  ["stakes open",        "Your [10] DYC table #[27] is waiting for an opponent."],
+  ["stakes wait",        "Your [10] DYC is locked in match #[31]. Refund opens in [3h 10m]."],
+  ["stakes refundable",  "Match #[31] was never settled - either player can refund both stakes now."],
+  ["stakes lost",        "You lost match #[31] - the winner collects the pot."],
+  ["stakes too early",   "Refund opens 24 hours after the match started - in [3h 10m]."],
+  ["stakes unread",      "Couldn't read your stakes from the chain"],
+  ["resume nothing locked", "a seat you started was taken or closed - nothing was locked, your DYC is still in your wallet."],
+  ["resume finished",    "that match has already finished - check your wallet."],
+  ["gate solo",          "Play solo (free) →"],
   ["8c free",            "no stakes at this table"],
   ["8d unopened table",  "Your [10] DYC is locked in escrow, but the table has not opened yet."],
   ["cancel moved-on",    "this table is no longer cancellable - the match has moved on"],
@@ -69,8 +83,8 @@ const LAW = [
   ["cross-account",      "this was prepared for another account - switch back to [0xA...] to finish it"],
   ["seated elsewhere",   "Your warrior is already seated - the battle is live in another window."],
   ["unsettled pots",     "You have [N] unsettled pots waiting - each one can be collected here."],
-  ["9 limit set",        "Once your net losses today reach this, the staked tables close for you until midnight UTC. Free tables and friend practice stay open. Only you can set or change this."],
-  ["9 limit block",      "Your daily limit is reached - the staked tables reopen at midnight UTC. Remaining headroom today: [X] DYC."],
+  ["9 limit set",        "Staked tables (friend challenges included) close for you whenever a stake would take today's net losses past this limit. Wins earlier in the day count against losses. The day resets at midnight UTC. Free tables stay open. Only you can set or change this."],
+  ["9 limit block",      "This stake would take you past your daily limit - you can still lose [X] DYC today. It resets at midnight UTC."],
 ];
 console.log("── THE LAW · section 11 enumerated ruled copy (doc → code) ──");
 for (const [tag, line] of LAW) {
@@ -308,7 +322,7 @@ ok("FP12 · the rite's Enter for a non-holder reads 'play solo — free', and th
 ok("FP13 · the demo's button reads 'Play free' and goes to the rite", /<a class="demo-cta" href="\.\.\/rite\.html">Play free<\/a>/.test(DEMO) &&
    norm(RULINGS).indexOf('"Play free"') >= 0);
 ok("FP14 · the Hall's gate screen is the new line + the second door, and the retired button is gone",
-   /hall-gate-line">Tables against other players need a Torana - solo play stays free\.<\/p>' \+\s*\/\/[^\n]*\n\s*'<p class="hall-gate-line hall-gate-buy"><a href="\.\.\/store\.html#bundle">/.test(HALL) &&
+   /hall-gate-line">Tables against other players need a Torana - solo play stays free\.<\/p>' \+[\s\S]{0,400}?<a id="hall-solo" href="\.\.\/rite\.html">Play solo \(free\) →<\/a><\/p>' \+[\s\S]{0,300}?'<p class="hall-gate-line hall-gate-buy"><a href="\.\.\/store\.html#bundle">/.test(HALL) &&
    HALL.indexOf("To the presale — the Torana follows") < 0);
 ok("FP15 · RETIRED words survive on no page: the bearer-only lines, the claim-only Torana line, 'Get Access', the Phase-B clause",
    [["The door opens only for bearers", INDEX], ["The gate opens only for bearers", INDEX], ["The game is built into this gate", INDEX],
@@ -353,6 +367,32 @@ console.log("\n── SITE-AUDIT-1 · the false statements stay gone (every play
   ok("SA4 · the dashboard's Buy DYC link goes to the Buy panel (the presale is open — never 'Coming soon')",
      /<a href="#buy-panel"><svg[^>]*>[\s\S]*?<\/svg>Buy DYC<\/a>/.test(DASH_HTML) && !/data-soon[^>]*>[\s\S]{0,400}?Buy DYC/.test(DASH_HTML));
 }
+
+// ═══ SITE-AUDIT-1 batch 2 (LOBBY_DESIGN amendment 2026-10-11) — the Hall's plain words, structurally ═══
+console.log("\n── SITE-AUDIT-1 batch 2 · the Hall's plain words ──");
+ok("SB1 · the amendment is recorded", /AMENDMENT 2026-10-11 \(SITE-AUDIT-1 batch 2\) - THE REFUND IS A BUTTON; PLAIN WORDS/.test(DOC));
+ok("SB2 · nothing on the Hall promises an AUTOMATIC refund any more", !/refund[^"\n]{0,40}automatically|automatically after 24/.test(HALL.replace(/\/\/[^\n]*/g, "")));
+ok("SB3 · the header and pre-flight say 'Your DYC', the tier note 'not enough DYC' (no 'Liquid' / 'insufficient liquid DYC' left)",
+   /hall-liquid-label">Your DYC</.test(HALL) && /Your DYC: <b>/.test(HALL) && /hall-tier-note">not enough DYC</.test(HALL) &&
+   !/>Liquid</.test(HALL) && !/Liquid DYC:/.test(HALL) && !/hall-tier-note">insufficient liquid DYC/.test(HALL));
+ok("SB4 · the gate's busy and reading lines name the Torana check in plain words",
+   HALL.indexOf("Checking your Torana…") >= 0 && HALL.indexOf("Couldn\\'t check your Torana just now") >= 0 &&
+   HALL.indexOf("reading the gate…") < 0 && HALL.indexOf("The gate is not answering") < 0);
+ok("SB5 · the escrow's errors map to the ruled plain sentences, and anything else to the one fallback",
+   ["NotOpen: \"this table is no longer open\"", "SelfMatch: \"you can't join your own table\"", "NotExpectedOpponent: \"this private table is for another wallet\"",
+    "BadStake: \"that stake isn't allowed\"", "TimeoutNotReached: \"refund opens 24 hours after the match started\"",
+    "NotMatched: \"this match is already settled or refunded\"", "NotOpener: \"only the player who opened this table can cancel it\""].every((l) => HALL.indexOf(l) >= 0) &&
+   HALL.indexOf('var WALLET_FALLBACK = "the wallet step didn\'t go through - nothing moved; try again";') >= 0 && HALL.indexOf('"the cast failed"') < 0);
+ok("SB6 · the match server's words are translated in the Hall (unsigned result → the ruled line; chain read → plain)",
+   /function plainServer\(t\)[\s\S]{0,300}referee could not sign[\s\S]{0,80}RESULT_UNCONFIRMED[\s\S]{0,200}The table server couldn't check the chain - try again in a moment\./.test(HALL) &&
+   /lastServerError = plainServer\(v\.lastReject\)/.test(HALL) && /plainServer\(s\.error\)/.test(HALL));
+ok("SB7 · the act reads COLLECT [N] DYC / REFUND BOTH STAKES / confirm in your wallet… (no CAST SETTLE, no casting…)",
+   /var COLLECT_BTN = function \(total\) \{ return "COLLECT " \+ total \+ " DYC"; \};/.test(HALL) && /var REFUND_BTN = "REFUND BOTH STAKES";/.test(HALL) &&
+   /var CONFIRM_WALLET = "confirm in your wallet…";/.test(HALL) && HALL.indexOf('"CAST SETTLE"') < 0 && HALL.indexOf('"casting…"') < 0);
+ok("SB8 · Concede is gone (the server plays it as a Pass)", !/data-concede|hall-concede|client\.concede\(/.test(HALL));
+ok("SB9 · the room-left line follows the ledger ('left before your limit'), never 'remaining headroom'",
+   /function LIMIT_ROOM\(remWei, capWei\) \{ return dycOf\(remWei\) \+ " of " \+ dycOf\(capWei\) \+ " DYC left before your limit"; \}/.test(HALL) &&
+   HALL.indexOf("Remaining headroom") < 0 && !/DYC remaining/.test(HALL));
 
 console.log("\n── advisory · other quoted doc lines (not section-11 ruled copy) ──");
 const lawSet = new Set(LAW.map(([, l]) => norm(l)));
