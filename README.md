@@ -20,10 +20,13 @@ and the treasury hall of owned cards. It **never touches the game repo's
   `onlyMinter`. A later authorized-minter module opens it).
 - `treasury.html` — **The Treasury** (owned WaveCardNFT cards on plinths; empty
   hall until cards are held; per-token Polygonscan links).
-- `game/` — **The gated game copy** (S2). A copy of the built game behind the
-  honest-door Access check. A holder's ENTER on the rite sets a session pass and
-  the §8.4 door-wipe carries them in; a passless deep-link to `game/` bounces to
-  the rite. Not DRM — the game is free elsewhere by design.
+- `game/` — **The game copy** (S2). A copy of the built game behind the
+  honest-door session check. **FREE-PLAY-1 (2026-10-11): solo play is free** — any
+  wallet connected on Polygon takes ENTER on the rite (a holder's, or a non-holder's
+  "play solo — free"), which sets the session pass, and the §8.4 door-wipe carries
+  them in; a passless deep-link to `game/` bounces to the rite to connect. The
+  Torana unlocks MULTIPLAYER: the Hall's page gate plus the match server's own
+  Torana check at sign-in (web3 FP1). Not DRM — the game is free elsewhere too.
 
 ## Updating the gated game
 
@@ -50,7 +53,7 @@ and records provenance in `game/SNAPSHOT.md`. What it does:
   streams from there and fails open to the landing if unavailable.
 - **Gate preamble** (between `DYW-GATE-START`/`END` markers, replaced cleanly on
   re-sync): an honest-door session check that redirects passless visitors to
-  `../rite.html`; a `localStorage` namespace shim (prefix `dyw::`) so the copy
+  `../rite.html` (where any wallet connected on Polygon gets the pass — FREE-PLAY-1); a `localStorage` namespace shim (prefix `dyw::`) so the copy
   keeps its own memory, isolated from the free game (both share the
   `sangbaran-purr.github.io` origin, which otherwise shares `localStorage`); and
   the return-to-gate gem-mark. **No wallet code lives in the game copy** — the

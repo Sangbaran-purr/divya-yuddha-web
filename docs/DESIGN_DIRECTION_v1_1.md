@@ -403,3 +403,19 @@ F. STATUES + RELIEFS: the master's guardian statues and carved
    (crest on stone ground, card-frame corner language, no
    rarity rung). Needed before the claim flow's visual is
    final; not needed for S1 scaffolding.
+
+═══════════════════════════════════════════
+## 14. NOTE 2026-10-11 — FREE-PLAY-1 (owner ruling)
+═══════════════════════════════════════════
+The game is FREE TO PLAY SOLO for any wallet connected on Polygon;
+the Torana (the Access NFT) unlocks MULTIPLAYER — every Hall table,
+free and staked (docs/RULINGS_2026-08-27.md, amendment 2026-10-11).
+The metaphor stands; its meaning moves:
+- §1 "the Access NFT is the rite that admits you; the game lies
+  through the door" now reads: the WALLET declares you and admits
+  you to the game; the Torana admits you to the HALL.
+- §7 "ENTER (sub: the door opens for bearers)" now reads: ENTER
+  (sub: play solo — free) for a connected non-holder, and the
+  holder's "the hall of war" as before.
+- §13.A "the DOOR opens only for bearers" now reads: the war is
+  visible to all; solo play is free; the Torana opens the Hall.

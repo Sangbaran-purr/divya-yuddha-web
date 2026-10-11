@@ -37,7 +37,7 @@ async function main() {
       MATCH_RPC_URL: RPC, STAKE_ESCROW_ADDRESS: escAddr, DYC_ADDRESS: dycAddr, STAKING_ENABLED: true,
       DARK_PAGE_ENABLED: false, FRIEND_TABLES_WITHHELD: false, KEEPALIVE_MS: 25000, THINK_MS: 120000, THINK_WARN_MS: 90000, VANISH_MS: 3000 };
     const logs = []; const srv = makeServer(cfg); const lobby = makeLobby(cfg.TIERS);
-    makeHub(srv, cfg, lobby, (m) => logs.push(String(m)), { E: loadGuardedEngine().engine, rng, createRoom, store: makeMatchStore({ file: "/tmp/acct.jsonl" }), escrow: makeEscrowReader({ rpcUrl: RPC, escrowAddress: escAddr }) });
+    makeHub(srv, cfg, lobby, (m) => logs.push(String(m)), { E: loadGuardedEngine().engine, rng, createRoom, access: require(path.join(MS, "test/accessstub")).HOLDER_STUB,   /* FREE-PLAY-1: the hub fails closed without a gate; every address holds a Torana here */ store: makeMatchStore({ file: "/tmp/acct.jsonl" }), escrow: makeEscrowReader({ rpcUrl: RPC, escrowAddress: escAddr }) });
     return { cfg, srv, lobby, logs };
   }
   async function listen(b) { await new Promise((r) => b.srv.listen(0, r)); b.url = "ws://127.0.0.1:" + b.srv.address().port; return b; }

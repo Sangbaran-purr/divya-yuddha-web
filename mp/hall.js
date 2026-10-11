@@ -1638,18 +1638,35 @@
     // never rebuilds it (which would wipe a half-typed input). renderSheet() is called only on sheet-state changes.
   }
 
+  // FREE-PLAY-1 (rung 2) — NO WALLET AT ALL gets the rite's own guidance (js/wallet.js concludes absence after its
+  //   detection window), never a Connect button that silently does nothing. The three cases and their words are the
+  //   rite's, verbatim: a wallet's in-app browser that isn't answering, a mobile browser (deep link into MetaMask),
+  //   and a desktop with no wallet (install). Retry re-runs detection.
+  function noWalletGuide() {
+    var W = window.DYWallet, st = W && W.state;
+    if (!st || st.hasProvider || !st.absenceConcluded) return null;
+    if (st.inApp) return "Wallet not responding — pull down to refresh this tab, then Retry.";
+    if (st.isMobile) return 'No wallet in this browser. <a href="' + W.mmDeepLink("mp/hall.html") + '">Open in MetaMask →</a>';
+    return 'You carry no key. <a href="https://metamask.io/download/" target="_blank" rel="noopener">Forge one</a> — install a wallet, then Retry.';
+  }
   function connectCard() {
+    var guide = noWalletGuide();
+    if (guide) {
+      return '<div class="hall-gate hall-connect hall-nowallet"><p>Connect your wallet to enter the Hall.</p>' +
+        '<p class="hall-gate-line hall-nowallet-guide">' + guide + '</p>' +
+        '<button class="hall-act" id="hall-connect" data-retry="1">Retry</button></div>';
+    }
     return '<div class="hall-gate hall-connect"><p>Connect your wallet to enter the Hall.</p>' +
       '<button class="hall-act" id="hall-connect">Connect wallet</button></div>';
   }
   function gateScreen() {
-    // S-GATE-1 (G4): the ruled door line, verbatim (docs/RULINGS_2026-08-27.md rule 3). The line ONLY; the rite door is the way in.
+    // FREE-PLAY-1 (RULINGS_2026-08-27 amendment 2026-10-11): solo play is free; a wallet without a Torana stops here,
+    //   told plainly what the Torana unlocks and where to get one. The same sentence the match server answers with
+    //   (web3 services/match-server FP1), so the page and the server can never disagree. Ruled words.
     return '<div class="hall-gate">' +
-      '<p class="hall-gate-line">The Torana opens this door. It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage.</p>' +
-      // S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 — THE SECOND DOOR. Rule 3's sentence above is unchanged;
-      //   the Torana can now also be BOUGHT (PlayStore, live 2026-09-12), so the gate names both roads. Ruled words.
-      '<p class="hall-gate-line hall-gate-buy"><a href="../store.html#bundle">Or buy it now: a Torana and 500 DYC for USD 20.</a></p>' +
-      '<a class="hall-act hall-gate-door" href="../rite.html">To the presale — the Torana follows</a></div>';
+      '<p class="hall-gate-line">Tables against other players need a Torana - solo play stays free.</p>' +
+      // S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 — THE SECOND DOOR, unchanged: the Torana can be BOUGHT.
+      '<p class="hall-gate-line hall-gate-buy"><a href="../store.html#bundle">Or buy it now: a Torana and 500 DYC for USD 20.</a></p></div>';
   }
 
   function header() {
@@ -1770,7 +1787,10 @@
   }
 
   // ── WIRING (inert idiom: the one quiet line; the practice door is the only live door) ──
-  function wireConnect() { var b = $("hall-connect"); if (b) b.onclick = connectWallet; }
+  function wireConnect() {
+    var b = $("hall-connect"); if (!b) return;
+    b.onclick = b.getAttribute("data-retry") ? function () { try { window.DYWallet.retry(); } catch (e) {} } : connectWallet;
+  }
   function wireRetry() { var b = $("hall-retry"); if (b) b.onclick = function () { location.reload(); }; }
   function tableById(id) { for (var i = 0; i < tables.length; i++) { if (String(tables[i].id) === String(id)) return tables[i]; } return null; }
   function wireHall() {
@@ -1941,6 +1961,7 @@
     if (!window.DYWallet || !window.DYWallet.onChange) return;
     try { window.DYWallet.init(); } catch (e) {}          // detection + the listener; prompts NOTHING (eth_accounts/eth_chainId only)
     window.DYWallet.onChange(function (st) {
+      if (accessState === "connect") render();             // FREE-PLAY-1 — the connect card follows detection (no wallet → guidance)
       var addr = (st && st.address) ? String(st.address).toLowerCase() : null;
       if (addr === walletSeen) return;                    // no change (and onChange fires once immediately)
       var prev = walletSeen; walletSeen = addr;

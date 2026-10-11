@@ -81,7 +81,11 @@ async function server(escAddr, dycAddr) {
   const logLines = [];
   const srv = makeServer(cfg);
   makeHub(srv, cfg, makeLobby(cfg.TIERS), function (m) { logLines.push(String(m)); },
-    { E: loadGuardedEngine().engine, rng, createRoom, store: makeMatchStore({ file: "/tmp/l3fix_store.jsonl" }), escrow: makeEscrowReader({ rpcUrl: RPC, escrowAddress: escAddr }) });
+    { E: loadGuardedEngine().engine, rng, createRoom, store: makeMatchStore({ file: "/tmp/l3fix_store.jsonl" }), escrow: makeEscrowReader({ rpcUrl: RPC, escrowAddress: escAddr }),
+      // FREE-PLAY-1 — since web3 FP1 the hub fails CLOSED without a Torana gate (no gate = nobody signs in). These
+      // suites test the Hall, not the gate, so they ride the match server's OWN holder stub (every address holds a
+      // Torana) — the same one its rehearsals use. The gate itself is proven in the web3 repo (test/accessgate.js).
+      access: require(path.join(MS, "test/accessstub")).HOLDER_STUB });
   await new Promise((r) => srv.listen(0, r));
   return { srv, url: "ws://127.0.0.1:" + srv.address().port, logLines };
 }
@@ -325,7 +329,7 @@ async function hall(url, escAddr, dycAddr, player, provider, opts) {
   const w = dom.window;
   w.ethers = ethers;
   const eth = makeEthereum(player, provider);
-  w.ethereum = eth;
+  if (!opts.noEthereum) w.ethereum = eth;          // FREE-PLAY-1 — opts.noEthereum: a browser with no wallet at all
   // the socket the Hall uses; wrapped so a proof can SEVER it mid-ceremony (the strand's closed socket).
   const sockets = []; let blocked = false;
   // "offline" = the connection FAILS ASYNCHRONOUSLY (an unreachable port), exactly as a browser socket does.
@@ -363,7 +367,7 @@ async function hall(url, escAddr, dycAddr, player, provider, opts) {
   w.localStorage.setItem("dyhall::stakeEscrowAddress", escAddr);
   w.localStorage.setItem("dyhall::dycAddress", dycAddr);
   w.localStorage.setItem("dyhall::readRpcUrl", RPC);
-  w.localStorage.setItem("dyhall::devAccess", "1");     // the documented proof-only gate bypass
+  if (!opts.realGate) w.localStorage.setItem("dyhall::devAccess", "1");     // the documented proof-only gate bypass (FREE-PLAY-1: opts.realGate reads the Torana for real)
   const run = (p) => { const code = fs.readFileSync(p, "utf8"); w.eval(code); };
   // S-HALL-SLIP-SCOPE-1 — opts.srcDir points the two PRODUCT files at another checkout of them (a temp dir holding
   //   `git show HEAD:` bytes), so a suite can drive the pre-fix Hall beside the new one in the same flow. Default is
@@ -376,12 +380,60 @@ async function hall(url, escAddr, dycAddr, player, provider, opts) {
   //  Nothing noticed until the Hall grew a chain guard; the guard is right, and this is the gap it found.
   w.DY_CONFIG.chain.id = await provider.getNetwork().then(function (n) { return Number(n.chainId); });
   w.DY_CONFIG.chain.idHex = "0x" + w.DY_CONFIG.chain.id.toString(16);
+  if (opts.accessNFT) w.DY_CONFIG.contracts.accessNFT = opts.accessNFT;   // FREE-PLAY-1 — the harness's own Torana contract
   if (!opts.noWallet) run(path.join(SITE, "js/wallet.js"));   // control: boot with DYWallet absent (init cannot run)
   run(path.join(SRC, "mp/matchclient.js"));
   run(path.join(SRC, "mp/hall.js"));
   w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
   w.__net = net;   // so a suite holding only `w` can still tear down safely (see teardown)
   return { dom, w, eth, sockets, net, sent };
+}
+
+// ── FREE-PLAY-1 — THE RITE'S PAGE, in jsdom: rite.html's REAL markup and its REAL scripts in page order (config,
+//    wallet, solotrack, then the page's own inline scripts, which runScripts:"outside-only" would not run by itself).
+//    opts: url (a tagged link), ls, noEthereum (no wallet at all), notConnected (a wallet that has not connected),
+//    wrongChain (the page expects a chain the wallet is not on), allowlist (the robot's list), analytics (on/off).
+async function ritePage(c, player, opts) {
+  opts = opts || {};
+  const html = fs.readFileSync(path.join(SITE, "rite.html"), "utf8");
+  const body = (html.split(/<body[^>]*>/)[1] || "").split("</body>")[0];
+  const inline = [...body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  // jsdom cannot navigate: Enter's `location.href = "game/…"` is RECORDED (w.__nav) instead of printed as an error;
+  // every other jsdom error still reaches the console.
+  const vc = new (require("jsdom").VirtualConsole)();
+  const navs = [];
+  vc.on("jsdomError", (e) => { if (/Not implemented: navigation/.test(String(e && e.message))) navs.push(1); else console.error(e); });
+  ["log", "warn", "error", "info"].forEach((k) => vc.on(k, (...a) => console[k](...a)));
+  const dom = new JSDOM(`<!doctype html><body class="threshold">${body.replace(/<script[\s\S]*?<\/script>/g, "")}</body>`,
+    { url: opts.url || "https://divyayuddha.games/rite.html", pretendToBeVisual: true, runScripts: "outside-only", virtualConsole: vc });
+  const w = dom.window;
+  w.ethers = ethers;
+  const eth = makeEthereum(player, c.provider);
+  if (opts.notConnected) eth.__wallet = null;            // eth_accounts answers [] until a connect
+  if (!opts.noEthereum) w.ethereum = eth;
+  w.TextEncoder = TextEncoder;
+  w.__fetches = [];
+  w.fetch = function (u) {
+    w.__fetches.push(String(u));
+    if (/allowlist/.test(String(u))) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(opts.allowlist || []) });
+    return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
+  };
+  w.localStorage.setItem("dy::readRpcUrl", RPC);
+  w.localStorage.setItem("dy_site_entered", "1");       // skip the one-time threshold notice: Enter goes straight to the door
+  for (const [k, v] of Object.entries(opts.ls || {})) w.localStorage.setItem(k, v);
+  const run = (code) => w.eval(code);
+  run(fs.readFileSync(path.join(SITE, "config.js"), "utf8"));
+  const chainId = Number((await c.provider.getNetwork()).chainId);
+  w.DY_CONFIG.chain.id = opts.wrongChain ? chainId + 1 : chainId;
+  w.DY_CONFIG.chain.idHex = "0x" + w.DY_CONFIG.chain.id.toString(16);
+  w.DY_CONFIG.contracts.accessNFT = c.addrs.nft;
+  w.DY_CONFIG.contracts.dycoin = c.addrs.dyc;
+  if (opts.analytics === false) w.DY_CONFIG.analytics = { enabled: false };
+  w.__navs = navs;                                       // one entry per navigation Enter attempted (jsdom cannot navigate)
+  run(fs.readFileSync(path.join(SITE, "js/wallet.js"), "utf8"));
+  run(fs.readFileSync(path.join(SITE, "js/solotrack.js"), "utf8"));
+  for (const code of inline) run(code);
+  return { dom, w, eth };
 }
 
 function click(w, sel) { const e = w.document.querySelector(sel); if (!e) throw new Error("no element " + sel); e.click(); return e; }
@@ -402,4 +454,4 @@ function teardown(h) {
   // deliberately NOT window.close() — closing is the race itself. The window dies with the process.
 }
 
-module.exports = { chain, chainStore, chainWinnings, server, hall, storePage, dashboardPage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };
+module.exports = { chain, chainStore, chainWinnings, server, hall, storePage, dashboardPage, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };

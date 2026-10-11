@@ -487,7 +487,7 @@ async function main() {
         const h = fs.readFileSync(path.join(SITE, page), "utf8");
         return h.indexOf(src) >= 0;
       };
-      for (const src of ["js/wallet.js", "config.js", "js/store.js"]) {
+      for (const src of ["js/wallet.js", "config.js", "js/store.js", "js/solotrack.js"]) {   // FREE-PLAY-1: the rite's tag file joins the law
         const carriers = PAGES.filter((pg) => loads(pg, src + "?v="));
         const bare = PAGES.filter((pg) => loads(pg, src + '"') || loads(pg, src + "'"));
         ok("I5 · " + src + " is stamped on all " + carriers.length + " page(s) that load it, and unstamped on none",

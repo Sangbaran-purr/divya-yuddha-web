@@ -94,7 +94,7 @@ async function main() {
     MATCH_RPC_URL: RPC, STAKE_ESCROW_ADDRESS: escAddr, DYC_ADDRESS: dycAddr, STAKING_ENABLED: true,
     DARK_PAGE_ENABLED: false, FRIEND_TABLES_WITHHELD: false };
   const srv = makeServer(cfg);
-  makeHub(srv, cfg, makeLobby(cfg.TIERS), () => {}, { E: loadGuardedEngine().engine, rng, createRoom,
+  makeHub(srv, cfg, makeLobby(cfg.TIERS), () => {}, { E: loadGuardedEngine().engine, rng, createRoom, access: require(path.join(MS, "test/accessstub")).HOLDER_STUB,   /* FREE-PLAY-1: the hub fails closed without a gate; every address holds a Torana here */
     store: makeMatchStore({ file: path.join(os.tmpdir(), "dy_slipscope.jsonl") }),
     escrow: makeEscrowReader({ rpcUrl: RPC, escrowAddress: escAddr }),
     signer: makeRefereeSigner({ privateKey: referee.privateKey, escrowAddress: escAddr, chainId: 31337 }) });

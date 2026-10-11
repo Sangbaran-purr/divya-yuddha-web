@@ -54,7 +54,7 @@ async function main() {
       MATCH_RPC_URL: H.RPC, STAKE_ESCROW_ADDRESS: c.escAddr, DYC_ADDRESS: c.dycAddr, STAKING_ENABLED: true,
       DARK_PAGE_ENABLED: false, FRIEND_TABLES_WITHHELD: false };
     const srv = makeServer(cfg);
-    makeHub(srv, cfg, makeLobby(cfg.TIERS), () => {}, { E: loadGuardedEngine().engine, rng, createRoom,
+    makeHub(srv, cfg, makeLobby(cfg.TIERS), () => {}, { E: loadGuardedEngine().engine, rng, createRoom, access: require(path.join(MS, "test/accessstub")).HOLDER_STUB,   /* FREE-PLAY-1: the hub fails closed without a gate; every address holds a Torana here */
       store: makeMatchStore({ file: path.join(os.tmpdir(), "dy_takeover.jsonl") }),
       escrow: makeEscrowReader({ rpcUrl: H.RPC, escrowAddress: c.escAddr }) });
     await new Promise((r) => srv.listen(0, r));

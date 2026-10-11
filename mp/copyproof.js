@@ -23,6 +23,7 @@ const DASH = fs.readFileSync(path.resolve(__dirname, "..", "js", "dashboard.js")
 const RITE = fs.readFileSync(path.resolve(__dirname, "..", "rite.html"), "utf8");
 const RULINGS = fs.readFileSync(path.resolve(__dirname, "..", "docs", "RULINGS_2026-08-27.md"), "utf8");
 const INDEX = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
+const DEMO = fs.readFileSync(path.resolve(__dirname, "..", "demo", "index.html"), "utf8");   // FREE-PLAY-1
 
 let pass = 0, fail = 0;
 function ok(name, cond, detail) { if (cond) { pass++; console.log("  ✓ " + name); } else { fail++; console.log("  ✖ " + name + (detail ? "\n      " + detail : "")); } }
@@ -234,11 +235,15 @@ ok("P4's fill carries its own preposition, so neither the date nor the sentinel 
 console.log("\n── the second door ruled 2026-09-12 (RULINGS_2026-08-27 amendment) ──");
 const RULE3 = "The Torana opens this door. It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage.";
 const SECOND_DOOR = "Or buy it now: a Torana and 500 DYC for USD 20.";
+const RULE3_HALL = "The Torana opens the Hall. It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage.";   // FREE-PLAY-1
+const detagFP = (h) => norm(String(h).replace(/<[^>]*>/g, " "));
 ok("the amendment is recorded", /AMENDMENT 2026-09-12 \(S-BUNDLE-1\) - THE SECOND DOOR/.test(RULINGS));
 ok("the second sentence is ruled in the amendment", norm(RULINGS).indexOf(norm(SECOND_DOOR)) >= 0);
 ok("rule 3's sentence is UNCHANGED in the rulings doc", norm(RULINGS).indexOf(norm(RULE3)) >= 0);
-ok("rule 3's sentence is untouched on the rite page", norm(RITE).indexOf(norm(RULE3)) >= 0);
-ok("rule 3's sentence is untouched in the Hall's gate screen", norm(HALL).indexOf(norm(RULE3)) >= 0);
+// FREE-PLAY-1 (amendment 2026-10-11) — rule 3 is SCOPED TO THE HALL and leaves the rite and the Hall's gate screen;
+// the old two pins ("untouched on the rite page / in the Hall's gate screen") are RETIRED and inverted here.
+ok("FP · rule 3's ORIGINAL sentence is on NO page now - it survives only as the rulings doc's quotation",
+   norm(RITE).indexOf(norm(RULE3)) < 0 && norm(HALL).indexOf(norm(RULE3)) < 0 && detagFP(INDEX).indexOf(norm(RULE3)) < 0);
 ok("the second door is on the rite page, linking store.html#bundle",
    /<a href="store\.html#bundle">Or buy it now: a Torana and 500 DYC for USD 20\.<\/a>/.test(RITE));
 ok("the second door is in the Hall's gate screen, linking ../store.html#bundle",
@@ -264,10 +269,51 @@ ok('R7 · "never sold" appears NOWHERE on any page - it survives only as the quo
    (RULINGS.match(/never sold/g) || []).length === 1);
 // the homepage sets the first sentence in <strong>, so the comparison is made on the TEXT, not the markup
 const detag = (h) => norm(String(h).replace(/<[^>]*>/g, " "));
-ok("R7 · rule 3's own two sentences are untouched on the homepage", detag(INDEX).indexOf(norm(RULE3)) >= 0);
+// FREE-PLAY-1 — the homepage carries rule 3 SCOPED TO THE HALL (its other two sentences and R7's clause unchanged)
+ok("R7/FP · the homepage's Law carries rule 3 scoped to the Hall", detag(INDEX).indexOf(norm(RULE3_HALL)) >= 0);
 ok("the rite's status line names the store (the claim stays shut)",
    norm(RITE).indexOf(norm("The Rite is not yet open. The Torana can be bought now in the store - a Torana and 500 DYC for USD 20.")) >= 0 &&
    /claimOpen/.test(RITE));
+
+// ═══ FREE-PLAY-1 (RULINGS_2026-08-27 amendment 2026-10-11) — SOLO IS FREE; THE TORANA OPENS THE HALL ═══
+console.log("\n── FREE-PLAY-1 · solo is free; the Torana opens the Hall (amendment 2026-10-11) ──");
+ok("FP0 · the amendment is recorded", /AMENDMENT 2026-10-11 \(FREE-PLAY-1\) - SOLO IS FREE; THE TORANA OPENS THE HALL/.test(RULINGS));
+const FP = [
+  // [id, ruled sentence, where the code carries it, a matcher on that source]
+  ["FP1 rule 1",      "The game is free to play solo for any wallet connected on Polygon. The Torana unlocks multiplayer: every Hall table, free and staked.", null, null],
+  ["FP2 rule 3 hall", RULE3_HALL, "index.html", (l) => detag(INDEX).indexOf(norm(l)) >= 0],
+  ["FP3 hall gate",   "Tables against other players need a Torana - solo play stays free.", "mp/hall.js", (l) => norm(HALL).indexOf(norm(l)) >= 0],
+  ["FP4 rite solo",   "Solo play is free - enter now. Tables against other players need a Torana.", "rite.html", (l) => norm(RITE).indexOf(norm(l)) >= 0],
+  ["FP5 rite connect","Connect a Polygon wallet to play free.", "rite.html", (l) => norm(RITE).indexOf(norm(l)) >= 0],
+  ["FP6 torana sub",  "One card. The Hall's tables, open to you.", "rite.html", (l) => norm(RITE).indexOf(norm(l)) >= 0],
+  ["FP7 hero",        "The war is visible to all. Solo play is free; the Torana opens the Hall.", "index.html", (l) => detag(INDEX).indexOf(norm(l)) >= 0],
+  ["FP8 promise",     "Own the cards. The game stays free.", "index.html", (l) => detag(INDEX).indexOf(norm(l)) >= 0],
+  ["FP9 doorway",     "Connect a Polygon wallet and play solo, free. Declare yourself — your wallet is your name here.", "index.html", (l) => detag(INDEX).indexOf(norm(l)) >= 0],
+  ["FP10 law opening","Solo play is free to every connected wallet. The Hall - play against people - is entered by the Torana.", "index.html", (l) => detag(INDEX).indexOf(norm(l)) >= 0],
+  ["FP11 law rank",   "Player-versus-player tables and staking are live in the Hall, for Torana holders.", "index.html", (l) => detag(INDEX).indexOf(norm(l)) >= 0],
+];
+for (const [id, line, where, has] of FP) {
+  ok(id + " — ruled in the amendment", norm(RULINGS).indexOf(norm(line)) >= 0);
+  if (where) ok(id + " — carried verbatim by " + where, has(line));
+}
+ok("FP12 · the rite's Enter for a non-holder reads 'play solo — free', and the arena sub-line reads 'free · solo'",
+   /setBtn\("Enter", "play solo — free", \{ onClick: enterSolo \}\)/.test(RITE) && /<span class="btn-sub">free · solo<\/span>/.test(INDEX) &&
+   norm(RULINGS).indexOf('"play solo — free"') >= 0 && norm(RULINGS).indexOf('"free · solo"') >= 0);
+ok("FP13 · the demo's button reads 'Play free' and goes to the rite", /<a class="demo-cta" href="\.\.\/rite\.html">Play free<\/a>/.test(DEMO) &&
+   norm(RULINGS).indexOf('"Play free"') >= 0);
+ok("FP14 · the Hall's gate screen is the new line + the second door, and the retired button is gone",
+   /hall-gate-line">Tables against other players need a Torana - solo play stays free\.<\/p>' \+\s*\/\/[^\n]*\n\s*'<p class="hall-gate-line hall-gate-buy"><a href="\.\.\/store\.html#bundle">/.test(HALL) &&
+   HALL.indexOf("To the presale — the Torana follows") < 0);
+ok("FP15 · RETIRED words survive on no page: the bearer-only lines, the claim-only Torana line, 'Get Access', the Phase-B clause",
+   [["The door opens only for bearers", INDEX], ["The gate opens only for bearers", INDEX], ["The game is built into this gate", INDEX],
+    ["The gate is yours", INDEX], ["for bearers<", INDEX], ["arrive in Phase B", INDEX], ["The whole launch set, playable", RITE],
+    ["The rite is spoken with a wallet. You carry none yet.", RITE], ["Declare yourself first — your wallet is your name at this gate.", RITE],
+    [">Get Access<", DEMO], ["The Rite Opens Soon", RITE]].every(([w, src]) => src.indexOf(w) < 0));
+ok("FP16 · the rite's solo line follows the same visibility law as the old door line (hidden by default, shown with the second door)",
+   /<p id="rite-doorline" class="rite-doorline" hidden>Solo play is free - enter now\./.test(RITE));
+ok("FP17 · the no-wallet guidance is the rite's own words on the Hall's connect card",
+   ["Wallet not responding — pull down to refresh this tab, then Retry.", "No wallet in this browser. ", "Open in MetaMask →",
+    "You carry no key. ", "— install a wallet, then Retry."].every((w) => RITE.indexOf(w) >= 0 && HALL.indexOf(w) >= 0));
 
 console.log("\n── advisory · other quoted doc lines (not section-11 ruled copy) ──");
 const lawSet = new Set(LAW.map(([, l]) => norm(l)));

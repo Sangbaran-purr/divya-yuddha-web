@@ -96,7 +96,7 @@ async function main() {
       DYC_ADDRESS: dycAddr, STAKING_ENABLED: true, THINK_MS: 25000, THINK_WARN_MS: 20000, VANISH_MS: 90000 }, over || {});
     const srv = makeServer(cfg);
     const logs = []; s_logs.push(logs);
-    makeHub(srv, cfg, makeLobby(cfg.TIERS), (m) => logs.push(String(m)), { E: loadGuardedEngine().engine, rng, createRoom,
+    makeHub(srv, cfg, makeLobby(cfg.TIERS), (m) => logs.push(String(m)), { E: loadGuardedEngine().engine, rng, createRoom, access: require(path.join(MS, "test/accessstub")).HOLDER_STUB,   /* FREE-PLAY-1: the hub fails closed without a gate; every address holds a Torana here */
       store: makeMatchStore({ file: path.join(os.tmpdir(), "dy_stakedframe_" + process.pid + ".jsonl") }),
       escrow: makeEscrowReader({ rpcUrl: RPC, escrowAddress: escAddr }),
       signer: makeRefereeSigner({ privateKey: referee.privateKey, escrowAddress: escAddr, chainId: 31337 }) });

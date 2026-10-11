@@ -381,8 +381,10 @@
           <!-- S-RITE-3 (Option A) — the buy door; revealed only when a LIVE voucher (allowlist.json) is found for this wallet. Same lit-gold CTA chrome. -->
           <a id="rite-buy" class="rite-btn rite-register" href="dashboard.html" hidden>BUY YOUR COIN</a>
           <div id="rite-line" class="state-line" aria-live="polite"></div>
-          <!-- S-GATE-1 (G4/P1) — the ruled door line; shown ONLY to a connected non-holder (isHolder === false). Verbatim, never reworded (docs/RULINGS_2026-08-27.md rule 3). -->
-          <p id="rite-doorline" class="rite-doorline" hidden>The Torana opens this door. It is dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage.</p>
+          <!-- FREE-PLAY-1 (RULINGS_2026-08-27 amendment 2026-10-11) — the solo line; shown ONLY to a connected non-holder
+               (isHolder === false), above the Enter that plays solo. Ruled words, reworded never. (Rule 3's sentence,
+               scoped to the Hall by the same amendment, stands on the homepage's Law of the Gate.) -->
+          <p id="rite-doorline" class="rite-doorline" hidden>Solo play is free - enter now. Tables against other players need a Torana.</p>
           <!-- S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 — THE SECOND DOOR. Rule 3's sentence above is
                unchanged; from 2026-09-12 the Torana can also be BOUGHT, so a line naming only the drop is an
                incomplete truth. Ruled words, reworded never. -->
@@ -417,7 +419,7 @@
         </figure>
         <div class="torana-copy">
           <h2 class="torana-title">TORANA — The Access Card</h2>
-          <p class="torana-sub">One card. The whole launch set, playable.</p>
+          <p class="torana-sub">One card. The Hall's tables, open to you.</p>
           <p class="torana-status">The Rite is not yet open. The Torana can be bought now in the store - a Torana and 500 DYC for USD 20.</p>
         </div>
       </section>
@@ -471,6 +473,7 @@
 
     <script src="js/light.js?v=s1e"></script>
     <script src="js/wallet.js?v=s1q"></script>
+    <script src="js/solotrack.js?v=t1"></script>
     <script>
       (function () {
         var CFG = window.DY_CONFIG;
@@ -589,7 +592,9 @@
         // so (S-RITE-4) the sleeping "Rite Opens Soon" box is HIDDEN here and the free-claim note drops to one quiet
         // line BELOW the buy door. The register door + its inbox line stay hidden (their words are false now).
         function showBuyRoad() {
-          if (btn) btn.hidden = true;
+          // FREE-PLAY-1 — the action box now carries Enter (play solo, free), which a voucher holder keeps: the buy
+          // door rides BESIDE it. Only the old sleeping "Rite Opens Soon" box was ever meant to hide here.
+          if (btn && !soloEnterShown) btn.hidden = true;
           if (reg) reg.hidden = true;
           if (buy) buy.hidden = false;
           msg.textContent = "Your pass is live.";
@@ -647,6 +652,13 @@
             done();
           };
         }
+        // FREE-PLAY-1 — a connected wallet on Polygon WITHOUT a Torana plays solo: the same pass, the same door.
+        // The one tag-only analytics event fires first (utm only — js/solotrack.js), then the holder's own road.
+        var soloEnterShown = false;
+        function enterSolo() {
+          try { if (window.DYSoloTrack) window.DYSoloTrack.soloStart(); } catch (e) {}
+          enterTheHall();
+        }
         function enterTheHall() {
           setSitePass();
           var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -703,6 +715,7 @@
           if (buyline) buyline.hidden = true;
           if (btn) btn.hidden = false; // S-RITE-4 — the action box is visible in EVERY state except the voucher branch (which hides it)
           stopVoucherPoll(); // S-LIVE-FIX-1 (C2) — every state change stops the poll; the no-mark branch restarts it if still unapproved
+          soloEnterShown = false; // FREE-PLAY-1 — only the connected-on-Polygon non-holder state sets it
 
           if (!s.hasProvider) {
             if (!s.absenceConcluded) {
@@ -715,7 +728,7 @@
               return;
             }
             // absence CONCLUDED — render honest guidance now, and a Retry that re-runs detection.
-            msg.textContent = s.inApp ? "Your wallet isn't responding." : "The rite is spoken with a wallet. You carry none yet.";
+            msg.textContent = s.inApp ? "Your wallet isn't responding." : "Connect a Polygon wallet to play free.";
             noWallet();
             setBtn("Retry", "check for your wallet again", {
               onClick: function () { msg.textContent = "Looking for your wallet…"; line.textContent = ""; window.DYWallet.retry(); },
@@ -723,7 +736,7 @@
             return;
           }
           if (!s.connected) {
-            msg.textContent = "Declare yourself first — your wallet is your name at this gate.";
+            msg.textContent = "Connect a Polygon wallet to play free.";
             setBtn("Declare Yourself", "connect wallet", {
               onClick: function () {
                 line.textContent = "Awaiting your seal…";
@@ -771,8 +784,9 @@
             if (dycEl) { dycEl.hidden = false; if (!dycRead) { dycRead = true; readDyc(); } }
             return;
           }
-          // not a bearer yet — a connected wallet with no Torana. S-GATE-1 (G4/P1): the ruled door
-          // line stands here, alongside the presale/register road (the honest way in). No pass, no Enter.
+          // not a bearer yet — a connected wallet ON POLYGON with no Torana. FREE-PLAY-1 (owner ruling 2026-10-11):
+          // solo play is free, so this wallet gets Enter (the holder's own pass and door); the solo line names what
+          // the Torana still unlocks, the second door offers it, and the presale/register road stands beside.
           if (door) door.hidden = false;
           if (buyline) buyline.hidden = false;
           if (CFG.claimOpen) {
@@ -788,7 +802,8 @@
             // S-DECL-1 (R1) / S-RITE-3 (Option A) — connected-no-mark: the rite sorts on the LIVE voucher.
             // The register road renders FIRST (the safe default, and the failed-fetch fallback); then a voucher match
             // in allowlist.json — the same match dashboard.js ships — swaps in the buy door.
-            setBtn("The Rite Opens Soon", "the free claim is not yet open", { sleeping: true });
+            soloEnterShown = true;
+            setBtn("Enter", "play solo — free", { onClick: enterSolo });
             showRegisterRoad();
             var who = s.address;
             sortNoMark(who); // immediate check (race/staleness-guarded inside)
@@ -807,6 +822,7 @@
           }
         });
 
+        try { if (window.DYSoloTrack) window.DYSoloTrack.mount(); } catch (e) {}   // FREE-PLAY-1 — the tag, from config
         window.DYWallet.init();
       })();
     </script>
