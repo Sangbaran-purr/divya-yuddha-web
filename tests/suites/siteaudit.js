@@ -88,6 +88,11 @@ async function run() {
     ok("MN7 · the tables card is live ('It Sits at the Tables' / LIVE NOW), ACTIVATE TO EARN → dashboard, the internal kicker is gone",
        /<h3>It Sits at the Tables<\/h3>/.test(m) && /<span class="phase">LIVE NOW<\/span>/.test(m) && /href="dashboard\.html">ACTIVATE TO EARN</.test(m) &&
        m.indexOf("numbers awaiting the owner's word") < 0);
+    // owner ruling A (2026-10-11): the vesting duration on the Mint is the contract's — two years (730 days) — and no other
+    const mv = R("mint.html").replace(/<!--[\s\S]*?-->/g, "");
+    const durations = (mv.match(/\b(\d+|one|two|three|eighteen|twenty|twenty-four)[ -](months?|years?|days?)\b/gi) || []).filter((d) => !/^two years?$/i.test(d));
+    ok("MN9 · the Mint states vesting as the contract's two years — no '20 months' and no other duration on the page",
+       mv.indexOf("85% vests linearly across the two years after exchange listing.") >= 0 && !/20 months/i.test(mv) && durations.length === 0, durations.join(", "));
     ok("MN8 · Station I asks for what the form asks (name, email, wallet address); the nav reads 'Play free / connect wallet'",
        /<h3>Register <small>three details, kept off the chain<\/small><\/h3>/.test(m) && /<b>name, email and wallet address<\/b>/.test(m) &&
        /<a class="rite-btn" href="rite\.html">Play free<span class="sub">connect wallet<\/span><\/a>/.test(m) && m.indexOf("phone, address") < 0);

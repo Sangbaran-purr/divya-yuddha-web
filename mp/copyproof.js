@@ -359,10 +359,9 @@ console.log("\n── SITE-AUDIT-1 · the false statements stay gone (every play
   ok("SA5 · the rite carries 'Register for the presale →' as a quiet text link to register.html (not a button)",
      /<a id="rite-presale" class="rite-presale" href="register\.html" hidden>Register for the presale →<\/a>/.test(RITE_V) &&
      !/class="[^"]*rite-btn[^"]*"[^>]*>Register for the presale/.test(RITE_V) && !/<button[^>]*>Register for the presale/.test(RITE_V));
-  // owner decision 2 (2026-10-11) — the chain says 730 days, not the owner's 20 months, so the NEUTRAL line ships
-  ok("SA6 · the Mint's vesting line is the neutral one (no duration stated until the owner rules on 730 days vs 20 months)",
-     visible("mint.html").indexOf("15% of each purchase arrives liquid; the rest vests linearly after exchange listing — your schedule is shown in your dashboard.") >= 0 &&
-     !/20 months|two years after exchange listing/.test(visible("mint.html")));
+  // owner ruling A (2026-10-11) — the wording follows the CONTRACT: VestingVault VEST_DURATION = 730 days (two years)
+  ok("SA6 · the Mint's vesting line states the contract's two years, exactly",
+     visible("mint.html").indexOf("15% of each purchase arrives liquid; 85% vests linearly across the two years after exchange listing.") >= 0);
   const DASH_HTML = visible("dashboard.html");
   ok("SA4 · the dashboard's Buy DYC link goes to the Buy panel (the presale is open — never 'Coming soon')",
      /<a href="#buy-panel"><svg[^>]*>[\s\S]*?<\/svg>Buy DYC<\/a>/.test(DASH_HTML) && !/data-soon[^>]*>[\s\S]{0,400}?Buy DYC/.test(DASH_HTML));
