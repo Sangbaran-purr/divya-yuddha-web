@@ -436,6 +436,7 @@ async function run() {
         if (opts.refuse) return { refused: opts.refuse, sentence: "x" };
         const out = { code: v.code, existing: false };
         if (opts.invites) out.invites = opts.invites;
+        if (opts.extra) Object.assign(out, opts.extra);     // INVITES-2: the v2 fields (scheme, week) ride beside the list
         return out;
       },
     };
@@ -577,6 +578,125 @@ async function run() {
     H.teardown(h3);
   }
 
+  // ═══════════════ DV · INVITES-2 — THE v2 CARD, ONLY WHILE THE DIGEST SAYS v2 ═══════════════
+  {
+    const c = await H.chainWinnings({ torana: true });
+    const chainId = await chainIdOf(c);
+    const now = Math.floor(Date.now() / 1000);
+    const mon = now - ((new Date(now * 1000).getUTCDay() + 6) % 7) * 86400 - (now % 86400);
+    const L1B = "0x1234567890abcdef1234567890abcdef1234abcd";
+    // a v2-shaped list: an L1 friend, a step-2 reward (no buyer — the bot never sends one), a weekly bonus
+    const v2items = [
+      { kind: "invite", level: 1, buyer: "0x1234…abcd", ts: now - 9 * 86400, unlockAt: now - 2 * 86400, status: "unlocked", rewardWei: (125n * DEC).toString(), paidWei: "0" },
+      { kind: "invite", level: 2, buyer: null, ts: now - 3 * 86400, unlockAt: now + 4 * 86400, status: "pending", rewardWei: (25n * DEC).toString(), paidWei: "0" },
+      { kind: "bonus", level: 0, buyer: null, week: mon - 7 * 86400, count: 21, ts: mon, unlockAt: mon + 7 * 86400, status: "pending", rewardWei: (2500n * DEC).toString(), paidWei: "0" },
+    ];
+    const LEAD_V1 = "Share your invite link. When a friend buys their first bundle through it, you earn 10% of what they paid.";
+    const LEAD_V2 = "Share your invite link. When a friend buys their first bundle through it, you earn 5% of what they paid.";
+    const V2_ONLY = [LEAD_V2, "you earn 1% more", "Weekly bonus:", "This week:", "Step 2", "Weekly bonus - week of"];
+    async function cardWith(digest, week, opts2) {
+      opts2 = opts2 || {};
+      const s = codeStub(chainId, { invites: opts2.items || v2items, extra: week == null ? {} : { scheme: "v2", week: { start: mon, count: week } } });
+      if (digest !== undefined) s.stub["invites-digest.json"] = () => digest;
+      const h = await H.dashboardPage(c, c.player, { invite: "https://bot.test", svc: s.stub });
+      if (opts2.cardStore) h.w.DY_MF_CONFIG.contracts.cardStore = "0x00000000000000000000000000000000000000c5";
+      await dashConnect(h.w);
+      H.click(h.w, "#inv-get");
+      await waitFor("the code", () => !!q(h.w, "#inv-code"));
+      await H.sleep(150);
+      return { h, w: h.w, card: txt(h.w, "#invites-panel") };
+    }
+    {
+      const r = await cardWith([{ date: "2026-10-12", codes: 1, bindings: 0, sha256: "x", scheme: "v1" }], 12);
+      ok("DV1 · DIGEST SAYS v1: the card is the v1 card — 10% lead, the review line, and NOT ONE v2 line (even with a v2-shaped list)",
+         r.card.indexOf(LEAD_V1) >= 0 && r.card.indexOf("More than 25 rewards in one month are checked by hand before they unlock.") >= 0
+           && V2_ONLY.every((t) => r.card.indexOf(t) < 0), V2_ONLY.filter((t) => r.card.indexOf(t) >= 0).join(" | "));
+      ok("DV2 · the digest was read once, from the site itself (same origin)", r.w.__fetches.filter((u) => u === "invites-digest.json").length === 1, JSON.stringify(r.w.__fetches));
+      H.teardown(r.h);
+    }
+    {
+      const r = await cardWith(undefined, 12);
+      ok("DV3 · NO DIGEST (unreadable): v1, never v2", r.card.indexOf(LEAD_V1) >= 0 && V2_ONLY.every((t) => r.card.indexOf(t) < 0));
+      H.teardown(r.h);
+    }
+    {
+      const r = await cardWith([{ date: "2026-10-11", scheme: "v1" }, { date: "2026-10-12", scheme: "v2" }], 12);
+      ok("DV4 · DIGEST SAYS v2 (latest entry): the 5% lead and the steps line replace the 10% lead",
+         r.card.indexOf(LEAD_V2) >= 0 && r.card.indexOf(LEAD_V1) < 0
+           && r.card.indexOf("When the friends they invite buy their first bundle, you earn 1% more - and so on, up to five steps beyond your own friends.") >= 0);
+      ok("DV5 · the weekly bonus and its unlock are stated; the review line is gone (v2 has no brake)",
+         r.card.indexOf("Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $20 more. 50 earns $50, 100 earns $200 and 200 earns $400 - only the highest step counts.") >= 0
+           && r.card.indexOf("A weekly bonus unlocks 7 days after its week ends.") >= 0 && r.card.indexOf("More than 25 rewards") < 0);
+      ok("DV6 · this week's progress, in the ruled words: 'This week: 12 of 20 - reach 20 for a $20 bonus.'", txt(r.w, "#inv-week") === "This week: 12 of 20 - reach 20 for a $20 bonus.", txt(r.w, "#inv-week"));
+      // the row's FIRST cell — who it is for (cells concatenate with no space, so read the cell, not the row)
+      const who = Array.from(r.w.document.querySelectorAll(".inv-row .inv-buyer")).map((x) => x.textContent.trim());
+      const rows = Array.from(r.w.document.querySelectorAll(".inv-row")).map((x) => x.textContent);
+      ok("DV7 · rows: your friend shortened; a step-2 reward shows 'Step 2' and NO address; the bonus row names its week",
+         who.length === 3 && who.indexOf("0x1234…abcd") >= 0 && who.indexOf("Step 2") >= 0 && rows.filter((x) => /0x/.test(x)).length === 1
+           && who.some((x) => /^Weekly bonus - week of \w{3} \d{2}, \d{4}$/.test(x)), who.join(" | "));
+      const lv = txt(r.w, "#inv-levels");
+      ok("DV8 · earnings per step: Your friends 125, Step 2 25, Weekly bonus 2,500 (DYC) — with the step note",
+         /Your friends\s*(\d+\s*)?125\.00 DYC/.test(lv) && /Step 2\s*(\d+\s*)?25\.00 DYC/.test(lv) && /Weekly bonus\s*2,500\.00 DYC/.test(lv)
+           && r.card.indexOf("Step 2 is the friends your friends invite, and so on up to step 6.") >= 0, lv);
+      ok("DV9 · the card-store lines stay HIDDEN while no card store is configured", r.card.indexOf("buy a card in the store") < 0 && r.card.indexOf("Cards bought with DYC") < 0);
+      ok("DV10 · the v2 card never says affiliate or referral", !/affiliat|referr/i.test(r.card));
+      H.teardown(r.h);
+    }
+    {
+      const r = await cardWith([{ scheme: "v2" }], 25, { cardStore: true });
+      ok("DV11 · with the card store configured, its two lines appear (DYC card purchases earn nothing)",
+         r.card.indexOf("When they buy a card in the store with USDT or USDC, you earn the same shares of its price.") >= 0 && r.card.indexOf("Cards bought with DYC earn nothing.") >= 0);
+      ok("DV12 · between steps the NEXT step is named: 25 → 'This week: 25 of 50 - reach 50 for a $50 bonus.'", txt(r.w, "#inv-week") === "This week: 25 of 50 - reach 50 for a $50 bonus.", txt(r.w, "#inv-week"));
+      H.teardown(r.h);
+      const t = await cardWith([{ scheme: "v2" }], 230);
+      ok("DV13 · past the top step: 'This week: 230 - the top bonus of $400 is reached.'", txt(t.w, "#inv-week") === "This week: 230 - the top bonus of $400 is reached.", txt(t.w, "#inv-week"));
+      H.teardown(t.h);
+    }
+    // ── the AMENDMENT (A1/A2/A8): open codes, accrued-not-released, the six level counts ──
+    {
+      const nh = await H.chainWinnings({ torana: false });
+      const accrued = [{ kind: "invite", level: 1, buyer: "0x1234…abcd", ts: now - 9 * 86400, unlockAt: now - 2 * 86400, status: "accrued", rewardWei: (125n * DEC).toString(), paidWei: "0" },
+                       { kind: "invite", level: 3, buyer: null, ts: now - 3 * 86400, unlockAt: now + 4 * 86400, status: "accrued", rewardWei: (25n * DEC).toString(), paidWei: "0" }];
+      const s = codeStub(await chainIdOf(nh), { invites: accrued, extra: { scheme: "v2", week: { start: mon, count: 3 },
+        levels: { 1: 1, 2: 0, 3: 1, 4: 0, 5: 0, 6: 0 }, release: { released: false, accruedWei: (150n * DEC).toString() } } });
+      s.stub["invites-digest.json"] = () => [{ scheme: "v2" }];
+      const h = await H.dashboardPage(nh, nh.player, { invite: "https://bot.test", svc: s.stub });
+      await dashConnect(h.w);
+      await H.sleep(200);
+      ok("DV15 · OPEN CODES (A1): under v2 a wallet with NO Torana sees the card and its one button", q(h.w, "#invites-panel").style.display === "" && !!q(h.w, "#inv-get"));
+      H.click(h.w, "#inv-get");
+      await waitFor("the code", () => !!q(h.w, "#inv-code"));
+      await H.sleep(100);
+      ok("DV16 · A8: earned but not released — 'You have earned 1.20 USDT in invite rewards. They unlock when you own a Torana — buy the bundle to release them.'",
+         txt(h.w, "#inv-accrued") === "You have earned 1.20 USDT in invite rewards. They unlock when you own a Torana — buy the bundle to release them.", txt(h.w, "#inv-accrued"));
+      const rows = Array.from(h.w.document.querySelectorAll(".inv-row .inv-status")).map((x) => x.textContent.trim());
+      ok("DV17 · each accrued row says what it waits for: 'Unlocks when you own a Torana'", rows.length === 2 && rows.every((r) => r === "Unlocks when you own a Torana"), rows.join(" | "));
+      const lv = Array.from(h.w.document.querySelectorAll("#inv-levels .win-part")).map((x) => x.getAttribute("data-level") + "=" + (x.querySelector(".inv-level-n") || {}).textContent);
+      ok("DV18 · all six levels are shown with their counts (L1 1, L3 1, the rest 0)", lv.join(",") === "1=1,2=0,3=1,4=0,5=0,6=0", lv.join(","));
+      ok("DV19 · and this week's direct count toward the next step", txt(h.w, "#inv-week") === "This week: 3 of 20 - reach 20 for a $20 bonus.");
+      H.teardown(h);
+      const s1 = codeStub(await chainIdOf(nh));
+      s1.stub["invites-digest.json"] = () => [{ scheme: "v1" }];
+      const h1 = await H.dashboardPage(nh, nh.player, { invite: "https://bot.test", svc: s1.stub });
+      await dashConnect(h1.w); await H.sleep(300);
+      ok("DV20 · under v1 a wallet with no Torana still never sees the card (and asks the service nothing)", q(h1.w, "#invites-panel").style.display === "none" && s1.seen.calls === 0);
+      H.teardown(h1);
+      const s2 = codeStub(await chainIdOf(c), { invites: v2items, extra: { scheme: "v2", week: { start: mon, count: 0 }, levels: { 1: 1, 2: 1, 3: 0, 4: 0, 5: 0, 6: 0 }, release: { released: true, accruedWei: (150n * DEC).toString() } } });   // the RELEASE flag decides, not the amount
+      s2.stub["invites-digest.json"] = () => [{ scheme: "v2" }];
+      const h2 = await H.dashboardPage(c, c.player, { invite: "https://bot.test", svc: s2.stub });
+      await dashConnect(h2.w); H.click(h2.w, "#inv-get"); await waitFor("the code", () => !!q(h2.w, "#inv-code")); await H.sleep(100);
+      ok("DV21 · a RELEASED wallet sees no 'You have earned' line", !q(h2.w, "#inv-accrued") && txt(h2.w, "#invites-panel").indexOf("You have earned") < 0);
+      H.teardown(h2);
+    }
+    {
+      // a v1 list under a v2 digest (the flip landed before the bot's list caught up): no step labels, no crash
+      const v1items = [{ buyer: L1B, ts: now - 9 * 86400, unlockAt: now - 2 * 86400, status: "unlocked", rewardWei: (250n * DEC).toString() }];
+      const r = await cardWith([{ scheme: "v2" }], null, { items: v1items });
+      ok("DV14 · v2 copy over a v1-shaped list: the friend shows shortened, no week line is invented", r.card.indexOf("0x1234…abcd") >= 0 && !q(r.w, "#inv-week"));
+      H.teardown(r.h);
+    }
+  }
+
   // ═══════════════ WD · THE WITHDRAW CARD, END TO END ON THE REAL DESK ═══════════════
   async function withdraw(label, cumW, cumI, opts) {
     opts = opts || {};
@@ -703,8 +823,8 @@ async function run() {
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
     ok("X4 · STAMPS: store.js s19, store.css s8, invite.js i1, mf-config mf9 on store.html",
        /js\/store\.js\?v=s19/.test(sh) && /css\/store\.css\?v=s8/.test(sh) && /js\/invite\.js\?v=i1/.test(sh) && /mf-config\.js\?v=mf9/.test(sh));
-    ok("X5 · STAMPS: dashboard.js mf35, dashboard.css mf7, invite.js i1, mf-config mf9 on dashboard.html",
-       /js\/dashboard\.js\?v=mf35/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf9/.test(dh));
+    ok("X5 · STAMPS: dashboard.js mf36, dashboard.css mf7, invite.js i1, mf-config mf9 on dashboard.html",
+       /js\/dashboard\.js\?v=mf36/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i1/.test(dh) && /mf-config\.js\?v=mf9/.test(dh));
     ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s19, report mf-config mf9)",
        /js\/store\.js\?v=s19/.test(th) && /mf-config\.js\?v=mf9/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));

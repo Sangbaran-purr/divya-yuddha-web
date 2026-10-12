@@ -19,7 +19,7 @@ const PICK = ARGS.filter(function (a) { return a.indexOf("--") !== 0; });
 
 // name → file. copyproof is already committed under mp/ and needs no chain; it runs first and fastest.
 const SUITES = [
-  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 318 },
+  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 346 },
   { name: "p4",            file: path.join(__dirname, "suites", "p4.js"), chain: true, expect: 7 },
   { name: "p8rig",         file: path.join(__dirname, "suites", "p8rig.js"), chain: true, expect: 7 },
   { name: "p7dom",         file: path.join(__dirname, "suites", "p7dom.js"), chain: true, expect: 4 },
@@ -40,7 +40,7 @@ const SUITES = [
   { name: "winnings",      file: path.join(__dirname, "suites", "winnings.js"), chain: true, expect: 41 },
   // AFFILIATE-1 rung 3 — Torana Invites (store + dashboard) and the ONE Withdraw card, against the REAL desk with
   // coupons signed by the bot's own signer and every invite signature checked by the bot's own verifier.
-  { name: "invites",       file: path.join(__dirname, "suites", "invites.js"), chain: true, expect: 94, capMs: 600000 },
+  { name: "invites",       file: path.join(__dirname, "suites", "invites.js"), chain: true, expect: 115, capMs: 600000 },
   // FEE-1 — the one player fee rule: the 7 measured mainnet blocks, the floor, read failure, the anvil compounding
   // control, real sends on two pages, and every write road reaching the one function.
   { name: "fees",          file: path.join(__dirname, "suites", "fees.js"), chain: true, expect: 26, capMs: 600000 },

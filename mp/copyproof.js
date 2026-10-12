@@ -457,6 +457,22 @@ const DASH_LAW = [
   ["I12 paid",           "Paid"],
   ["I13 held",           "Held for review"],
   ["I14 desk not open",  "Unlocked - withdrawals open when the desk does."],
+  // INVITES-2 — the v2 card (shown only while the digest's scheme is v2)
+  ["J1 lead",            "Share your invite link. When a friend buys their first bundle through it, you earn 5% of what they paid."],
+  ["J2 steps",           "When the friends they invite buy their first bundle, you earn 1% more - and so on, up to five steps beyond your own friends."],
+  ["J3 weekly bonus",    "Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $20 more. 50 earns $50, 100 earns $200 and 200 earns $400 - only the highest step counts."],
+  ["J4 bonus unlock",    "A weekly bonus unlocks 7 days after its week ends."],
+  ["J5 this week",       "This week: [12] of [20] - reach [20] for a $[20] bonus."],
+  ["J6 top step",        "This week: [210] - the top bonus of $400 is reached."],
+  ["J7 your friends",    "Your friends"],
+  ["J8 step n",          "Step [2]"],
+  ["J9 step note",       "Step 2 is the friends your friends invite, and so on up to step 6."],
+  ["J10 bonus row",      "Weekly bonus - week of [date]"],
+  ["J11 cards",          "When they buy a card in the store with USDT or USDC, you earn the same shares of its price."],
+  ["J12 cards dyc",      "Cards bought with DYC earn nothing."],
+  // INVITES-2 amendment — earned but not yet released (A2/A8)
+  ["J13 accrued",        "You have earned [X] USDT in invite rewards. They unlock when you own a Torana — buy the bundle to release them."],
+  ["J14 waiting",        "Unlocks when you own a Torana"],
   ["N1 unavailable",     "Invites are unavailable for a moment. Try again shortly."],
   ["N2 stale",           "That signature has expired. Sign again."],
   ["N3 bad signature",   "That signature couldn't be verified. Sign again."],
@@ -482,8 +498,8 @@ ok("W-TRAP — the winnings expiry does NOT use the DropDesk's 90-day wording",
 // Referrals link (left untouched); the invite scheme's own copy must not borrow them. Checked over every ruled line
 // this rung added AND over the two source blocks that render them, so a stray sentence outside the law is caught too.
 {
-  const NEW_LINES = STORE_LAW.filter((r) => /^P1[3-8] /.test(r[0])).concat(DASH_LAW.filter((r) => /^(V\d|E8|I\d|N\d)/.test(r[0])));
-  ok("AF0 · the new-scheme line set was located (5 store + 28 dashboard)", NEW_LINES.length === 33, String(NEW_LINES.length));
+  const NEW_LINES = STORE_LAW.filter((r) => /^P1[3-8] /.test(r[0])).concat(DASH_LAW.filter((r) => /^(V\d|E8|I\d|N\d|J\d)/.test(r[0])));
+  ok("AF0 · the new-scheme line set was located (5 store + 28 dashboard + 14 v2)", NEW_LINES.length === 47, String(NEW_LINES.length));
   // INVITE-STEP-2: the retired box and its sentence are gone from the source and the doc's ruled set
   ok("AF5 · the retired invite box is gone: no Skip, no Sign button, no P14 sentence in store.js",
      !/b-invite-ask|b-invite-skip|b-invite-sign|Sign a free invite before you buy/.test(STORE));

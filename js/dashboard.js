@@ -217,6 +217,28 @@ window.DYDash = (function () {
   var I_PAID = "Paid";
   var I_HELD = "Held for review";
   var I_WAITING_DESK = "Unlocked - withdrawals open when the desk does.";
+  // ── INVITES-2 · THE v2 LINES (DASHBOARD_DESIGN_v1 §11). Shown ONLY while the bot's daily digest says the active scheme
+  //    is v2 (the owner flips it after counsel confirms); until then — and whenever the digest can't be read — the card is
+  //    exactly the v1 card above. Same law: never the words of the older Referrals link (AF1-AF3). ──
+  var J_LEAD = "Share your invite link. When a friend buys their first bundle through it, you earn 5% of what they paid.";
+  var J_STEPS = "When the friends they invite buy their first bundle, you earn 1% more - and so on, up to five steps beyond your own friends.";
+  var J_BONUS = "Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $20 more. 50 earns $50, 100 earns $200 and 200 earns $400 - only the highest step counts.";
+  var J_BONUS_UNLOCK = "A weekly bonus unlocks 7 days after its week ends.";
+  function J_WEEK(n, target, usd) { return "This week: " + n + " of " + target + " - reach " + target + " for a $" + usd + " bonus."; }
+  function J_WEEK_TOP(n) { return "This week: " + n + " - the top bonus of $400 is reached."; }
+  var J_STEP_1 = "Your friends";
+  function J_STEP_N(k) { return "Step " + k; }
+  var J_STEP_NOTE = "Step 2 is the friends your friends invite, and so on up to step 6.";
+  function J_BONUS_ROW(date) { return "Weekly bonus - week of " + date; }
+  // the card-store lines: written now, shown only once the card store is configured (CARD-STORE-1)
+  var J_CARDS = "When they buy a card in the store with USDT or USDC, you earn the same shares of its price.";
+  var J_CARDS_DYC = "Cards bought with DYC earn nothing.";
+  // INVITES-2 AMENDMENT (A2/A8): rewards ACCRUE for every wallet and are RELEASED once it owns a Torana (its own bundle,
+  // or a presale Torana). A wallet that has earned but not yet qualified is told so, in the owner's words.
+  function J_ACCRUED(usdt) { return "You have earned " + usdt + " USDT in invite rewards. They unlock when you own a Torana — buy the bundle to release them."; }
+  var J_WAITING = "Unlocks when you own a Torana";
+  // the weekly steps, highest first — the bot's own table (approval-bot src/winnings/invites.js BONUS_TIERS)
+  var J_TIERS = [{ n: 20, usd: 20 }, { n: 50, usd: 50 }, { n: 100, usd: 200 }, { n: 200, usd: 400 }];
   // the invite service's own refusals (approval-bot src/invites/service.js), in the site's words
   var INV_SVC = {
     RECORD_UNAVAILABLE: "Invites are unavailable for a moment. Try again shortly.",
@@ -347,6 +369,8 @@ window.DYDash = (function () {
       // AFFILIATE-1 rung 3 — NULL today: the Torana Invites card stays invisible and no call is made. The Torana read
       // that gates the card runs only when this is set.
       inviteServiceUrl: o.inviteServiceUrl || FILE.inviteServiceUrl || null,
+      // INVITES-2 — the USDT/USDC card store (CARD-STORE-1). NULL today: its invite lines stay hidden.
+      cardStore: oc.cardStore || fc.cardStore || null,
       accessNFT: oc.accessNFT || fc.accessNFT || (PLAYER && PLAYER.contracts && PLAYER.contracts.accessNFT) || null,
       usdt: oc.usdt || fc.usdt || null,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
@@ -1587,10 +1611,27 @@ window.DYDash = (function () {
   var invCode = null;      // the code, once the service answered
   var invItems = null;     // [{ buyer, ts, unlockAt, status: pending|unlocked|held, rewardWei }] or null = not provided
   var invBusy = false;
+  // INVITES-2 — which copy the card speaks: the ACTIVE scheme from the bot's daily digest (the latest entry), read once,
+  // only when the card is shown. Anything but an exact "v2" — unreadable, missing, malformed — is v1.
+  var invScheme = "v1", invSchemeAsked = false, invWeek = null, invLevels = null, invRelease = null;
+  function invLoadScheme() {
+    if (invSchemeAsked) return;
+    invSchemeAsked = true;
+    try {
+      fetch("invites-digest.json", { cache: "no-store" }).then(function (r) { return r && r.ok ? r.json() : null; }).then(function (arr) {
+        var last = Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null;
+        var next = last && last.scheme === "v2" ? "v2" : "v1";
+        if (next !== invScheme) { invScheme = next; renderInvites(); }
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  function invV2() { return invScheme === "v2"; }
 
   function invSvcBase() { var u = cfg().inviteServiceUrl; return u ? String(u).replace(/\/+$/, "") : null; }
   function invVisible() {
-    return !!(invSvcBase() && window.DYInvite && isConnected() && data && data.torana != null && BigInt(data.torana) > 0n);
+    if (!(invSvcBase() && window.DYInvite && isConnected() && data)) return false;
+    if (invV2()) return true;                     // INVITES-2 A1 — open codes: under v2 any connected wallet gets a code
+    return data.torana != null && BigInt(data.torana) > 0n;
   }
   // an item's state, in plain words — THE BOT'S STATUS, AS-IS (rung 3b). The bot lays the desk's own invitePaid over
   // the unlocked rewards oldest first and says "paid" per reward; this page used to redo that split itself and, given
@@ -1599,6 +1640,7 @@ window.DYDash = (function () {
     if (x.status === "paid") return I_PAID;
     if (x.status === "held") return I_HELD;
     if (x.status === "pending") return I_UNLOCKS_ON(dateFmt(Number(x.unlockAt)));
+    if (x.status === "accrued") return J_WAITING;   // INVITES-2 A2 — earned, waiting for the wallet's own Torana
     return (!winDormant() && !!data.win) ? I_READY : I_WAITING_DESK;
   }
   function invShort(a) { var s = String(a || ""); return /^0x[0-9a-fA-F]{40}$/.test(s) ? shortAddr(s) : s; }
@@ -1606,9 +1648,20 @@ window.DYDash = (function () {
   function renderInvites() {
     var panel = $("invites-panel"), host = $("invites-body");
     if (!panel || !host) return;
+    // the scheme decides who sees the card (v2: open codes), so it is asked first — only with the service configured
+    // and a wallet connected (a dormant page asks nothing)
+    if (invSvcBase() && isConnected()) invLoadScheme();
     if (!invVisible()) { panel.style.display = "none"; host.innerHTML = ""; return; }
     panel.style.display = "";
-    var h = "<p class='win-lead'>" + esc(I_LEAD) + "</p>"
+    var h = invV2()
+      ? "<p class='win-lead'>" + esc(J_LEAD) + "</p>"
+        + "<p class='win-note' id='inv-steps'>" + esc(J_STEPS) + "</p>"
+        + "<div class='win-facts'><span class='win-fact'>" + esc(I_PAID_AS) + "</span>"
+        + "<span class='win-fact'>" + esc(I_UNLOCK) + "</span></div>"
+        + "<p class='win-note'>" + esc(I_FIRST) + " " + esc(I_FREE) + "</p>"
+        + "<p class='win-note' id='inv-bonus'>" + esc(J_BONUS) + " " + esc(J_BONUS_UNLOCK) + "</p>"
+        + (cfg().cardStore ? "<p class='win-note' id='inv-cards'>" + esc(J_CARDS) + " " + esc(J_CARDS_DYC) + "</p>" : "")
+      : "<p class='win-lead'>" + esc(I_LEAD) + "</p>"
       + "<div class='win-facts'><span class='win-fact'>" + esc(I_PAID_AS) + "</span>"
       + "<span class='win-fact'>" + esc(I_UNLOCK) + "</span></div>"
       + "<p class='win-note'>" + esc(I_FIRST) + " " + esc(I_FREE) + "</p>";
@@ -1619,8 +1672,9 @@ window.DYDash = (function () {
       h += "<div class='inv-code'><span class='inv-code-k'>Your invite code</span><span class='inv-code-v' id='inv-code'>" + esc(invCode) + "</span></div>"
         + "<div class='inv-link'><input class='inv-link-in' id='inv-link' readonly value='" + esc(link) + "' />"
         + "<button class='rite-btn' id='inv-copy'>Copy link</button></div>";
+      if (invV2()) h += invAccruedHtml() + invWeekHtml();
       h += invListHtml();
-      h += "<p class='win-note'>" + esc(I_REVIEW) + "</p>";
+      if (!invV2()) h += "<p class='win-note'>" + esc(I_REVIEW) + "</p>";   // v2 has no review brake
     }
     host.innerHTML = h;
     if ($("inv-get")) $("inv-get").onclick = actInviteCode;
@@ -1632,6 +1686,45 @@ window.DYDash = (function () {
         else { $("inv-link").select(); document.execCommand && document.execCommand("copy"); ok(); }
       } catch (e) { $("inv-link").select(); }
     };
+  }
+
+  // INVITES-2 — this week's progress toward the weekly bonus (the bot's count of your own friends' first bundles)
+  function invWeekHtml() {
+    if (!invWeek || !(Number(invWeek.count) >= 0)) return "";
+    var n = Number(invWeek.count), next = null;
+    for (var i = 0; i < J_TIERS.length; i++) { if (n < J_TIERS[i].n) { next = J_TIERS[i]; break; } }
+    return "<p class='win-note inv-week' id='inv-week'>" + esc(next ? J_WEEK(n, next.n, next.usd) : J_WEEK_TOP(n)) + "</p>";
+  }
+  // INVITES-2 A8 — earned but not yet released: the owner's sentence, with the accrued amount in USDT
+  function invAccruedHtml() {
+    if (!invRelease || invRelease.released) return "";
+    var w = 0n; try { w = BigInt(invRelease.accruedWei || "0"); } catch (e) { w = 0n; }
+    if (w <= 0n) return "";
+    return "<p class='win-note inv-accrued' id='inv-accrued'>" + esc(J_ACCRUED(fmt(w / 125000000000000n, 6, 2))) + "</p>";
+  }
+  // INVITES-2 — a row's first cell: your own friend (shortened), a deeper step (never a buyer), or a weekly bonus
+  function invWho(x) {
+    if (x.kind === "bonus") return J_BONUS_ROW(dateFmt(Number(x.week)));
+    if (x.level != null && Number(x.level) > 1) return J_STEP_N(Number(x.level));
+    return invShort(x.buyer);
+  }
+  // INVITES-2 — earnings per step: all six levels (A8: the count at each, from the bot), and the weekly bonuses
+  function invLevelsHtml(dec) {
+    var by = {}, n = {}, order = invLevels ? ["1", "2", "3", "4", "5", "6"] : [];
+    order.forEach(function (k) { by[k] = 0n; n[k] = Number(invLevels[k] || 0); });
+    invItems.forEach(function (x) {
+      var k = x.kind === "bonus" ? "bonus" : String(x.level || 1);
+      if (by[k] == null) { by[k] = 0n; order.push(k); }
+      by[k] += BigInt(x.rewardWei);
+      if (!invLevels && k !== "bonus") n[k] = (n[k] || 0) + 1;
+    });
+    order.sort(function (a, b) { return (a === "bonus" ? 99 : Number(a)) - (b === "bonus" ? 99 : Number(b)); });
+    return "<div class='inv-levels' id='inv-levels'>" + order.map(function (k) {
+      var label = k === "bonus" ? "Weekly bonus" : k === "1" ? J_STEP_1 : J_STEP_N(Number(k));
+      var count = k === "bonus" ? "" : "<span class='inv-level-n'>" + (n[k] || 0) + "</span> ";
+      return "<div class='win-part' data-level='" + esc(k) + "'><span class='win-part-k'>" + esc(label) + "</span><span class='win-part-v'>" + count + fmt(by[k], dec) + " DYC</span></div>";
+    }).join("") + "</div>"
+      + (order.some(function (k) { return k !== "1" && k !== "bonus"; }) ? "<p class='win-note'>" + esc(J_STEP_NOTE) + "</p>" : "");
   }
 
   function invListHtml() {
@@ -1647,13 +1740,13 @@ window.DYDash = (function () {
       if (x.status === "held") tot.held += r;
       else if (x.status === "pending") tot.pending += r;
       else { tot.paid += pw; tot.ready += r - pw; }
-      return "<tr class='inv-row'><td class='inv-buyer'>" + esc(invShort(x.buyer)) + "</td>"
+      return "<tr class='inv-row'><td class='inv-buyer'>" + esc(invV2() ? invWho(x) : invShort(x.buyer)) + "</td>"
         + "<td class='inv-date'>" + esc(dateFmt(Number(x.ts))) + "</td>"
         + "<td class='inv-amt'>" + fmt(r, dec) + " DYC</td>"
         + "<td class='inv-status'>" + esc(st) + "</td></tr>";
     });
     var usd = function (w) { return "&#8776; USD " + fmt(w / 125000000000000n, 6, 2); };
-    return "<table class='inv-table'><tbody>" + rows.join("") + "</tbody></table>"
+    return (invV2() ? invLevelsHtml(dec) : "") + "<table class='inv-table'><tbody>" + rows.join("") + "</tbody></table>"
       + "<div class='inv-totals' id='inv-totals'>"
       + "<div class='win-part'><span class='win-part-k'>Earned</span><span class='win-part-v'>" + fmt(tot.all, dec) + " DYC " + usd(tot.all) + "</span></div>"
       + "<div class='win-part'><span class='win-part-k'>Ready</span><span class='win-part-v'>" + fmt(tot.ready, dec) + " DYC " + usd(tot.ready) + "</span></div>"
@@ -1691,8 +1784,12 @@ window.DYDash = (function () {
         invCode = window.DYInvite.normCode(res.code);
         invItems = Array.isArray(res.invites) ? res.invites.map(function (x, k) {
           return { key: k, buyer: x.buyer, ts: x.ts, unlockAt: x.unlockAt, status: x.status,
-                   rewardWei: String(x.rewardWei || "0"), paidWei: String(x.paidWei || "0") };
+                   rewardWei: String(x.rewardWei || "0"), paidWei: String(x.paidWei || "0"),
+                   kind: x.kind, level: x.level, week: x.week, count: x.count };   // INVITES-2 (absent under v1)
         }) : null;
+        invWeek = res.week && typeof res.week === "object" ? { start: Number(res.week.start), count: Number(res.week.count) } : null;
+        invLevels = res.levels && typeof res.levels === "object" ? res.levels : null;            // INVITES-2 A8
+        invRelease = res.release && typeof res.release === "object" ? res.release : null;       // INVITES-2 A2/A8
         done();
       })
       .catch(function (e) {

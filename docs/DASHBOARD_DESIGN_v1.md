@@ -157,6 +157,34 @@ thing and is untouched.
 - Held for review
 - Unlocked - withdrawals open when the desk does.
 
+**The Torana Invites card - v2** (INVITES-2, owner rulings 2026-10-12). Shown ONLY while the bot's daily digest
+(`invites-digest.json`, latest entry) says `"scheme": "v2"` - the owner flips the bot's `INVITES_SCHEME` after counsel
+confirms the multi-level structure. Until then, and whenever the digest can't be read, the card is exactly the v1 card
+above. Under v2 the lead, steps, bonus and card lines replace the v1 lead and the review line (v2 has no review brake);
+the paid-as, unlock, first-bundle and free-invite lines stay. A deeper step's buyer is never shown - only its step. The
+card-store lines appear only once the USDT/USDC card store is configured (CARD-STORE-1); DYC card purchases earn nothing.
+
+- Share your invite link. When a friend buys their first bundle through it, you earn 5% of what they paid.
+- When the friends they invite buy their first bundle, you earn 1% more - and so on, up to five steps beyond your own friends.
+- Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $20 more. 50 earns $50, 100 earns $200 and 200 earns $400 - only the highest step counts.
+- A weekly bonus unlocks 7 days after its week ends.
+- This week: [12] of [20] - reach [20] for a $[20] bonus.
+- This week: [210] - the top bonus of $400 is reached.
+- Your friends
+- Step [2]
+- Step 2 is the friends your friends invite, and so on up to step 6.
+- Weekly bonus - week of [date]
+- When they buy a card in the store with USDT or USDC, you earn the same shares of its price.
+- Cards bought with DYC earn nothing.
+
+**The v2 amendment** (INVITES-2 amendment, owner rulings final): under v2 the card shows for ANY connected wallet (open
+codes - no Torana needed to get a code). Rewards accrue for every wallet and are released once it owns a Torana (its own
+bundle, or a presale Torana); until then the card says so, with the accrued amount in USDT, and each accrued row says
+what it waits for. The step rows show all six levels with the count at each.
+
+- You have earned [X] USDT in invite rewards. They unlock when you own a Torana — buy the bundle to release them.
+- Unlocks when you own a Torana
+
 **The invite service's refusals** (`INV_SVC`)
 
 - Invites are unavailable for a moment. Try again shortly.
