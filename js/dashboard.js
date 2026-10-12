@@ -398,11 +398,12 @@ window.DYDash = (function () {
     return null;
   }
   function logProvider() {
-    var c = cfg(), urls = [], arch = archiveReadRpc();
+    var urls = [], arch = archiveReadRpc();
     if (arch) urls.push(arch); // archive Read RPC first — extends getLogs to deep history (publicnode prunes, some free caps range)
-    // drpc-first archive-capable fallbacks (the proven admin/s18 pattern), then any config free endpoints
-    ["https://polygon.drpc.org", "https://polygon-bor-rpc.publicnode.com"].forEach(function (u) { if (urls.indexOf(u) < 0) urls.push(u); });
-    (c.readRpcUrlFallbacks || []).forEach(function (u) { if (u && urls.indexOf(u) < 0) urls.push(u); });
+    // drpc-first archive-capable fallbacks (the proven admin/s18 pattern), then the KEYLESS scan list.
+    // READ-PROXY-2: PINNED to config.js chain.scanRpcUrls — the read proxy (readRpcUrl) never serves a getLogs scan.
+    ["https://polygon.drpc.org"].concat((PLAYER.chain && PLAYER.chain.scanRpcUrls) || ["https://polygon-bor-rpc.publicnode.com"])
+      .forEach(function (u) { if (u && urls.indexOf(u) < 0) urls.push(u); });
     return buildProvider("log", urls, walletInChain());
   }
   function resetReadProvider() { _provCache = {}; }
@@ -2077,7 +2078,7 @@ window.DYDash = (function () {
   function runDiag() {
     var c = cfg();
     var callUrls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
-    var logUrls = (c.readRpcUrlFallbacks || []).filter(Boolean); if (!logUrls.length) logUrls = callUrls.slice();
+    var logUrls = ((PLAYER.chain && PLAYER.chain.scanRpcUrls) || []).filter(Boolean); if (!logUrls.length) logUrls = callUrls.slice(1);   // READ-PROXY-2: the keyless scan list
     var uniq = []; callUrls.concat(logUrls).forEach(function (u) { if (uniq.indexOf(u) < 0) uniq.push(u); });
 
     var box = document.createElement("div");

@@ -274,7 +274,7 @@ async function run() {
   console.log("\n── ST · the stamps ──");
   const rite = fs.readFileSync(path.join(SITE, "rite.html"), "utf8"), hallHtml = fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8");
   ok("ST1 · rite.html loads js/solotrack.js?v=t1 (after wallet.js, before the page's own script)",
-     /<script src="js\/wallet\.js\?v=s1q"><\/script>\s*<script src="js\/solotrack\.js\?v=t1"><\/script>\s*<script>/.test(rite));
+     /<script src="js\/wallet\.js\?v=s1r"><\/script>\s*<script src="js\/solotrack\.js\?v=t1"><\/script>\s*<script>/.test(rite));
   ok("ST2 · mp/hall.html loads hall.js?v=h35 (the gate screen moved, then the stake parse)", /<script src="hall\.js\?v=h35"><\/script>/.test(hallHtml));
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));   // the runner's own format

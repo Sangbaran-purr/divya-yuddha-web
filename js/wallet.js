@@ -327,6 +327,7 @@ window.DYWallet = (function () {
           return step(i + 1);
         }
         return poolFor(url).send(method, params).then(function (res) {
+          if (lastGood !== url) announce(url);                  // READ-PROXY-2: once per change of serving endpoint
           lastGood = url;
           return res;
         }, function (err) {
@@ -338,6 +339,11 @@ window.DYWallet = (function () {
     }
     return step(0);
   }
+  // READ-PROXY-2 — ONE console line naming the endpoint that answered a read: the HOSTNAME only (never a path, never a
+  // query, never a key), printed when the serving endpoint changes — so a remote buyer's console proves which road
+  // served them.
+  function hostOnly(url) { try { return new URL(url).hostname; } catch (x) { return "unknown"; } }
+  function announce(url) { try { console.info("[read] served by " + hostOnly(url)); } catch (x) {} }
   function readProvider() {
     var e = window.ethers;
     var urls = readUrls();
@@ -352,7 +358,8 @@ window.DYWallet = (function () {
   function scanProvider() {
     var e = window.ethers;
     var over = null; try { over = window.localStorage.getItem("dy::readRpcUrl"); } catch (x) {}
-    var url = over || (CFG.chain.readRpcUrls && CFG.chain.readRpcUrls[0]) || CFG.chain.rpcUrls[0];
+    // READ-PROXY-2: the scan road is PINNED to the keyless list — never the read proxy at readRpcUrls[0]
+    var url = over || (CFG.chain.scanRpcUrls && CFG.chain.scanRpcUrls[0]) || CFG.chain.rpcUrls[0];
     var req = new e.FetchRequest(url);
     req.timeout = SCAN_TIMEOUT;
     req.setThrottleParams({ maxAttempts: 2 });

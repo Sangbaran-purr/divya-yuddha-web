@@ -46,8 +46,11 @@ window.DY_MF_CONFIG = {
   // The verified primary is publicnode (CORS-clean, full node, reliable eth_call), drpc a redundant fallback; the
   // connected wallet remains the last-resort rescue. Tried in order (FallbackProvider, quorum 1). No API key needed.
   // (A domain-locked mainnet Alchemy key can be dropped in later for eth_call headroom — small pile, not required.)
-  readRpcUrl: "https://polygon-bor-rpc.publicnode.com",
+  // READ-PROXY-2 — our own read proxy first (the fast eth_call road); publicnode moves into the fallbacks. The getLogs
+  // scans never use these: they ride config.js chain.scanRpcUrls (keyless), pinned in dashboard.js and report.js.
+  readRpcUrl: "https://rpc.divyayuddha.games",
   readRpcUrlFallbacks: [
+    "https://polygon-bor-rpc.publicnode.com",
     "https://polygon.drpc.org",
   ],
   // ⚠ eth_getLogs SPLIT: the domain-locked key's free tier caps eth_getLogs at a 10-block range —

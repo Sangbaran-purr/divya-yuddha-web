@@ -22,11 +22,23 @@ window.DY_CONFIG = {
     // had simply never reached the chain. Order is measured latency from a real browser at https://divyayuddha.games
     // (392 / 793 / 792 / 1032 ms). All four answered eth_chainId 137, a live eth_call on the PlayStore, and
     // eth_blockNumber, with CORS open to this origin. KEYLESS ONLY — no key may ever appear in a page.
+    //
+    // READ-PROXY-2 (2026-10-12) — OUR OWN READ PROXY FIRST. rpc.divyayuddha.games (dy-rpc on Render) serves the FAST
+    // read road only (eth_call / eth_blockNumber / eth_chainId); the keyless publicnode, drpc and tenderly follow it, so
+    // a dead proxy falls straight through to them. The 1rpc endpoint is GONE: it sends no CORS header, so it could never
+    // answer a browser at this origin.
     readRpcUrls: [
+      "https://rpc.divyayuddha.games",
       "https://polygon-bor-rpc.publicnode.com",
       "https://polygon.drpc.org",
       "https://polygon.gateway.tenderly.co",
-      "https://1rpc.io/matic",
+    ],
+    // READ-PROXY-2 — THE SCAN ROAD'S KEYLESS LIST. Every getLogs walk (wallet.scanProvider, the dashboard's and the
+    // report's logProvider) rides THIS list and never the proxy: deep scans stay off the one endpoint we pay for.
+    scanRpcUrls: [
+      "https://polygon-bor-rpc.publicnode.com",
+      "https://polygon.drpc.org",
+      "https://polygon.gateway.tenderly.co",
     ],
     blockExplorerUrls: ["https://polygonscan.com"],
   },

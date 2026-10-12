@@ -104,7 +104,8 @@ window.DYReport = (function () {
     return prov;
   }
   function readProvider() { var c = cfg(); return buildProvider("read", [c.readRpcUrl].concat(c.readRpcUrlFallbacks || [])); }
-  function logProvider() { var c = cfg(), free = (c.readRpcUrlFallbacks || []).filter(Boolean); return buildProvider("log", free.length ? free : [c.readRpcUrl]); }
+  // READ-PROXY-2: the getLogs scans are PINNED to the keyless list (config.js chain.scanRpcUrls) — never the read proxy
+  function logProvider() { var free = ((PLAYER.chain && PLAYER.chain.scanRpcUrls) || []).filter(Boolean); return buildProvider("log", free.length ? free : ["https://polygon-bor-rpc.publicnode.com"]); }
 
   // ---- chunked getLogs (S5a pattern): returns [] on any failure so a figure degrades to "—", never throws ----
   function scanLogs(provider, address, topics, fromBlock, toBlock) {

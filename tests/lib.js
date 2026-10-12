@@ -268,6 +268,12 @@ async function storePage(c, player, opts) {
   w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
   w.DY_CONFIG.contracts.dycoin = c.addrs.dyc;           // the inventory coin under test
   if (opts.readUrls) w.DY_CONFIG.chain.readRpcUrls = opts.readUrls.slice();
+  if (opts.scanUrls) w.DY_CONFIG.chain.scanRpcUrls = opts.scanUrls.slice();      // READ-PROXY-2: the keyless scan list
+  if (opts.captureConsole) {                                                      // READ-PROXY-2: what the page tells its console
+    w.__console = [];
+    const keep = w.console.info ? w.console.info.bind(w.console) : null;
+    w.console.info = function () { w.__console.push(Array.prototype.join.call(arguments, " ")); if (keep && opts.echoConsole) keep.apply(null, arguments); };
+  }
   w.DY_CONFIG.contracts.waveCardSale = null;            // the wave-card tabs are OUT of scope here: dark, not busy
   w.DY_CONFIG.contracts.waveCardMarket = null;
   run(path.join(SITE, "js/wallet.js"));
