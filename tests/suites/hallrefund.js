@@ -234,7 +234,7 @@ async function run() {
      (HALL.match(/COMMITMENT_JOIN\(t\.stake\)/g) || []).length === 2 && (HALL.match(/[^_]COMMITMENT\((chosen\.stake|ctx\.stakeWei)\)/g) || []).length === 2 &&
      !/COMMITMENT\(t\.stake\)/.test(HALL));
   const hh = fs.readFileSync(path.join(H.SITE, "mp", "hall.html"), "utf8");
-  ok("X3 · stamps: hall.js h34, hall.css h12", /hall\.js\?v=h34"/.test(hh) && /hall\.css\?v=h12"/.test(hh));
+  ok("X3 · stamps: hall.js h35, hall.css h12", /hall\.js\?v=h35"/.test(hh) && /hall\.css\?v=h12"/.test(hh));
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));
   process.exit(fail ? 1 : 0);

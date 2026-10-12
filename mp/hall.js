@@ -252,6 +252,7 @@
         //   a resume can no longer fire into a socket that would refuse it. Once per feed generation.
         if (v && v.me && resumedGen !== gen) {
           resumedGen = gen; signedInAs = signedInAs || v.me;
+          try { if (client.getLossLimit) client.getLossLimit(); } catch (e) {}   // LIMIT-DISPLAY-1 — only now does the server know us
           try { if (client.resumeSettlement) client.resumeSettlement(); } catch (e) {}
           try { resumePendingTx(); } catch (e) {}
         }
@@ -282,7 +283,10 @@
       //   went into an unauthed socket the server would refuse, and the record was cleared anyway. Resume is now
       //   driven by the AUTHED signal in onUpdate. (authConnected is safe before the challenge: B3 sets the mode
       //   first, so the challenge handler signs when it lands.)
-      var poll = setInterval(function () { if (client && me && window.ethereum) { clearInterval(poll); client.authConnected(); client.getLossLimit && setTimeout(function () { try { client.getLossLimit(); } catch (e) {} }, 600); } }, 120);
+      //   LIMIT-DISPLAY-1 — the daily-limit read is NOT sent from here any more: a fixed 600ms timer raced the sign-in
+      //   (a wallet prompt, or the server's Torana read, takes longer), the server answered "not authed", and the limit
+      //   never reached the screen. It is asked for in the AUTHED step below, once per feed generation.
+      var poll = setInterval(function () { if (client && me && window.ethereum) { clearInterval(poll); client.authConnected(); } }, 120);
       setTimeout(function () { clearInterval(poll); }, 20000); // patient: a mobile in-app wallet can inject window.ethereum a beat late (DYWallet's 3s-detection reasoning)
     } catch (e) { feedState = "dead"; render(); }
     // bounded connect watchdog: no {tables} within 8s → dead face (never a false empty room)
