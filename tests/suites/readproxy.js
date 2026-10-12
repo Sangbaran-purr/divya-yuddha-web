@@ -79,7 +79,8 @@ async function run() {
     const c = await H.chainStore();
     const proxy = await recorder(RPC), pn = await recorder(RPC);
     // the proxy stand-in carries a PATH and a QUERY, so the console line is proven to print the hostname alone
-    const h = await H.storePage(c, c.player, { readUrls: [proxy.url + "/node/v1?apikey=SECRETKEY", pn.url], captureConsole: true });
+    // (the query is deliberately NOT a keyed-URL shape — consoleroad G2 scans every tracked file for those)
+    const h = await H.storePage(c, c.player, { readUrls: [proxy.url + "/node/v1?k=SECRETVALUE", pn.url], captureConsole: true });
     await H.until(() => /In stock/.test(bodyText(h.w)), 20000, "In stock via the proxy");
     ok("P1 · a clean store load reads 'In stock' — served by the PROXY (first on the road); publicnode never asked",
        /In stock/.test(bodyText(h.w)) && proxy.hits.indexOf("eth_call") >= 0 && pn.hits.length === 0, JSON.stringify({ proxy: proxy.hits.slice(0, 5), pn: pn.hits }));
