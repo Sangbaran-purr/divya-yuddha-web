@@ -21,7 +21,8 @@ const USDC = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
 const STORE_JS = path.join(H.SITE, "js", "store.js");
 
 // ── the ruled lines (STORE_DESIGN §11 P19-P26, P8, P12), quoted so a drift shows here too ──
-const P20 = (sym) => "Paid in " + sym + " - pick the coin on the bundle above.";
+const P19 = (sum, sym) => "Buy for " + sum + " · " + sym;     // the button names the coin it will charge (review fix 1)
+const P20 = "Pay with";
 const P21 = (sym, sum) => "Not enough " + sym + " in this wallet - " + sum + " buys this card.";
 const P22 = "Not enough POL in this wallet for the network fee - add a little POL and try again.";
 const P23 = "This card is sold out.";
@@ -185,14 +186,16 @@ async function main() {
     h = await fresh(c, P);
     const w = h.w;
     const b1 = usdBtn(w, "Deva Sainika"), b2 = usdBtn(w, "Agneyastra");
-    ok("T1 · both switches true: card 101 reads 'Buy for USD 20', card 102 'Buy for USD 38'",
-       b1 && b1.textContent === "Buy for USD 20" && b2 && b2.textContent === "Buy for USD 38", (b1 && b1.textContent) + " / " + (b2 && b2.textContent));
+    ok("T1 · both switches true: card 101 reads 'Buy for USD 20 · USDC', card 102 'Buy for USD 38 · USDC' — the coin is NAMED",
+       b1 && b1.textContent === P19("USD 20", "USDC") && b2 && b2.textContent === P19("USD 38", "USDC"), (b1 && b1.textContent) + " / " + (b2 && b2.textContent));
     ok("T2 · the DYC button is unchanged beside it (Approve DYC / Buy, same row)",
        /Approve DYC|^Buy$/.test(tileOf(w, "Deva Sainika").querySelector(".st-btn:not(.st-usd)").textContent));
     ok("T3 · a price that does not divide by 1e14 (2,000 DYC + 1 wei) gets NO USD button (the contract refuses it)", !usdBtn(w, "Airavata's Calf"));
     ok("T4 · a sold-out card gets NO USD button", !usdBtn(w, "Aruna Charioteer"));
-    const coinLine = tileOf(w, "Deva Sainika").querySelector(".st-usd-coin");
-    ok("T5 · the coin line names the bundle's chip (USDC, auto by balance)", coinLine && coinLine.textContent === P20("USDC"), coinLine && coinLine.textContent);
+    const sw = tileOf(w, "Deva Sainika").querySelector(".st-usd-coin");
+    const chips = sw ? Array.from(sw.querySelectorAll(".st-usd-chip")).map((x) => x.textContent + (x.classList.contains("on") ? "*" : "")) : [];
+    ok("T5 · the card carries its own switch: 'Pay with' USDT / USDC, USDC on (the bundle's chip, auto by balance)",
+       !!sw && sw.querySelector(".st-usd-pay").textContent === P20 && chips.join(",") === "USDT,USDC*", chips.join(","));
     // the grid loads more than once (on mount, on connect); each load is one salesOpen() on the DYC sale. Count only once
     // the read road has gone QUIET (no new call for 1.5 s) — a stray per-card read lands after the buttons paint.
     for (let n = -1, t0 = Date.now(); n !== P.calls.length && Date.now() - t0 < 20000;) { n = P.calls.length; await H.sleep(1500); }
@@ -246,18 +249,53 @@ async function main() {
   H.teardown(h);
 
   // ══════════════ C · THE CHIP: the bundle's choice is the card's coin ══════════════
-  console.log("\n── C · the coin is the bundle's chip ──");
+  console.log("\n── C · the coin: named on the button, one switch for the page ──");
+  const btnText = (w, n) => { const b = usdBtn(w, n); return b ? b.textContent : ""; };
+  const cardOn = (w, n) => { const t = tileOf(w, n); const o = t && t.querySelector(".st-usd-chip.on"); return o ? o.textContent : ""; };
+  const bundleOn = (w) => { const o = w.document.querySelector(".b-asset.on .b-asset-l"); return o ? o.textContent : ""; };
   {
     h = await fresh(c, P);
     const w = h.w;
     await waitFor("the bundle's chips", () => Array.from(w.document.querySelectorAll(".b-asset")).length === 2);
-    const usdtChip = Array.from(w.document.querySelectorAll(".b-asset")).filter((b) => /USDT/.test(b.textContent))[0];
-    usdtChip.click();
-    const line = await waitFor("the coin line follows the chip", () => { const l = tileOf(w, "Deva Sainika").querySelector(".st-usd-coin"); return l && l.textContent === P20("USDT") ? l.textContent : null; }).catch(() => null);
-    ok("C1 · picking USDT on the bundle repaints every card's coin line to USDT", !!line);
+    Array.from(w.document.querySelectorAll(".b-asset")).filter((b) => /USDT/.test(b.textContent))[0].click();
+    const moved = await waitFor("the cards follow the bundle", () => bundleOn(w) === "Pay with USDT" && btnText(w, "Deva Sainika") === P19("USD 20", "USDT") && btnText(w, "Agneyastra") === P19("USD 38", "USDT")
+      && cardOn(w, "Deva Sainika") === "USDT" && cardOn(w, "Agneyastra") === "USDT").catch(() => null);
+    ok("C1 · USDT on the BUNDLE: the bundle shows USDT, every card button now reads '· USDT' and every card switch shows USDT", !!moved, bundleOn(w) + " / " + btnText(w, "Deva Sainika") + " / " + cardOn(w, "Agneyastra"));
     const before = await c.usdtT.balanceOf(MASTER);
-    const m = await tapAndSettle(w, "Deva Sainika", [DONE, "Cancelled", "Not enough", "Couldn't"]);
+    const m = await tapAndSettle(w, "Deva Sainika", [DONE]);
     ok("C2 · and the buy pays USDT0 (the void-return token): the master +20 USDT", m === DONE && (await c.usdtT.balanceOf(MASTER)) - before === 20n * DEC6, m);
+    // the switch on a CARD moves the bundle and every other card
+    ok("C3a · (precondition) before the card switch the bundle still shows USDT", bundleOn(w) === "Pay with USDT", bundleOn(w));
+    Array.from(tileOf(w, "Agneyastra").querySelectorAll(".st-usd-chip")).filter((x) => x.textContent === "USDC")[0].click();
+    const back = await waitFor("the bundle follows the card", () => bundleOn(w) === "Pay with USDC" && btnText(w, "Agneyastra") === P19("USD 38", "USDC")
+      && cardOn(w, "Deva Sainika") === "USDC", 300).catch(() => null);   // IMMEDIATE: the switch repaints the bundle itself, not a later refresh
+    ok("C3 · USDC on a CARD's switch: the bundle's chip moves to USDC, and every card reads '· USDC'", !!back, bundleOn(w) + " / " + btnText(w, "Agneyastra"));
+    H.teardown(h);
+  }
+  {
+    // THE NAMED COIN IS THE CHARGED COIN, even when the switch moves while the road is in flight
+    h = await fresh(c, P);
+    const w = h.w;
+    await waitFor("USDC named", () => btnText(w, "Deva Sainika") === P19("USD 20", "USDC"));
+    const usdcB = await c.usdcT.balanceOf(MASTER), usdtB = await c.usdtT.balanceOf(MASTER);
+    P.delayMs = 500;
+    usdBtn(w, "Deva Sainika").click();
+    await H.sleep(150);
+    Array.from(tileOf(w, "Agneyastra").querySelectorAll(".st-usd-chip")).filter((x) => x.textContent === "USDT")[0].click();   // switch mid-road
+    await H.sleep(50);
+    const midLabel = btnText(w, "Deva Sainika");
+    const m = await waitFor("settled", () => { const t = tileOf(w, "Deva Sainika"), e = t && t.querySelector(".st-msg"); return e && /\b(ok|bad)\b/.test(e.className) ? e.textContent.trim() : null; }, 60000)
+      .catch(() => "(never settled)");
+    P.delayMs = 0;
+    const dUsdc = (await c.usdcT.balanceOf(MASTER)) - usdcB, dUsdt = (await c.usdtT.balanceOf(MASTER)) - usdtB;
+    ok("C4 · a switch DURING the buy does not change the coin: the tap that named USDC charged USDC (+20) and no USDT",
+       m === DONE && dUsdc === 20n * DEC6 && dUsdt === 0n, m + " usdc+" + dUsdc + " usdt+" + dUsdt);
+    ok("C4b · and while it was in flight its button still named USDC (the label never shows a coin the road isn't charging)",
+       midLabel === P19("USD 20", "USDC"), midLabel);
+    ok("C5 · every token the wallet was asked to approve or spend was the coin named at the tap",
+       h.eth.__sent.every((t) => [USDC.toLowerCase(), c.wave.store.toLowerCase()].indexOf(t.to.toLowerCase()) >= 0)
+       && h.eth.__sent.filter((t) => t.to.toLowerCase() === c.wave.store.toLowerCase()).every((t) => t.data.toLowerCase().indexOf(USDC.slice(2).toLowerCase()) >= 0));
+    ok("C6 · and afterwards the other cards name the new coin (USDT) — the page choice did move", btnText(w, "Agneyastra") === P19("USD 38", "USDT"), btnText(w, "Agneyastra"));
     H.teardown(h);
   }
 
@@ -370,6 +408,13 @@ const MUTANTS = [
   ["no sold-out check at the tap", "if (F.remaining === 0n) throw usdStop(\"sold\");", ""],
   ["price not required to divide", "if (price == null || price <= 0n || price % DYC_WEI_PER_USD !== 0n) return null;", "if (price == null || price <= 0n) return null;"],
   ["the coin ignores the bundle's chip", "function usdCoinKey() { return bChosen || bShown || \"usdc\"; }", "function usdCoinKey() { return \"usdc\"; }"],
+  ["the button does not name the coin", "var U_BTN = function (sum, sym) { return \"Buy for \" + sum + \" · \" + sym; };", "var U_BTN = function (sum, sym) { return \"Buy for \" + sum; };"],
+  ["the label is not repainted on a switch (it names a coin the tap won't charge)", "if (b.getAttribute(\"data-done\") !== \"1\") b.textContent = U_BTN(b.getAttribute(\"data-sum\"), c.label);", ""],
+  // (NOT a mutant: "the tap charges the page's coin instead of data-coin" is EQUIVALENT — every switch repaints each
+  //  idle button's label and data-coin in the same pass, so at the moment of a tap the two cannot differ. C4/C4b pin
+  //  the only window where they could: a road in flight.)
+  ["a card's switch does not move the bundle", "if (bHost) paintBundle(bHost);   // the bundle's chips follow (paintBundle calls usdCoinRepaint itself)", ""],
+  ["a road in flight is repainted to the new coin", "if (b.getAttribute(\"data-busy\") === \"1\") continue;          // a road in flight keeps the coin it named", ""],
   ["the network is not checked at the signer", "if (Number(x[0].chainId) !== Number(CFG.chain.id)) throw usdStop(\"net\");", ""],
   ["a per-card store read on render", "if (!usdLive || !cusAddr() || soldOut) return;", "if (cusAddr()) loadE().then(function (E) { new E.Contract(cusAddr(), CUS_ABI, readProvider()).remainingOf(row.card.cardId).catch(function () {}); }); if (!usdLive || !cusAddr() || soldOut) return;"],
   ["a rejection worded as a generic refusal", "if (/user rejected|denied|ACTION_REJECTED/i.test(s) || (e && e.code === 4001)) return U_CANCEL;", ""],

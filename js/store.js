@@ -534,7 +534,10 @@ window.DYStore = (function () {
   //   • approve is EXACT (the price, never max) and only when the fresh allowance is short; FEE-1 fee fields on both
   //     sends; every send is staticCall-simulated first. No Torana is needed to buy.
   // =========================================================================
-  var U_COIN = function (sym) { return "Paid in " + sym + " - pick the coin on the bundle above."; };
+  // C3 review fix 1: the BUTTON names the coin it will charge, and a switch on the card changes it (shared with the
+  // bundle's chips — switching either switches both). A buyer never pays in a coin the button did not name.
+  var U_BTN = function (sum, sym) { return "Buy for " + sum + " · " + sym; };
+  var U_PAYWITH = "Pay with";
   var U_SHORT = function (sym, sum) { return "Not enough " + sym + " in this wallet - " + sum + " buys this card."; };
   var U_POL = "Not enough POL in this wallet for the network fee - add a little POL and try again.";
   var U_SOLD = "This card is sold out.";
@@ -546,7 +549,8 @@ window.DYStore = (function () {
   // WaveCardUsdSale): approve 46,331, buy 190,661 incl. the mint; the budget sits above both so a wallet that passes the check is never refused.
   var USD_APPROVE_GAS = 70000n, USD_BUY_GAS = 300000n;
   var DYC_WEI_PER_USD = 100000000000000n;   // 1e14 — the contract's DYC_WEI_PER_USD_UNIT
-  var bShown = null;                        // the chip the bundle tile last showed (assetPicker's auto choice)
+  var bShown = null;
+  var bHost = null;                         // the bundle tile, so a card's coin switch can repaint its chips                        // the chip the bundle tile last showed (assetPicker's auto choice)
 
   function cusAddr() { return bLs("dystore::cardUsdStoreAddress") || (CFG.contracts && CFG.contracts.cardUsdStore); }
   // the USD price in 6-decimal units, or null when the DYC price is busy, zero, or does not divide exactly (the
@@ -557,9 +561,29 @@ window.DYStore = (function () {
   }
   function usdCoinKey() { return bChosen || bShown || "usdc"; }
   function usdCoin() { var k = usdCoinKey(); return ASSETS.filter(function (a) { return a.key === k; })[0] || ASSETS[0]; }
+  // repaint every card's button label, its coin stamp (data-coin — the coin the tap will charge) and its switch together,
+  // in one pass, so the named coin and the charged coin can never disagree
   function usdCoinRepaint() {
-    var lines = document.querySelectorAll(".st-usd-coin");
-    for (var i = 0; i < lines.length; i++) lines[i].textContent = U_COIN(usdCoin().label);
+    var c = usdCoin();
+    var btns = document.querySelectorAll(".st-usd");
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      if (b.getAttribute("data-busy") === "1") continue;          // a road in flight keeps the coin it named
+      b.setAttribute("data-coin", c.key);
+      if (b.getAttribute("data-done") !== "1") b.textContent = U_BTN(b.getAttribute("data-sum"), c.label);
+    }
+    var chips = document.querySelectorAll(".st-usd-chip");
+    for (var j = 0; j < chips.length; j++) {
+      var on = chips[j].getAttribute("data-coin") === c.key;
+      chips[j].className = "st-usd-chip" + (on ? " on" : "");
+      chips[j].setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+  // a switch on ANY card (or the bundle) is the one page choice
+  function pickUsdCoin(key) {
+    bChosen = key;
+    if (bHost) paintBundle(bHost);   // the bundle's chips follow (paintBundle calls usdCoinRepaint itself)
+    usdCoinRepaint();
   }
 
   function buildUsdAction(actions, msg, row, usdLive, soldOut, refresh) {
@@ -567,11 +591,25 @@ window.DYStore = (function () {
     var usd = usdOf(row.price);
     if (usd == null) return;
     var sum = usd6(usd);
+    var c0 = usdCoin();
     var btn = el("button", "st-btn st-usd");
     btn.type = "button";
-    btn.textContent = "Buy for " + sum;
+    btn.setAttribute("data-sum", sum);
+    btn.setAttribute("data-coin", c0.key);
+    btn.textContent = U_BTN(sum, c0.label);
     actions.appendChild(btn);
-    actions.appendChild(txt("div", "st-usd-coin", U_COIN(usdCoin().label)));
+    var sw = el("div", "st-usd-coin");
+    sw.appendChild(txt("span", "st-usd-pay", U_PAYWITH));
+    ASSETS.slice().reverse().forEach(function (a) {                 // USDT first, then USDC
+      var chip = el("button", "st-usd-chip" + (a.key === c0.key ? " on" : ""));
+      chip.type = "button";
+      chip.textContent = a.label;
+      chip.setAttribute("data-coin", a.key);
+      chip.setAttribute("aria-pressed", a.key === c0.key ? "true" : "false");
+      chip.onclick = function () { pickUsdCoin(a.key); };
+      sw.appendChild(chip);
+    });
+    actions.appendChild(sw);
     if (!connectedOk()) { btn.disabled = true; return; }   // the DYC button beside it already says to connect
     btn.onclick = function () { doUsdBuy(btn, msg, row, refresh); };
   }
@@ -609,13 +647,17 @@ window.DYStore = (function () {
   }
 
   function doUsdBuy(btn, msg, row, refresh) {
-    var coin = usdCoin(), sym = coin.label, coinAddr = coin.addr(), cardId = row.card.cardId;
+    // THE COIN IS THE ONE THIS BUTTON NAMED (data-coin, painted with its label) — never re-derived at the tap
+    var named = btn.getAttribute("data-coin");
+    var coin = ASSETS.filter(function (a) { return a.key === named; })[0];
+    if (!coin) return;
+    var sym = coin.label, coinAddr = coin.addr(), cardId = row.card.cardId;
     var w = window.DYWallet.state || {};
     var me = w.address || null;
     var F = null, ctx = { sym: sym, sum: null };
-    btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet…";
+    btn.disabled = true; btn.setAttribute("data-busy", "1"); msg.className = "st-msg"; msg.textContent = "Checking this wallet…";
     var label = btn.textContent;
-    function fail(e) { btn.disabled = false; btn.textContent = label; msg.className = "st-msg bad"; msg.textContent = usdErr(e, ctx); }
+    function fail(e) { btn.removeAttribute("data-busy"); btn.disabled = false; btn.textContent = label; usdCoinRepaint(); msg.className = "st-msg bad"; msg.textContent = usdErr(e, ctx); }
     if (w.connected && !w.chainOk) { fail(usdStop("net")); return; }
     if (!me || !coinAddr) { fail(usdStop("precast")); return; }
     usdFresh(me, coinAddr, cardId)
@@ -667,11 +709,12 @@ window.DYStore = (function () {
       .then(function (o) {
         if (o.slow) throw usdStop("slow");
         msg.className = "st-msg ok"; msg.textContent = U_DONE;
+        btn.setAttribute("data-done", "1"); btn.removeAttribute("data-busy");
         btn.textContent = "Bought";
         if (refresh) setTimeout(refresh, 1200);
       })
       .catch(function (e) {
-        if (e && e.__usd === "slow") { btn.disabled = false; btn.textContent = label; msg.className = "st-msg"; msg.textContent = "Still confirming on chain. Nothing is lost — refresh when it lands."; return; }
+        if (e && e.__usd === "slow") { btn.removeAttribute("data-busy"); btn.disabled = false; btn.textContent = label; msg.className = "st-msg"; msg.textContent = "Still confirming on chain. Nothing is lost — refresh when it lands."; return; }
         fail(e);
       });
   }
@@ -1804,7 +1847,7 @@ window.DYStore = (function () {
       b.appendChild(txt("span", "b-asset-l", "Pay with " + a.label));
       var bal = s && s.balance != null ? "balance " + (Number(s.balance) / 1000000).toFixed(2) : "balance unavailable";
       b.appendChild(txt("span", "b-asset-b", ok ? bal : bal + " · not enough"));
-      if (ok) b.onclick = function () { bChosen = a.key; onPick(); usdCoinRepaint(); };
+      if (ok) b.onclick = function () { pickUsdCoin(a.key); };
       else { b.disabled = true; b.title = "not enough " + a.label + " in this wallet"; }
       row.appendChild(b);
     });
@@ -1953,6 +1996,7 @@ window.DYStore = (function () {
   function mountBundle() {
     var host = document.getElementById("bundle-body");
     if (!host) return;
+    bHost = host;
     var rb = document.getElementById("b-refresh");
     var inFlight = 0;
     // PART 3 — the tile's own refresh is shut while a read is running, so the user cannot stack them. Wallet-event

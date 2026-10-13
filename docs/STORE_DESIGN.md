@@ -301,18 +301,22 @@ gains a second button beside the DYC one, paying USDT or USDC through WaveCardUs
 (config contracts.cardUsdStore). It is shown ONLY while the store's own `open` AND
 WaveCardSale.salesOpen() both read true; a busy read is not true. The price is the DYC
 price / 1e14 (USD 0.01 per DYC), the supply the DYC sale's shared cap - both already read
-by the grid, so the only new read is `open()`. It pays with the coin the bundle tile shows
-(the player's chip, else the one it picked by balance). At the tap the deciding numbers are
+by the grid, so the only new read is `open()`. THE BUTTON NAMES THE COIN IT WILL CHARGE
+(review fix, 2026-10-13): "Buy for USD 20 · USDT", with a USDT / USDC switch on the card
+itself. The choice is ONE for the page, shared with the bundle tile's chips - switching on
+any card or on the bundle switches all of them. The tap charges exactly the coin its
+button named (a road in flight keeps it even if the switch moves). Default: the bundle's
+chip (the player's pick, else the one it picked by balance). At the tap the deciding numbers are
 read again for the connected wallet (both switches, price, supply, coin balance, allowance,
 POL) - all or nothing, P12 on a failed read - and the pen is checked to be the one read
 for. approve is EXACT and only when the fresh allowance is short. No Torana is needed.
 A bought card is owned exactly as a DYC purchase is: "Bought — it is in your Treasury."
 
-P19 the button
-Buy for [USD 20]
+P19 the button (names the coin it will charge)
+Buy for [USD 20] · [USDT]
 
-P20 the coin line under it
-Paid in [USDT] - pick the coin on the bundle above.
+P20 the coin switch's label (then a USDT and a USDC chip)
+Pay with
 
 P21 not enough of the coin (from the fresh read, before any approval)
 Not enough [USDT] in this wallet - [USD 20] buys this card.
@@ -333,7 +337,7 @@ P26 rejected in the wallet
 Cancelled in your wallet.
 
   P19/P21 [USD 20]  priceOf(card) / 1e14, as "USD " + whole dollars (6-decimal USD / 1e6)
-  P20/P21 [USDT]    the coin the tap will pay with - USDC or USDT
+  P19/P21 [USDT]    the coin the tap will pay with - USDC or USDT
 
 P14 RETIRED 2026-10-10 (INVITE-STEP-2): "You were invited by [CODE]. Sign a free invite before you buy - it costs
 nothing and moves no money." went with the separate invite box and its Sign / Skip buttons.

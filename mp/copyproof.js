@@ -166,8 +166,8 @@ const STORE_LAW = [
   ["P17 declined",       "The invite signature is free and moves no money - please sign it to continue with your purchase."],
   ["P18 signing",        "Sign the free invite in your wallet..."],
   // CARD-STORE-1 C3 — the USD card button and its refusals
-  ["P19 usd button",     "Buy for [USD 20]"],
-  ["P20 usd coin",       "Paid in [USDT] - pick the coin on the bundle above."],
+  ["P19 usd button",     "Buy for [USD 20] · [USDT]"],
+  ["P20 usd coin switch", "Pay with"],
   ["P21 usd short",      "Not enough [USDT] in this wallet - [USD 20] buys this card."],
   ["P22 usd pol",        "Not enough POL in this wallet for the network fee - add a little POL and try again."],
   ["P23 usd sold out",   "This card is sold out."],
@@ -182,6 +182,11 @@ for (const [tag, line] of STORE_LAW) {
 }
 
 console.log("\n── the store's structural guards ──");
+// CARD-STORE-1 C3 review fix 1 — the fragment matcher drops one-character pieces (the "·") and "Pay with" also lives in
+// the bundle's chips, so the two USD-card lines are pinned EXACTLY at their own definitions.
+ok("C3-1 · the USD button names its coin: U_BTN is exactly \"Buy for \" + sum + \" · \" + sym",
+   STORE.indexOf('var U_BTN = function (sum, sym) { return "Buy for " + sum + " · " + sym; };') >= 0);
+ok("C3-2 · the card's coin switch is labelled exactly \"Pay with\" (U_PAYWITH)", STORE.indexOf('var U_PAYWITH = "Pay with";') >= 0);
 // S-BUNDLE-3 — THE PRICE IS THE HERO NUMBER, on both faces, and the old body-text line is gone.
 // S-BUNDLE-4 — the PICTURE carries the bundle (card + the site's own coin), the text column carries the price alone.
 ok("the coin line is the site's own 96px DYC mark, the one rite.html serves",
