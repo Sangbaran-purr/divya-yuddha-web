@@ -377,7 +377,10 @@ async function main() {
     await (await new ethers.Contract(c.addrs.nft, ["function mint(address) returns (uint256)"], await c.provider.getSigner(c.addrs.ps)).mint(K.address)).wait();
     h = await vPage(K, inviteLs(code), { svc: s1.stub });
     const m = await tapAndSettle(h.w, "Deva Sainika", [DONE]);
-    ok("V9 · a TORANA HOLDER (the bot can never bind it): no prompt, straight to the buy", m === DONE && typed(h.eth) === 0 && s1.seen.calls === 0, m);
+    const v = s1.seen.verified[0] || {};
+    ok("V9 · C5-A LATE JOIN: a TORANA HOLDER is asked too — signs first, the binding reaches the bot, '" + P15 + "', the buy lands",
+       m === DONE && typed(h.eth) === 1 && s1.seen.calls === 1 && v.ok && v.buyer.toLowerCase() === K.address.toLowerCase() && note(h.w, "Deva Sainika") === P15,
+       m + " typed=" + typed(h.eth) + " calls=" + s1.seen.calls);
     H.teardown(h);
   }
   {
@@ -405,13 +408,10 @@ async function main() {
   {
     const K = await newBuyer(), other = await newBuyer(), code = await realCode(), s1 = bindStub();
     h = await vPage(K, inviteLs(code), { svc: s1.stub });
-    P.delayMs = 600;
     usdBtn(h.w, "Deva Sainika").click();
-    await H.sleep(200);
-    h.eth.__switchTo(other);                                                   // the pen moves under the step's Torana read
-    await H.sleep(2500);
-    P.delayMs = 0;
-    ok("V14 · the wallet switched under the step's read: NO signature is asked for either pen", typed(h.eth) === 0 && s1.seen.calls === 0, "typed=" + typed(h.eth));
+    h.eth.__switchTo(other);                                                   // the pen moves the instant after the tap
+    await H.sleep(3000);
+    ok("V14 · the wallet switched mid-tap: NO signature is asked for either pen, the bind is never called", typed(h.eth) === 0 && s1.seen.calls === 0, "typed=" + typed(h.eth));
     H.teardown(h);
   }
   {
@@ -551,10 +551,11 @@ const MUTANTS = [
   ["C5: a declined signature still buys", "if (go) { doUsdBuy(btn, msg, row, refresh); return; }", "{ doUsdBuy(btn, msg, row, refresh); return; }"],
   ["C5: a dead bot BLOCKS the purchase", "inviteSettled[key] = true; inviteNote(msg, B_INV_SOFT); msg.textContent = \"\";   // the service is down: buy on\n        return true;", "inviteSettled[key] = true; inviteNote(msg, B_INV_SOFT); msg.textContent = \"\";   // the service is down: buy on\n        return false;"],
   ["C5: a can't-apply refusal BLOCKS the purchase", "        msg.textContent = \"\";\n        return true;\n      }, function () {", "        msg.textContent = \"\";\n        return !(res && res.refused);\n      }, function () {"],
-  ["C5: a Torana holder is prompted", "if (bal !== 0n) return true;                        // a Torana holder can't be bound: no prompt", ""],
+  ["C5-A: Torana holders skipped (the retired rule)", "    return inviteSign(me, msg, btn);\n  }\n\n  function inviteSign(me, msg, btn) {",
+    "    return loadE().then(function (E) { return new E.Contract(accessAddr(), BNFT_ABI, readProvider()).balanceOf(me); }).then(function (b) { return b !== 0n ? true : inviteSign(me, msg, btn); }, function () { return true; });\n  }\n\n  function inviteSign(me, msg, btn) {"],
   ["C5: the browser's memory ignored (already-bound wallets asked again)", "if (!r || r.done.indexOf(w) >= 0) return Promise.resolve(true);", "if (!r) return Promise.resolve(true);"],
   ["C5: prompts on the wrong network", "if (ws.connected && !ws.chainOk) return Promise.resolve(true);   // wrong network: never prompt — the buy stops at P25", ""],
-  ["C5: no pen check before the prompt", "if (!sameWallet(me)) return true;                   // the pen moved under the read: don't sign for the wrong wallet", ""],
+  ["C5-A: no pen check before the prompt", "if (String(a).toLowerCase() !== key || !sameWallet(me)) { var pe = new Error(\"pen moved\"); pe.__pen = true; throw pe; }", ""],
   ["C5: the DYC road takes the invite step", "  function doApproveThenSwap(ethers, btn, msg, row) {\n", "  function doApproveThenSwap(ethers, btn, msg, row) {\n    cardInviteGate(msg, btn);\n"],
   ["a rejection worded as a generic refusal", "if (/user rejected|denied|ACTION_REJECTED/i.test(s) || (e && e.code === 4001)) return U_CANCEL;", ""],
 ];

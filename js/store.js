@@ -1316,10 +1316,11 @@ window.DYStore = (function () {
   // true = go on to the buy, false = the buyer declined the free signature (no purchase). Never rejects.
   // CARD-STORE-1 C5 — THE CARD ROAD'S GATE. A USD card buyer from an invite link must be BOUND before they buy, or the
   // chain is never paid (the bot only pays a sale made after the binding). Asked when, and only when, an invite is
-  // remembered, the service is live, this wallet's invite is not already settled (recorded, or can't apply — remembered
-  // beside the code, INVITE-STEP-2), AND the wallet holds no Torana — read FRESH here, because a holder can never be
-  // bound (the bot refuses HELD_TORANA) and asking would be a wasted prompt. A failed Torana read is OUR failure: no
-  // prompt, the buy goes on. A DYC card buy never comes here (no invite step, no commission — unchanged ruling).
+  // remembered, the service is live, and this wallet's invite is not already settled in this browser (recorded, or
+  // can't apply — remembered beside the code, INVITE-STEP-2). C5-A (LATE JOIN, owner ruling 2026-10-13): a Torana
+  // holder is asked too — a holder with no inviter may now be bound once (the bot decides; any refusal never blocks).
+  // There is no public "is bound" lookup (ruling B): a wallet bound from another browser is asked once more, the bot
+  // answers "already bound", the buy goes ahead and this browser remembers it. A DYC card buy never comes here.
   function cardInviteGate(msg, btn) {
     var ws = window.DYWallet.state || {}, me = ws.address || null;
     if (!inviteLive() || !me) return Promise.resolve(true);
@@ -1328,13 +1329,7 @@ window.DYStore = (function () {
     if (inviteSettled[w]) return Promise.resolve(true);
     var r = inviteRead();
     if (!r || r.done.indexOf(w) >= 0) return Promise.resolve(true);
-    return loadE().then(function (ethers) {
-      return new ethers.Contract(accessAddr(), BNFT_ABI, readProvider()).balanceOf(me);
-    }).then(function (bal) {
-      if (bal !== 0n) return true;                        // a Torana holder can't be bound: no prompt
-      if (!sameWallet(me)) return true;                   // the pen moved under the read: don't sign for the wrong wallet
-      return inviteSign(me, msg, btn);
-    }, function () { return true; });                     // the read failed: ours — never a blocker
+    return inviteSign(me, msg, btn);
   }
 
   function inviteSign(me, msg, btn) {
@@ -1343,8 +1338,13 @@ window.DYStore = (function () {
     msg.className = "st-msg"; msg.textContent = B_INV_SIGNING;
     var signedAt = inviteLib().nowS();
     return signerRoad().then(function (r) {
-      var td = inviteLib().bindingTypedData(CFG.chain.id, me, code, signedAt, r.ethers);
-      return r.signer.signTypedData(td.domain, td.types, td.message);
+      // the pen must still be the wallet this binding names — a switch mid-tap never yields a prompt for the wrong
+      // wallet (the bot would refuse it anyway; asking would only confuse). Ours, not the buyer's: the buy decides next.
+      return r.signer.getAddress().then(function (a) {
+        if (String(a).toLowerCase() !== key || !sameWallet(me)) { var pe = new Error("pen moved"); pe.__pen = true; throw pe; }
+        var td = inviteLib().bindingTypedData(CFG.chain.id, me, code, signedAt, r.ethers);
+        return r.signer.signTypedData(td.domain, td.types, td.message);
+      });
     }).then(function (sig) {
       // the bind: a slow or dead service is OUR failure — it never holds the buyer
       var post = fetch(inviteSvc() + "/invites/bind", {
@@ -1373,6 +1373,7 @@ window.DYStore = (function () {
         msg.textContent = ""; inviteNote(msg, B_INV_DECLINED, "bad"); btn.disabled = false;
         return false;
       }
+      if (e && e.__pen) { msg.textContent = ""; return true; }   // the pen moved: nothing asked, nothing settled — the buy road stops it (P12)
       inviteSettled[key] = true; inviteNote(msg, B_INV_SOFT); msg.textContent = "";      // the wallet could not sign: ours
       return true;
     });

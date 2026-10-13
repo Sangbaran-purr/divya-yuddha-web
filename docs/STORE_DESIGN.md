@@ -363,13 +363,14 @@ unchanged: the gate decides only whether it starts.
 
 THE SAME STEP ON THE USD CARD BUY (CARD-STORE-1 C5, owner ruling 2026-10-13: USD card purchases pay the 6-level
 chain, so a card-only buyer from an invite link must be bound before buying). Tapping "Buy for USD … · …" with a
-remembered invite, the service configured, a wallet not already settled in this browser, and NO Torana (read fresh
-at the tap - a holder can never be bound) first asks for the free signature (P18), then the card road continues in
+remembered invite, the service configured, and a wallet not already settled in this browser first asks for the free
+signature (P18) - Torana holders included since C5-A (LATE JOIN, owner ruling 2026-10-13: a holder with no inviter
+may be bound once; only purchases after the binding pay the chain), then the card road continues in
 the same tap (fresh read, exact approve, buy). Declined: P17, no purchase, asked again next tap. Our failures and
 every can't-apply refusal (already bound, loop, code unknown or killed): P16 and the buy goes ahead. Recorded: P15,
-and that wallet is never asked again here. Wrong network, or the wallet switched under the read: no prompt. Same
+and that wallet is never asked again here. Wrong network, or the wallet switched mid-tap: no prompt. Same
 sentences as the bundle; no new copy. A DYC card buy never takes this step (no commission on DYC sales).
-"Already bound" means known to THIS browser (recorded or refused here) - the page cannot ask the bot whether a
+(Owner ruling B, 2026-10-13: no public "is bound" lookup.) "Already bound" means known to THIS browser (recorded or refused here) - the page cannot ask the bot whether a
 wallet is bound, so a wallet bound from another browser is asked once more; the bot answers it as already bound
 (P16), the buy goes ahead, and this browser remembers it.
 
