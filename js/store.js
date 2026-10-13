@@ -611,7 +611,16 @@ window.DYStore = (function () {
     });
     actions.appendChild(sw);
     if (!connectedOk()) { btn.disabled = true; return; }   // the DYC button beside it already says to connect
-    btn.onclick = function () { doUsdBuy(btn, msg, row, refresh); };
+    btn.onclick = function () {
+      // CARD-STORE-1 C5: the free invite signature comes FIRST when one applies (INVITE-STEP-2's law, on the card road).
+      // The button is held for the whole tap, so the coin it named is the coin the buy charges, whatever the switch does.
+      btn.setAttribute("data-busy", "1"); btn.disabled = true;
+      msg.className = "st-msg"; msg.textContent = "";                                // a new tap never shows the last tap's verdict
+      cardInviteGate(msg, btn).then(function (go) {
+        if (go) { doUsdBuy(btn, msg, row, refresh); return; }
+        btn.removeAttribute("data-busy"); btn.disabled = false; usdCoinRepaint();   // declined: no purchase, ready again
+      });
+    };
   }
 
   // the fresh read at the tap — every number that decides, for THIS wallet, on the read road (proxy first)
@@ -1301,7 +1310,35 @@ window.DYStore = (function () {
   function inviteGate(host, msg, btn) {
     var st = bState;
     if (!inviteApplies(st)) return Promise.resolve(true);
-    var code = inviteRead().code, me = st.me, key = String(me).toLowerCase();
+    return inviteSign(st.me, msg, btn);
+  }
+  // THE SIGNATURE + BIND, shared by the bundle's gate and the USD card's (CARD-STORE-1 C5). Same answers, same law:
+  // true = go on to the buy, false = the buyer declined the free signature (no purchase). Never rejects.
+  // CARD-STORE-1 C5 — THE CARD ROAD'S GATE. A USD card buyer from an invite link must be BOUND before they buy, or the
+  // chain is never paid (the bot only pays a sale made after the binding). Asked when, and only when, an invite is
+  // remembered, the service is live, this wallet's invite is not already settled (recorded, or can't apply — remembered
+  // beside the code, INVITE-STEP-2), AND the wallet holds no Torana — read FRESH here, because a holder can never be
+  // bound (the bot refuses HELD_TORANA) and asking would be a wasted prompt. A failed Torana read is OUR failure: no
+  // prompt, the buy goes on. A DYC card buy never comes here (no invite step, no commission — unchanged ruling).
+  function cardInviteGate(msg, btn) {
+    var ws = window.DYWallet.state || {}, me = ws.address || null;
+    if (!inviteLive() || !me) return Promise.resolve(true);
+    if (ws.connected && !ws.chainOk) return Promise.resolve(true);   // wrong network: never prompt — the buy stops at P25
+    var w = String(me).toLowerCase();
+    if (inviteSettled[w]) return Promise.resolve(true);
+    var r = inviteRead();
+    if (!r || r.done.indexOf(w) >= 0) return Promise.resolve(true);
+    return loadE().then(function (ethers) {
+      return new ethers.Contract(accessAddr(), BNFT_ABI, readProvider()).balanceOf(me);
+    }).then(function (bal) {
+      if (bal !== 0n) return true;                        // a Torana holder can't be bound: no prompt
+      if (!sameWallet(me)) return true;                   // the pen moved under the read: don't sign for the wrong wallet
+      return inviteSign(me, msg, btn);
+    }, function () { return true; });                     // the read failed: ours — never a blocker
+  }
+
+  function inviteSign(me, msg, btn) {
+    var code = inviteRead().code, key = String(me).toLowerCase();
     btn.disabled = true;
     msg.className = "st-msg"; msg.textContent = B_INV_SIGNING;
     var signedAt = inviteLib().nowS();

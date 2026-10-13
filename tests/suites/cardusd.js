@@ -19,6 +19,11 @@ const MASTER = "0xbab57f595b80318A79006Cd1f6Fde11464AaF86e";
 const USDT0 = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F";
 const USDC = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
 const STORE_JS = path.join(H.SITE, "js", "store.js");
+// CARD-STORE-1 C5 — the bot's OWN code library: the stub bind route runs the bot's verifier on what the page signed
+const botCodes = require(path.join(H.W3, "services", "approval-bot", "src", "invites", "codes.js"));
+const P15 = "Invite recorded.";
+const P16 = "The invite couldn't be recorded - your purchase goes ahead as normal.";
+const P17 = "The invite signature is free and moves no money - please sign it to continue with your purchase.";
 
 // ── the ruled lines (STORE_DESIGN §11 P19-P26, P8, P12), quoted so a drift shows here too ──
 const P19 = (sum, sym) => "Buy for " + sum + " · " + sym;     // the button names the coin it will charge (review fix 1)
@@ -104,7 +109,7 @@ async function chainCards() {
 const q = (w, s) => w.document.querySelector(s);
 const tileOf = (w, name) => Array.from(w.document.querySelectorAll("#st-buy-grid figure")).filter((f) => (f.querySelector("figcaption") || {}).textContent === name)[0] || null;
 const usdBtn = (w, name) => { const t = tileOf(w, name); return t ? t.querySelector(".st-usd") : null; };
-const msgOf = (w, name) => { const t = tileOf(w, name); const m = t && t.querySelector(".st-msg"); return m ? m.textContent.replace(/\s+/g, " ").trim() : ""; };
+const msgOf = (w, name) => { const t = tileOf(w, name); const m = t && t.querySelector(".st-msg:not(.b-invite-note)"); return m ? m.textContent.replace(/\s+/g, " ").trim() : ""; };
 const sends = (eth) => eth.__calls.filter((m) => m === "eth_sendTransaction").length;
 
 async function page(c, P, opts) {
@@ -142,11 +147,11 @@ async function fresh(c, P, opts) {
 async function tapAndSettle(w, name, want) {
   usdBtn(w, name).click();
   return waitFor("the road settled on " + name, () => {
-    const t = tileOf(w, name), e = t && t.querySelector(".st-msg");
+    const t = tileOf(w, name), e = t && t.querySelector(".st-msg:not(.b-invite-note)");
     if (!e) return null;
     const m = e.textContent.replace(/\s+/g, " ").trim();
     return (/\b(ok|bad)\b/.test(e.className) || /Still confirming/.test(m)) ? m : null;
-  }, 60000);
+  }, 60000).catch(() => "(never settled: " + msgOf(w, name) + ")");   // a road that stalls fails its check by name
 }
 
 async function main() {
@@ -284,7 +289,7 @@ async function main() {
     Array.from(tileOf(w, "Agneyastra").querySelectorAll(".st-usd-chip")).filter((x) => x.textContent === "USDT")[0].click();   // switch mid-road
     await H.sleep(50);
     const midLabel = btnText(w, "Deva Sainika");
-    const m = await waitFor("settled", () => { const t = tileOf(w, "Deva Sainika"), e = t && t.querySelector(".st-msg"); return e && /\b(ok|bad)\b/.test(e.className) ? e.textContent.trim() : null; }, 60000)
+    const m = await waitFor("settled", () => { const t = tileOf(w, "Deva Sainika"), e = t && t.querySelector(".st-msg:not(.b-invite-note)"); return e && /\b(ok|bad)\b/.test(e.className) ? e.textContent.trim() : null; }, 60000)
       .catch(() => "(never settled)");
     P.delayMs = 0;
     const dUsdc = (await c.usdcT.balanceOf(MASTER)) - usdcB, dUsdt = (await c.usdtT.balanceOf(MASTER)) - usdtB;
@@ -296,6 +301,130 @@ async function main() {
        h.eth.__sent.every((t) => [USDC.toLowerCase(), c.wave.store.toLowerCase()].indexOf(t.to.toLowerCase()) >= 0)
        && h.eth.__sent.filter((t) => t.to.toLowerCase() === c.wave.store.toLowerCase()).every((t) => t.data.toLowerCase().indexOf(USDC.slice(2).toLowerCase()) >= 0));
     ok("C6 · and afterwards the other cards name the new coin (USDT) — the page choice did move", btnText(w, "Agneyastra") === P19("USD 38", "USDT"), btnText(w, "Agneyastra"));
+    H.teardown(h);
+  }
+
+  // ══════════════ V · THE INVITE STEP ON THE USD CARD BUY (CARD-STORE-1 C5) ══════════════
+  console.log("\n── V · the invite step on the USD card buy ──");
+  const chainId = Number((await c.provider.getNetwork()).chainId);
+  const realCode = async () => { const wl = ethers.Wallet.createRandom(), td = botCodes.codeRequestTypedData(chainId, wl.address, Math.floor(Date.now() / 1000));
+    return botCodes.codeFromSignature(await wl.signTypedData(td.domain, td.types, td.message)); };
+  // the stub /invites/bind: verifies the page's signature with the BOT'S verifier; `refuse` answers a named refusal
+  const bindStub = (opts) => { const seen = { calls: 0, verified: [] }; return { seen, stub: { "/invites/bind": (init) => {
+    seen.calls++; const b = JSON.parse(init.body); const v = botCodes.verifyBinding(chainId, b); seen.verified.push(v);
+    if (!v.ok) return { refused: "BAD_SIGNATURE" }; if (opts && opts.refuse) return { refused: opts.refuse, sentence: "x" }; return { code: v.code, existing: false }; } } }; };
+  const typed = (eth) => eth.__calls.filter((m) => m === "eth_signTypedData_v4").length;
+  const note = (w, n) => { const t = tileOf(w, n), e = t && t.querySelector(".b-invite-note"); return e ? e.textContent.trim() : ""; };
+  const inviteLs = (code, done) => ({ "dystore::invite": JSON.stringify(Object.assign({ code: code, at: Date.now() }, done ? { done: done } : {})) });
+  const vPage = async (who, ls, extra) => fresh(c, P, Object.assign({ player: who, invite: "https://bot.test", ls: Object.assign({ "dystore::usdcAddress": USDC, "dystore::usdtAddress": USDT0 }, ls) }, extra || {}));
+  const newBuyer = async () => { const wl = ethers.Wallet.createRandom().connect(c.provider);
+    await c.provider.send("anvil_setBalance", [wl.address, "0x" + (10n * DEC).toString(16)]); await fund(wl.address, 200n * DEC6);
+    await c.provider.send("anvil_impersonateAccount", [wl.address]);   // the shim forwards sends to anvil, which must be able to send as K
+    return wl; };
+  {
+    const K = await newBuyer(), code = await realCode(), s1 = bindStub();
+    h = await vPage(K, inviteLs(code), { svc: s1.stub });
+    const before = await c.usdcT.balanceOf(MASTER);
+    const m = await tapAndSettle(h.w, "Deva Sainika", [DONE]);
+    const v = s1.seen.verified[0] || {};
+    ok("V1 · a card-only buyer from an invite link (no Torana): the FREE signature comes FIRST, then the buy lands",
+       m === DONE && typed(h.eth) === 1 && h.eth.__calls.indexOf("eth_signTypedData_v4") < h.eth.__calls.indexOf("eth_sendTransaction")
+       && (await c.usdcT.balanceOf(MASTER)) - before === 20n * DEC6, m + " typed=" + typed(h.eth));
+    ok("V2 · the bot's own verifier accepts what was signed: THIS buyer, THIS code; the page says '" + P15 + "'",
+       s1.seen.calls === 1 && v.ok && v.buyer.toLowerCase() === K.address.toLowerCase() && v.code === code && note(h.w, "Deva Sainika") === P15, JSON.stringify(v) + " / " + note(h.w, "Deva Sainika"));
+    await waitFor("the next card ready", () => { const b = usdBtn(h.w, "Agneyastra"); return b && !b.disabled; });
+    const m2 = await tapAndSettle(h.w, "Agneyastra", [DONE]);
+    ok("V3 · ALREADY BOUND (recorded here): the next card buy asks NOTHING and goes straight to the buy", m2 === DONE && typed(h.eth) === 1 && s1.seen.calls === 1, m2);
+    H.teardown(h);
+  }
+  {
+    const K = await newBuyer(), code = await realCode(), s1 = bindStub();
+    h = await vPage(K, inviteLs(code), { svc: s1.stub });
+    h.eth.__declineTyped = true;
+    usdBtn(h.w, "Deva Sainika").click();
+    await waitFor("the declined sentence", () => note(h.w, "Deva Sainika") === P17, 20000).catch(() => null);
+    await H.sleep(400);
+    ok("V4 · the buyer REJECTS the free signature: '" + P17 + "' — no purchase, nothing approved or sent, the bind never called",
+       note(h.w, "Deva Sainika") === P17 && sends(h.eth) === 0 && s1.seen.calls === 0 && !usdBtn(h.w, "Deva Sainika").disabled, note(h.w, "Deva Sainika"));
+    h.eth.__declineTyped = false;
+    const m = await tapAndSettle(h.w, "Deva Sainika", [DONE]);
+    ok("V5 · …and the next tap ASKS AGAIN; signed this time, the buy lands", m === DONE && typed(h.eth) === 2 && s1.seen.calls === 1, m + " typed=" + typed(h.eth));
+    H.teardown(h);
+  }
+  {
+    const K = await newBuyer(), code = await realCode();
+    h = await vPage(K, inviteLs(code), { svcDown: true });
+    const m = await tapAndSettle(h.w, "Deva Sainika", [DONE]);
+    ok("V6 · the BOT IS DOWN: signed, the bind fails — '" + P16 + "' — and the purchase goes ahead and lands",
+       m === DONE && typed(h.eth) === 1 && note(h.w, "Deva Sainika") === P16, m + " / " + note(h.w, "Deva Sainika"));
+    H.teardown(h);
+  }
+  {
+    const K = await newBuyer(), code = await realCode(), s1 = bindStub({ refuse: "ALREADY_BOUND" });
+    h = await vPage(K, inviteLs(code), { svc: s1.stub });
+    const m = await tapAndSettle(h.w, "Deva Sainika", [DONE]);
+    ok("V7 · a CAN'T-APPLY refusal (already bound elsewhere; the same for LOOP / CODE_KILLED): '" + P16 + "', the buy lands",
+       m === DONE && note(h.w, "Deva Sainika") === P16, m);
+    await waitFor("the next card ready", () => { const b = usdBtn(h.w, "Agneyastra"); return b && !b.disabled; });
+    const m2 = await tapAndSettle(h.w, "Agneyastra", [DONE]);
+    ok("V8 · …and that wallet is remembered: never asked again", m2 === DONE && typed(h.eth) === 1 && s1.seen.calls === 1);
+    H.teardown(h);
+  }
+  {
+    const K = await newBuyer(), code = await realCode(), s1 = bindStub();
+    // K holds a Torana: minted by the PlayStore (already an AccessNFT minter), impersonated on this local chain
+    await c.provider.send("anvil_impersonateAccount", [c.addrs.ps]); await c.provider.send("anvil_setBalance", [c.addrs.ps, "0x" + (1n * DEC).toString(16)]);
+    await (await new ethers.Contract(c.addrs.nft, ["function mint(address) returns (uint256)"], await c.provider.getSigner(c.addrs.ps)).mint(K.address)).wait();
+    h = await vPage(K, inviteLs(code), { svc: s1.stub });
+    const m = await tapAndSettle(h.w, "Deva Sainika", [DONE]);
+    ok("V9 · a TORANA HOLDER (the bot can never bind it): no prompt, straight to the buy", m === DONE && typed(h.eth) === 0 && s1.seen.calls === 0, m);
+    H.teardown(h);
+  }
+  {
+    const K = await newBuyer(), code = await realCode(), s1 = bindStub();
+    h = await vPage(K, inviteLs(code, [K.address.toLowerCase()]), { svc: s1.stub });
+    const m = await tapAndSettle(h.w, "Deva Sainika", [DONE]);
+    ok("V10 · a wallet this browser already settled (bound or can't apply, INVITE-STEP-2's memory): no prompt", m === DONE && typed(h.eth) === 0 && s1.seen.calls === 0, m);
+    H.teardown(h);
+  }
+  {
+    const K = await newBuyer(), s1 = bindStub();
+    h = await vPage(K, {}, { svc: s1.stub });
+    const m = await tapAndSettle(h.w, "Deva Sainika", [DONE]);
+    ok("V11 · no invite remembered: no prompt (control)", m === DONE && typed(h.eth) === 0 && s1.seen.calls === 0, m);
+    H.teardown(h);
+  }
+  {
+    const K = await newBuyer(), code = await realCode(), s1 = bindStub();
+    h = await vPage(K, inviteLs(code), { svc: s1.stub });
+    h.w.DYWallet.state.chainOk = false;
+    const m = await tapAndSettle(h.w, "Deva Sainika", [P25]);
+    ok("V13 · WRONG NETWORK with a remembered invite: no signature prompt — the buy stops at '" + P25 + "'", m === P25 && typed(h.eth) === 0 && s1.seen.calls === 0, m);
+    H.teardown(h);
+  }
+  {
+    const K = await newBuyer(), other = await newBuyer(), code = await realCode(), s1 = bindStub();
+    h = await vPage(K, inviteLs(code), { svc: s1.stub });
+    P.delayMs = 600;
+    usdBtn(h.w, "Deva Sainika").click();
+    await H.sleep(200);
+    h.eth.__switchTo(other);                                                   // the pen moves under the step's Torana read
+    await H.sleep(2500);
+    P.delayMs = 0;
+    ok("V14 · the wallet switched under the step's read: NO signature is asked for either pen", typed(h.eth) === 0 && s1.seen.calls === 0, "typed=" + typed(h.eth));
+    H.teardown(h);
+  }
+  {
+    // a DYC card buy never takes the invite step (no commission on DYC sales — unchanged ruling)
+    const K = await newBuyer(), code = await realCode(), s1 = bindStub();
+    await (await c.dyc.mint(K.address, 10000n * DEC)).wait();
+    h = await vPage(K, inviteLs(code), { svc: s1.stub });
+    const dycBtn = () => tileOf(h.w, "Deva Sainika").querySelector(".st-btn:not(.st-usd)");
+    await waitFor("the DYC button", () => dycBtn() && !dycBtn().disabled);
+    dycBtn().click();
+    await waitFor("the DYC approve settled", () => { const e = tileOf(h.w, "Deva Sainika").querySelector(".st-msg:not(.b-invite-note)"); return e && /ok|bad/.test(e.className); }, 60000).catch(() => null);
+    ok("V12 · a DYC card buy with a remembered invite: NO signature asked, the bind never called", typed(h.eth) === 0 && s1.seen.calls === 0 && sends(h.eth) >= 1,
+       "typed=" + typed(h.eth) + " sends=" + sends(h.eth));
     H.teardown(h);
   }
 
@@ -370,7 +499,7 @@ async function main() {
     usdBtn(h.w, "Deva Sainika").click();
     await H.sleep(250);
     h.eth.__switchTo(other);                                                                   // the pen moves under the read
-    const m = await waitFor("settled", () => { const t = tileOf(h.w, "Deva Sainika"), e = t && t.querySelector(".st-msg"); return e && /\b(ok|bad)\b/.test(e.className) ? e.textContent.trim() : null; }, 60000)
+    const m = await waitFor("settled", () => { const t = tileOf(h.w, "Deva Sainika"), e = t && t.querySelector(".st-msg:not(.b-invite-note)"); return e && /\b(ok|bad)\b/.test(e.className) ? e.textContent.trim() : null; }, 60000)
       .catch(() => "(never settled: " + msgOf(h.w, "Deva Sainika") + " / sends " + sends(h.eth) + ")");
     P.delayMs = 0;
     ok("R11 · the wallet switched under the read (sameWallet): P12, nothing signed for either pen", m === P12 && sends(h.eth) === 0, m);
@@ -417,6 +546,16 @@ const MUTANTS = [
   ["a road in flight is repainted to the new coin", "if (b.getAttribute(\"data-busy\") === \"1\") continue;          // a road in flight keeps the coin it named", ""],
   ["the network is not checked at the signer", "if (Number(x[0].chainId) !== Number(CFG.chain.id)) throw usdStop(\"net\");", ""],
   ["a per-card store read on render", "if (!usdLive || !cusAddr() || soldOut) return;", "if (cusAddr()) loadE().then(function (E) { new E.Contract(cusAddr(), CUS_ABI, readProvider()).remainingOf(row.card.cardId).catch(function () {}); }); if (!usdLive || !cusAddr() || soldOut) return;"],
+  // CARD-STORE-1 C5 — the invite step on the USD card road
+  ["C5: the card road skips the invite step", "cardInviteGate(msg, btn).then(function (go) {", "Promise.resolve(true).then(function (go) {"],
+  ["C5: a declined signature still buys", "if (go) { doUsdBuy(btn, msg, row, refresh); return; }", "{ doUsdBuy(btn, msg, row, refresh); return; }"],
+  ["C5: a dead bot BLOCKS the purchase", "inviteSettled[key] = true; inviteNote(msg, B_INV_SOFT); msg.textContent = \"\";   // the service is down: buy on\n        return true;", "inviteSettled[key] = true; inviteNote(msg, B_INV_SOFT); msg.textContent = \"\";   // the service is down: buy on\n        return false;"],
+  ["C5: a can't-apply refusal BLOCKS the purchase", "        msg.textContent = \"\";\n        return true;\n      }, function () {", "        msg.textContent = \"\";\n        return !(res && res.refused);\n      }, function () {"],
+  ["C5: a Torana holder is prompted", "if (bal !== 0n) return true;                        // a Torana holder can't be bound: no prompt", ""],
+  ["C5: the browser's memory ignored (already-bound wallets asked again)", "if (!r || r.done.indexOf(w) >= 0) return Promise.resolve(true);", "if (!r) return Promise.resolve(true);"],
+  ["C5: prompts on the wrong network", "if (ws.connected && !ws.chainOk) return Promise.resolve(true);   // wrong network: never prompt — the buy stops at P25", ""],
+  ["C5: no pen check before the prompt", "if (!sameWallet(me)) return true;                   // the pen moved under the read: don't sign for the wrong wallet", ""],
+  ["C5: the DYC road takes the invite step", "  function doApproveThenSwap(ethers, btn, msg, row) {\n", "  function doApproveThenSwap(ethers, btn, msg, row) {\n    cardInviteGate(msg, btn);\n"],
   ["a rejection worded as a generic refusal", "if (/user rejected|denied|ACTION_REJECTED/i.test(s) || (e && e.code === 4001)) return U_CANCEL;", ""],
 ];
 

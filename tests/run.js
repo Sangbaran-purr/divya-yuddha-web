@@ -56,7 +56,7 @@ const SUITES = [
   // LIMIT-DISPLAY-1 — the stored daily limit reaches the screen after a reload, however slow the sign-in
   { name: "readproxy",     file: path.join(__dirname, "suites", "readproxy.js"), chain: true, expect: 17 },
   // CARD-STORE-1 C3 — the USD card button against the REAL WaveCardUsdSale (tokens planted at their Polygon addresses)
-  { name: "cardusd",       file: path.join(__dirname, "suites", "cardusd.js"), chain: true, expect: 40, capMs: 600000 },
+  { name: "cardusd",       file: path.join(__dirname, "suites", "cardusd.js"), chain: true, expect: 54, capMs: 600000 },
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
   { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 28 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)
