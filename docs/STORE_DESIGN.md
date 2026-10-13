@@ -296,6 +296,8 @@ The invite signature is free and moves no money - please sign it to continue wit
 P18 while the wallet asks for the free signature
 Sign the free invite in your wallet...
 
+USD CARD STORE LIVE 2026-10-13 - WaveCardUsdSale opened on mainnet (Card 3, tx 0xbbdce12b...), first sale card 106 token 8.
+
 P19-P26  THE USD CARD BUTTON (CARD-STORE-1 C3, 2026-10-13). Each wave card on the Buy grid
 gains a second button beside the DYC one, paying USDT or USDC through WaveCardUsdSale
 (config contracts.cardUsdStore). It is shown ONLY while the store's own `open` AND
