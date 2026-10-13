@@ -134,7 +134,7 @@ async function run() {
   {
     const pages = ["index.html", "admin.html", "register.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html", "mint.html"];
     const read = (p) => fs.readFileSync(path.join(SITE, p), "utf8");
-    ok("X1 · config.js is stamped s19 on every page that loads it (10)", pages.every((p) => /config\.js\?v=s19"/.test(read(p))) && pages.every((p) => !/config\.js\?v=s18"/.test(read(p))));
+    ok("X1 · config.js is stamped s20 on every page that loads it (10; CARD-STORE-1 C3 moved it)", pages.every((p) => /config\.js\?v=s20"/.test(read(p))) && pages.every((p) => !/config\.js\?v=s19"/.test(read(p))));
     ok("X2 · wallet.js s1r, mf-config.js mf9, dashboard.js mf36, report.js mf4f",
        pages.filter((p) => /js\/wallet\.js\?v=/.test(read(p))).every((p) => /js\/wallet\.js\?v=s1r"/.test(read(p)))
          && ["dashboard.html", "report.html", "store.html", "mint.html"].every((p) => /mf-config\.js\?v=mf9"/.test(read(p)))

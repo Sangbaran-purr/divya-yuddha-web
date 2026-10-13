@@ -274,13 +274,14 @@ async function storePage(c, player, opts) {
     const keep = w.console.info ? w.console.info.bind(w.console) : null;
     w.console.info = function () { w.__console.push(Array.prototype.join.call(arguments, " ")); if (keep && opts.echoConsole) keep.apply(null, arguments); };
   }
-  w.DY_CONFIG.contracts.waveCardSale = null;            // the wave-card tabs are OUT of scope here: dark, not busy
+  w.DY_CONFIG.contracts.waveCardSale = opts.waveCardSale || null;   // the wave-card tabs are OUT of scope unless a suite brings its own sale
   w.DY_CONFIG.contracts.waveCardMarket = null;
+  w.DY_CONFIG.contracts.cardUsdStore = opts.cardUsdStore || null;   // CARD-STORE-1 C3: hermetic — never the mainnet store on a local chain
   run(path.join(SITE, "js/wallet.js"));
   run(path.join(SITE, "js/cards.js"));
   run(path.join(SITE, "js/wave-registry.js"));
   run(path.join(SITE, "js/invite.js"));
-  run(path.join(SITE, "js/store.js"));
+  run(opts.storeSrc || path.join(SITE, "js/store.js"));   // storeSrc: a suite's MUTANT copy (the mutant runner only)
   w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
   w.DYStore.mountInvite();     // store.html's order: the strip comes first (a no-op without ?invite=)
   if (opts.tracking) w.DYStore.mountTracking();

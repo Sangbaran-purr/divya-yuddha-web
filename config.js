@@ -83,6 +83,12 @@ window.DY_CONFIG = {
     // Overridable for the anvil proof by dystore::usdcAddress / dystore::usdtAddress (MockStable stands in).
     usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // USDC-native (Polygon, 6 dec)
     usdt: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", // USDT0 (Polygon, 6 dec; a void-return transfer — SafeERC20's case)
+
+    // CARD-STORE-1 — the USD CARD STORE (WaveCardUsdSale), mainnet 2026-10-13, block 95453631 (web3 CARD_STORE_C2). The
+    // same wave cards for USDT or USDC: price = WaveCardSale.priceOf / 1e14, supply = the DYC sale's shared cap, every
+    // payment straight to the master. Immutable; its one switch is `open`, and the page shows its buttons only while
+    // that AND WaveCardSale.salesOpen read true. Overridable for the anvil proof by dystore::cardUsdStoreAddress.
+    cardUsdStore: "0xb6535aCB1FFF2eBe527C0a5682E1814A342B02B6",
   },
 
   // S-HALL-L1 (D3) — the DY Match Server (M-P1 lobby / M-P4–M-P6 staked matches). The Hall reads live tables over this

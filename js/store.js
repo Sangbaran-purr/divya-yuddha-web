@@ -34,6 +34,13 @@ window.DYStore = (function () {
     "function remainingOf(uint256) view returns (uint256)",
     "function buy(uint256 cardId)",
   ];
+  // CARD-STORE-1 C3 — WaveCardUsdSale: the same wave cards for USDT or USDC. Its price is the DYC sale's priceOf / 1e14
+  // (USD 0.01 per DYC, 6-decimal USD) and its supply is the DYC sale's cap, so the grid's existing reads price it.
+  var CUS_ABI = [
+    "function open() view returns (bool)",
+    "function remainingOf(uint256) view returns (uint256)",
+    "function buy(uint256 cardId, address token) returns (uint256)",
+  ];
   var MARKET_ABI = [
     "function marketsOpen() view returns (bool)",
     "function totalListed() view returns (uint256)",
@@ -379,6 +386,11 @@ window.DYStore = (function () {
             return dyc.allowance(s.address, saleAddr()).catch(function () { return null; });
           })
         : Promise.resolve(null);
+      // CARD-STORE-1 C3 — ONE extra read beside the card reads: the USD store's own flag. Its prices and supply are the
+      // DYC sale's (priceOf / 1e14, the one shared cap), already read below, so no card is read twice.
+      var usdOpenP = cusAddr()
+        ? new ethers.Contract(cusAddr(), CUS_ABI, provider).open().catch(function () { return null; })
+        : Promise.resolve(null);
       return Promise.all([
         sale.salesOpen().catch(function () { return null; }),
         dycDecimals(ethers, provider),
@@ -389,11 +401,12 @@ window.DYStore = (function () {
             sale.remainingOf(w.cardId).catch(function () { return null; }),
           ]).then(function (r) { return { card: w, price: r[0], remaining: r[1] }; });
         })),
-      ]).then(function (all) { return { ethers: ethers, open: all[0], rows: all[3], allowance: all[2] }; });
+        usdOpenP,
+      ]).then(function (all) { return { ethers: ethers, open: all[0], rows: all[3], allowance: all[2], usdOpen: all[4] }; });
     }).then(function (res) {
       if (gen !== buyGen) return; // superseded
       buyAllowance = res.allowance;
-      renderBuy(res.ethers, statusEl, grid, res.open, res.rows);
+      renderBuy(res.ethers, statusEl, grid, res.open, res.rows, res.usdOpen);
     }).catch(function () {
       if (gen !== buyGen) return;
       statusEl.textContent = "";
@@ -401,8 +414,11 @@ window.DYStore = (function () {
     });
   }
 
-  function renderBuy(ethers, statusEl, grid, open, rows) {
-    buyCache = { ethers: ethers, statusEl: statusEl, grid: grid, open: open, rows: rows }; // for filter re-render
+  function renderBuy(ethers, statusEl, grid, open, rows, usdOpen) {
+    buyCache = { ethers: ethers, statusEl: statusEl, grid: grid, open: open, rows: rows, usdOpen: usdOpen }; // for filter re-render
+    // CARD-STORE-1 C3 — the USD buttons exist ONLY when BOTH switches read true: the store's own `open` and the DYC
+    // sale's `salesOpen` (the store refuses a buy unless both are on). A busy read (null) is not true — no button.
+    var usdLive = usdOpen === true && open === true;
     grid.className = "ex-grid";
     grid.innerHTML = "";
     var openState = open === null ? "busy" : (open ? "open" : "closed");
@@ -437,6 +453,7 @@ window.DYStore = (function () {
       var soldOut = row.remaining === 0n;
       var priced = !priceBusy && row.price != null && row.price > 0n;
       buildBuyAction(ethers, actions, msg, row, card, openState, soldOut, priced, function () { loadBuy(statusEl, grid); });
+      buildUsdAction(actions, msg, row, usdLive, soldOut, function () { loadBuy(statusEl, grid); });
       cf.fig.appendChild(actions);
       cf.fig.appendChild(msg);
       // ZOOM (second door): the art opens the lightbox; the SAME buy flow is wired inside it
@@ -446,6 +463,7 @@ window.DYStore = (function () {
         supplyText: supplyText,
         wireAction: function (aEl, mEl) {
           buildBuyAction(ethers, aEl, mEl, row, card, openState, soldOut, priced, function () { closeZoom(); loadBuy(statusEl, grid); });
+          buildUsdAction(aEl, mEl, row, usdLive, soldOut, function () { closeZoom(); loadBuy(statusEl, grid); });
         },
       });
       grid.appendChild(cf.fig);
@@ -504,6 +522,158 @@ window.DYStore = (function () {
     }).catch(function (e) {
       btn.disabled = false; btn.textContent = "Buy"; msg.className = "st-msg bad"; msg.textContent = revertMsg(e, "Purchase failed or was rejected.");
     });
+  }
+
+  // =========================================================================
+  // CARD-STORE-1 C3 — BUY A WAVE CARD FOR USD (WaveCardUsdSale), beside the DYC button.
+  //   • SHOWN only when the store's `open` AND the DYC sale's `salesOpen` both read true (renderBuy's usdLive).
+  //   • PAYS with the coin the bundle tile shows (bChosen, else the chip it auto-picked) — one choice for the page.
+  //   • THE TAP RE-READS what decides, for THIS wallet, on the read road — both switches, the price, the shared
+  //     supply, the coin balance, its allowance to the store and the POL balance — ALL OR NOTHING (a failed read
+  //     stops at P12 with nothing signed, the STORE-READ-2 law). Then the pen is checked to be the one we read for.
+  //   • approve is EXACT (the price, never max) and only when the fresh allowance is short; FEE-1 fee fields on both
+  //     sends; every send is staticCall-simulated first. No Torana is needed to buy.
+  // =========================================================================
+  var U_COIN = function (sym) { return "Paid in " + sym + " - pick the coin on the bundle above."; };
+  var U_SHORT = function (sym, sum) { return "Not enough " + sym + " in this wallet - " + sum + " buys this card."; };
+  var U_POL = "Not enough POL in this wallet for the network fee - add a little POL and try again.";
+  var U_SOLD = "This card is sold out.";
+  var U_CLOSED = "The card store is closed for now.";
+  var U_NET = "Switch your wallet to Polygon to buy.";
+  var U_CANCEL = "Cancelled in your wallet.";
+  var U_DONE = "Bought — it is in your Treasury.";   // the DYC road's own words: a card bought either way is owned the same way
+  // gas budgeted per send for the POL check (MetaMask needs gasLimit × maxFee up front). Measured (tests/suites/cardusd.js, the REAL
+  // WaveCardUsdSale): approve 46,331, buy 190,661 incl. the mint; the budget sits above both so a wallet that passes the check is never refused.
+  var USD_APPROVE_GAS = 70000n, USD_BUY_GAS = 300000n;
+  var DYC_WEI_PER_USD = 100000000000000n;   // 1e14 — the contract's DYC_WEI_PER_USD_UNIT
+  var bShown = null;                        // the chip the bundle tile last showed (assetPicker's auto choice)
+
+  function cusAddr() { return bLs("dystore::cardUsdStoreAddress") || (CFG.contracts && CFG.contracts.cardUsdStore); }
+  // the USD price in 6-decimal units, or null when the DYC price is busy, zero, or does not divide exactly (the
+  // contract refuses those — PriceNotExact / Unpriced — so no button is offered for them)
+  function usdOf(price) {
+    if (price == null || price <= 0n || price % DYC_WEI_PER_USD !== 0n) return null;
+    return price / DYC_WEI_PER_USD;
+  }
+  function usdCoinKey() { return bChosen || bShown || "usdc"; }
+  function usdCoin() { var k = usdCoinKey(); return ASSETS.filter(function (a) { return a.key === k; })[0] || ASSETS[0]; }
+  function usdCoinRepaint() {
+    var lines = document.querySelectorAll(".st-usd-coin");
+    for (var i = 0; i < lines.length; i++) lines[i].textContent = U_COIN(usdCoin().label);
+  }
+
+  function buildUsdAction(actions, msg, row, usdLive, soldOut, refresh) {
+    if (!usdLive || !cusAddr() || soldOut) return;
+    var usd = usdOf(row.price);
+    if (usd == null) return;
+    var sum = usd6(usd);
+    var btn = el("button", "st-btn st-usd");
+    btn.type = "button";
+    btn.textContent = "Buy for " + sum;
+    actions.appendChild(btn);
+    actions.appendChild(txt("div", "st-usd-coin", U_COIN(usdCoin().label)));
+    if (!connectedOk()) { btn.disabled = true; return; }   // the DYC button beside it already says to connect
+    btn.onclick = function () { doUsdBuy(btn, msg, row, refresh); };
+  }
+
+  // the fresh read at the tap — every number that decides, for THIS wallet, on the read road (proxy first)
+  function usdFresh(me, coinAddr, cardId) {
+    return loadE().then(function (ethers) {
+      var p = readProvider();
+      var store = new ethers.Contract(cusAddr(), CUS_ABI, p);
+      var sale = new ethers.Contract(saleAddr(), SALE_ABI, p);
+      var t = new ethers.Contract(coinAddr, STABLE_ABI, p);
+      return Promise.all([store.open(), sale.salesOpen(), sale.priceOf(cardId), store.remainingOf(cardId),
+                          t.balanceOf(me), t.allowance(me, cusAddr()), p.getBalance(me)]).then(function (r) {
+        return { open: r[0], salesOpen: r[1], price: r[2], remaining: r[3], balance: r[4], allowance: r[5], pol: r[6] };
+      });
+    });
+  }
+  function usdStop(tag) { var e = new Error(tag); e.__usd = tag; return e; }
+  function usdErr(e, ctx) {
+    if (e && e.__usd === "precast") return B_P12;
+    if (e && e.__usd === "closed") return U_CLOSED;
+    if (e && e.__usd === "sold") return U_SOLD;
+    if (e && e.__usd === "short") return U_SHORT(ctx.sym, ctx.sum || "this price");
+    if (e && e.__usd === "pol") return U_POL;
+    if (e && e.__usd === "net") return U_NET;
+    if (e && e.__usd === "price") return B_P8;
+    var s = (e && (e.shortMessage || e.reason || e.message)) || "";
+    if (/user rejected|denied|ACTION_REJECTED/i.test(s) || (e && e.code === 4001)) return U_CANCEL;
+    if (/insufficient funds|INSUFFICIENT_FUNDS/i.test(s)) return U_POL;
+    if (/StoreClosed|DycSaleClosed/.test(s)) return U_CLOSED;
+    if (/SoldOut/.test(s)) return U_SOLD;
+    if (/ERC20InsufficientBalance|transfer amount exceeds balance/.test(s)) return U_SHORT(ctx.sym, ctx.sum || "this price");
+    if (/network changed|NETWORK_ERROR.*chain|underlying network/i.test(s)) return U_NET;
+    return B_P8;
+  }
+
+  function doUsdBuy(btn, msg, row, refresh) {
+    var coin = usdCoin(), sym = coin.label, coinAddr = coin.addr(), cardId = row.card.cardId;
+    var w = window.DYWallet.state || {};
+    var me = w.address || null;
+    var F = null, ctx = { sym: sym, sum: null };
+    btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet…";
+    var label = btn.textContent;
+    function fail(e) { btn.disabled = false; btn.textContent = label; msg.className = "st-msg bad"; msg.textContent = usdErr(e, ctx); }
+    if (w.connected && !w.chainOk) { fail(usdStop("net")); return; }
+    if (!me || !coinAddr) { fail(usdStop("precast")); return; }
+    usdFresh(me, coinAddr, cardId)
+      .then(function (f) { return f; }, function () { throw usdStop("precast"); })
+      .then(function (f) {
+        F = f;
+        if (!sameWallet(me)) throw usdStop("precast");          // the pen moved under the read
+        if (!F.open || !F.salesOpen) throw usdStop("closed");
+        F.usd = usdOf(F.price);
+        if (F.usd == null) throw usdStop("price");
+        ctx.sum = usd6(F.usd);
+        if (F.remaining === 0n) throw usdStop("sold");
+        if (F.balance < F.usd) throw usdStop("short");
+        return window.DYWallet.feeOverrides();
+      })
+      .then(function (fee) {
+        F.fee = fee;
+        F.needApprove = F.allowance < F.usd;                    // FRESH — never a kept allowance
+        var gas = (F.needApprove ? USD_APPROVE_GAS : 0n) + USD_BUY_GAS;
+        if (F.pol < gas * BigInt(fee.maxFeePerGas)) throw usdStop("pol");
+        return signerRoad();
+      })
+      .then(function (r) {
+        return Promise.all([r.provider.getNetwork(), r.signer.getAddress()]).then(function (x) {
+          if (Number(x[0].chainId) !== Number(CFG.chain.id)) throw usdStop("net");
+          if (!eqAddr(x[1], me) || !sameWallet(me)) throw usdStop("precast");
+          return r;
+        });
+      })
+      .then(function (r) {
+        var store = new r.ethers.Contract(cusAddr(), CUS_ABI, r.signer);
+        var stable = new r.ethers.Contract(coinAddr, STABLE_ABI, r.signer);
+        var step = Promise.resolve();
+        if (F.needApprove) {
+          step = stable.approve.staticCall(cusAddr(), F.usd).then(function () {
+            msg.textContent = "Approve exactly " + ctx.sum + " in your wallet…";
+            return window.DYWallet.feeOverrides().then(function (fee) { return stable.approve(cusAddr(), F.usd, fee); });   // FEE-1, fresh at the send
+          }).then(function (tx) { msg.textContent = "Approving… waiting for confirmation."; return boundedWait(tx); })
+            .then(function (o) { if (o.slow) throw usdStop("slow"); });
+        }
+        return step.then(function () {
+          msg.textContent = "Simulating the purchase…";
+          return store.buy.staticCall(cardId, coinAddr);
+        }).then(function () {
+          msg.textContent = "Confirm the purchase in your wallet…";
+          return window.DYWallet.feeOverrides().then(function (fee) { return store.buy(cardId, coinAddr, fee); });
+        }).then(function (tx) { msg.textContent = "Buying… waiting for confirmation."; return boundedWait(tx); });
+      })
+      .then(function (o) {
+        if (o.slow) throw usdStop("slow");
+        msg.className = "st-msg ok"; msg.textContent = U_DONE;
+        btn.textContent = "Bought";
+        if (refresh) setTimeout(refresh, 1200);
+      })
+      .catch(function (e) {
+        if (e && e.__usd === "slow") { btn.disabled = false; btn.textContent = label; msg.className = "st-msg"; msg.textContent = "Still confirming on chain. Nothing is lost — refresh when it lands."; return; }
+        fail(e);
+      });
   }
 
   // =========================================================================
@@ -857,7 +1027,7 @@ window.DYStore = (function () {
     function reRenderActive() {
       var mkt = tabMkt.getAttribute("aria-selected") === "true";
       if (mkt) { if (mktCache) renderMarket(mktCache.ethers, mktCache.statusEl, mktCache.grid, mktCache.open, mktCache.rows); else loadMarket(mktStatus, mktGrid); }
-      else { if (buyCache) renderBuy(buyCache.ethers, buyCache.statusEl, buyCache.grid, buyCache.open, buyCache.rows); else loadBuy(buyStatus, buyGrid); }
+      else { if (buyCache) renderBuy(buyCache.ethers, buyCache.statusEl, buyCache.grid, buyCache.open, buyCache.rows, buyCache.usdOpen); else loadBuy(buyStatus, buyGrid); }
     }
     if (filterHost) renderFilter(filterHost, reRenderActive);
 
@@ -1634,7 +1804,7 @@ window.DYStore = (function () {
       b.appendChild(txt("span", "b-asset-l", "Pay with " + a.label));
       var bal = s && s.balance != null ? "balance " + (Number(s.balance) / 1000000).toFixed(2) : "balance unavailable";
       b.appendChild(txt("span", "b-asset-b", ok ? bal : bal + " · not enough"));
-      if (ok) b.onclick = function () { bChosen = a.key; onPick(); };
+      if (ok) b.onclick = function () { bChosen = a.key; onPick(); usdCoinRepaint(); };
       else { b.disabled = true; b.title = "not enough " + a.label + " in this wallet"; }
       row.appendChild(b);
     });
@@ -1712,6 +1882,7 @@ window.DYStore = (function () {
       ? function (k) { var a = st.asset[k]; return a && a.packPrice != null ? a.packPrice * BigInt(bPacks) : null; }
       : function (k) { var a = st.asset[k]; return a && a.bundlePrice != null ? a.bundlePrice : null; };
     var pick = assetPicker(st, unitOf, function () { paintBundle(host); });
+    bShown = pick.chosen; usdCoinRepaint();   // CARD-STORE-1 C3: the card tiles pay with the chip the bundle shows
 
     if (!holder) {
       card.appendChild(picture(500000000000000000000n));

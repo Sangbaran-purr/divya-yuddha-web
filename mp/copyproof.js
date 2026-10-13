@@ -165,6 +165,15 @@ const STORE_LAW = [
   // INVITE-STEP-2 — the signature is part of Buy (P14 and its box retired)
   ["P17 declined",       "The invite signature is free and moves no money - please sign it to continue with your purchase."],
   ["P18 signing",        "Sign the free invite in your wallet..."],
+  // CARD-STORE-1 C3 — the USD card button and its refusals
+  ["P19 usd button",     "Buy for [USD 20]"],
+  ["P20 usd coin",       "Paid in [USDT] - pick the coin on the bundle above."],
+  ["P21 usd short",      "Not enough [USDT] in this wallet - [USD 20] buys this card."],
+  ["P22 usd pol",        "Not enough POL in this wallet for the network fee - add a little POL and try again."],
+  ["P23 usd sold out",   "This card is sold out."],
+  ["P24 usd closed",     "The card store is closed for now."],
+  ["P25 usd network",    "Switch your wallet to Polygon to buy."],
+  ["P26 usd cancelled",  "Cancelled in your wallet."],
 ];
 console.log("\n── THE STORE'S LAW · STORE_DESIGN section 11 ruled copy (doc → js/store.js) ──");
 for (const [tag, line] of STORE_LAW) {

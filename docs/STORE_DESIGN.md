@@ -296,6 +296,45 @@ The invite signature is free and moves no money - please sign it to continue wit
 P18 while the wallet asks for the free signature
 Sign the free invite in your wallet...
 
+P19-P26  THE USD CARD BUTTON (CARD-STORE-1 C3, 2026-10-13). Each wave card on the Buy grid
+gains a second button beside the DYC one, paying USDT or USDC through WaveCardUsdSale
+(config contracts.cardUsdStore). It is shown ONLY while the store's own `open` AND
+WaveCardSale.salesOpen() both read true; a busy read is not true. The price is the DYC
+price / 1e14 (USD 0.01 per DYC), the supply the DYC sale's shared cap - both already read
+by the grid, so the only new read is `open()`. It pays with the coin the bundle tile shows
+(the player's chip, else the one it picked by balance). At the tap the deciding numbers are
+read again for the connected wallet (both switches, price, supply, coin balance, allowance,
+POL) - all or nothing, P12 on a failed read - and the pen is checked to be the one read
+for. approve is EXACT and only when the fresh allowance is short. No Torana is needed.
+A bought card is owned exactly as a DYC purchase is: "Bought — it is in your Treasury."
+
+P19 the button
+Buy for [USD 20]
+
+P20 the coin line under it
+Paid in [USDT] - pick the coin on the bundle above.
+
+P21 not enough of the coin (from the fresh read, before any approval)
+Not enough [USDT] in this wallet - [USD 20] buys this card.
+
+P22 not enough POL for the network fee (fresh POL balance vs the fee cap of the sends)
+Not enough POL in this wallet for the network fee - add a little POL and try again.
+
+P23 sold out
+This card is sold out.
+
+P24 the store closed (either switch off)
+The card store is closed for now.
+
+P25 wrong network
+Switch your wallet to Polygon to buy.
+
+P26 rejected in the wallet
+Cancelled in your wallet.
+
+  P19/P21 [USD 20]  priceOf(card) / 1e14, as "USD " + whole dollars (6-decimal USD / 1e6)
+  P20/P21 [USDT]    the coin the tap will pay with - USDC or USDT
+
 P14 RETIRED 2026-10-10 (INVITE-STEP-2): "You were invited by [CODE]. Sign a free invite before you buy - it costs
 nothing and moves no money." went with the separate invite box and its Sign / Skip buttons.
 
