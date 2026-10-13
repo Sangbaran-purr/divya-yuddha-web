@@ -373,6 +373,10 @@ async function hall(url, escAddr, dycAddr, player, provider, opts) {
   w.localStorage.setItem("dyhall::stakeEscrowAddress", escAddr);
   w.localStorage.setItem("dyhall::dycAddress", dycAddr);
   w.localStorage.setItem("dyhall::readRpcUrl", RPC);
+  // HERMETIC: the SHARED read road (js/wallet.js — the fee floor, the Torana read) is pinned to the local chain too, as
+  // every other page harness already does. Unpinned, a Hall test's fee read walked the REAL config list — and on
+  // 2026-10-13 this machine's ISP resolver sinkholed publicnode, the walk hung, and ten Hall suites timed out.
+  if (!opts.liveReadRoad) w.localStorage.setItem("dy::readRpcUrl", RPC);
   if (!opts.realGate) w.localStorage.setItem("dyhall::devAccess", "1");     // the documented proof-only gate bypass (FREE-PLAY-1: opts.realGate reads the Torana for real)
   const run = (p) => { const code = fs.readFileSync(p, "utf8"); w.eval(code); };
   // S-HALL-SLIP-SCOPE-1 — opts.srcDir points the two PRODUCT files at another checkout of them (a temp dir holding
