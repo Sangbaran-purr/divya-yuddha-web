@@ -36,7 +36,7 @@ function pageAt(iso, opts) {
   });
   const fixed = Date.parse(iso);
   const pre = "<script>(function(){var t=" + fixed + ";Date.now=function(){return t;};})();"
-    + "window.fetch=function(){return Promise.resolve({json:function(){return Promise.resolve(" + JSON.stringify(PUZZLES) + ");}});};</script>";
+    + "window.fetch=function(){return Promise.resolve({json:function(){return Promise.resolve(" + JSON.stringify(opts.puzzles || PUZZLES) + ");}});};</script>";
   html = html.replace("<head>", "<head>" + pre);
   const url = "https://divyayuddha.games/play/daily/" + (opts.q || "");
   const dom = new JSDOM(html, { url: url, runScripts: "dangerously", pretendToBeVisual: true,
@@ -104,11 +104,21 @@ async function main() {
       ["2026-11-30", "2027-01-01", v.today, "garbage", "2026-10-1"].forEach((w) => { const pk = D.pick(PUZZLES, ms, w); if (pk.puzzle && pk.puzzle.date > v.today) leak = true; });
     }
     ok("F3 · on every day from 17 Oct to 5 Nov, no road (today, the list, any ?d=) reaches a puzzle dated after today", !leak);
+    const noneLine = (dom) => { const n = doc(dom).getElementById("dd-none"); return n.hidden ? null : n.textContent; };
     const before = pageAt("2026-10-14T10:00:00Z"); await tick();
-    ok("F4 · before the batch (14 Oct): no puzzle and no list — only the heading (the no-puzzle wording is the owner's to write)",
-      doc(before).getElementById("dd-play").hidden && doc(before).getElementById("dd-past").hidden && doc(before).getElementById("dd-none").textContent === "");
+    ok("F4 · before the first puzzle (14 Oct): 'The first Daily Puzzle arrives on Monday 19 October.' — no puzzle, no list yet",
+      noneLine(before) === "The first Daily Puzzle arrives on Monday 19 October." && doc(before).getElementById("dd-play").hidden && doc(before).getElementById("dd-past").hidden, noneLine(before));
+    const eve = pageAt("2026-10-18T23:59:59Z"); await tick();
+    const dawn = pageAt("2026-10-19T00:00:00Z"); await tick();
+    ok("F4b · THE UNLOCK: at 23:59:59 UTC on 18 Oct the message still shows; at 00:00:00 UTC on 19 Oct the first puzzle is there",
+      noneLine(eve) === "The first Daily Puzzle arrives on Monday 19 October." && noneLine(dawn) === null && doc(dawn).getElementById("dd-date").textContent === "2026-10-19");
+    const shifted = PUZZLES.filter((p) => p.date >= "2026-10-21");
+    const early = pageAt("2026-10-14T10:00:00Z", { puzzles: shifted }); await tick();
+    ok("F4c · the date is READ FROM THE DATA, not hard-coded: a batch starting 21 Oct says 'Wednesday 21 October'",
+      noneLine(early) === "The first Daily Puzzle arrives on Wednesday 21 October.", noneLine(early));
     const after = pageAt("2026-11-02T10:00:00Z"); await tick();
-    ok("F5 · after the batch (2 Nov): no puzzle of the day; all 14 are in the earlier list", doc(after).getElementById("dd-play").hidden && doc(after).querySelectorAll("#dd-pastlist li").length === 14);
+    ok("F5 · after the batch runs out (2 Nov): 'A new puzzle is on its way. Try an earlier one below.' and all 14 earlier puzzles listed",
+      noneLine(after) === "A new puzzle is on its way. Try an earlier one below." && doc(after).getElementById("dd-play").hidden && doc(after).querySelectorAll("#dd-pastlist li").length === 14, noneLine(after));
   });
 
   // ═══ PLAYING: a win, a wrong play, a reveal, a missed day ═══
@@ -173,6 +183,18 @@ async function main() {
     play(d6, w6.play, w6.target ? { target: w6.target } : {});
     ok("M2 · …and solving 24 Oct starts again at 1", doc(d6).getElementById("dd-streak").textContent === "1");
 
+    // the reveal on an EARLIER puzzle: no confirm, and never the today-only line
+    const P8 = byDate("2026-10-20"), l8 = loserOf(P8);
+    const d8 = pageAt("2026-10-24T09:00:00Z", { q: "?d=2026-10-20", store: { [D.STORE_KEY]: JSON.stringify(stored(d6)) } }); await tick();
+    const keep8 = JSON.stringify(stored(d8));
+    play(d8, l8.play);
+    click(d8, "#dd-actions .dd-btn", "Show me the answer");
+    await new Promise((r) => setTimeout(r, 120));
+    ok("R8 · revealing an EARLIER puzzle: no streak warning, and the note never says 'Today doesn't count…' — only 'Earlier puzzles don't count toward your streak.'",
+      doc(d8).getElementById("dd-confirm").hidden && msg(d8).indexOf("The winning play: ") === 0
+        && doc(d8).getElementById("dd-afternote").textContent === "Earlier puzzles don't count toward your streak."
+        && doc(d8).querySelector("main").textContent.indexOf("Today doesn't count as solved") < 0 && JSON.stringify(stored(d8)) === keep8, JSON.stringify([doc(d8).getElementById("dd-confirm").hidden, msg(d8).slice(0,40), doc(d8).getElementById("dd-afternote").textContent, doc(d8).body.textContent.indexOf("Today doesn"), JSON.stringify(stored(d8)) === keep8]));
+
     // an earlier puzzle: playable for fun, never touches the streak
     const before = JSON.stringify(stored(d6));
     const P7 = byDate("2026-10-23"), w7 = winnerOf(P7);
@@ -196,7 +218,10 @@ async function main() {
     const P = byDate("2026-10-29"), w = winnerOf(P), L = w.line;
     const d = pageAt("2026-10-29T10:00:00Z"); await tick();
     // the card alone, no Leap: the solver's own slot, then end the turn
-    play(d, w.play, { slot: L.pos == null ? 0 : L.pos });
+    click(d, ".dd-hand .dd-card", w.play); click(d, "#dd-actions .dd-btn", "Play " + w.play);
+    const slots = [...doc(d).querySelectorAll(".dd-slot")];
+    ok("L0 · placing a Unit: each slot button says 'Place it here'", slots.length > 0 && slots.every((b) => b.textContent === "Place it here" && b.getAttribute("aria-label") === "Place it here"));
+    slots[L.pos == null ? 0 : L.pos].click();
     click(d, "#dd-actions .dd-btn", "End my turn");
     ok("L1 · 29 Oct: the right card WITHOUT the Leap loses ('Not this one')", /^Not this one/.test(msg(d)), msg(d));
     // with the solver's own Leap

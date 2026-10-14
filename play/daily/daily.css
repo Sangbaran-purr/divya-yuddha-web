@@ -85,3 +85,6 @@ button.dd-card { cursor: pointer; }
 /* the house stylesheet gives sections a display; a hidden panel must stay hidden */
 .dd [hidden], .dd-modal[hidden] { display: none !important; }
 .dd-boardnote { color: var(--gold-hairline); font-size: .9rem; margin: 0 0 6px; text-align: center; }
+.dd-none { text-align: center; margin: 18px 0 6px; }
+.dd-noneline { font-size: 1.1rem; color: var(--flame-core); margin: 0; }
+.dd-slot { font-size: .62rem; }

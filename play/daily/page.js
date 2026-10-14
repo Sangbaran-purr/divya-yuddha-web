@@ -38,6 +38,9 @@
     cantPlay: "Can't be played now.",
     solvedAlready: "You've solved today's puzzle.",
     boardAfter: "The board after your play, before the round is scored.",
+    // no puzzle today (owner ruling 2026-10-14): before the first puzzle, and after a batch runs out
+    firstArrives: function (when) { return "The first Daily Puzzle arrives on " + when + "."; },
+    onItsWay: "A new puzzle is on its way. Try an earlier one below.",
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -113,7 +116,7 @@
     });
     return wrap;
   }
-  function slotBtn(i) { var b = el("button", "dd-slot", "Here"); b.type = "button"; b.setAttribute("aria-label", "Place it here"); b.addEventListener("click", function () { commitPlay(null, i); }); return b; }
+  function slotBtn(i) { var b = el("button", "dd-slot", "Place it here"); b.type = "button"; b.setAttribute("aria-label", "Place it here"); b.addEventListener("click", function () { commitPlay(null, i); }); return b; }
 
   function leapTargets(u) {
     var pl = g.players[0];
@@ -300,6 +303,22 @@
     });
   }
 
+  // no puzzle today: before the first one, say when it arrives (from the data, never hard-coded); otherwise point to
+  // the earlier puzzles. The day name and date are read in UTC, the puzzle's own calendar.
+  function noPuzzle(v) {
+    var first = list.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0];
+    var none = $("dd-none"); none.innerHTML = "";
+    var line = (first && v.today < first.date) ? T.firstArrives(dayName(first.date)) : T.onItsWay;
+    none.appendChild(el("p", "dd-noneline", line));
+    none.hidden = false; $("dd-play").hidden = true;
+  }
+  function dayName(date) {
+    var d = new Date(date + "T00:00:00Z");
+    var W = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    var M = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return W[d.getUTCDay()] + " " + d.getUTCDate() + " " + M[d.getUTCMonth()];
+  }
+
   function start(puzzles) {
     list = puzzles;
     var q = null; try { q = new URLSearchParams(location.search).get("d"); } catch (e) {}
@@ -307,7 +326,7 @@
     P = pk.puzzle; isToday = pk.isToday;
     renderPast(v.past.filter(function (p) { return !P || p.date !== P.date; }));
     if (!store) $("dd-store").textContent = T.noStore;
-    if (!P) { $("dd-none").hidden = false; $("dd-play").hidden = true; return; }   // no puzzle today — the copy is the owner's to write
+    if (!P) { noPuzzle(v); return; }
     $("dd-play").hidden = false;
     $("dd-date").textContent = P.date + (isToday ? "" : " · an earlier puzzle");
     $("dd-ptitle").textContent = P.title;

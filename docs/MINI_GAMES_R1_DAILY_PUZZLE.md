@@ -67,7 +67,7 @@ hides nothing from someone who runs the solver; it keeps the key out of plain si
 | `play/daily/daily.js` | the day rules (no DOM): UTC date, which puzzles are visible, streak, safe storage, note decoding |
 | `play/daily/notes.js` | the 14 explanations, ENCODED — built by `node scripts/daily-notes-encode.js` from the owner's plain file outside the repo |
 | `play/daily/daily.css` | stone · gold · flame (threshold.css tokens); mobile first, rows wrap — no sideways scrolling |
-| `tests/suites/daily.js` | 46 checks: the real page in jsdom with a controlled clock and store |
+| `tests/suites/daily.js` | 50 checks: the real page in jsdom with a controlled clock and store |
 
 - **Judging.** The page builds the position with `puzzle-core.js` over the site's engine copy (loaded as a plain
   script), lets the player play on that live engine — card, target, slot and, for Vanaras, the free Leap (choose the
@@ -85,6 +85,9 @@ hides nothing from someone who runs the solver; it keeps the key out of plain si
   A revealed day is not solved and ends the streak, the same as a missed day. Best streak is kept. Every storage
   read/write is wrapped; with storage blocked the page still plays and says progress isn't being saved; a corrupt or
   oddly-shaped record is treated as empty.
-- **No puzzle today** (before 19 Oct, or after 1 Nov when the batch runs out): the page shows only the heading (and
-  the earlier-puzzles list once there is one). The wording for this state is the OWNER'S TO RULE ON — none was
-  invented. The `#dd-none` panel is in place, empty.
+- **No puzzle today** (owner ruling 2026-10-14): one line, then the earlier puzzles. Before the first puzzle:
+  "The first Daily Puzzle arrives on Monday 19 October." — the day and date are READ FROM THE DATA (the earliest puzzle,
+  in UTC), never hard-coded. After a batch runs out: "A new puzzle is on its way. Try an earlier one below."
+- **Where players find it** (owner ruling 2026-10-14): from the GAME'S MAIN MENU only — no site-nav or dashboard link.
+- **Wording** approved word for word (2026-10-14), with "Place it here" on the slot buttons, the description without
+  "UTC", and "Today doesn't count as solved, and your streak is over." shown ONLY on today's puzzle.

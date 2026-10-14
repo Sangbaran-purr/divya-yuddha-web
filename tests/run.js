@@ -74,7 +74,7 @@ const SUITES = [
   // MINI-GAMES-1 R2: the Daily Puzzle PAGE — the real page in jsdom (controlled clock and store): UTC dates incl. +5:30
   // and -8, win / wrong / draw / reveal / missed day, storage blocked, no future puzzle, in-page solver = offline solver,
   // no plain answer or explanation in any served file.
-  { name: "daily",         file: path.join(__dirname, "suites", "daily.js"), chain: false, expect: 46 },
+  { name: "daily",         file: path.join(__dirname, "suites", "daily.js"), chain: false, expect: 50 },
 ];
 
 function freePort() {
