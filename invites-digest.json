@@ -29,5 +29,12 @@
     "bindings": 0,
     "sha256": "9a9921bd23c5d4032d5ab65d144c94af056a4d988b54129fbe7d1b4b48e653e2",
     "scheme": "v1"
+  },
+  {
+    "date": "2026-10-14",
+    "codes": 1,
+    "bindings": 1,
+    "sha256": "111eb8ea13f9327bda1ed244cd249c439f48249fb6c3f2a0059b657cbe7f6738",
+    "scheme": "v2"
   }
 ]
