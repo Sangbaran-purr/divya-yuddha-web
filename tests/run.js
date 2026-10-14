@@ -60,7 +60,7 @@ const SUITES = [
   // MY-INVITES-1 — the affiliate's own page against the REAL bot over a REAL chain (a 7-deep tree, both schemes)
   { name: "myinvites",     file: path.join(__dirname, "suites", "myinvites.js"), chain: true, expect: 58, capMs: 900000 },
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
-  { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 28 },
+  { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 30 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)
   // MP-FIX-2: the Hall steps back while a match is live — the frame's bands, the collapse, and the lobby's safety
   // (source + mutants; no chain and no network — the pixels are proven in a browser and written into the rung).

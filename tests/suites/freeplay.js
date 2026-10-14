@@ -257,9 +257,15 @@ async function run() {
   // SITE-AUDIT-1 re-applied the injected S3 block (the Store roundel relink), so the copy is compared OUTSIDE that
   // block: the game itself, the gate preamble and the stamp are unchanged since before FREE-PLAY-1.
   const outsideS3 = (t) => t.replace(/<!-- DYW-S3-SUPPRESS-START[\s\S]*?<!-- DYW-S3-SUPPRESS-END -->/, "<S3/>");
-  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block (the game, the redirect, the stamp)",
-     outsideS3(head("game/index.html")) === outsideS3(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")) &&
-     head("game/STAMP") === fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8"));
+  // MINI-GAMES-1 (owner ruling 2026-10-14) re-synced the copy from game 49555c0: its ONLY change is the main-menu Daily
+  // Puzzle plaque + its door, and the stamp 07c3530 -> 49555c0. Those exact pieces are taken out before comparing, so
+  // ANY other drift in the copy still turns this red.
+  const withoutDoor = (t) => t.replace(/      <button class="mode plaque-lg active" id="mode-daily">[^\n]*<\/button>\n/, "")
+    .replace(/\/\* MINI-GAMES-1 R2 — THE DAILY PUZZLE DOOR[\s\S]*?\n\}\)\(\);\n/, "");
+  const nowCopy = fs.readFileSync(path.join(SITE, "game/index.html"), "utf8");
+  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle door (MINI-GAMES-1) and its stamp",
+     outsideS3(head("game/index.html")) === outsideS3(withoutDoor(nowCopy)) && withoutDoor(nowCopy) !== nowCopy &&
+     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === "49555c0");
   // SITE-AUDIT-1 grew the sync script (GAME_REF + the Store relink); the GATE it injects must not have moved
   const gateBlock = (t) => (t.match(/<!-- DYW-GATE-START[\s\S]*?<!-- DYW-S3-SUPPRESS-START/) || [""])[0];
   ok("DG2 · the sync script's gate preamble is unchanged since before FREE-PLAY-1 (a passless visit still goes to the rite)",
@@ -267,7 +273,8 @@ async function run() {
      /if \(!sessionStorage\.getItem\("dyw_pass"\)\) \{ location\.replace\("\.\.\/rite\.html"\); return; \}/.test(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")));
   const demo = fs.readFileSync(path.join(SITE, "demo/index.html"), "utf8"), demoHead = head("demo/index.html");
   ok("DG3 · the demo still seeds the pass and its mark the same way; ONLY its button changed ('Play free' → the rite)",
-     demo.replace('<a class="demo-cta" href="../rite.html">Play free</a>', '<a class="demo-cta" href="../index.html">Get Access</a>') === demoHead &&
+     demo.replace('<a class="demo-cta" href="../rite.html">Play free</a>', '<a class="demo-cta" href="../index.html">Get Access</a>')
+       .replace("../game/index.html?v=49555c0", "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows the MINI-GAMES-1 re-sync
      /sessionStorage\.setItem\("dyw_pass", "1"\)/.test(demo) && /sessionStorage\.setItem\("dyw_demo", "1"\)/.test(demo));
 
   // ═══════════════ ST · THE STAMPS ═══════════════
