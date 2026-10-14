@@ -88,7 +88,8 @@ async function main() {
   const wnft = await F("WaveCardNFT").deploy(MASTER, "ipfs://base/"); await wnft.waitForDeployment();
   const sale = await F("WaveCardSale").deploy(c.addrs.dyc, await wnft.getAddress(), MASTER, MASTER); await sale.waitForDeployment();
   const store = await F("WaveCardUsdSale").deploy(await sale.getAddress()); await store.waitForDeployment();
-  await (await sale.connect(master).setPrices([101, 102, 103], [2000n * DEC, 3800n * DEC, 2000n * DEC])).wait();
+  // the LIVE mainnet prices for these ids (101 Deva Sainika 2,000 · 102 Agneyastra 3,800 · 103 Airavata's Calf 3,800 DYC)
+  await (await sale.connect(master).setPrices([101, 102, 103], [2000n * DEC, 3800n * DEC, 3800n * DEC])).wait();
   await (await sale.connect(master).setSupplyCaps([101, 102, 103], [100, 100, 100])).wait();
   await (await sale.connect(master).setSalesOpen(true)).wait();
   await (await wnft.connect(master).setMinter(await sale.getAddress(), true)).wait();
@@ -143,7 +144,7 @@ async function main() {
   const LJ = await wallet();
   await mine(1, 2); await bundle(LJ);                                          // LJ bought a bundle UNBOUND…
   await mine(1, 2); const bLJ = await bind(LJ, codeOf[W[0].address]);         // …then joined W0 LATE…
-  await mine(1, 2); await card(LJ, 103);                                     // …then a USD 20 card (pending)
+  await mine(1, 2); await card(LJ, 101);                                     // …then a USD 20 card, Deva Sainika (pending)
   await mine(140, 2);                                                          // past the deriver's head buffer
   deskPaid.set(W[0].address.toLowerCase(), 100n * DEC);                       // the desk has paid W0 100 DYC
 
@@ -235,6 +236,12 @@ async function main() {
        JSON.stringify([shownUsd("#mi-money .mi-m[data-k='earned']"), usd(sum(() => true))]));
     ok("M4-" + scheme + " · the page can never show more than the desk will pay: ready ≤ the ledger's unlocked entitlement", BigInt(mval(w, "ready")) <= cum);
     ok("M5-" + scheme + " · the Withdraw button is the dashboard's one Withdraw card", q(w, "#mi-withdraw") && q(w, "#mi-withdraw").getAttribute("href") === "dashboard.html#winnings-panel");
+    ok("M7-" + scheme + " · something is ready, so the Withdraw button is the site's normal ACTIVE primary button (btn-g btn-p, as the dashboard's Claim), not dimmed",
+       q(w, "#mi-withdraw").classList.contains("btn-g") && q(w, "#mi-withdraw").classList.contains("btn-p") && !q(w, "#mi-withdraw").classList.contains("mi-off") && !q(w, "#mi-withdraw").getAttribute("aria-disabled"));
+    ok("C1-" + scheme + " · the invitees column reads 'What they bought'", Array.from(w.document.querySelectorAll("#mi-direct thead th")).map((x) => x.textContent).indexOf("What they bought") >= 0);
+    if (scheme === "v2") ok("B1-v2 · the whole bonus ladder sits under the count, word for word; nothing highlighted at " + (led.week.progress.get(me) || 0) + " this week",
+       q(w, "#mi-ladder") && q(w, "#mi-ladder").textContent === "20 bundles → USD 20 · 50 → USD 50 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)" && !q(w, "#mi-ladder .mi-tier.on"),
+       q(w, "#mi-ladder") && q(w, "#mi-ladder").textContent);
     // ── invitees and history ──
     const direct = Array.from(w.document.querySelectorAll("#mi-direct tbody tr")).map((r) => r.querySelector("td[data-k='wallet']").textContent);
     ok("D1-" + scheme + " · My direct invitees = W1 and LJ, SHORTENED (0xAbCd…1234), oldest first", JSON.stringify(direct) === JSON.stringify([short(W[1].address), short(LJ.address)]), JSON.stringify(direct));
@@ -261,6 +268,31 @@ async function main() {
         .replace(/<script src="js\/[^"]+"><\/script>/g, "").replace(/<script>\s*window\.DYMyInvites[\s\S]*?<\/script>/, "");
       fs.writeFileSync(path.join(dir, "myinvites-" + scheme + ".html"), out);
     }
+    H.teardown(h);
+  }
+
+  console.log("\n── N · card names are the store's ──");
+  {
+    // every live card id: the page's name for it IS the store page's name for it (its own resolveCard)
+    const hs = await H.storePage(c, c.player, { waveCardSale: null });
+    const hp = await page(W[0], "v1");
+    const live = hs.w.DY_WAVE_REGISTRY.list().filter((x) => x.status === "live");
+    const off = live.filter((x) => hp.w.DYMyInvites._cardName(x.cardId) !== hs.w.DYStore.resolveCard(x.cardId).name).map((x) => x.cardId + ":" + hp.w.DYMyInvites._cardName(x.cardId) + "≠" + hs.w.DYStore.resolveCard(x.cardId).name);
+    ok("N1 · all " + live.length + " live card ids: the page's name for the id = the store page's resolveCard name for it", live.length >= 87 && off.length === 0, off.join(" | "));
+    ok("N2 · and an unknown id never borrows a neighbour's name ('Card #999')", hp.w.DYMyInvites._cardName(999) === "Card #999");
+    H.teardown(hs); H.teardown(hp);
+  }
+  {
+    // the bot's answer drives the ladder's highlight: step 50 reached → that step, and only it, is highlighted
+    const ans = { ok: true, scheme: "v2", code: "ABCDEFGH", inviter: null, levels: [1, 2, 3, 4, 5, 6].map((lv) => ({ level: lv, people: 0, bundles: 0, cards: 0, salesUsdE6: "0", ratePct: lv === 1 ? 5 : 1, earnedWei: "0" })),
+      money: { earnedWei: "0", readyWei: "0", withdrawnWei: "0", pendingWei: "0", pending: [], lockedWei: "0", heldWei: "0", bonusWei: "0" }, direct: [], history: [],
+      week: { start: 1760918400, closesAt: 1761523200, count: 57, next: { count: 100, usd: 200 }, reached: 50, tiers: [{ count: 20, usd: 20 }, { count: 50, usd: 50 }, { count: 100, usd: 200 }, { count: 200, usd: 400 }] } };
+    const h = await H.myInvitesPage(c, W[0], Object.assign({ svc: { "/invites/mine": () => ans } }, process.env.DY_PAGE_MUTANT ? { pageSrc: process.env.DY_PAGE_MUTANT } : {}));
+    await waitFor("provider", () => h.w.DYWallet.state.hasProvider); await h.w.DYWallet.connect(); await waitFor("connected", () => h.w.DYWallet.state.connected);
+    await show(h);
+    const on = Array.from(h.w.document.querySelectorAll("#mi-ladder .mi-tier.on")).map((x) => x.getAttribute("data-tier"));
+    ok("B2 · 57 this week, step 50 reached: exactly the '50 → USD 50' step is highlighted", JSON.stringify(on) === JSON.stringify(["50"]), JSON.stringify(on));
+    ok("W1 · nothing ready (ready = 0): the Withdraw button is DIMMED (and not clickable)", q(h.w, "#mi-withdraw").classList.contains("mi-off") && q(h.w, "#mi-withdraw").getAttribute("aria-disabled") === "true");
     H.teardown(h);
   }
 
@@ -318,6 +350,13 @@ const MUTANTS = [
   ["the withdraw button goes somewhere else", "href='dashboard.html#winnings-panel'", "href='dashboard.html'"],
   ["the pending dates are dropped", "      + row(\"pending\", \"Pending\", m.pendingWei, pend ? \"<ul class='mi-pend'>\" + pend + \"</ul>\" : \"\")", "      + row(\"pending\", \"Pending\", m.pendingWei)"],
   ["a declined signature is shown as 'down'", "      err = (e && (e.code === 4001 || e.code === \"ACTION_REJECTED\")) || /user rejected|denied/i.test(s) ? MI_DECLINED : MI_DOWN;", "      err = MI_DOWN;"],
+  ["the active withdraw button is the plain (non-primary) style", "        ? \"<a class='btn-g btn-p mi-withdraw' id='mi-withdraw'", "        ? \"<a class='btn-g mi-withdraw' id='mi-withdraw'"],
+  ["the withdraw button is always dimmed", "      + (big(m.readyWei) > 0n\n", "      + (false\n"],
+  ["the withdraw button is never dimmed", "        : \"<a class='btn-g btn-p mi-withdraw mi-off' id='mi-withdraw' aria-disabled='true' href='dashboard.html#winnings-panel'>\"", "        : \"<a class='btn-g btn-p mi-withdraw' id='mi-withdraw' href='dashboard.html#winnings-panel'>\""],
+  ["the ladder highlights the next step, not the reached one", "      var on = w.reached != null && Number(w.reached) === Number(t.count);", "      var on = w.next != null && Number(w.next.count) === Number(t.count);"],
+  ["the ladder is missing", "      + ladderLine(w)", ""],
+  ["names from the registry by list position, not by id", "      var w = window.DY_WAVE_REGISTRY && window.DY_WAVE_REGISTRY.lookup ? window.DY_WAVE_REGISTRY.lookup(n) : null;", "      var w = window.DY_WAVE_REGISTRY && window.DY_WAVE_REGISTRY.list ? window.DY_WAVE_REGISTRY.list()[n - 100] : null;"],
+  ["the old column name", "<th>What they bought</th>", "<th>Bought (paying)</th>"],
   ["the counts-only rule line is missing", "    return h + \"</tbody></table><p class='mi-note' id='mi-counts'>\" + esc(d.scheme === \"v2\" ? MI_COUNTS_V2 : MI_COUNTS_V1) + \"</p>\";", "    return h + \"</tbody></table>\";"],
 ];
 

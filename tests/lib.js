@@ -323,6 +323,7 @@ async function myInvitesPage(c, player, opts) {
   w.DY_CONFIG.chain.id = chainId;
   w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
   run(path.join(SITE, "js/wallet.js"));
+  run(path.join(SITE, "js/cards.js"));                     // my-invites.html's order: the launch list, then the wave registry
   run(path.join(SITE, "js/wave-registry.js"));
   run(path.join(SITE, "js/invite.js"));
   run(opts.pageSrc || path.join(SITE, "js/myinvites.js"));   // pageSrc: a suite's MUTANT copy (the mutant runner only)

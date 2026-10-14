@@ -32,6 +32,7 @@ window.DYMyInvites = (function () {
   var MI_LOCKED = "Locked until you own a Torana";
   var MI_WITHDRAW = "Withdraw on the dashboard";
   var MI_DYC_NOTE = "125 DYC = USD 1.";
+  var MI_LADDER_TAIL = "(highest tier reached only)";
 
   var data = null, dataFor = null, err = null, busy = false;
   var TIMEOUT_MS = 15000;
@@ -49,10 +50,16 @@ window.DYMyInvites = (function () {
   function dateOf(ts) { try { return new Date(Number(ts) * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); } catch (e) { return "—"; } }
   function utcOf(ts) { try { return new Date(Number(ts) * 1000).toUTCString().replace(/:00 GMT$/, " UTC").replace(/ GMT$/, " UTC"); } catch (e) { return "—"; } }
   function localOf(ts) { try { return new Date(Number(ts) * 1000).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); } catch (e) { return "—"; } }
+  // THE NAME OF A CARD ID — the store page's own lookup, in its order (js/store.js resolveCard): the launch list, then
+  // the wave registry's lookup. tests/suites/myinvites.js checks every live id against the store's resolveCard.
   function cardName(id) {
-    var reg = window.DY_WAVE_REGISTRY, w = null;
-    try { w = reg && reg.list ? reg.list().filter(function (x) { return String(x.cardId) === String(id); })[0] : null; } catch (e) { w = null; }
-    return w && w.name ? w.name : "Card #" + id;
+    var n = Number(id);
+    try {
+      if (window.DY_CARDS && window.DY_CARDS.byId && window.DY_CARDS.byId[n]) return window.DY_CARDS.lookup(n).name;
+      var w = window.DY_WAVE_REGISTRY && window.DY_WAVE_REGISTRY.lookup ? window.DY_WAVE_REGISTRY.lookup(n) : null;
+      if (w && w.name) return w.name;
+    } catch (e) { /* fall through */ }
+    return "Card #" + id;
   }
   function statusOf(h) {
     if (h.status === "pending") return "pending until " + dateOf(h.unlockAt);
@@ -128,7 +135,9 @@ window.DYMyInvites = (function () {
       + (v2 ? row("locked", MI_LOCKED, m.lockedWei) : "")
       + (big(m.heldWei) > 0n ? row("held", "Held for review", m.heldWei) : "")
       + "</div><p class='mi-note'>" + esc(MI_DYC_NOTE) + "</p>"
-      + "<a class='rite-btn mi-withdraw' id='mi-withdraw' href='dashboard.html#winnings-panel'>" + esc(MI_WITHDRAW) + "</a>";
+      + (big(m.readyWei) > 0n
+        ? "<a class='btn-g btn-p mi-withdraw' id='mi-withdraw' href='dashboard.html#winnings-panel'>" + esc(MI_WITHDRAW) + "</a>"
+        : "<a class='btn-g btn-p mi-withdraw mi-off' id='mi-withdraw' aria-disabled='true' href='dashboard.html#winnings-panel'>" + esc(MI_WITHDRAW) + "</a>");
     return h;
   }
   function weekBlock(d) {
@@ -136,11 +145,24 @@ window.DYMyInvites = (function () {
     var w = d.week, next = w.next;
     return "<div class='mi-week' id='mi-week' data-count='" + w.count + "'><p>Direct first bundles this week: <b>" + w.count + "</b>.</p>"
       + (next ? "<p>Next bonus at " + next.count + ": <b>USD " + next.usd + "</b> (" + (next.count - w.count) + " to go).</p>" : "<p>You have reached the top bonus this week.</p>")
+      + ladderLine(w)
       + "<p class='mi-note'>The week closes Monday 00:00 UTC — " + esc(utcOf(w.closesAt)) + " (" + esc(localOf(w.closesAt)) + " your time).</p></div>";
+  }
+  // the whole ladder: "20 bundles → USD 20 · 50 → USD 50 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)",
+  // the step reached highlighted (the bot's own tiers and its own "reached")
+  function ladderLine(w) {
+    var tiers = Array.isArray(w.tiers) ? w.tiers : [];
+    if (!tiers.length) return "";
+    var parts = tiers.map(function (t, i) {
+      var txt = (i === 0 ? t.count + " bundles" : String(t.count)) + " → USD " + t.usd;
+      var on = w.reached != null && Number(w.reached) === Number(t.count);
+      return "<span class='mi-tier" + (on ? " on" : "") + "' data-tier='" + t.count + "'" + (on ? " aria-current='true'" : "") + ">" + esc(txt) + "</span>";
+    });
+    return "<p class='mi-ladder' id='mi-ladder'>" + parts.join(" · ") + " " + esc(MI_LADDER_TAIL) + "</p>";
   }
   function directTable(d) {
     if (!d.direct.length) return "<p class='mi-note' id='mi-direct-none'>No one has joined through your link yet.</p>";
-    var h = "<table class='mi-table' id='mi-direct'><thead><tr><th>Wallet</th><th>Joined</th><th>Bought (paying)</th><th>Earned me</th></tr></thead><tbody>";
+    var h = "<table class='mi-table' id='mi-direct'><thead><tr><th>Wallet</th><th>Joined</th><th>What they bought</th><th>Earned me</th></tr></thead><tbody>";
     d.direct.forEach(function (x) {
       var bought = [];
       if (x.bundles) bought.push(x.bundles === 1 ? "bundle" : x.bundles + " bundles");
@@ -205,5 +227,5 @@ window.DYMyInvites = (function () {
     render();
     if (window.DYWallet) window.DYWallet.onChange(function () { render(); });
   }
-  return { mount: mount, _show: show, _data: function () { return data; } };
+  return { mount: mount, _show: show, _data: function () { return data; }, _cardName: cardName };
 })();

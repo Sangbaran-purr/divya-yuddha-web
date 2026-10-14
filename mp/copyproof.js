@@ -553,6 +553,8 @@ const MI_LAW = [
   ["MI13 locked",          "Locked until you own a Torana", MYI],
   ["MI14 withdraw",        "Withdraw on the dashboard", MYI],
   ["MI15 dyc note",        "125 DYC = USD 1.", MYI],
+  ["MI16 invitee column",  "What they bought", MYI],
+  ["MI17 ladder tail",     "(highest tier reached only)", MYI],
 ];
 console.log("\n── MY INVITES · DASHBOARD_DESIGN_v1 §13 ruled copy (doc → js/myinvites.js, + the dashboard's link) ──");
 for (const [tag, line, src] of MI_LAW) {

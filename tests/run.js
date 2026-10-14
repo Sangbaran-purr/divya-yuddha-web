@@ -19,7 +19,7 @@ const PICK = ARGS.filter(function (a) { return a.indexOf("--") !== 0; });
 
 // name → file. copyproof is already committed under mp/ and needs no chain; it runs first and fastest.
 const SUITES = [
-  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 397 },
+  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 401 },
   { name: "p4",            file: path.join(__dirname, "suites", "p4.js"), chain: true, expect: 7 },
   { name: "p8rig",         file: path.join(__dirname, "suites", "p8rig.js"), chain: true, expect: 7 },
   { name: "p7dom",         file: path.join(__dirname, "suites", "p7dom.js"), chain: true, expect: 4 },
@@ -58,7 +58,7 @@ const SUITES = [
   // CARD-STORE-1 C3 — the USD card button against the REAL WaveCardUsdSale (tokens planted at their Polygon addresses)
   { name: "cardusd",       file: path.join(__dirname, "suites", "cardusd.js"), chain: true, expect: 54, capMs: 600000 },
   // MY-INVITES-1 — the affiliate's own page against the REAL bot over a REAL chain (a 7-deep tree, both schemes)
-  { name: "myinvites",     file: path.join(__dirname, "suites", "myinvites.js"), chain: true, expect: 49, capMs: 900000 },
+  { name: "myinvites",     file: path.join(__dirname, "suites", "myinvites.js"), chain: true, expect: 58, capMs: 900000 },
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
   { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 28 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)

@@ -225,3 +225,12 @@ button links there). The page makes no chain reads (card names come from the loc
 - Locked until you own a Torana
 - Withdraw on the dashboard
 - 125 DYC = USD 1.
+- What they bought
+- (highest tier reached only)
+
+Review fixes (owner, 2026-10-14): the direct-invitees column is "What they bought"; the weekly bonus (v2) shows the whole
+ladder under the count - "20 bundles → USD 20 · 50 → USD 50 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)" -
+from the bot's own tiers, the step reached highlighted; "Withdraw on the dashboard" is the site's normal gold button
+whenever Unlocked (ready) > 0, and dimmed only at 0. Card names come from the store page's own lookup (the launch list,
+then the wave registry); a suite check holds every live id to the store's resolveCard, and on 2026-10-14 all 87 live
+ids were checked against their on-chain metadata (WaveCardNFT tokenURI base) and priceOf/1e14 - 0 mismatches.
