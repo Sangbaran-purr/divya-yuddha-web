@@ -148,7 +148,7 @@ window.DYMyInvites = (function () {
       + ladderLine(w)
       + "<p class='mi-note'>The week closes Monday 00:00 UTC — " + esc(utcOf(w.closesAt)) + " (" + esc(localOf(w.closesAt)) + " your time).</p></div>";
   }
-  // the whole ladder: "20 bundles → USD 20 · 50 → USD 50 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)",
+  // the whole ladder: "20 bundles → USD 40 · 50 → USD 100 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)",
   // the step reached highlighted (the bot's own tiers and its own "reached")
   function ladderLine(w) {
     var tiers = Array.isArray(w.tiers) ? w.tiers : [];

@@ -166,7 +166,7 @@ card-store lines appear only once the USDT/USDC card store is configured (CARD-S
 
 - Share your invite link. When a friend buys their first bundle through it, you earn 5% of what they paid.
 - When the friends they invite buy their first bundle, you earn 1% more - and so on, up to five steps beyond your own friends.
-- Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $20 more. 50 earns $50, 100 earns $200 and 200 earns $400 - only the highest step counts.
+- Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $40 more. 50 earns $100, 100 earns $200 and 200 earns $400 - only the highest step counts.
 - A weekly bonus unlocks 7 days after its week ends.
 - This week: [12] of [20] - reach [20] for a $[20] bonus.
 - This week: [210] - the top bonus of $400 is reached.
@@ -229,7 +229,7 @@ button links there). The page makes no chain reads (card names come from the loc
 - (highest tier reached only)
 
 Review fixes (owner, 2026-10-14): the direct-invitees column is "What they bought"; the weekly bonus (v2) shows the whole
-ladder under the count - "20 bundles → USD 20 · 50 → USD 50 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)" -
+ladder under the count - "20 bundles → USD 40 · 50 → USD 100 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)" -
 from the bot's own tiers, the step reached highlighted; "Withdraw on the dashboard" is the site's normal gold button
 whenever Unlocked (ready) > 0, and dimmed only at 0. Card names come from the store page's own lookup (the launch list,
 then the wave registry); a suite check holds every live id to the store's resolveCard, and on 2026-10-14 all 87 live

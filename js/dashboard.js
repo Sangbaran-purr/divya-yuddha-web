@@ -223,7 +223,7 @@ window.DYDash = (function () {
   //    exactly the v1 card above. Same law: never the words of the older Referrals link (AF1-AF3). ──
   var J_LEAD = "Share your invite link. When a friend buys their first bundle through it, you earn 5% of what they paid.";
   var J_STEPS = "When the friends they invite buy their first bundle, you earn 1% more - and so on, up to five steps beyond your own friends.";
-  var J_BONUS = "Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $20 more. 50 earns $50, 100 earns $200 and 200 earns $400 - only the highest step counts.";
+  var J_BONUS = "Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $40 more. 50 earns $100, 100 earns $200 and 200 earns $400 - only the highest step counts.";
   var J_BONUS_UNLOCK = "A weekly bonus unlocks 7 days after its week ends.";
   function J_WEEK(n, target, usd) { return "This week: " + n + " of " + target + " - reach " + target + " for a $" + usd + " bonus."; }
   function J_WEEK_TOP(n) { return "This week: " + n + " - the top bonus of $400 is reached."; }
@@ -239,7 +239,7 @@ window.DYDash = (function () {
   function J_ACCRUED(usdt) { return "You have earned " + usdt + " USDT in invite rewards. They unlock when you own a Torana — buy the bundle to release them."; }
   var J_WAITING = "Unlocks when you own a Torana";
   // the weekly steps, highest first — the bot's own table (approval-bot src/winnings/invites.js BONUS_TIERS)
-  var J_TIERS = [{ n: 20, usd: 20 }, { n: 50, usd: 50 }, { n: 100, usd: 200 }, { n: 200, usd: 400 }];
+  var J_TIERS = [{ n: 20, usd: 40 }, { n: 50, usd: 100 }, { n: 100, usd: 200 }, { n: 200, usd: 400 }];   // owner ruling 2026-10-14 (was 20/50)
   // the invite service's own refusals (approval-bot src/invites/service.js), in the site's words
   var INV_SVC = {
     RECORD_UNAVAILABLE: "Invites are unavailable for a moment. Try again shortly.",

@@ -240,7 +240,7 @@ async function main() {
        q(w, "#mi-withdraw").classList.contains("btn-g") && q(w, "#mi-withdraw").classList.contains("btn-p") && !q(w, "#mi-withdraw").classList.contains("mi-off") && !q(w, "#mi-withdraw").getAttribute("aria-disabled"));
     ok("C1-" + scheme + " · the invitees column reads 'What they bought'", Array.from(w.document.querySelectorAll("#mi-direct thead th")).map((x) => x.textContent).indexOf("What they bought") >= 0);
     if (scheme === "v2") ok("B1-v2 · the whole bonus ladder sits under the count, word for word; nothing highlighted at " + (led.week.progress.get(me) || 0) + " this week",
-       q(w, "#mi-ladder") && q(w, "#mi-ladder").textContent === "20 bundles → USD 20 · 50 → USD 50 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)" && !q(w, "#mi-ladder .mi-tier.on"),
+       q(w, "#mi-ladder") && q(w, "#mi-ladder").textContent === "20 bundles → USD 40 · 50 → USD 100 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)" && !q(w, "#mi-ladder .mi-tier.on"),
        q(w, "#mi-ladder") && q(w, "#mi-ladder").textContent);
     // ── invitees and history ──
     const direct = Array.from(w.document.querySelectorAll("#mi-direct tbody tr")).map((r) => r.querySelector("td[data-k='wallet']").textContent);
@@ -286,12 +286,12 @@ async function main() {
     // the bot's answer drives the ladder's highlight: step 50 reached → that step, and only it, is highlighted
     const ans = { ok: true, scheme: "v2", code: "ABCDEFGH", inviter: null, levels: [1, 2, 3, 4, 5, 6].map((lv) => ({ level: lv, people: 0, bundles: 0, cards: 0, salesUsdE6: "0", ratePct: lv === 1 ? 5 : 1, earnedWei: "0" })),
       money: { earnedWei: "0", readyWei: "0", withdrawnWei: "0", pendingWei: "0", pending: [], lockedWei: "0", heldWei: "0", bonusWei: "0" }, direct: [], history: [],
-      week: { start: 1760918400, closesAt: 1761523200, count: 57, next: { count: 100, usd: 200 }, reached: 50, tiers: [{ count: 20, usd: 20 }, { count: 50, usd: 50 }, { count: 100, usd: 200 }, { count: 200, usd: 400 }] } };
+      week: { start: 1760918400, closesAt: 1761523200, count: 57, next: { count: 100, usd: 200 }, reached: 50, tiers: [{ count: 20, usd: 40 }, { count: 50, usd: 100 }, { count: 100, usd: 200 }, { count: 200, usd: 400 }] } };
     const h = await H.myInvitesPage(c, W[0], Object.assign({ svc: { "/invites/mine": () => ans } }, process.env.DY_PAGE_MUTANT ? { pageSrc: process.env.DY_PAGE_MUTANT } : {}));
     await waitFor("provider", () => h.w.DYWallet.state.hasProvider); await h.w.DYWallet.connect(); await waitFor("connected", () => h.w.DYWallet.state.connected);
     await show(h);
     const on = Array.from(h.w.document.querySelectorAll("#mi-ladder .mi-tier.on")).map((x) => x.getAttribute("data-tier"));
-    ok("B2 · 57 this week, step 50 reached: exactly the '50 → USD 50' step is highlighted", JSON.stringify(on) === JSON.stringify(["50"]), JSON.stringify(on));
+    ok("B2 · 57 this week, step 50 reached: exactly the '50 → USD 100' step is highlighted", JSON.stringify(on) === JSON.stringify(["50"]), JSON.stringify(on));
     ok("W1 · nothing ready (ready = 0): the Withdraw button is DIMMED (and not clickable)", q(h.w, "#mi-withdraw").classList.contains("mi-off") && q(h.w, "#mi-withdraw").getAttribute("aria-disabled") === "true");
     H.teardown(h);
   }

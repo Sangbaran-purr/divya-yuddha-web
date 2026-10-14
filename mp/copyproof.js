@@ -474,7 +474,7 @@ const DASH_LAW = [
   // INVITES-2 — the v2 card (shown only while the digest's scheme is v2)
   ["J1 lead",            "Share your invite link. When a friend buys their first bundle through it, you earn 5% of what they paid."],
   ["J2 steps",           "When the friends they invite buy their first bundle, you earn 1% more - and so on, up to five steps beyond your own friends."],
-  ["J3 weekly bonus",    "Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $20 more. 50 earns $50, 100 earns $200 and 200 earns $400 - only the highest step counts."],
+  ["J3 weekly bonus",    "Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $40 more. 50 earns $100, 100 earns $200 and 200 earns $400 - only the highest step counts."],
   ["J4 bonus unlock",    "A weekly bonus unlocks 7 days after its week ends."],
   ["J5 this week",       "This week: [12] of [20] - reach [20] for a $[20] bonus."],
   ["J6 top step",        "This week: [210] - the top bonus of $400 is reached."],

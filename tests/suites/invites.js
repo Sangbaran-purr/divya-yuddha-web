@@ -632,9 +632,9 @@ async function run() {
          r.card.indexOf(LEAD_V2) >= 0 && r.card.indexOf(LEAD_V1) < 0
            && r.card.indexOf("When the friends they invite buy their first bundle, you earn 1% more - and so on, up to five steps beyond your own friends.") >= 0);
       ok("DV5 · the weekly bonus and its unlock are stated; the review line is gone (v2 has no brake)",
-         r.card.indexOf("Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $20 more. 50 earns $50, 100 earns $200 and 200 earns $400 - only the highest step counts.") >= 0
+         r.card.indexOf("Weekly bonus: when 20 of your own friends buy their first bundle in one week (Monday to Monday, UTC), you earn $40 more. 50 earns $100, 100 earns $200 and 200 earns $400 - only the highest step counts.") >= 0
            && r.card.indexOf("A weekly bonus unlocks 7 days after its week ends.") >= 0 && r.card.indexOf("More than 25 rewards") < 0);
-      ok("DV6 · this week's progress, in the ruled words: 'This week: 12 of 20 - reach 20 for a $20 bonus.'", txt(r.w, "#inv-week") === "This week: 12 of 20 - reach 20 for a $20 bonus.", txt(r.w, "#inv-week"));
+      ok("DV6 · this week's progress, in the ruled words: 'This week: 12 of 20 - reach 20 for a $40 bonus.'", txt(r.w, "#inv-week") === "This week: 12 of 20 - reach 20 for a $40 bonus.", txt(r.w, "#inv-week"));
       // the row's FIRST cell — who it is for (cells concatenate with no space, so read the cell, not the row)
       const who = Array.from(r.w.document.querySelectorAll(".inv-row .inv-buyer")).map((x) => x.textContent.trim());
       const rows = Array.from(r.w.document.querySelectorAll(".inv-row")).map((x) => x.textContent);
@@ -653,7 +653,7 @@ async function run() {
       const r = await cardWith([{ scheme: "v2" }], 25, { cardStore: true });
       ok("DV11 · v2 with the card store configured WHERE THE LIVE SITE KEEPS IT (config.js cardUsdStore): its two lines appear (DYC card purchases earn nothing)",
          r.card.indexOf("When they buy a card in the store with USDT or USDC, you earn the same shares of its price.") >= 0 && r.card.indexOf("Cards bought with DYC earn nothing.") >= 0);
-      ok("DV12 · between steps the NEXT step is named: 25 → 'This week: 25 of 50 - reach 50 for a $50 bonus.'", txt(r.w, "#inv-week") === "This week: 25 of 50 - reach 50 for a $50 bonus.", txt(r.w, "#inv-week"));
+      ok("DV12 · between steps the NEXT step is named: 25 → 'This week: 25 of 50 - reach 50 for a $100 bonus.'", txt(r.w, "#inv-week") === "This week: 25 of 50 - reach 50 for a $100 bonus.", txt(r.w, "#inv-week"));
       H.teardown(r.h);
       const t = await cardWith([{ scheme: "v2" }], 230);
       ok("DV13 · past the top step: 'This week: 230 - the top bonus of $400 is reached.'", txt(t.w, "#inv-week") === "This week: 230 - the top bonus of $400 is reached.", txt(t.w, "#inv-week"));
@@ -685,7 +685,7 @@ async function run() {
       ok("DV17 · each accrued row says what it waits for: 'Unlocks when you own a Torana'", rows.length === 2 && rows.every((r) => r === "Unlocks when you own a Torana"), rows.join(" | "));
       const lv = Array.from(h.w.document.querySelectorAll("#inv-levels .win-part")).map((x) => x.getAttribute("data-level") + "=" + (x.querySelector(".inv-level-n") || {}).textContent);
       ok("DV18 · all six levels are shown with their counts (L1 1, L3 1, the rest 0)", lv.join(",") === "1=1,2=0,3=1,4=0,5=0,6=0", lv.join(","));
-      ok("DV19 · and this week's direct count toward the next step", txt(h.w, "#inv-week") === "This week: 3 of 20 - reach 20 for a $20 bonus.");
+      ok("DV19 · and this week's direct count toward the next step", txt(h.w, "#inv-week") === "This week: 3 of 20 - reach 20 for a $40 bonus.");
       H.teardown(h);
       const s1 = codeStub(await chainIdOf(nh));
       s1.stub["invites-digest.json"] = () => [{ scheme: "v1" }];
@@ -835,8 +835,8 @@ async function run() {
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
     ok("X4 · STAMPS: store.js s23, store.css s10 (CARD-STORE-1 C3 + review fix + C5 + C5-A), invite.js i2, mf-config mf9 on store.html",
        /js\/store\.js\?v=s23/.test(sh) && /css\/store\.css\?v=s10/.test(sh) && /js\/invite\.js\?v=i2/.test(sh) && /mf-config\.js\?v=mf9/.test(sh));
-    ok("X5 · STAMPS: dashboard.js mf38, dashboard.css mf7, invite.js i2, mf-config mf9 on dashboard.html",
-       /js\/dashboard\.js\?v=mf38/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf9/.test(dh));
+    ok("X5 · STAMPS: dashboard.js mf39, dashboard.css mf7, invite.js i2, mf-config mf9 on dashboard.html",
+       /js\/dashboard\.js\?v=mf39/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf9/.test(dh));
     ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s23, report mf-config mf9)",
        /js\/store\.js\?v=s23/.test(th) && /mf-config\.js\?v=mf9/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));
