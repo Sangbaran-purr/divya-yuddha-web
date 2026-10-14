@@ -68,6 +68,9 @@ const SUITES = [
   // MP-FIX-3A: the Hall's stake refusals — one sentence per truth, an unread balance that says so, the chain guard,
   // the read failover and the pre-flight line (source + real ethers decode + mutants; no chain, no network).
   { name: "hallstake",     file: path.join(__dirname, "suites", "hallstake.js"), chain: false, expect: 34 },
+  // MINI-GAMES-1 R1: the Daily Puzzle — 14 puzzles, each solved to EXACTLY ONE winning play by the offline solver over the
+  // site's copy of the real engine; the solver's refusals (two wins, none, malformed, unknown card, luck) and mutants.
+  { name: "puzzles",       file: path.join(__dirname, "suites", "puzzles.js"), chain: false, expect: 48 },
 ];
 
 function freePort() {
