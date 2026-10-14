@@ -530,8 +530,40 @@ ok("W-TRAP — the winnings expiry does NOT use the DropDesk's 90-day wording",
      DASH.indexOf('toast("Referrals live on the separate rewards platform.")') >= 0);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// MY-INVITES-1 — THE FOURTH PAIR: DASHBOARD_DESIGN_v1 §13 -> js/myinvites.js (the affiliate's own page), and its one
+// line on the dashboard ("See my invites →") -> js/dashboard.js.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+const MYI = fs.readFileSync(path.resolve(__dirname, "..", "js", "myinvites.js"), "utf8");
+const MI_DOC = (DDOC.split("## 13. MY INVITES")[1] || "");
+const MI_LAW = [
+  ["MI0 dashboard link",   "See my invites →", DASH],
+  ["MI1 title",            "My Invites", MYI],
+  ["MI2 lead",             "Everyone who joined through your invite link, what they bought, and what it earned you.", MYI],
+  ["MI3 sign",             "Sign a free message to show your invites. It moves no money and works once.", MYI],
+  ["MI4 connect",          "Connect your wallet to see your invites.", MYI],
+  ["MI5 network",          "Switch your wallet to Polygon to see your invites.", MYI],
+  ["MI6 closed",           "My Invites is not open yet.", MYI],
+  ["MI7 bot down",         "Your invites can't be read right now - nothing is lost. Try again in a moment.", MYI],
+  ["MI8 declined",         "Nothing was shown - the message is free and moves no money. Tap Show my invites to try again.", MYI],
+  ["MI9 no code",          "You don't have an invite code yet - get one on the dashboard.", MYI],
+  ["MI10 counts v1",       "Counts only purchases that pay: a friend's first bundle, bought after they joined you. Top-ups and card buys never pay.", MYI],
+  ["MI11 counts v2",       "Counts only purchases that pay: a first bundle or a USD card, bought after the buyer joined. Top-ups and DYC card buys never pay.", MYI],
+  ["MI12 privacy",         "Friends of friends are shown as totals only.", MYI],
+  ["MI13 locked",          "Locked until you own a Torana", MYI],
+  ["MI14 withdraw",        "Withdraw on the dashboard", MYI],
+  ["MI15 dyc note",        "125 DYC = USD 1.", MYI],
+];
+console.log("\n── MY INVITES · DASHBOARD_DESIGN_v1 §13 ruled copy (doc → js/myinvites.js, + the dashboard's link) ──");
+for (const [tag, line, src] of MI_LAW) {
+  ok(tag + " — in §13 of the doc", norm(MI_DOC).indexOf(norm(line)) >= 0, line);
+  ok(tag + " — carried verbatim by " + (src === DASH ? "dashboard.js" : "myinvites.js"), norm(src).indexOf(norm(line)) >= 0, line);
+}
+ok("MI-P · the page never shortens or rebuilds a wallet itself (no shortAddr, no .slice(0, 6), no checksum) — the BOT shapes every wallet",
+   !/shortAddr|\.slice\(0, ?6\)|toChecksum|getAddress\(/.test(MYI.replace(/sg\.getAddress\(\)/g, "")));
+
 // WINNINGS-4: THREE pairs now (Hall, Store, Dashboard). RULED_N counts the first two; DASH_LAW is the third and
-// is added here so the arithmetic printed below is the true one, not an inherited one.
-const RULED_ALL = RULED_N + DASH_LAW.length;
-console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across THREE pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
+// is added here so the arithmetic printed below is the true one, not an inherited one. MY-INVITES-1 adds the fourth.
+const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length;
+console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across FOUR pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);

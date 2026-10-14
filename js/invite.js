@@ -9,6 +9,7 @@
 
      InviteCodeRequest(address wallet,string statement,uint256 issuedAt)
      InviteBinding(address buyer,string code,string statement,uint256 signedAt)
+     MyInvitesView(address wallet,string statement,uint256 issuedAt)        (MY-INVITES-1: read-only, 5 min, works once)
 
    Domain: { name: "Torana Invites", version: "1", chainId } — no verifyingContract (off-chain attestations).
    Freshness: the bot accepts a record only within 10 minutes of its own clock, so the time is taken at signing.
@@ -21,9 +22,17 @@ window.DYInvite = (function () {
   var CODE_LENGTH = 8;
   var CODE_RE = new RegExp("^[" + ALPHABET + "]{" + CODE_LENGTH + "}$");
   var CODE_STATEMENT = "Request my Torana Invites code";
+  var VIEW_STATEMENT = "View my Torana Invites";   // MY-INVITES-1 — the bot's VIEW_STATEMENT, verbatim
 
   var CODE_TYPES = {
     InviteCodeRequest: [
+      { name: "wallet", type: "address" },
+      { name: "statement", type: "string" },
+      { name: "issuedAt", type: "uint256" },
+    ],
+  };
+  var VIEW_TYPES = {
+    MyInvitesView: [
       { name: "wallet", type: "address" },
       { name: "statement", type: "string" },
       { name: "issuedAt", type: "uint256" },
@@ -57,6 +66,10 @@ window.DYInvite = (function () {
     return { domain: domainFor(chainId), types: CODE_TYPES, primaryType: "InviteCodeRequest",
       message: { wallet: addr(wallet, ethers), statement: CODE_STATEMENT, issuedAt: Number(issuedAt) } };
   }
+  function viewRequestTypedData(chainId, wallet, issuedAt, ethers) {
+    return { domain: domainFor(chainId), types: VIEW_TYPES, primaryType: "MyInvitesView",
+      message: { wallet: addr(wallet, ethers), statement: VIEW_STATEMENT, issuedAt: Number(issuedAt) } };
+  }
   function bindingTypedData(chainId, buyer, code, signedAt, ethers) {
     return { domain: domainFor(chainId), types: BINDING_TYPES, primaryType: "InviteBinding",
       message: { buyer: addr(buyer, ethers), code: code, statement: bindingStatement(code), signedAt: Number(signedAt) } };
@@ -74,5 +87,6 @@ window.DYInvite = (function () {
     CODE_TYPES: CODE_TYPES, BINDING_TYPES: BINDING_TYPES,
     domainFor: domainFor, bindingStatement: bindingStatement, normCode: normCode, nowS: nowS,
     codeRequestTypedData: codeRequestTypedData, bindingTypedData: bindingTypedData, inviteLink: inviteLink,
+    VIEW_STATEMENT: VIEW_STATEMENT, VIEW_TYPES: VIEW_TYPES, viewRequestTypedData: viewRequestTypedData,
   };
 })();

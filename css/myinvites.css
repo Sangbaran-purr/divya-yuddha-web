@@ -1,0 +1,35 @@
+/* MY-INVITES-1 — the affiliate's own page. Rides dashboard.css (the panel, the code/link row, the buttons);
+   only the tables, the money grid and the notes are new. */
+.mi-shell { display: block; }
+.mi-main { max-width: 980px; margin: 0 auto; }
+.mi-back { color: var(--gold, #e8c874); text-decoration: none; font-size: .9rem; }
+.mi-panel { padding: 18px 20px; }
+.mi-h1 { font-family: "Cinzel", serif; letter-spacing: .06em; margin: 0 0 4px; font-size: 1.6rem; color: var(--gold, #e8c874); }
+.mi-lead { margin: 0 0 14px; opacity: .85; }
+.mi-sec { margin: 18px 0 0; }
+.mi-sec h2 { font-family: "Cinzel", serif; font-size: 1rem; letter-spacing: .08em; margin: 0 0 8px; color: var(--gold, #e8c874); }
+.mi-note { font-size: .82rem; opacity: .72; margin: 6px 0; }
+.mi-err { color: #e7a08c; margin: 6px 0; }
+.mi-inviter { margin: 8px 0 0; font-size: .92rem; }
+.mi-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.mi-table th, .mi-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(232, 200, 116, .14); vertical-align: top; }
+.mi-table th { font-weight: 600; opacity: .8; font-size: .78rem; letter-spacing: .04em; }
+.mi-total td { font-weight: 700; border-top: 1px solid rgba(232, 200, 116, .4); }
+.mi-usd { white-space: nowrap; }
+.mi-dyc { display: block; font-size: .72rem; opacity: .6; white-space: nowrap; }
+.mi-who { font-size: .78rem; opacity: .7; }
+.mi-money { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.mi-m { background: rgba(0, 0, 0, .25); border: 1px solid rgba(232, 200, 116, .18); border-radius: 8px; padding: 10px 12px; }
+.mi-m-k { display: block; font-size: .78rem; opacity: .75; margin-bottom: 4px; }
+.mi-m-v .mi-usd { font-size: 1.15rem; color: var(--gold, #e8c874); }
+.mi-pend { margin: 6px 0 0; padding-left: 16px; font-size: .76rem; opacity: .8; }
+.mi-withdraw { display: inline-block; margin-top: 10px; text-decoration: none; }
+.mi-week p { margin: 4px 0; }
+@media (max-width: 640px) {
+  .mi-table { font-size: .8rem; }
+  .mi-table th, .mi-table td { padding: 5px 4px; }
+  #mi-levels, #mi-history, #mi-direct { display: block; overflow-x: auto; }
+}
+.mi-panel .inv-code { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 4px 0 8px; }
+.mi-panel .inv-link { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mi-panel .inv-link-in { flex: 1 1 240px; min-width: 0; }

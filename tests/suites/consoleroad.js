@@ -468,7 +468,7 @@ async function main() {
     {
       const PAGES = ["index.html", "admin.html", "register.html", "store.html", "treasury.html",
                      "dashboard.html", "report.html", "rite.html", "mp/hall.html",
-                     "mint.html", "explore.html"];   // SITE-AUDIT-1: the two pages that gained scripts join the law
+                     "mint.html", "explore.html", "my-invites.html"];   // SITE-AUDIT-1: the two pages that gained scripts join the law; MY-INVITES-1 the third
       const rows = [];
       for (const page of PAGES) {
         const h = fs.readFileSync(path.join(SITE, page), "utf8");

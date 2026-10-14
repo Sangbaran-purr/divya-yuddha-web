@@ -195,3 +195,33 @@ what it waits for. The step rows show all six levels with the count at each.
 - We can't check that right now - nothing is lost. Try again shortly.
 - Invites are not open yet.
 - Invites are unavailable right now.
+
+## 13. MY INVITES (MY-INVITES-1, owner rulings 2026-10-14) - the affiliate's own page, `my-invites.html`
+
+A separate page (not in the main nav), linked from the Torana Invites card. Every number is the approval bot's
+`/invites/mine` answer, computed from the SAME ledger that signs the desk's coupons: the page can never show more than
+the desk will pay ("Unlocked (ready)" = the ledger's unlocked entitlement minus what the desk has paid). A failed read
+is a sentence, never zeros. Privacy is shaped by the bot: your own data only (the request is SIGNED by your wallet, a
+free EIP-712 message valid 5 minutes and usable once), level 1 as shortened wallets, levels 2-6 as totals only, your
+inviter shortened; no full address, no email, nothing about anyone's other holdings. Under v1 the page shows level 1
+at 10% on first bundles and no bonus section; the v2 sections (six levels, the weekly bonus, "Locked until you own a
+Torana") appear only when the bot answers scheme v2. Withdrawals stay on the dashboard's one Withdraw card (the page's
+button links there). The page makes no chain reads (card names come from the local wave registry).
+
+### Ruled copy (pinned by `mp/copyproof.js`, doc → `js/myinvites.js`, and the dashboard's one link line → `js/dashboard.js`)
+- See my invites →
+- My Invites
+- Everyone who joined through your invite link, what they bought, and what it earned you.
+- Sign a free message to show your invites. It moves no money and works once.
+- Connect your wallet to see your invites.
+- Switch your wallet to Polygon to see your invites.
+- My Invites is not open yet.
+- Your invites can't be read right now - nothing is lost. Try again in a moment.
+- Nothing was shown - the message is free and moves no money. Tap Show my invites to try again.
+- You don't have an invite code yet - get one on the dashboard.
+- Counts only purchases that pay: a friend's first bundle, bought after they joined you. Top-ups and card buys never pay.
+- Counts only purchases that pay: a first bundle or a USD card, bought after the buyer joined. Top-ups and DYC card buys never pay.
+- Friends of friends are shown as totals only.
+- Locked until you own a Torana
+- Withdraw on the dashboard
+- 125 DYC = USD 1.

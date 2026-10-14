@@ -291,6 +291,46 @@ async function storePage(c, player, opts) {
   return { dom, w, eth };
 }
 
+// MY-INVITES-1 — my-invites.html in jsdom: the page's own markup and scripts, behind the same EIP-1193 shim. The bot is
+// `opts.svc` (route substring -> handler(init) -> JSON), recorded in w.__fetches; `opts.svcDown` fails every bot call.
+async function myInvitesPage(c, player, opts) {
+  opts = opts || {};
+  const html = fs.readFileSync(path.join(SITE, "my-invites.html"), "utf8");
+  const body = (html.split(/<body[^>]*>/)[1] || "").split("</body>")[0].replace(/<script[\s\S]*?<\/script>/g, "");
+  const dom = new JSDOM(`<!doctype html><body class="dash">${body}</body>`, { url: "https://divyayuddha.games/my-invites.html", pretendToBeVisual: true, runScripts: "outside-only" });
+  const w = dom.window;
+  w.ethers = ethers;
+  const eth = makeEthereum(player, c.provider);
+  w.ethereum = eth;
+  w.TextEncoder = TextEncoder;
+  w.__fetches = []; w.__fetchBodies = [];
+  w.fetch = function (u, init) {
+    w.__fetches.push(String(u));
+    if (init && init.body) w.__fetchBodies.push({ url: String(u), body: JSON.parse(init.body) });
+    if (opts.svcDown && /bot\.test/.test(String(u))) return Promise.reject(new TypeError("Failed to fetch"));
+    const svc = opts.svc || {};
+    for (const key of Object.keys(svc)) {
+      if (String(u).indexOf(key) >= 0) return Promise.resolve(svc[key](init)).then((b) => ({ ok: true, status: 200, json: () => Promise.resolve(b) }));
+    }
+    return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
+  };
+  const chainId = Number((await c.provider.getNetwork()).chainId);
+  w.localStorage.setItem("dy::readRpcUrl", RPC);
+  const run = (p) => w.eval(fs.readFileSync(p, "utf8"));
+  run(path.join(SITE, "config.js"));
+  run(path.join(SITE, "mf-config.js"));
+  w.DY_MF_CONFIG.inviteServiceUrl = opts.invite === undefined ? "https://bot.test" : opts.invite;
+  w.DY_CONFIG.chain.id = chainId;
+  w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
+  run(path.join(SITE, "js/wallet.js"));
+  run(path.join(SITE, "js/wave-registry.js"));
+  run(path.join(SITE, "js/invite.js"));
+  run(opts.pageSrc || path.join(SITE, "js/myinvites.js"));   // pageSrc: a suite's MUTANT copy (the mutant runner only)
+  w.DYMyInvites.mount();
+  w.DYWallet.init();
+  return { dom, w, eth };
+}
+
 // an EIP-1193 shim: reads/writes forwarded to anvil (the account is unlocked), personal_sign signed locally.
 function makeEthereum(player, provider) {
   const listeners = {};
@@ -471,4 +511,4 @@ function teardown(h) {
   // deliberately NOT window.close() — closing is the race itself. The window dies with the process.
 }
 
-module.exports = { chain, chainStore, chainWinnings, server, hall, storePage, dashboardPage, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };
+module.exports = { chain, chainStore, chainWinnings, server, hall, storePage, dashboardPage, myInvitesPage, makeEthereum, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };

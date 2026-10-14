@@ -213,6 +213,7 @@ window.DYDash = (function () {
   var I_UNSHOWN = "Your invited purchases can't be shown right now.";
   var I_COPIED = "Link copied.";
   function I_UNLOCKS_ON(date) { return "Unlocks on " + date; }
+  var I_MINE = "See my invites →";                                            // MY-INVITES-1 (DASHBOARD_DESIGN_v1 §12)
   var I_READY = "Ready to withdraw";
   var I_PAID = "Paid";
   var I_HELD = "Held for review";
@@ -1676,6 +1677,8 @@ window.DYDash = (function () {
       h += invListHtml();
       if (!invV2()) h += "<p class='win-note'>" + esc(I_REVIEW) + "</p>";   // v2 has no review brake
     }
+    // MY-INVITES-1 — the affiliate's own page: levels, money, invitees and history (a separate page, not in the nav)
+    h += "<p class='win-note inv-mine'><a id='inv-mine' href='my-invites.html'>" + esc(I_MINE) + "</a></p>";
     host.innerHTML = h;
     if ($("inv-get")) $("inv-get").onclick = actInviteCode;
     if ($("inv-copy")) $("inv-copy").onclick = function () {
