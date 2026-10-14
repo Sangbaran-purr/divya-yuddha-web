@@ -58,3 +58,33 @@ hides nothing from someone who runs the solver; it keeps the key out of plain si
   it already lifted.
 - Vanara free Leaps are part of the puzzle: the solver counts a card as winning if it wins with any legal use of your
   Leaps, and one puzzle (2026-10-29) can only be won with one — so the page must offer the Leap.
+
+## R2 — the page, `/play/daily/` (built locally, not linked from anywhere yet)
+| File | What it is |
+|---|---|
+| `play/daily/index.html` | the page: free, no wallet, no Torana, no DYC; `noindex`; NOT linked from the site nav (owner ruling) |
+| `play/daily/page.js` | the board, the play loop, judging, reveal, streak display |
+| `play/daily/daily.js` | the day rules (no DOM): UTC date, which puzzles are visible, streak, safe storage, note decoding |
+| `play/daily/notes.js` | the 14 explanations, ENCODED — built by `node scripts/daily-notes-encode.js` from the owner's plain file outside the repo |
+| `play/daily/daily.css` | stone · gold · flame (threshold.css tokens); mobile first, rows wrap — no sideways scrolling |
+| `tests/suites/daily.js` | 46 checks: the real page in jsdom with a controlled clock and store |
+
+- **Judging.** The page builds the position with `puzzle-core.js` over the site's engine copy (loaded as a plain
+  script), lets the player play on that live engine — card, target, slot and, for Vanaras, the free Leap (choose the
+  Unit that Leaps, then the neighbour it copies, before or after the card) — then passes and reads the engine's round
+  result. No answer is looked up anywhere: the solver has proven only one play wins. A draw is not a win.
+- **Reveal.** "Show me the answer" appears after one wrong try. On today's puzzle it asks first ("This ends your
+  streak. Show the answer?"); then the page runs the SAME solver in the browser (≤ 40 ms per puzzle measured) and shows
+  the winning play (and its Leap, if one is needed) and the explanation.
+- **Explanations are lightly encoded** (XOR mask + base64, per puzzle). **This stops accidental spoilers only** — the
+  decoder ships with the page, so anyone who wants to can read them. It is not secrecy.
+- **The day.** One puzzle per UTC date, new at 00:00 UTC for everyone (the page reads `Date.now()`, never the local
+  date). Earlier puzzles of the batch open from the list (`?d=`) for fun and never touch the streak; a future date is
+  never shown — a future `?d=` falls back to today's puzzle.
+- **The streak** (browser only, key `dy_daily_v1`): consecutive UTC days solved on their own date, however many tries.
+  A revealed day is not solved and ends the streak, the same as a missed day. Best streak is kept. Every storage
+  read/write is wrapped; with storage blocked the page still plays and says progress isn't being saved; a corrupt or
+  oddly-shaped record is treated as empty.
+- **No puzzle today** (before 19 Oct, or after 1 Nov when the batch runs out): the page shows only the heading (and
+  the earlier-puzzles list once there is one). The wording for this state is the OWNER'S TO RULE ON — none was
+  invented. The `#dd-none` panel is in place, empty.

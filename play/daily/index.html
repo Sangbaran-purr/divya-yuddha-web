@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Divya Yuddha — Daily Puzzle</title>
+    <meta name="description" content="One position, one winning play. A new puzzle every day at 00:00 UTC." />
+    <link rel="icon" href="../../assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="preload" href="../../assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="../../assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../../css/threshold.css?v=s1g" />
+    <link rel="stylesheet" href="daily.css?v=d1" />
+  </head>
+  <body class="daily">
+    <!-- MINI-GAMES-1 R2 — the Daily Puzzle. Free for everyone: no wallet, no Torana, no DYC, no badges, no leaderboard.
+         Not linked from the site yet (owner ruling: the owner decides where it is linked from). -->
+    <header class="dd-top">
+      <a class="dd-crest" href="../../index.html">
+        <img class="brand-logo" src="../../assets/brand/logo.webp" width="460" height="298" alt="Divya Yuddha — Battle of the Celestials" />
+      </a>
+    </header>
+    <main class="dd">
+      <h1 class="dd-h1">The Daily Puzzle</h1>
+      <p class="dd-epithet">One field. One move. One victory.</p>
+
+      <section id="dd-play" hidden>
+        <p class="dd-meta"><span id="dd-date"></span> · <span id="dd-diff"></span></p>
+        <h2 class="dd-h2" id="dd-ptitle"></h2>
+        <p id="dd-msg" role="status" aria-live="polite"></p>
+        <div id="dd-game"></div>
+        <div id="dd-detail" class="dd-detail" hidden></div>
+        <div id="dd-actions" class="dd-actions"></div>
+
+        <section id="dd-after" class="dd-after" hidden>
+          <h3 class="dd-h3">How it was won</h3>
+          <p id="dd-explain" class="dd-explain"></p>
+          <p id="dd-afternote" class="dd-afternote"></p>
+          <dl class="dd-stats">
+            <div><dt>Streak</dt><dd id="dd-streak">0</dd></div>
+            <div><dt>Best streak</dt><dd id="dd-best">0</dd></div>
+            <div><dt>Next puzzle in</dt><dd id="dd-next"></dd></div>
+          </dl>
+        </section>
+      </section>
+
+      <!-- NO PUZZLE TODAY (before 19 Oct, or after the batch ends on 1 Nov): the wording is the owner's to rule on —
+           deliberately left empty until then. -->
+      <section id="dd-none" class="dd-none" hidden></section>
+
+      <section id="dd-past" class="dd-past" hidden>
+        <h3 class="dd-h3">Earlier puzzles</h3>
+        <ul id="dd-pastlist"></ul>
+      </section>
+
+      <p id="dd-store" class="dd-store"></p>
+    </main>
+
+    <div id="dd-confirm" class="dd-modal" role="dialog" aria-modal="true" aria-labelledby="dd-confirm-q" hidden>
+      <div class="dd-modalbox">
+        <p id="dd-confirm-q">This ends your streak. Show the answer?</p>
+        <div class="dd-actions">
+          <button type="button" id="dd-confirm-yes" class="dd-btn dd-reveal">Show the answer</button>
+          <button type="button" id="dd-confirm-no" class="dd-btn">Keep trying</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- the site's engine copy (byte-identical to the game's); its top-level declarations become page globals -->
+    <script src="../../game/src/engine.js?v=33d0757"></script>
+    <script src="puzzle-core.js?v=d1"></script>
+    <script src="daily.js?v=d1"></script>
+    <script src="notes.js?v=d1"></script>
+    <script>window.DY_DAILY_V = "d1";</script>
+    <script src="page.js?v=d1"></script>
+  </body>
+</html>

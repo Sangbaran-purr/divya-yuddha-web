@@ -1,0 +1,87 @@
+/* MINI-GAMES-1 R2 — the Daily Puzzle. Stone · gold · flame (threshold.css tokens). Mobile first: nothing is wider
+   than the screen; rows wrap, they never scroll sideways. */
+body.daily { background: var(--stone-void); }
+.dd-top { padding: 14px 16px 0; text-align: center; }
+.dd-crest .brand-logo { width: 150px; height: auto; }
+.dd { max-width: 760px; margin: 0 auto; padding: 8px 14px 48px; color: var(--parchment); font-family: var(--text); }
+.dd-h1 { font-family: var(--display); letter-spacing: var(--track-display); color: var(--gold-burnished); text-align: center; font-size: 1.55rem; margin: 6px 0 0; font-weight: 500; }
+.dd-epithet { text-align: center; font-family: var(--display); letter-spacing: var(--track-epithet); color: var(--gold-aged); font-size: .7rem; text-transform: uppercase; margin: 4px 0 16px; }
+.dd-meta { text-align: center; color: var(--gold-hairline); font-size: .95rem; margin: 0; text-transform: capitalize; }
+.dd-h2 { font-family: var(--display); color: var(--flame-core); text-align: center; font-size: 1.15rem; letter-spacing: .06em; margin: 2px 0 10px; font-weight: 500; }
+.dd-h3 { font-family: var(--display); color: var(--gold-burnished); font-size: .95rem; letter-spacing: .08em; margin: 18px 0 6px; font-weight: 500; }
+#dd-msg { text-align: center; font-size: 1.08rem; min-height: 1.5em; margin: 0 0 10px; color: var(--parchment); }
+#dd-msg.dd-bad { color: #f0a58c; }
+#dd-msg.dd-good { color: var(--flame-core); }
+
+.dd-realm { border: 1px solid var(--gold-aged); background: var(--stone-lit); padding: 6px 10px; margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.dd-realmname { font-family: var(--display); color: var(--gold-burnished); letter-spacing: .06em; font-size: .9rem; }
+.dd-realmfx { color: var(--parchment); font-size: .95rem; }
+.dd-round { margin: 0 0 8px; color: var(--gold-hairline); font-size: .92rem; }
+
+.dd-side, .dd-hand { border-top: 1px solid var(--gold-aged); padding: 8px 0 10px; }
+.dd-them { background: linear-gradient(180deg, rgba(142,47,27,.10), transparent); }
+.dd-you { background: linear-gradient(0deg, rgba(31,92,70,.10), transparent); }
+.dd-sidehead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.dd-who { font-family: var(--display); color: var(--gold-burnished); letter-spacing: .08em; font-size: .85rem; }
+.dd-total { font-family: var(--display); color: var(--flame-core); font-size: 1.25rem; }
+.dd-passed { font-size: .8rem; color: var(--gold-hairline); border: 1px solid var(--gold-aged); padding: 0 6px; }
+.dd-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.dd-heroes { margin-bottom: 8px; }
+.dd-empty { color: var(--gold-aged); font-size: .9rem; padding: 6px 0; }
+
+.dd-card { position: relative; width: 74px; min-height: 104px; padding: 0; border: 1px solid var(--gold-aged); background: var(--stone-relief);
+  color: var(--parchment); font: inherit; text-align: center; display: flex; flex-direction: column; align-items: stretch; }
+button.dd-card { cursor: pointer; }
+.dd-card img { width: 100%; height: auto; display: block; }
+.dd-card.dd-noart { justify-content: center; min-height: 104px; }
+.dd-name { font-size: .72rem; line-height: 1.15; padding: 3px 2px 2px; color: var(--parchment); }
+.dd-pow { position: absolute; top: 3px; left: 3px; min-width: 22px; padding: 1px 4px; background: var(--stone-void); color: var(--flame-core); font-family: var(--display); font-size: .95rem; border: 1px solid var(--gold-aged); }
+.dd-pow:empty { display: none; }
+.dd-tags { font-size: .66rem; color: #9fd3b6; padding: 0 2px 3px; line-height: 1.15; }
+.dd-hero { border-color: var(--duskgold); }
+.dd-art { border-style: dashed; }
+.dd-pick { border-color: var(--flame-core); box-shadow: 0 0 0 2px rgba(255,201,107,.35), 0 0 14px rgba(232,147,58,.45); }
+.dd-chosen { border-color: var(--flame-core); box-shadow: 0 0 0 2px var(--flame-halo); }
+.dd-off { opacity: .45; cursor: not-allowed; }
+.dd-off .dd-tags { color: var(--gold-hairline); }
+.dd-slot { width: 30px; min-height: 104px; border: 1px dashed var(--flame-core); background: rgba(255,201,107,.06); color: var(--flame-core); font: .7rem var(--display); writing-mode: vertical-rl; cursor: pointer; }
+
+.dd-detail { border: 1px solid var(--gold-aged); background: var(--stone-lit); padding: 8px 12px; margin-top: 10px; }
+.dd-detname { margin: 0; font-family: var(--display); color: var(--gold-burnished); letter-spacing: .05em; }
+.dd-dettext { margin: 4px 0 0; }
+.dd-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: center; }
+.dd-btn { font-family: var(--display); letter-spacing: .06em; font-size: .85rem; padding: 10px 14px; min-height: 44px; background: var(--stone-relief);
+  color: var(--gold-burnished); border: 1px solid var(--gold-aged); cursor: pointer; }
+.dd-btn.dd-go { color: var(--stone-void); background: var(--gold-burnished); border-color: var(--flame-core); }
+.dd-btn.dd-reveal { color: #f0c2b4; border-color: var(--ember); }
+
+.dd-after { border: 1px solid var(--gold-aged); background: var(--stone-lit); padding: 6px 14px 12px; margin-top: 16px; }
+.dd-explain { margin: 4px 0 8px; line-height: 1.45; }
+.dd-afternote { color: #f0c2b4; margin: 0 0 8px; }
+.dd-afternote:empty { display: none; }
+.dd-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0; }
+.dd-stats div { min-width: 90px; }
+.dd-stats dt { font-family: var(--display); font-size: .72rem; letter-spacing: .1em; color: var(--gold-hairline); text-transform: uppercase; }
+.dd-stats dd { margin: 0; font-family: var(--display); color: var(--flame-core); font-size: 1.3rem; }
+
+.dd-past ul { list-style: none; padding: 0; margin: 0; }
+.dd-past li { padding: 6px 0; border-bottom: 1px solid rgba(107,84,38,.4); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.dd-past a { color: var(--gold-burnished); }
+.dd-tick { color: #9fd3b6; font-size: .85rem; }
+.dd-store { color: var(--gold-hairline); font-size: .85rem; text-align: center; margin-top: 18px; }
+.dd-store:empty, .dd-none:empty { display: none; }
+
+.dd-modal { position: fixed; inset: 0; background: rgba(11,10,8,.82); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
+.dd-modal[hidden] { display: none; }
+.dd-modalbox { max-width: 360px; width: 100%; border: 1px solid var(--gold-burnished); background: var(--stone-lit); padding: 16px; color: var(--parchment); text-align: center; font-size: 1.05rem; }
+
+@media (min-width: 640px) {
+  .dd-card { width: 92px; min-height: 128px; }
+  .dd-slot { min-height: 128px; }
+  .dd-name { font-size: .78rem; }
+  .dd-h1 { font-size: 1.9rem; }
+}
+
+/* the house stylesheet gives sections a display; a hidden panel must stay hidden */
+.dd [hidden], .dd-modal[hidden] { display: none !important; }
+.dd-boardnote { color: var(--gold-hairline); font-size: .9rem; margin: 0 0 6px; text-align: center; }
