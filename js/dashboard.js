@@ -370,8 +370,10 @@ window.DYDash = (function () {
       // AFFILIATE-1 rung 3 — NULL today: the Torana Invites card stays invisible and no call is made. The Torana read
       // that gates the card runs only when this is set.
       inviteServiceUrl: o.inviteServiceUrl || FILE.inviteServiceUrl || null,
-      // INVITES-2 — the USDT/USDC card store (CARD-STORE-1). NULL today: its invite lines stay hidden.
-      cardStore: oc.cardStore || fc.cardStore || null,
+      // INVITES-2 — the USDT/USDC card store (CARD-STORE-1). Its one home is config.js `cardUsdStore` (the store page reads
+      // it there); the mf-config `cardStore` key never existed in the shipped config, so reading only that kept the v2
+      // "cards earn the same shares" line hidden on mainnet (found at the v2 go-live check, 2026-10-14). Unset: hidden.
+      cardStore: oc.cardStore || fc.cardStore || pc.cardUsdStore || null,
       accessNFT: oc.accessNFT || fc.accessNFT || (PLAYER && PLAYER.contracts && PLAYER.contracts.accessNFT) || null,
       usdt: oc.usdt || fc.usdt || null,
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,

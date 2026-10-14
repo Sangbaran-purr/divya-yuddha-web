@@ -598,13 +598,20 @@ async function run() {
       opts2 = opts2 || {};
       const s = codeStub(chainId, { invites: opts2.items || v2items, extra: week == null ? {} : { scheme: "v2", week: { start: mon, count: week } } });
       if (digest !== undefined) s.stub["invites-digest.json"] = () => digest;
-      const h = await H.dashboardPage(c, c.player, { invite: "https://bot.test", svc: s.stub });
-      if (opts2.cardStore) h.w.DY_MF_CONFIG.contracts.cardStore = "0x00000000000000000000000000000000000000c5";
+      // the card store lives where the live site keeps it: config.js contracts.cardUsdStore (the store page's own key)
+      const h = await H.dashboardPage(c, c.player, { invite: "https://bot.test", svc: s.stub, cardUsdStore: opts2.cardStore ? "0x00000000000000000000000000000000000000c5" : null });
       await dashConnect(h.w);
       H.click(h.w, "#inv-get");
       await waitFor("the code", () => !!q(h.w, "#inv-code"));
       await H.sleep(150);
       return { h, w: h.w, card: txt(h.w, "#invites-panel") };
+    }
+    {
+      // CARD-STORE-1 / v2 go-live fix: the store is configured (config.js cardUsdStore, as on mainnet) but the scheme is v1
+      const r = await cardWith([{ date: "2026-10-12", scheme: "v1" }], 12, { cardStore: true });
+      ok("DV1b · v1 with the card store configured: the card lines NEVER show (v1 pays no cards)",
+         r.card.indexOf("buy a card in the store") < 0 && r.card.indexOf("Cards bought with DYC") < 0 && r.card.indexOf(LEAD_V1) >= 0);
+      H.teardown(r.h);
     }
     {
       const r = await cardWith([{ date: "2026-10-12", codes: 1, bindings: 0, sha256: "x", scheme: "v1" }], 12);
@@ -644,13 +651,18 @@ async function run() {
     }
     {
       const r = await cardWith([{ scheme: "v2" }], 25, { cardStore: true });
-      ok("DV11 · with the card store configured, its two lines appear (DYC card purchases earn nothing)",
+      ok("DV11 · v2 with the card store configured WHERE THE LIVE SITE KEEPS IT (config.js cardUsdStore): its two lines appear (DYC card purchases earn nothing)",
          r.card.indexOf("When they buy a card in the store with USDT or USDC, you earn the same shares of its price.") >= 0 && r.card.indexOf("Cards bought with DYC earn nothing.") >= 0);
       ok("DV12 · between steps the NEXT step is named: 25 → 'This week: 25 of 50 - reach 50 for a $50 bonus.'", txt(r.w, "#inv-week") === "This week: 25 of 50 - reach 50 for a $50 bonus.", txt(r.w, "#inv-week"));
       H.teardown(r.h);
       const t = await cardWith([{ scheme: "v2" }], 230);
       ok("DV13 · past the top step: 'This week: 230 - the top bonus of $400 is reached.'", txt(t.w, "#inv-week") === "This week: 230 - the top bonus of $400 is reached.", txt(t.w, "#inv-week"));
       H.teardown(t.h);
+      // the shipped config, unmodified: config.js as it is in the repo carries the mainnet cardUsdStore, and the dashboard reads it
+      const cfgSrc = require("fs").readFileSync(require("path").join(H.SITE, "config.js"), "utf8");
+      ok("DV14 · the SHIPPED config.js carries cardUsdStore (the mainnet store), and dashboard.js reads exactly that key",
+         /cardUsdStore: "0xb6535aCB1FFF2eBe527C0a5682E1814A342B02B6"/.test(cfgSrc)
+           && /cardStore: oc\.cardStore \|\| fc\.cardStore \|\| pc\.cardUsdStore \|\| null/.test(require("fs").readFileSync(require("path").join(H.SITE, "js", "dashboard.js"), "utf8")));
     }
     // ── the AMENDMENT (A1/A2/A8): open codes, accrued-not-released, the six level counts ──
     {
@@ -823,8 +835,8 @@ async function run() {
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
     ok("X4 · STAMPS: store.js s23, store.css s10 (CARD-STORE-1 C3 + review fix + C5 + C5-A), invite.js i2, mf-config mf9 on store.html",
        /js\/store\.js\?v=s23/.test(sh) && /css\/store\.css\?v=s10/.test(sh) && /js\/invite\.js\?v=i2/.test(sh) && /mf-config\.js\?v=mf9/.test(sh));
-    ok("X5 · STAMPS: dashboard.js mf37, dashboard.css mf7, invite.js i2, mf-config mf9 on dashboard.html",
-       /js\/dashboard\.js\?v=mf37/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf9/.test(dh));
+    ok("X5 · STAMPS: dashboard.js mf38, dashboard.css mf7, invite.js i2, mf-config mf9 on dashboard.html",
+       /js\/dashboard\.js\?v=mf38/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf9/.test(dh));
     ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s23, report mf-config mf9)",
        /js\/store\.js\?v=s23/.test(th) && /mf-config\.js\?v=mf9/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));

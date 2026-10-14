@@ -205,6 +205,7 @@ async function dashboardPage(c, player, opts) {
   w.DY_MF_CONFIG.winningsServiceUrl = (opts.winnings && opts.winnings.service) || null;
   w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null;            // set EXPLICITLY: the shipped config is live (WINNINGS-5); absent => the dormant face, and no test ever reaches the real bot
   if (c.addrs && c.addrs.nft) w.DY_CONFIG.contracts.accessNFT = c.addrs.nft;
+  w.DY_CONFIG.contracts.cardUsdStore = opts.cardUsdStore || null;   // hermetic: never the mainnet card store unless a test asks
   run(path.join(SITE, "js/wallet.js"));
   run(path.join(SITE, "js/invite.js"));
   run(path.join(SITE, "js/dashboard.js"));

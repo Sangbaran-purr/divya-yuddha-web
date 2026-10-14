@@ -40,7 +40,7 @@ const SUITES = [
   { name: "winnings",      file: path.join(__dirname, "suites", "winnings.js"), chain: true, expect: 41 },
   // AFFILIATE-1 rung 3 — Torana Invites (store + dashboard) and the ONE Withdraw card, against the REAL desk with
   // coupons signed by the bot's own signer and every invite signature checked by the bot's own verifier.
-  { name: "invites",       file: path.join(__dirname, "suites", "invites.js"), chain: true, expect: 115, capMs: 600000 },
+  { name: "invites",       file: path.join(__dirname, "suites", "invites.js"), chain: true, expect: 117, capMs: 600000 },
   // FEE-1 — the one player fee rule: the 7 measured mainnet blocks, the floor, read failure, the anvil compounding
   // control, real sends on two pages, and every write road reaching the one function.
   { name: "fees",          file: path.join(__dirname, "suites", "fees.js"), chain: true, expect: 26, capMs: 600000 },
