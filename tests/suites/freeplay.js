@@ -275,7 +275,11 @@ async function run() {
      ["  if (PUZZLE_MODE && !pzMay('card')) return;   // MINI-GAMES-1: one card play per try\n", ""],
      ["  if (PUZZLE_MODE){ pzPump(); return; }   // MINI-GAMES-1 puzzle mode: no AI, no conch, no relay — close the action, drive the reveal or report\n", ""],
      ["  if(PUZZLE_MODE) return;                   // MINI-GAMES-1: the puzzle page owns the result — no rewards, no result face\n", ""],
-     ["else if (PUZZLE_MODE) puzzleBoot(); ", ""]].forEach(([x, y]) => { u = u.split(x).join(y); });
+     ["else if (PUZZLE_MODE) puzzleBoot(); ", ""],
+     // GAME-HEADER-1 (owner ruling 2026-10-15): the live game is no longer a prototype — the title and the header line, undone exactly
+     ["<title>Divya Yuddha — Battle of the Celestials</title>", "<title>Divya Yuddha — Prototype v0.1</title>"],
+     ['<small id="facline">DEVA vs DEVA</small>', '<small id="facline">PROTOTYPE · DEVA vs DEVA</small>'],
+     ["fl.textContent=`${FAC_LABEL(currentFactions.p0)} vs ${FAC_LABEL(currentFactions.p1)}`;   // GAME-HEADER-1 (owner ruling 2026-10-15): no longer a prototype", "fl.textContent=`PROTOTYPE · ${FAC_LABEL(currentFactions.p0)} vs ${FAC_LABEL(currentFactions.p1)}`;"]].forEach(([x, y]) => { u = u.split(x).join(y); });
     return u;
   };
   // the gate's ONE new road (the Daily Puzzle's own frame), undone exactly — in the sync script and in the copy
@@ -288,7 +292,7 @@ async function run() {
   ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle door, the Daily Puzzle's battle mode (?puzzle=1) and its gate road (MINI-GAMES-1), and the stamp",
      outsideS3(head("game/index.html")) === outsideS3(withoutDoor(nowCopy)) && withoutDoor(nowCopy) !== nowCopy &&
      withoutPuzzleMode(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")).indexOf("PUZZLE_MODE") < 0 &&
-     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === "6b8d0ea");
+     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === "ae56424");
   // SITE-AUDIT-1 grew the sync script (GAME_REF + the Store relink); the GATE it injects must not have moved
   const gateBlock = (t) => (t.match(/<!-- DYW-GATE-START[\s\S]*?<!-- DYW-S3-SUPPRESS-START/) || [""])[0];
   const shNow = fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8"), copyNow = fs.readFileSync(path.join(SITE, "game/index.html"), "utf8");
@@ -299,7 +303,7 @@ async function run() {
   const demo = fs.readFileSync(path.join(SITE, "demo/index.html"), "utf8"), demoHead = head("demo/index.html");
   ok("DG3 · the demo still seeds the pass and its mark the same way; ONLY its button changed ('Play free' → the rite)",
      demo.replace('<a class="demo-cta" href="../rite.html">Play free</a>', '<a class="demo-cta" href="../index.html">Get Access</a>')
-       .replace("../game/index.html?v=6b8d0ea", "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows the MINI-GAMES-1 re-syncs
+       .replace("../game/index.html?v=ae56424", "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows the MINI-GAMES-1 re-syncs
      /sessionStorage\.setItem\("dyw_pass", "1"\)/.test(demo) && /sessionStorage\.setItem\("dyw_demo", "1"\)/.test(demo));
 
   // ═══════════════ ST · THE STAMPS ═══════════════

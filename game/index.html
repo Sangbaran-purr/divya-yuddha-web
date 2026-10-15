@@ -105,7 +105,7 @@
      The game is free elsewhere by design; there is no DRM here. -->
 <!-- DYW-GATE-END -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Divya Yuddha — Prototype v0.1</title>
+<title>Divya Yuddha — Battle of the Celestials</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
 /* ═══ DESIGN SYSTEM v1 — THE SINGLE TOKEN SOURCE (T34; authority: docs/DESIGN_SYSTEM_RESKIN_v1.md §1 + AMENDMENT A1) ═══
@@ -2153,7 +2153,7 @@ body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn, body.puzzl
 </div>
 <div id="app">
   <header>
-    <div class="title">DIVYA YUDDHA<small id="facline">PROTOTYPE · DEVA vs DEVA</small></div>
+    <div class="title">DIVYA YUDDHA<small id="facline">DEVA vs DEVA</small></div>
     <div class="hdr-right">
       <button id="realmchip" class="hidden" title="tap for realm effect">🌌 <span id="realmname"></span></button>
       <span id="diffchip" class="hidden" title="AI difficulty"></span>
@@ -6958,7 +6958,7 @@ function applyFactionTheme(){
   setFac(document.querySelector('.half.opp'), currentFactions.p1);
   setFac($('hud-p'), currentFactions.p0);
   setFac($('hud-o'), currentFactions.p1);
-  const fl=$('facline'); if(fl) fl.textContent=`PROTOTYPE · ${FAC_LABEL(currentFactions.p0)} vs ${FAC_LABEL(currentFactions.p1)}`;
+  const fl=$('facline'); if(fl) fl.textContent=`${FAC_LABEL(currentFactions.p0)} vs ${FAC_LABEL(currentFactions.p1)}`;   // GAME-HEADER-1 (owner ruling 2026-10-15): no longer a prototype
 }
 
 /* ---------- faction select ---------- */
