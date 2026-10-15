@@ -141,6 +141,24 @@ async function run() {
     ok("GM5 · inside the site's demo the Daily Puzzle plaque is not shown (the demo keeps its face, like Multiplayer)", !demoRun.b && demoRun.navs.length === 0);
   }
 
+  // ═══ SY · THE SYNC'S ENTRY-LINK LEDGER COVERS EVERY PAGE THAT LINKS THE GAME (owner ruling 2026-10-15) ═══
+  console.log("\n── SY · every page that links the game is re-stamped by the sync ──");
+  {
+    const sh = R("scripts/sync_game.sh");
+    const listed = ((sh.match(/^ENTRY_FILES="([^"]*)"/m) || [])[1] || "").split(/\s+/).filter(Boolean).map((f) => f.replace("$SITE_REPO/", "")).sort();
+    // every tracked page/script OUTSIDE the game copy, the tests and mp/ (the Hall reads game/STAMP — no stamped link of its own)
+    const tracked = require("child_process").execFileSync("git", ["ls-files"], { cwd: SITE, encoding: "utf8" }).split("\n")
+      .filter((f) => /\.(html|js)$/.test(f) && !/^(game|tests|mp|tmp)\/|node_modules/.test(f));
+    const linking = tracked.filter((f) => R(f).indexOf("game/index.html") >= 0).sort();
+    const missing = linking.filter((f) => listed.indexOf(f) < 0), stale = listed.filter((f) => linking.indexOf(f) < 0);
+    ok("SY1 · every site page that links the game (" + linking.length + ") is in sync_game.sh's ENTRY_FILES, and the list names no page that doesn't — a new page can't be left behind",
+       linking.length >= 10 && missing.length === 0 && stale.length === 0, "missing: " + missing.join(",") + " stale: " + stale.join(","));
+    const count = listed.reduce((n, f) => n + (R(f).match(/game\/index\.html/g) || []).length, 0);
+    const guard = Number((sh.match(/if \[ "\$LINKS_BEFORE" != "(\d+)" \]/) || [])[1]);
+    ok("SY2 · the sync's guarded link count (" + guard + ") equals the links those pages really carry, all stamped to the current copy (" + R("game/STAMP").trim() + ")",
+       count === guard && listed.every((f) => (R(f).match(/game\/index\.html(\?v=[0-9a-f]+)?/g) || []).every((m) => m === "game/index.html?v=" + R("game/STAMP").trim())), count + " vs " + guard);
+  }
+
   // ═══ MP · /mp/ GOES TO THE HALL ═══
   console.log("\n── MP · /mp/ ──");
   {
