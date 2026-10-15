@@ -2142,7 +2142,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .vault-gate{ padding:0 12px 24px; font-size:11px; line-height:1.5; color:var(--parchment); opacity:.88; text-align:center; }   /* TASK 31: 10px/.75 measured too dim at 390px — nudged for legibility */
 .vault-set{ margin:0 12px 14px; padding:9px; border:1px solid var(--gold-dim-25); border-radius:9px;
   background:linear-gradient(180deg,var(--plaque-hi),var(--plaque-lo)); text-align:center; }
-body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn{ display:none !important; }   /* MINI-GAMES-1 puzzle mode: no settings (speed is fixed), no shield/unbind (not puzzle moves) */
+body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn, body.puzzle header .title, body.puzzle header .roundbox{ display:none !important; }   /* MINI-GAMES-1 puzzle mode: no settings (speed is fixed), no shield/unbind (not puzzle moves), no header line or round label (owner ruling 2026-10-15) — the realm chip stays */
 </style>
 </head>
 <body>
@@ -12845,7 +12845,7 @@ let Pz = null;   // null = not loaded; else this try's state
 const PZ_CORE_URL = '../play/daily/puzzle-core.js';   // the site layout: /game/index.html → /play/daily/puzzle-core.js
 const PE = { newGame: newGame, playCard: playCard, pass: pass, playableIndices: playableIndices, targetSpec: targetSpec,
   effPower: effPower, isShielded: isShielded, totalPower: totalPower, adjacentUnits: adjacentUnits, doLeap: doLeap,
-  leapLimit: leapLimit, sweepDeaths: sweepDeaths, REALMS: REALMS, REALM_INFO: REALM_INFO, DECKS: DECKS };
+  leapLimit: leapLimit, sweepDeaths: sweepDeaths, canLeap: canLeap, REALMS: REALMS, REALM_INFO: REALM_INFO, DECKS: DECKS };
 // card id → the sheets its PLAY can draw (the cast/arrival, and any follow-on the same try can reach)
 const PZ_PLAY_SHEETS = { brahmastra:['brahmastra'], pashupata:['pashupatastra'], tamasa:['tamasa'],
   amrita:['amrita_bless','amrita_revive'], kishkindhacrown:['kishkindhacrown'], ramasignet:['ramasignet'], chandrahas:['chandrahas'],
@@ -12959,7 +12959,7 @@ function pzLoad(P){
 function pzMay(kind){
   if (!Pz || Pz.reported || Pz.performing || choreoActive || !G || G.over) return false;
   if (!(G.turn===ME && !G.players[ME].passed)) return false;
-  if (kind==='card' && Pz.cardPlayed){ toast('One play only — now Leap or end your turn.'); return false; }
+  if (kind==='card' && Pz.cardPlayed){ toast(PE.canLeap(G,ME) ? "You've made your play. Leap or end your turn." : "You've made your play. End your turn."); return false; }   // owner ruling 2026-10-15
   return true;
 }
 function pzActionStart(evStart){ if (!Pz) return; const t=performance.now(); if (!Pz.first) Pz.first=t; Pz.open={ t, evStart }; }

@@ -1,8 +1,8 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `1fad925cd5bfdc5c3175a2dd17043119433800b9` (1fad925)
-- Source committed: 2026-10-15 16:15:29 +0530
+- Source commit: `6b8d0ea415e28b121b13390a7c72a2819a1f67e0` (6b8d0ea)
+- Source committed: 2026-10-15 16:55:41 +0530
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -35,10 +35,10 @@
 - game/ in-repo size: 2272 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty-two site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2, my-invites.html x2) are stamped game/index.html?v=1fad925 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 22.
+- The twenty-two site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2, my-invites.html x2) are stamped game/index.html?v=6b8d0ea — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 22.
 
 ## STAMP (S-HALL-WIRE-1 R4)
-- game/STAMP holds the source short sha (1fad925), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
+- game/STAMP holds the source short sha (6b8d0ea), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh

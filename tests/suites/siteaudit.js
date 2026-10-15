@@ -107,7 +107,7 @@ async function run() {
     const navs = []; const vc = new VirtualConsole(); vc.on("jsdomError", (e) => { if (/navigation/.test(e.message)) navs.push(1); });
     const dom = new JSDOM(`<!doctype html><body><div class="roundels"><button class="roundel locked" data-soon title="Store — coming soon"><svg></svg><span class="rlock">🔒</span></button>
       <button class="roundel locked" data-soon title="Decks — coming soon"><span class="rlock">🔒</span></button></div></body>`,
-      { url: "https://divyayuddha.games/game/index.html?v=1fad925", runScripts: "outside-only", pretendToBeVisual: true, virtualConsole: vc });
+      { url: "https://divyayuddha.games/game/index.html?v=6b8d0ea", runScripts: "outside-only", pretendToBeVisual: true, virtualConsole: vc });
     const w = dom.window; let toasts = 0;
     w.eval(code);
     w.document.querySelectorAll("[data-soon]").forEach((b) => { b.onclick = () => toasts++; });   // the game's own "Coming soon" handler
@@ -121,13 +121,13 @@ async function run() {
     const block = (t) => (t.match(/<!-- DYW-S3-SUPPRESS-START[\s\S]*?<!-- DYW-S3-SUPPRESS-END -->/) || [""])[0];
     ok("GM3 · the copy's S3 block is BYTE-IDENTICAL to what the sync script injects (re-applied every sync, never hand-edited)",
        block(R("scripts/sync_game.sh")).length > 500 && block(R("scripts/sync_game.sh")) === block(g) && block(g).indexOf("(6) SITE-AUDIT-1") >= 0 &&
-       R("game/STAMP").trim() === "1fad925");
+       R("game/STAMP").trim() === "6b8d0ea");
     // MINI-GAMES-1 — the Daily Puzzle door on the game's main menu (owner ruling 2026-10-14: found from the game only)
     const btn = (g.match(/<button class="mode plaque-lg active" id="mode-daily">[\s\S]*?<\/button>/) || [""])[0];
     const door = (g.match(/\(function\(\)\{\n  var dp = document\.getElementById\('mode-daily'\);[\s\S]*?\n\}\)\(\);/) || [""])[0];
     const run = (demo) => {
       const navs = []; const vc2 = new VirtualConsole(); vc2.on("jsdomError", (e) => { if (/navigation/.test(e.message)) navs.push(e.message); });
-      const d = new JSDOM("<!doctype html><body><div id='landing'>" + btn + "</div></body>", { url: "https://divyayuddha.games/game/index.html?v=1fad925", runScripts: "outside-only", virtualConsole: vc2 });
+      const d = new JSDOM("<!doctype html><body><div id='landing'>" + btn + "</div></body>", { url: "https://divyayuddha.games/game/index.html?v=6b8d0ea", runScripts: "outside-only", virtualConsole: vc2 });
       if (demo) d.window.sessionStorage.setItem("dyw_demo", "1");
       d.window.eval(door);
       const b = d.window.document.getElementById("mode-daily");
