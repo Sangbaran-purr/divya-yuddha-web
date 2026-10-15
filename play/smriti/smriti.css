@@ -1,0 +1,68 @@
+/* MINI-GAMES-2 · SMRITI — stone · gold · flame (threshold.css tokens). Mobile first: nothing is wider than the screen; the
+   board wraps into columns that always fit, it never scrolls sideways. */
+body.smriti { background: var(--stone-void); overflow-x: hidden; }
+.sm-top { padding: 14px 16px 0; text-align: center; }
+.sm-crest .brand-logo { width: 150px; height: auto; }
+.sm { max-width: 760px; margin: 0 auto; padding: 8px 14px 48px; color: var(--parchment); font-family: var(--text); }
+.sm-h1 { font-family: var(--display); letter-spacing: var(--track-display); color: var(--gold-burnished); text-align: center; font-size: 1.55rem; margin: 6px 0 0; font-weight: 500; }
+.sm-epithet { text-align: center; font-family: var(--display); letter-spacing: var(--track-epithet); color: var(--gold-aged); font-size: .7rem; text-transform: uppercase; margin: 4px 0 16px; }
+.sm-h2 { font-family: var(--display); color: var(--flame-core); text-align: center; font-size: 1.2rem; letter-spacing: .06em; margin: 6px 0 10px; font-weight: 500; }
+.sm-how { text-align: center; font-size: 1.05rem; line-height: 1.45; margin: 0 auto 16px; max-width: 34em; }
+
+.sm-levels { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 420px; margin: 0 auto; }
+.sm-lv { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name pairs" "best best"; gap: 2px 10px; align-items: baseline; text-align: left;
+  padding: 12px 16px; min-height: 64px; background: var(--stone-relief); border: 1px solid var(--gold-aged); color: var(--parchment); font: inherit; cursor: pointer; }
+.sm-lv:hover, .sm-lv:focus-visible { border-color: var(--flame-core); }
+.sm-lvname { grid-area: name; font-family: var(--display); color: var(--gold-burnished); letter-spacing: .08em; font-size: 1.05rem; }
+.sm-lvpairs { grid-area: pairs; color: var(--gold-hairline); font-size: .95rem; }
+.sm-lvbest { grid-area: best; color: var(--flame-core); font-size: .92rem; }
+
+.sm-bar { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; align-items: baseline; margin: 0 0 10px; }
+.sm-level { font-family: var(--display); color: var(--gold-burnished); letter-spacing: .08em; }
+.sm-stat { color: var(--gold-hairline); }
+.sm-stat b { color: var(--flame-core); font-family: var(--display); font-weight: 500; font-size: 1.1rem; }
+
+.sm-board { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 420px; margin: 0 auto; }
+.sm-board.sm-hard { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }   /* 24 cards: 6 × 4 so the whole board is in view on a phone */
+.sm-card { position: relative; aspect-ratio: 5 / 7; padding: 0; border: 0; background: none; cursor: pointer; perspective: 800px; font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+.sm-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .35s ease; }
+.sm-up .sm-inner { transform: rotateY(180deg); }
+.sm-back, .sm-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border: 1px solid var(--gold-aged); overflow: hidden; }
+.sm-back { display: flex; align-items: center; justify-content: center; background:
+  radial-gradient(circle at 50% 50%, rgba(232,147,58,.18), transparent 60%), repeating-linear-gradient(45deg, var(--stone-relief) 0 6px, var(--stone-lit) 6px 12px); }
+.sm-mark { font-family: var(--display); color: var(--gold-burnished); font-size: 1.4rem; opacity: .8; }
+.sm-face { transform: rotateY(180deg); background: var(--stone-relief); display: flex; flex-direction: column; }
+.sm-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sm-face .sm-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 3px 4px; font-size: .66rem; line-height: 1.1; text-align: center; color: var(--parchment);
+  background: linear-gradient(0deg, rgba(11,10,8,.9), rgba(11,10,8,0)); }
+.sm-face.sm-noart { justify-content: center; }
+.sm-face.sm-noart .sm-name { position: static; background: none; font-size: .8rem; }
+.sm-matched .sm-face { border-color: var(--flame-core); box-shadow: 0 0 0 1px var(--flame-halo); }
+.sm-waking .sm-face { border-color: var(--flame-core); box-shadow: 0 0 14px rgba(255,201,107,.55); }
+.sm-busy .sm-card { cursor: default; }
+.sm-busy .sm-card:not(.sm-waking):not(.sm-up) .sm-back { filter: brightness(.82); }
+
+.sm-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; justify-content: center; }
+.sm-btn { font-family: var(--display); letter-spacing: .06em; font-size: .85rem; padding: 10px 14px; min-height: 44px; background: var(--stone-relief);
+  color: var(--gold-burnished); border: 1px solid var(--gold-aged); cursor: pointer; }
+.sm-btn.sm-go { color: var(--stone-void); background: var(--gold-burnished); border-color: var(--flame-core); }
+.sm-done { text-align: center; border: 1px solid var(--gold-aged); background: var(--stone-lit); padding: 14px 16px 18px; max-width: 460px; margin: 6px auto 0; }
+.sm-result { font-size: 1.15rem; margin: 0 0 6px; }
+.sm-bestline { color: var(--flame-core); font-family: var(--display); letter-spacing: .05em; margin: 0; }
+.sm-store { color: var(--gold-hairline); font-size: .85rem; text-align: center; margin-top: 18px; }
+.sm-store:empty { display: none; }
+.sm-stage { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 30; }
+
+/* the house stylesheet gives sections a display; a hidden panel must stay hidden */
+.sm [hidden] { display: none !important; }
+
+@media (min-width: 720px) {
+  .sm { max-width: 980px; }
+  .sm-h1 { font-size: 1.9rem; }
+  .sm-levels { grid-template-columns: repeat(3, 1fr); max-width: 760px; }
+  .sm-board.sm-easy { grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: 760px; }
+  .sm-board.sm-medium { grid-template-columns: repeat(8, minmax(0, 1fr)); max-width: 900px; }
+  .sm-board.sm-hard { grid-template-columns: repeat(8, minmax(0, 1fr)); max-width: 900px; gap: 8px; }
+  .sm-face .sm-name { font-size: .74rem; }
+}
+@media (prefers-reduced-motion: reduce) { .sm-inner { transition: none; } }

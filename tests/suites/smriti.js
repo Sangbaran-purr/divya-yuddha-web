@@ -1,0 +1,328 @@
+"use strict";
+// MINI-GAMES-2 · SMRITI (/play/smriti/) — the memory game. R1 the rules and data, R2 the animation player, R3 the page.
+// The real files, in Node and in jsdom. The Hero packs are read from the game checkout (DY_GAME, or ../divya-yuddha beside
+// this repo) exactly where the live site reads them on the free game's site; Meghnad from the site's pinned copy.
+// Every breakage named by the owner is applied to the real source text and must turn its check red (M·).
+const path = require("path"), fs = require("fs"), { execFileSync } = require("child_process");
+const { JSDOM } = require("jsdom");
+const H = require("../lib.js");
+const SITE = H.SITE, DIR = path.join(SITE, "play", "smriti");
+const GAME = process.env.DY_GAME || path.resolve(SITE, "..", "divya-yuddha");
+const PIN = "ae56424";   // the game commit the Meghnad copy and the manifest reader are pinned to (GAME-HEADER-1, pushed 2026-10-15)
+const E = require(path.join(SITE, "game", "src", "engine.js"));
+const AM = require(path.join(DIR, "manifest.js"));
+const R = (f) => fs.readFileSync(path.join(SITE, f), "utf8");
+const SRC = { rules: R("play/smriti/smriti.js"), player: R("play/smriti/player.js"), page: R("play/smriti/page.js") };
+const MANIFEST_BASE = "https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/";
+const THUMBS = path.join(GAME, "assets", "thumbs");
+
+let pass = 0, fail = 0;
+const ok = (n, c, d) => { c ? (pass++, console.log("  ✓ " + n)) : (fail++, console.log("  ✖ " + n + (d ? "\n      " + d : ""))); };
+const J = (x) => JSON.stringify(x);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(fn, ms) { const t = Date.now(); while (!fn()) { if (Date.now() - t > (ms || 15000)) return false; await sleep(10); } return true; }
+async function section(name, fn) { try { await fn(); } catch (e) { ok(name + " — ran to the end", false, String(e && e.stack || e).split("\n").slice(0, 3).join(" | ")); } }
+// a module from (possibly mutated) source text, as Node would load it
+function loadUMD(src) { const m = { exports: {} }; new Function("module", "exports", "require", src)(m, m.exports, require); return m.exports; }
+const S = loadUMD(SRC.rules);
+const CARDS = S.cardsFrom(E.DECKS);
+const hasThumb = (c) => fs.existsSync(path.join(THUMBS, S.artName(c)));
+const gameOK = fs.existsSync(path.join(GAME, "assets", "manifest", "registry.json")) && fs.existsSync(THUMBS);
+
+// ═══ R1 · THE RULES (as functions over a rules module, so a mutant can be checked by the same code) ═══
+function checkDeal(Sx, pool) {
+  const bad = []; let sameSeed = true, differs = false;
+  for (const lv of Sx.LEVEL_ORDER) for (let seed = 1; seed <= 300; seed++) {
+    const d = Sx.deal(pool, lv, seed), count = {};
+    d.forEach((t) => { count[t.id] = (count[t.id] || 0) + 1; });
+    if (d.length !== 2 * Sx.LEVELS[lv] || Object.values(count).some((n) => n !== 2) || Object.keys(count).length !== Sx.LEVELS[lv]) bad.push("copies " + lv + " " + seed);
+    if (!d.some((t) => Sx.isAnimated(t.card))) bad.push("no animated pair " + lv + " " + seed);
+    if (J(Sx.deal(pool, lv, seed).map((t) => t.id)) !== J(d.map((t) => t.id))) sameSeed = false;
+    if (J(Sx.deal(pool, lv, seed + 1000).map((t) => t.id)) !== J(d.map((t) => t.id))) differs = true;
+  }
+  return { bad, sameSeed, differs };
+}
+function checkTries(Sx) {
+  const tiles = Sx.deal(Sx.poolOf(CARDS, hasThumbSafe), "easy", 7), g = Sx.start(tiles, "easy");
+  const first = g.tiles[0], twin = g.tiles.find((t) => t !== first && t.id === first.id), other = g.tiles.find((t) => t.id !== first.id);
+  const r = {};
+  Sx.flip(g, first.i); r.oneCard = g.tries;                                  // a single card is not a try
+  Sx.flip(g, other.i); r.miss = g.tries; r.twoUp = first.up && other.up;
+  r.third = Sx.flip(g, g.tiles.find((t) => !t.up).i) === null;               // no third card while two wait
+  Sx.turnBack(g); r.back = !first.up && !other.up && g.open.length === 0;
+  Sx.flip(g, first.i); Sx.flip(g, twin.i); r.match = g.tries; r.locked = first.matched && twin.matched && Sx.flip(g, first.i) === null && Sx.turnBack(g) === false && first.up;
+  return r;
+}
+function hasThumbSafe(c) { return gameOK ? hasThumb(c) : c.id !== "setustones"; }
+function checkBest(Sx) {
+  const rec = Sx.blank();
+  const a = Sx.recordBest(rec, "easy", 14), b = Sx.recordBest(rec, "easy", 18), c = Sx.recordBest(rec, "easy", 11), d = Sx.recordBest(rec, "easy", 11);
+  return { first: a, worse: b, better: c, equal: d, best: rec.best.easy };
+}
+
+(async function main() {
+  console.log("── MINI-GAMES-2 · SMRITI ──");
+  if (!gameOK) ok("the game checkout is present (" + GAME + ") — set DY_GAME; the pins and the pack checks need it", false);
+
+  await section("R1", async () => {
+    console.log("\n── R1 · the rules and the data ──");
+    const pool = S.poolOf(CARDS, hasThumbSafe);
+    ok("P1 · the pool is every card of the game with art: " + pool.length + " of " + CARDS.length + " (all but The Setu Stones, which has no art yet), current names from the engine (the Hero 'Bali')",
+      CARDS.length === 176 && pool.length === 175 && !pool.some((c) => c.id === "setustones") && CARDS.find((c) => c.id === "hanuman").n === "Bali");
+    const withArt = S.poolOf(CARDS, () => true);
+    let seen = false; for (let seed = 1; seed < 4000 && !seen; seed++) seen = S.deal(withArt, "hard", seed).some((t) => t.id === "setustones");
+    ok("P2 · the day its art exists The Setu Stones joins by itself: with its picture present the pool is 176 and it is dealt (nothing names it)", withArt.length === 176 && seen && SRC.rules.indexOf("setustones") < 0 && SRC.page.indexOf("setustones") < 0);
+    const anim = CARDS.filter(S.isAnimated).map((c) => c.id).sort();
+    ok("P3 · the animated cards are the 20 Heroes and Meghnad — 21, every one with art", anim.length === 21 && anim.indexOf("meghnad") >= 0 && CARDS.filter((c) => c.t === "hero").length === 20 && anim.every((id) => pool.some((c) => c.id === id)));
+    const dc = checkDeal(S, pool);
+    ok("D1 · 900 deals (300 seeds × Easy 6 / Medium 8 / Hard 12 pairs): two copies of each card, the right number of pairs, every board with an animated pair", dc.bad.length === 0, dc.bad.slice(0, 3).join(", "));
+    ok("D2 · the same seed gives the same deal; another seed another", dc.sameSeed && dc.differs);
+    const t = checkTries(S);
+    ok("G1 · one card turned is not a try; two cards are one try", t.oneCard === 0 && t.miss === 1 && t.match === 2, J(t));
+    ok("G2 · a mismatch: both stay up until they turn back, no third card meanwhile, then both face down", t.twoUp && t.third && t.back, J(t));
+    ok("G3 · a match locks: both stay up and can't be turned again", t.locked, J(t));
+    const g = S.start(S.deal(pool, "medium", 3), "medium"); const byId = {};
+    g.tiles.forEach((x) => (byId[x.id] = byId[x.id] || []).push(x.i));
+    Object.values(byId).forEach(([a, b]) => { S.flip(g, a); S.flip(g, b); });
+    ok("G4 · finding every pair ends the game; a perfect game is exactly one try per pair", g.done && g.found === 8 && g.tries === 8 && S.flip(g, 0) === null);
+    const b = checkBest(S);
+    ok("B1 · best = fewest tries: the first game sets it, a worse one leaves it, a better one lowers it, an equal one is not 'new'", b.first && !b.worse && b.better && !b.equal && b.best === 11, J(b));
+    const thrower = { getItem() { throw new Error("SecurityError"); }, setItem() { throw new Error("SecurityError"); } };
+    const mem = (v) => ({ getItem: () => v, setItem() {} });
+    ok("B2 · storage blocked: loading gives an empty record, saving reports false — never an error", J(S.load(thrower)) === J(S.blank()) && S.save(thrower, S.blank()) === false && J(S.load(null)) === J(S.blank()));
+    ok("B3 · storage corrupt or the wrong shape is an empty record (and an impossible best is dropped)",
+      J(S.load(mem("{nope"))) === J(S.blank()) && J(S.load(mem('{"best":[1,2]}'))) === J(S.blank()) && J(S.load(mem('{"v":1,"best":{"easy":3,"hard":"x","medium":9}}'))) === J({ v: 1, best: { medium: 9 } }));
+    // the owner's R1 breakages
+    const mut = (from, to) => { if (SRC.rules.indexOf(from) < 0) throw new Error("mutant anchor gone: " + from); return loadUMD(SRC.rules.split(from).join(to)); };
+    const m1 = mut("var first = anim[Math.floor(rng() * anim.length)];", "var first = pool[Math.floor(rng() * pool.length)];");
+    ok("M1 · breakage 'drop the animated-pair rule' is caught (D1 goes red)", checkDeal(m1, pool).bad.some((x) => /no animated pair/.test(x)));
+    const m2 = mut("    if (s.open.length === 1) return { kind: \"first\", tile: t };\n    s.tries++;", "    s.tries++;\n    if (s.open.length === 1) return { kind: \"first\", tile: t };");
+    ok("M2 · breakage 'count single cards' is caught (G1 goes red)", checkTries(m2).oneCard !== 0);
+    const m3 = mut("    if (old != null && tries >= old) return false;\n", "");
+    const b3 = checkBest(m3);
+    ok("M3 · breakage 'let best get worse' is caught (B1 goes red)", b3.worse === true || b3.best !== 11, J(b3));
+  });
+
+  // ═══ R2 · THE ANIMATION PLAYER ═══
+  // a fetch that serves the free game's packs from the game checkout, and the page-relative Meghnad copy from the site
+  function makeFetch(o) {
+    o = o || {};
+    const log = [];
+    const fetch = (u) => {
+      log.push(u);
+      let p = null;
+      if (u.indexOf(MANIFEST_BASE) === 0) p = path.join(GAME, "assets", "manifest", u.slice(MANIFEST_BASE.length));
+      else if (/\/play\/smriti\//.test(u)) p = path.join(DIR, u.replace(/^.*\/play\/smriti\//, ""));
+      if (o.block && o.block(u)) p = null;
+      if (!p || !fs.existsSync(p)) return Promise.resolve({ ok: false, status: 404, json: () => Promise.reject(new Error("404")) });
+      const buf = fs.readFileSync(p);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(JSON.parse(buf.toString("utf8"))) });
+    };
+    return { fetch, log };
+  }
+  function makeImage(o) {
+    o = o || {};
+    const made = [];
+    function Img() { this.onload = null; this.onerror = null; this._src = ""; made.push(this); }
+    Object.defineProperty(Img.prototype, "src", { get() { return this._src; }, set(v) { this._src = v; if (!v) return; const me = this; setTimeout(() => { if (me._src !== v) return; const bad = o.fail && o.fail(v); if (bad) { if (me.onerror) me.onerror(); } else if (me.onload) me.onload(); }, 1); } });
+    return { Img, made };
+  }
+  const fakeCtx = () => { const calls = []; return { calls, canvas: { width: 400, height: 800 }, clearRect() {}, drawImage() { calls.push([].slice.call(arguments, 1, 5)); }, set globalAlpha(v) {}, get globalAlpha() { return 1; } }; };
+  const nodeEnv = (PLx, o) => { const f = makeFetch(o), im = makeImage(o);
+    return { f, im, p: PLx.create({ AM, fetch: f.fetch, Image: im.Img, raf: (fn) => setTimeout(fn, 4), now: () => Date.now(), pageUrl: "https://divyayuddha.games/play/smriti/" }) }; };
+
+  await section("R2", async () => {
+    console.log("\n── R2 · the animation player ──");
+    const game = R("game/index.html");
+    const block = (game.match(/\/\* ===== ACTOR MODULE VERBATIM BEGIN · manifest ===== \*\/\n([\s\S]*?)\/\* ===== ACTOR MODULE VERBATIM END · manifest ===== \*\//) || [])[1];
+    ok("A1 · play/smriti/manifest.js is the game's own manifest reader, byte for byte (the verbatim block in the site's game copy)", !!block && block === R("play/smriti/manifest.js"));
+    let atPin = null, mgPin = null, labClean = null;
+    try {
+      atPin = execFileSync("git", ["-C", GAME, "show", PIN + ":lab/vfx-manifestation/lib/manifest.js"], { maxBuffer: 1 << 26 });
+      mgPin = ["manifest.json", "atlas_256.webp"].map((f) => [f, execFileSync("git", ["-C", GAME, "show", PIN + ":lab/vfx-manifestation/actors/meghnad/" + f], { maxBuffer: 1 << 26 })]);
+      labClean = execFileSync("git", ["-C", GAME, "status", "--short", "--", "lab"], { encoding: "utf8" }).trim() === "";
+    } catch (e) { atPin = null; }
+    ok("A2 · …and the lab original at the recorded game commit " + PIN + ", byte for byte", !!atPin && Buffer.compare(atPin, fs.readFileSync(path.join(DIR, "manifest.js"))) === 0);
+    ok("A3 · MEGHNAD: the site's fixed copy of his 256 px sheet and frame list is byte-for-byte the lab original at " + PIN + " (manifest.json + atlas_256.webp), and nothing under lab/ is modified",
+      !!mgPin && mgPin.every(([f, b]) => Buffer.compare(b, fs.readFileSync(path.join(DIR, "actors", "meghnad", f))) === 0) && labClean === true && !fs.existsSync(path.join(DIR, "actors", "meghnad", "atlas.webp")));
+    const PL = loadUMD(SRC.player);
+    // own speed
+    const mans = CARDS.filter(S.isAnimated).map((c) => c.id === "meghnad" ? JSON.parse(R("play/smriti/actors/meghnad/manifest.json")) : JSON.parse(fs.readFileSync(path.join(GAME, "assets", "manifest", "actors", c.id, "manifest.json"), "utf8")));
+    const durs = mans.map((m) => PL.durationOf(m));
+    ok("A4 · OWN SPEED: every clip plays at its own length (its phaseMs at tempo 1) plus a 400 ms wake-up and a 400 ms settle — " + Math.min(...durs) + "–" + Math.max(...durs) + " ms across the 21 (not the battle's 0.6 tempo, not fast mode)",
+      Math.round(Math.min(...durs) / 100) / 10 === 2.6 && Math.round(Math.max(...durs) / 100) / 10 === 4.8 && mans.every((m) => PL.durationOf(m) === m.phaseMs.emerge + m.phaseMs.act + 800));   // the ruled "2.6–4.8 s", to the tenth
+    PL.ANIMATION_SPEED = 2; const half = PL.durationOf(mans[0]); PL.ANIMATION_SPEED = 1;
+    ok("A5 · ANIMATION_SPEED is the one setting: at 2 every play takes half as long; the page never sets a speed of its own", half === Math.round(PL.durationOf(mans[0]) / 2) && (SRC.player.match(/ANIMATION_SPEED/g) || []).length >= 3 && SRC.page.indexOf("ANIMATION_SPEED") < 0);
+    // loading
+    const { f, im, p } = nodeEnv(PL);
+    await p.prepare(["indra", "meghnad", "indra", "notacard"]);
+    ok("A6 · the registry is read once; a Hero from the free game's packs and Meghnad from the pinned copy are ready; a card with no pack is 'failed' (it will just turn over)",
+      f.log.filter((u) => /registry\.json$/.test(u)).length === 1 && p.state("indra") === "ready" && p.state("meghnad") === "ready" && p.state("notacard") === "failed");
+    const atlases = p.fetched.filter((u) => /atlas/.test(u));
+    ok("A7 · only 256 px sheets are fetched — never a 512 px atlas", atlases.length === 2 && atlases.every((u) => /atlas_256\.webp$/.test(u)), J(atlases));
+    ok("A8 · Meghnad comes from the pinned copy beside the page, not from the game's site", p.fetched.some((u) => u === "https://divyayuddha.games/play/smriti/actors/meghnad/manifest.json") && !p.fetched.some((u) => /actors\/meghnad/.test(u) && u.indexOf(MANIFEST_BASE) === 0));
+    ok("A9 · each animation is fetched once (a card twice on the board is one fetch)", ["actors/indra/manifest.json", "actors/indra/atlas_256.webp"].every((s) => p.fetched.filter((u) => u.endsWith(s)).length === 1));
+    const ctx = fakeCtx(); const t0 = Date.now();
+    PL.ANIMATION_SPEED = 8;
+    const played = await p.play("indra", ctx, { x: 100, y: 300, w: 80, h: 112 });
+    const took = Date.now() - t0;
+    const missed = await p.play("notacard", fakeCtx(), { x: 0, y: 0, w: 1, h: 1 });
+    PL.ANIMATION_SPEED = 1;
+    ok("A10 · a play draws the figure from the sheet, frame by frame, for its own length; a card with no pack plays nothing and returns at once (fallback)",
+      played === true && ctx.calls.length > 10 && took >= PL.durationOf(p.manifestOf("indra")) / 8 - 30 && missed === false, J({ draws: ctx.calls.length, took }));
+    const before = p.fetched.length; await p.play("meghnad", fakeCtx(), { x: 0, y: 0, w: 80, h: 112 }).catch(() => {});
+    ok("A11 · playing again fetches nothing new", p.fetched.length === before);
+    const imgs = im.made.slice();
+    await p.prepare(["agni"]);
+    ok("A12 · a new board lets the old packs go (their pictures cleared) and loads only the new board's", p.released.indexOf("indra") >= 0 && p.released.indexOf("meghnad") >= 0 && imgs.every((x) => x.src === "") && J(p.loaded) === J(["agni"]) && p.state("indra") === "none");
+    const blocked = nodeEnv(PL, { block: (u) => /registry\.json$/.test(u) });
+    await blocked.p.prepare(["indra"]);
+    ok("A13 · no registry (offline, blocked): every card just turns over — 'failed', no error thrown", blocked.p.state("indra") === "failed" && (await blocked.p.play("indra", fakeCtx(), { x: 0, y: 0, w: 1, h: 1 })) === false);
+    const brokenAtlas = nodeEnv(PL, { fail: (u) => /varuna/.test(u) });
+    await brokenAtlas.p.prepare(["varuna", "indra"]);
+    ok("A14 · a broken sheet fails only its own card", brokenAtlas.p.state("varuna") === "failed" && brokenAtlas.p.state("indra") === "ready");
+    // the owner's R2 breakages
+    const mutP = (from, to) => { if (SRC.player.indexOf(from) < 0) throw new Error("mutant anchor gone: " + from); return loadUMD(SRC.player.split(from).join(to)); };
+    const k1 = nodeEnv(mutP('var m = AM.forRung(raw, OUT.RUNG);\n          if (m.rung !== OUT.RUNG) throw new Error("no " + OUT.RUNG + " px sheet for " + id);', "var m = raw;"));
+    await k1.p.prepare(["indra"]);
+    ok("M4 · breakage 'fetch 512 px' is caught (A7 goes red)", k1.p.fetched.some((u) => /atlas\.webp$/.test(u)));
+    const k2 = nodeEnv(mutP("Object.keys(cache).forEach(function (id) { var s = cache[id]; if (s.img) { try { s.img.onload = s.img.onerror = null; s.img.src = \"\"; } catch (e) {} } released.push(id); });", ""));
+    await k2.p.prepare(["indra"]); const k2imgs = k2.im.made.slice(); await k2.p.prepare(["agni"]);
+    ok("M5 · breakage 'skip release' is caught (A12 goes red)", !(k2.p.released.indexOf("indra") >= 0 && k2imgs.every((x) => x.src === "")));
+  });
+
+  // ═══ R3 · THE PAGE ═══
+  const HTML = R("play/smriti/index.html");
+  function pageAt(o) {
+    o = o || {};
+    const srcs = Object.assign({}, SRC, o.src || {});
+    let html = HTML.replace(/<script src="([^"]+)"><\/script>/g, (m, src) => {
+      const f = path.resolve(DIR, src.split("?")[0]), base = path.basename(f);
+      const body = base === "page.js" ? srcs.page : base === "player.js" ? srcs.player : base === "smriti.js" ? srcs.rules : fs.readFileSync(f, "utf8");
+      const extra = base === "page.js" ? "<script>DY_SMRITI_PLAYER.ANIMATION_SPEED = " + (o.speed || 6) + ";</script>" : "";
+      return extra + "<script>" + body.replace(/<\/script/g, "<\\/script") + "</script>";
+    });
+    const f = makeFetch(o), im = makeImage({ fail: (u) => (o.artMissing || ["TheSetuStones"]).some((n) => u.indexOf("_" + n + "_") >= 0) });
+    const draws = [];
+    const dom = new JSDOM(html, { url: "https://divyayuddha.games/play/smriti/", runScripts: "dangerously", pretendToBeVisual: true,
+      beforeParse(w) {
+        w.fetch = (u, x) => f.fetch(String(u), x);
+        w.Image = im.Img;
+        w.matchMedia = (q) => ({ matches: !!o.reduce && /reduce/.test(q), media: q, addListener() {}, removeListener() {} });
+        w.HTMLCanvasElement.prototype.getContext = function () { const cv = this; return { canvas: cv, clearRect() {}, drawImage() { draws.push(1); }, set globalAlpha(v) {}, get globalAlpha() { return 1; } }; };
+        if (o.blocked) Object.defineProperty(w, "localStorage", { get() { throw new Error("SecurityError: storage blocked"); } });
+        else if (o.store) Object.keys(o.store).forEach((k) => w.localStorage.setItem(k, o.store[k]));
+        if (o.random) { const seq = o.random.slice(); w.Math.random = () => (seq.length ? seq.shift() : 0.5); }
+      } });
+    const w = dom.window, P = w.__DY_SMRITI_PAGE;
+    const plays = [], asks = [], origPlay = P.player.play, origReady = P.player.whenReady;
+    P.player.play = function (id) { plays.push(id); return origPlay.apply(this, arguments); };
+    P.player.whenReady = function (id) { asks.push(id); return origReady.apply(this, arguments); };   // every animation the page ASKS for, played or not
+    return { dom, w, P, f, plays, asks, draws, $: (id) => w.document.getElementById(id) };
+  }
+  const startLevel = async (pg, lv) => { pg.w.document.querySelector('.sm-lv[data-level="' + lv + '"]').click(); await until(() => pg.P.game && !pg.P.busy && pg.P.game.level === lv, 15000); await sleep(30); };
+  const card = (pg, i) => pg.w.document.querySelector('.sm-card[data-i="' + i + '"]');
+  const tapT = (pg, i) => card(pg, i).click();
+  const idle = (pg) => until(() => !pg.P.busy, 20000);
+  async function solveAll(pg, wrongFirst) {   // play to the end: optional wrong tries, then every pair
+    const g = pg.P.game, by = {};
+    g.tiles.forEach((t) => (by[t.id] = by[t.id] || []).push(t.i));
+    const ids = Object.keys(by);
+    for (let k = 0; k < (wrongFirst || 0); k++) { tapT(pg, by[ids[0]][0]); await idle(pg); tapT(pg, by[ids[1]][0]); await idle(pg); }
+    for (const id of ids) { if (g.tiles[by[id][0]].matched) continue; tapT(pg, by[id][0]); await idle(pg); tapT(pg, by[id][1]); await idle(pg); }
+  }
+
+  await section("R3", async () => {
+    console.log("\n── R3 · the page ──");
+    const pg = pageAt();
+    ok("C1 · the level choice: Easy 6 pairs, Medium 8, Hard 12, each with its best ('No best yet')",
+      [...pg.w.document.querySelectorAll(".sm-lv")].map((b) => b.textContent).join("|") === "Easy6 pairsNo best yet|Medium8 pairsNo best yet|Hard12 pairsNo best yet" && !pg.$("sm-choose").hidden && pg.$("sm-play").hidden);
+    await startLevel(pg, "easy");
+    const g = pg.P.game, animIds = [...new Set(g.tiles.filter((t) => S.isAnimated(t.card)).map((t) => t.id))];
+    ok("C2 · an Easy board: 12 face-down cards, two of each, at least one animated pair", g.tiles.length === 12 && pg.w.document.querySelectorAll(".sm-card").length === 12 && pg.w.document.querySelectorAll(".sm-card.sm-up").length === 0 && animIds.length >= 1);
+    await until(() => animIds.every((id) => pg.P.player.state(id) !== "loading"), 10000);
+    ok("C3 · only the animated cards on THIS board are loaded, at 256 px", J(pg.P.player.loaded.slice().sort()) === J(animIds.slice().sort()) && pg.P.player.fetched.filter((u) => /atlas/.test(u)).every((u) => /atlas_256\.webp$/.test(u)), J({ loaded: pg.P.player.loaded, animIds }));
+    // a Hero turn: the board waits, and takes no other turn meanwhile
+    const hero = g.tiles.find((t) => S.isAnimated(t.card)), other = g.tiles.find((t) => !S.isAnimated(t.card) && t.id !== hero.id);
+    tapT(pg, hero.i);
+    await until(() => pg.P.playing === hero.i, 3000);
+    const during = { busy: pg.P.busy, playing: pg.P.playing };
+    tapT(pg, other.i); await sleep(40);
+    const blocked = !g.tiles[other.i].up && g.tries === 0;
+    await idle(pg);
+    ok("W1 · turning a Hero plays its animation out of the card, and the board WAITS: no other card can be turned until it ends",
+      during.busy === true && during.playing === hero.i && blocked && pg.plays[0] === hero.id && pg.draws.length > 5, J({ during, blocked, plays: pg.plays }));
+    tapT(pg, other.i); await idle(pg);   // a miss (a Hero and a plain card): the plain card does not animate
+    ok("W2 · after the animation the board takes turns again; a plain card turned never animates", g.tries === 1 && pg.plays.length === 1 && J(pg.asks) === J([hero.id]) && !g.tiles[hero.i].up);
+    tapT(pg, hero.i); await idle(pg);
+    ok("W3 · EVERY turn of a Hero animates — the second time too", pg.plays.length === 2 && pg.plays[1] === hero.id);
+    const twin = g.tiles.find((t) => t.id === hero.id && t.i !== hero.i);
+    tapT(pg, twin.i); await idle(pg);
+    ok("W4 · the matching Hero animates as well, and the pair locks", pg.plays.length === 3 && g.tiles[hero.i].matched && g.tiles[twin.i].matched);
+    await solveAll(pg);
+    ok("W5 · through a whole game, only Heroes and Meghnad animated — never another card", pg.asks.every((id) => S.isAnimated(CARDS.find((c) => c.id === id))) && pg.plays.length >= 3 && pg.plays.length === pg.asks.length);
+    const tries1 = g.tries;
+    ok("F1 · the finished game: 'You found all 6 pairs in N tries.' and 'New best!' — the packs are let go",
+      !pg.$("sm-done").hidden && pg.$("sm-result").textContent === "You found all 6 pairs in " + tries1 + " tries." && pg.$("sm-bestline").textContent === "New best!" && pg.P.player.loaded.length === 0);
+    ok("F2 · the best is kept in this browser", JSON.parse(pg.w.localStorage.getItem("dy_smriti")).best.easy === tries1);
+    pg.$("sm-again").click(); await until(() => pg.P.game && pg.P.game !== g && !pg.P.busy, 10000);
+    await solveAll(pg, 2);
+    ok("F3 · 'Play again' deals a new board; a worse game keeps the best: 'Your best: N tries.'", pg.P.game.tries === 8 && tries1 < 8 && pg.$("sm-bestline").textContent === "Your best: " + tries1 + " tries." && JSON.parse(pg.w.localStorage.getItem("dy_smriti")).best.easy === tries1);
+    pg.$("sm-choose-again").click();
+    ok("F4 · 'Choose a level' goes back to the choice, now showing 'Best: N tries' for Easy", !pg.$("sm-choose").hidden && pg.w.document.querySelector('.sm-lv[data-level="easy"] .sm-lvbest').textContent === "Best: " + tries1 + " tries");
+
+    // reduced motion: no animation, no wait
+    const rm = pageAt({ reduce: true });
+    await startLevel(rm, "hard");
+    const rg = rm.P.game, rh = rg.tiles.find((t) => S.isAnimated(t.card));
+    tapT(rm, rh.i);
+    const rmBusy = rm.P.busy;
+    ok("RM1 · reduced motion: turning a Hero plays nothing and the board does not wait", rm.plays.length === 0 && rmBusy === false && rg.tiles[rh.i].up && rm.P.playing === null);
+    // a missing pack: a plain turn, no wait
+    const np = pageAt({ block: (u) => /registry\.json$/.test(u) });
+    await startLevel(np, "medium");
+    const nh = np.P.game.tiles.find((t) => S.isAnimated(t.card));
+    tapT(np, nh.i); await idle(np);
+    ok("FB1 · with no animation available the Hero just turns over and the board goes on (no error)", np.P.game.tiles[nh.i].up && np.draws.length === 0 && np.P.busy === false);
+    // storage blocked and corrupt
+    const sb = pageAt({ blocked: true });
+    await startLevel(sb, "easy"); await solveAll(sb);
+    ok("S1 · storage BLOCKED: the game plays to the end, and says plainly the best isn't saved", sb.$("sm-result").textContent.indexOf("You found all 6 pairs in ") === 0 && sb.$("sm-store").textContent === "This browser isn't saving your best scores.");
+    const sc = pageAt({ store: { dy_smriti: "{not json" } });
+    ok("S2 · a corrupt record is an empty one: the choice shows 'No best yet'", sc.w.document.querySelector('.sm-lv[data-level="easy"] .sm-lvbest').textContent === "No best yet");
+    // the pool at run time: a card whose picture is missing is set aside and the board dealt again
+    const full = S.poolOf(CARDS, () => true);
+    let seed = 1; while (!S.deal(full, "hard", seed).some((t) => t.id === "setustones")) seed++;
+    const rnd = [(seed + 0.5) / 4294967296];
+    const withArt = pageAt({ artMissing: ["__none__"], random: rnd }); await startLevel(withArt, "hard");
+    const noArt = pageAt({ random: rnd }); await startLevel(noArt, "hard");
+    const expect175 = S.deal(S.poolOf(CARDS, (c) => c.id !== "setustones"), "hard", seed).map((t) => t.id);
+    ok("P4 · ON THE PAGE, seed " + seed + ": with its picture published The Setu Stones is dealt like any card; with its picture missing it is set aside and the SAME seed is dealt again without it",
+      withArt.P.game.tiles.some((t) => t.id === "setustones") && J(withArt.P.missing) === J([]) && !noArt.P.game.tiles.some((t) => t.id === "setustones")
+        && J(noArt.P.missing) === J(["setustones"]) && J(noArt.P.game.tiles.map((t) => t.id)) === J(expect175));
+    // layout (the real widths are measured in the browser; here the rules that make them hold)
+    const css = R("play/smriti/smriti.css");
+    ok("L1 · layouts: at 390 px Easy and Medium in four columns, Hard six by four (the whole board in view); from 720 px six / eight columns; the page never scrolls sideways; the animation canvas never takes a tap",
+      /\.sm-board \{ display: grid; gap: 8px; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); max-width: 420px;/.test(css) && /\n\.sm-board\.sm-hard \{ grid-template-columns: repeat\(6,/.test(css) && /\.sm-board\.sm-easy \{ grid-template-columns: repeat\(6/.test(css) && /  \.sm-board\.sm-hard \{ grid-template-columns: repeat\(8/.test(css)
+        && /body\.smriti \{[^}]*overflow-x: hidden/.test(css) && /\.sm-stage \{[^}]*pointer-events: none/.test(css));
+    // the owner's R2/R3 breakages, on the page
+    const k3 = pageAt({ src: { page: SRC.page.split("player.prepare(tiles.filter(function (t) { return S.isAnimated(t.card); }).map(function (t) { return t.id; }));").join("player.prepare(CARDS.filter(S.isAnimated).map(function (c) { return c.id; }));") } });
+    await startLevel(k3, "easy");
+    ok("M6 · breakage 'load an animation not on the board' is caught (C3 goes red)", k3.P.player.loaded.length > new Set(k3.P.game.tiles.filter((t) => S.isAnimated(t.card)).map((t) => t.id)).size);
+    const k4 = pageAt({ src: { page: SRC.page.split("if (!game || busy || !S.canFlip(game, i)) return;").join("if (!game || !S.canFlip(game, i)) return;") } });
+    await startLevel(k4, "easy");
+    const kg = k4.P.game, kh = kg.tiles.find((t) => S.isAnimated(t.card)), ko = kg.tiles.find((t) => t.id !== kh.id);
+    tapT(k4, kh.i); await until(() => k4.P.playing === kh.i, 3000); tapT(k4, ko.i); await sleep(40);
+    ok("M7 · breakage 'allow flips during an animation' is caught (W1 goes red)", kg.tiles[ko.i].up === true);
+    await idle(k4);
+    const k5 = pageAt({ src: { page: SRC.page.split("if (S.isAnimated(r.tile.card) && !reduced())").join("if (!reduced())") } });
+    await startLevel(k5, "easy");
+    const plain = k5.P.game.tiles.find((t) => !S.isAnimated(t.card));
+    tapT(k5, plain.i); await idle(k5);
+    ok("M8 · breakage 'animate a non-Hero card' is caught (W2/W5 go red)", k5.asks.indexOf(plain.id) >= 0);
+  });
+
+  console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));
+  if (fail) process.exitCode = 1;
+  setTimeout(() => process.exit(process.exitCode || 0), 50);
+})().catch((e) => { console.error(e); process.exitCode = 1; });

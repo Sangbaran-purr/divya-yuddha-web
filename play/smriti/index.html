@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Divya Yuddha — Smriti</title>
+    <meta name="description" content="A memory game with the cards of Divya Yuddha. Find every pair." />
+    <link rel="icon" href="../../assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="preload" href="../../assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="../../assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../../css/threshold.css?v=s1g" />
+    <link rel="stylesheet" href="smriti.css?v=m1" />
+  </head>
+  <body class="smriti">
+    <!-- MINI-GAMES-2 — SMRITI, the memory game. Free for everyone: no wallet, no Torana, no DYC, no badges, no leaderboard.
+         Not linked from anywhere yet (owner ruling: the owner decides where it is linked from). -->
+    <header class="sm-top">
+      <a class="sm-crest" href="../../index.html">
+        <img class="brand-logo" src="../../assets/brand/logo.webp" width="460" height="298" alt="Divya Yuddha — Battle of the Celestials" />
+      </a>
+    </header>
+    <main class="sm">
+      <h1 class="sm-h1">Smriti</h1>
+      <p class="sm-epithet">What is seen once is never lost.</p>
+
+      <section id="sm-choose">
+        <p class="sm-how">Turn over two cards at a time and find every matching pair. Heroes and Meghnad come to life when you turn them over. Fewer tries is better.</p>
+        <div class="sm-levels" id="sm-levels"></div>
+      </section>
+
+      <section id="sm-play" hidden>
+        <div class="sm-bar">
+          <span class="sm-level" id="sm-level"></span>
+          <span class="sm-stat">Tries: <b id="sm-tries">0</b></span>
+          <span class="sm-stat">Best: <b id="sm-best">—</b></span>
+        </div>
+        <div class="sm-board" id="sm-board"></div>
+        <div class="sm-actions"><button type="button" class="sm-btn" id="sm-back">Choose a level</button></div>
+      </section>
+
+      <section id="sm-done" class="sm-done" hidden>
+        <h2 class="sm-h2">Every pair found</h2>
+        <p class="sm-result" id="sm-result"></p>
+        <p class="sm-bestline" id="sm-bestline"></p>
+        <div class="sm-actions">
+          <button type="button" class="sm-btn sm-go" id="sm-again">Play again</button>
+          <button type="button" class="sm-btn" id="sm-choose-again">Choose a level</button>
+        </div>
+      </section>
+
+      <p id="sm-store" class="sm-store"></p>
+    </main>
+    <canvas id="sm-stage" class="sm-stage" aria-hidden="true"></canvas>
+
+    <!-- the site's engine copy (byte-identical to the game's): its DECKS are the card pool -->
+    <script src="../../game/src/engine.js?v=33d0757"></script>
+    <script src="manifest.js?v=m1"></script>
+    <script src="smriti.js?v=m1"></script>
+    <script src="player.js?v=m1"></script>
+    <script src="page.js?v=m1"></script>
+  </body>
+</html>
