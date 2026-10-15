@@ -7,7 +7,7 @@ leaderboards — personal streaks and bests only, kept in the browser. Order: Da
 ## Files
 | File | What it is |
 |---|---|
-| `play/daily/puzzles.json` | the 14 puzzles, one per day from Monday 2026-10-19 — **no answers in it** |
+| `play/daily/puzzles.json` | the 14 puzzles, one per day from Thursday 2026-10-15 to Wednesday 2026-10-28 (owner ruling 2026-10-15: batch 1 starts that day, 4 days earlier than first planned, same order) — **no answers in it** |
 | `tests/fixtures/daily-answers.sha256.json` | one salted SHA-256 fingerprint per puzzle of the approved winning play — **the only form the answers take in this repo** |
 | `scripts/puzzle-answer-digest.js` | the fingerprint: `sha256(salt + "|" + id + "|" + play + "|" + target)` |
 | `play/daily/puzzle-core.js` | load · candidates · solve (UMD: `window.DY_PUZZLE` in the browser, `require` in Node) |
@@ -86,8 +86,15 @@ hides nothing from someone who runs the solver; it keeps the key out of plain si
   read/write is wrapped; with storage blocked the page still plays and says progress isn't being saved; a corrupt or
   oddly-shaped record is treated as empty.
 - **No puzzle today** (owner ruling 2026-10-14): one line, then the earlier puzzles. Before the first puzzle:
-  "The first Daily Puzzle arrives on Monday 19 October." — the day and date are READ FROM THE DATA (the earliest puzzle,
+  "The first Daily Puzzle arrives on <Day date Month>." — the day and date are READ FROM THE DATA (the earliest puzzle,
   in UTC), never hard-coded. After a batch runs out: "A new puzzle is on its way. Try an earlier one below."
 - **Where players find it** (owner ruling 2026-10-14): from the GAME'S MAIN MENU only — no site-nav or dashboard link.
 - **Wording** approved word for word (2026-10-14), with "Place it here" on the slot buttons, the description without
   "UTC", and "Today doesn't count as solved, and your streak is over." shown ONLY on today's puzzle.
+
+## Batch 1 moved to start 15 Oct (owner ruling 2026-10-15)
+All 14 dates moved 4 days earlier, same order (puzzle 1 = Thu 15 Oct … puzzle 14 = Wed 28 Oct); no position, answer or
+explanation changed (proven: every field but id/date is identical, and every explanation decodes word for word). The id
+carries the date, so each puzzle was re-solved and its winner checked against the OLD approved fingerprint before the new
+fingerprint was written for that same play. The suites now read every date from the data (day 0 = the first puzzle);
+the only calendar pin is the ruled launch line, checked once.

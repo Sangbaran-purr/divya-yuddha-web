@@ -47,11 +47,15 @@ for (const P of PUZZLES) {
 }
 {
   const dates = PUZZLES.map((p) => p.date);
-  const want = Array.from({ length: 14 }, (_, i) => new Date(Date.UTC(2026, 9, 19 + i)).toISOString().slice(0, 10));
-  ok("D1 · fourteen puzzles, one per day, Monday 2026-10-19 → Sunday 2026-11-01, ids unique",
-    JSON.stringify(dates) === JSON.stringify(want) && new Date(Date.UTC(2026, 9, 19)).getUTCDay() === 1 && new Set(PUZZLES.map((p) => p.id)).size === 14);
+  // the batch START is the owner's ruling (2026-10-15: batch 1 starts that day, 4 days earlier than first planned);
+  // every other date follows from it — one puzzle per consecutive UTC day, each id carrying its own date
+  const START = "2026-10-15";
+  const want = Array.from({ length: 14 }, (_, i) => new Date(Date.parse(START + "T00:00:00Z") + i * 86400000).toISOString().slice(0, 10));
+  ok("D1 · fourteen puzzles, one per consecutive UTC day from the ruled start " + START + " (Thursday) to " + want[13] + ", each id = dp-<date>, ids unique",
+    JSON.stringify(dates) === JSON.stringify(want) && new Date(START + "T00:00:00Z").getUTCDay() === 4
+      && PUZZLES.every((p) => p.id === "dp-" + p.date) && new Set(PUZZLES.map((p) => p.id)).size === 14);
   const ladder = ["easy", "easy", "medium", "medium", "medium", "hard", "hard"];
-  ok("D2 · easier early in the week, harder later (Mon–Tue easy · Wed–Fri medium · Sat–Sun hard, both weeks)",
+  ok("D2 · the approved order is kept: puzzles 1–2 easy, 3–5 medium, 6–7 hard, then the same again for 8–14",
     PUZZLES.every((p, i) => p.difficulty === ladder[i % 7]), PUZZLES.map((p) => p.difficulty).join(","));
   const mine = new Set(PUZZLES.map((p) => p.you.faction)), all = new Set(PUZZLES.map((p) => p.you.faction).concat(PUZZLES.map((p) => p.them.faction)));
   ok("D3 · all four factions are played (and all four are faced)", mine.size === 4 && all.size === 4, [...mine].join(","));
@@ -92,13 +96,13 @@ for (const P of PUZZLES) {
   ok("R1 · every winning line (card, target, slot, Leaps), replayed by hand through the engine, WINS the round at the solver's exact score", all, why);
   // the page must offer the free Leap: exactly one puzzle cannot be won without one (named by date, not by play)
   const needLeap = PUZZLES.filter((P) => solved[P.id].ok && (solved[P.id].winners[0].line.before.length + solved[P.id].winners[0].line.after.length) > 0).map((P) => P.date);
-  ok("R2 · the page needs Leap control: 2026-10-29 is won only with a free Leap (and every other puzzle without one)",
-    JSON.stringify(needLeap) === JSON.stringify(["2026-10-29"]), needLeap.join(","));
+  ok("R2 · the page needs Leap control: puzzle 11 is won only with a free Leap (and every other puzzle without one)",
+    JSON.stringify(needLeap) === JSON.stringify([PUZZLES[10].date]), needLeap.join(","));
 }
 
 // ── the solver's refusals ──
 {
-  const base = "dp-2026-10-19";                                     // Chandra Dev wins 20–19
+  const base = PUZZLES[0].id;                                        // puzzle 1
   const two = byId(base); two.them.hand = two.them.hand.filter((n) => n !== "Ravana"); two.setup = two.setup.filter((s) => s.play !== "Ravana");
   // without Ravana the opponent cannot answer the second turn — rebuild the turn order honestly
   two.setup = [{ side: "you", play: "Ashwini Kumars" }, { side: "them", play: "Narakasura" }, { side: "you", play: "Marut" }, { side: "them", pass: true }, { side: "you", play: "Gandharva" }, { side: "you", play: "Kubera" }];
@@ -116,9 +120,9 @@ for (const P of PUZZLES) {
   const loser = all10.plays.find((p) => !p.win && p.play);
   const wrong = solve(byId(base), { play: loser.play, target: loser.target });
   ok("S3 · a stated answer that is not the one winner is REJECTED (WRONG_ANSWER)", !wrong.ok && wrong.reason === "WRONG_ANSWER", wrong.detail);
-  const tp = byId("dp-2026-10-28"), tw = solve(tp, null).winners[0];
+  const tp = byId(PUZZLES[9].id), tw = solve(tp, null).winners[0];   // puzzle 10
   const sameCardOtherTarget = solve(tp, null).plays.find((p) => p.play === tw.play && p.target && p.target !== tw.target);
-  const wrongT = solve(byId("dp-2026-10-28"), { play: tw.play, target: sameCardOtherTarget.target });
+  const wrongT = solve(byId(PUZZLES[9].id), { play: tw.play, target: sameCardOtherTarget.target });
   ok("S4 · …and so is the right card on a wrong target", !wrongT.ok && wrongT.reason === "WRONG_ANSWER", wrongT.detail);
 
   const mal = [
@@ -153,7 +157,7 @@ for (const P of PUZZLES) {
   ok("S11 · a setup step out of turn is rejected (ILLEGAL)", !rt.ok && rt.reason === "ILLEGAL" && /turn/.test(rt.detail), rt.detail);
 
   // the dice: Ahamkara's Chaos Surge lands on a RANDOM Asura Unit — with two on the board the position is luck
-  const luck = byId("dp-2026-10-30");
+  const luck = byId(PUZZLES[11].id);                                  // puzzle 12
   luck.setup = [{ side: "you", play: "Chandra Dev" }, { side: "them", play: "Bana Asura" }, { side: "you", play: "Marut" }, { side: "them", play: "Kali Asura" },
     { side: "you", play: "Gandharva" }, { side: "them", play: "Ahamkara", target: "Kali Asura" }, { side: "you", play: "Gandharva" }, { side: "them", pass: true }];
   const rl = solve(luck, null);
@@ -181,12 +185,12 @@ for (const P of PUZZLES) {
 
 // ── the realm is the lesson, not decoration (named by date — no winning play named) ──
 {
-  const y = byId("dp-2026-11-01"); y.realm = "mrityulok";
+  const y = byId(PUZZLES[13].id); y.realm = "mrityulok";              // puzzle 14 (Yaksha)
   const ry = solve(y, null);
-  ok("M1 · Yaksha is the lesson: the same 2026-11-01 position outside Yaksha has TWO winners", !ry.ok && ry.reason === "TWO_WINS", ry.detail);
-  const k = byId("dp-2026-10-24"); k.realm = "mrityulok";
+  ok("M1 · Yaksha is the lesson: the same puzzle-14 position outside Yaksha has TWO winners", !ry.ok && ry.reason === "TWO_WINS", ry.detail);
+  const k = byId(PUZZLES[5].id); k.realm = "mrityulok";               // puzzle 6 (Kalki)
   const rk = solve(k, null);
-  ok("M2 · Kalki is the lesson: outside Kalki the approved 2026-10-24 play is no longer the one winner", !(rk.ok && approved(k, rk.winners[0])));
+  ok("M2 · Kalki is the lesson: outside Kalki the approved puzzle-6 play is no longer the one winner", !(rk.ok && approved(k, rk.winners[0])));
 }
 
 console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));
