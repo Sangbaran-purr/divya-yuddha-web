@@ -98,3 +98,25 @@ explanation changed (proven: every field but id/date is identical, and every exp
 carries the date, so each puzzle was re-solved and its winner checked against the OLD approved fingerprint before the new
 fingerprint was written for that same play. The suites now read every date from the data (day 0 = the first puzzle);
 the only calendar pin is the ruled launch line, checked once.
+
+## Daily Puzzle Effects — R2 (2026-10-15): the try is played in the real battle screen
+
+- **The frame.** `/play/daily/` frames the gated game copy in puzzle mode: `../../game/index.html?v=<game/STAMP>&puzzle=1`
+  (the stamp read no-store at load, as the Hall does — so `play/daily/page.js` sits beside `mp/` outside the entry-link
+  ledger, SY1). The frame builds the same position with `puzzle-core.js`, lets the player make one play, any Leaps and
+  End turn, plays every effect (no tap-to-skip, speed fixed at Normal, sound effects on from the first tap, battle music
+  never fetched, reduced motion as in the battle), and reports the round's result, score and the events it showed.
+- **The page keeps the rules.** Solved, streak, best, countdown and the reveal are decided exactly as before, from the
+  frame's result. On a result the page COVERS the battle with its own words ("You win the round, X–Y." / "Not this one.
+  Try again. The round ended X–Y." with a "Try again" button), so the battle's banners and round 2 are never seen. After a
+  win or a reveal the stage settles to a compact panel and the battle is put away.
+- **The reveal** sends the frame the solver's line (`puzzle:perform`) — the ONLY time the page ever sends a play — and the
+  frame plays it with its effects; the explanation follows when the frame reports it played.
+- **The gate.** The sync's honest-door preamble has ONE new road: the Daily Puzzle's own frame (framed, same origin, parent
+  under `/play/daily/`, `?puzzle=1`) skips the pass — the puzzle is free for everyone — and the gem. Every other road,
+  including a direct visit with `?puzzle=1`, still goes to the rite.
+- **The fallback.** If the battle says nothing for 20 s, or reports an error, the page's own board (the R2 page) takes over.
+- **Tests.** `tests/suites/daily.js` drives the page through a frame stub that speaks the frame's exact words and scores
+  each try with `PZ.run`; the game repo's `src/test_puzzlemode.js` proves the real frame reports the same result and the
+  engine's own events for every winning line and wrong lines. Before the reveal the page sends the frame the puzzle and
+  resets only (K1); the frame's messages carry results only (K2); N6 extends the no-answer scan to the frame's code.

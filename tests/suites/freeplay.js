@@ -262,19 +262,44 @@ async function run() {
   // ANY other drift in the copy still turns this red.
   const withoutDoor = (t) => t.replace(/      <button class="mode plaque-lg active" id="mode-daily">[^\n]*<\/button>\n/, "")
     .replace(/\/\* MINI-GAMES-1 R2 — THE DAILY PUZZLE DOOR[\s\S]*?\n\}\)\(\);\n/, "");
-  const nowCopy = fs.readFileSync(path.join(SITE, "game/index.html"), "utf8");
-  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle door (MINI-GAMES-1) and its stamp",
+  // MINI-GAMES-1 Daily Puzzle Effects R2 (2026-10-15) re-synced from game 1fad925: the battle screen's puzzle mode (?puzzle=1) —
+  // ONE guarded block above pump() + nine one-line guards, each undone here EXACTLY (any other drift still turns red).
+  const withoutPuzzleMode = (t) => {
+    const a = t.indexOf("\n/* ══ MINI-GAMES-1 · DAILY PUZZLE EFFECTS (R1)"), b = t.indexOf("\nfunction pump(){", a);
+    let u = (a >= 0 && b > a) ? t.slice(0, a) + t.slice(b) : t;
+    [["body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn{ display:none !important; }   /* MINI-GAMES-1 puzzle mode: no settings (speed is fixed), no shield/unbind (not puzzle moves) */\n", ""],
+     [".filter(([k])=>!(PUZZLE_MODE && (k==='menu'||k==='battle')))", ""],
+     [" loadSheets:(keys)=>(keys||[]).forEach(loadSheet) /* MINI-GAMES-1: the puzzle's own list */,", ""],
+     ["  if (PUZZLE_MODE) pzActionStart(evStart);   // MINI-GAMES-1: time this action (start → its choreography released)\n", ""],
+     ["layer.onclick=PUZZLE_MODE ? null : skipChoreo;   // MINI-GAMES-1: no tap-to-skip in a puzzle — every try plays in full", "layer.onclick=skipChoreo;"],
+     ["  if (PUZZLE_MODE && !pzMay('card')) return;   // MINI-GAMES-1: one card play per try\n", ""],
+     ["  if (PUZZLE_MODE){ pzPump(); return; }   // MINI-GAMES-1 puzzle mode: no AI, no conch, no relay — close the action, drive the reveal or report\n", ""],
+     ["  if(PUZZLE_MODE) return;                   // MINI-GAMES-1: the puzzle page owns the result — no rewards, no result face\n", ""],
+     ["else if (PUZZLE_MODE) puzzleBoot(); ", ""]].forEach(([x, y]) => { u = u.split(x).join(y); });
+    return u;
+  };
+  // the gate's ONE new road (the Daily Puzzle's own frame), undone exactly — in the sync script and in the copy
+  const withoutDailyFrame = (t) => t
+    .replace(/\n  var dailyFrame = false; \/\* MINI-GAMES-1 Daily Puzzle Effects R2:[^\n]*\n  try \{ dailyFrame = [^\n]*\n/, "\n")
+    .replace('if (!dailyFrame && !sessionStorage.getItem("dyw_pass")) {', 'if (!sessionStorage.getItem("dyw_pass")) {')
+    .replace('} catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }', '} catch (e) { location.replace("../rite.html"); return; }')
+    .replace(/\n    if \(dailyFrame\) return; \/\* MINI-GAMES-1: nor inside the Daily Puzzle's frame[^\n]*/, "");
+  const nowCopy = withoutDailyFrame(withoutPuzzleMode(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")));
+  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle door, the Daily Puzzle's battle mode (?puzzle=1) and its gate road (MINI-GAMES-1), and the stamp",
      outsideS3(head("game/index.html")) === outsideS3(withoutDoor(nowCopy)) && withoutDoor(nowCopy) !== nowCopy &&
-     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === "49555c0");
+     withoutPuzzleMode(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")).indexOf("PUZZLE_MODE") < 0 &&
+     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === "1fad925");
   // SITE-AUDIT-1 grew the sync script (GAME_REF + the Store relink); the GATE it injects must not have moved
   const gateBlock = (t) => (t.match(/<!-- DYW-GATE-START[\s\S]*?<!-- DYW-S3-SUPPRESS-START/) || [""])[0];
-  ok("DG2 · the sync script's gate preamble is unchanged since before FREE-PLAY-1 (a passless visit still goes to the rite)",
-     gateBlock(head("scripts/sync_game.sh")) === gateBlock(fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8")) && gateBlock(head("scripts/sync_game.sh")).length > 200 &&
-     /if \(!sessionStorage\.getItem\("dyw_pass"\)\) \{ location\.replace\("\.\.\/rite\.html"\); return; \}/.test(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")));
+  const shNow = fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8"), copyNow = fs.readFileSync(path.join(SITE, "game/index.html"), "utf8");
+  ok("DG2 · the sync script's gate preamble is unchanged since before FREE-PLAY-1 except ONE ruled road (the Daily Puzzle's own frame skips the pass and the gem); a passless visit still goes to the rite",
+     gateBlock(head("scripts/sync_game.sh")) === withoutDailyFrame(gateBlock(shNow)) && gateBlock(shNow) !== withoutDailyFrame(gateBlock(shNow)) && gateBlock(head("scripts/sync_game.sh")).length > 200 &&
+     /if \(!dailyFrame && !sessionStorage\.getItem\("dyw_pass"\)\) \{ location\.replace\("\.\.\/rite\.html"\); return; \}/.test(copyNow) &&
+     /dailyFrame = window\.top !== window && \/\[\?&\]puzzle=1\(&\|\$\)\/\.test\(location\.search\) && window\.parent\.location\.origin === location\.origin && \/\^\\\/play\\\/daily\\\/\/\.test\(window\.parent\.location\.pathname\)/.test(copyNow));
   const demo = fs.readFileSync(path.join(SITE, "demo/index.html"), "utf8"), demoHead = head("demo/index.html");
   ok("DG3 · the demo still seeds the pass and its mark the same way; ONLY its button changed ('Play free' → the rite)",
      demo.replace('<a class="demo-cta" href="../rite.html">Play free</a>', '<a class="demo-cta" href="../index.html">Get Access</a>')
-       .replace("../game/index.html?v=49555c0", "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows the MINI-GAMES-1 re-sync
+       .replace("../game/index.html?v=1fad925", "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows the MINI-GAMES-1 re-syncs
      /sessionStorage\.setItem\("dyw_pass", "1"\)/.test(demo) && /sessionStorage\.setItem\("dyw_demo", "1"\)/.test(demo));
 
   // ═══════════════ ST · THE STAMPS ═══════════════

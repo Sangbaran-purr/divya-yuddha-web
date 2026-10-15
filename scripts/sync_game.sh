@@ -151,9 +151,11 @@ cat > "$PRE" <<'PREAMBLE'
 <!-- DYW-GATE-START (injected by scripts/sync_game.sh; re-sync replaces this block) -->
 <script>
 (function(){
+  var dailyFrame = false; /* MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle frames this copy in puzzle mode (?puzzle=1) from /play/daily/ on THIS origin. That frame alone skips the pass; nothing else does (a direct visit, any other frame, any other page). */
+  try { dailyFrame = window.top !== window && /[?&]puzzle=1(&|$)/.test(location.search) && window.parent.location.origin === location.origin && /^\/play\/daily\//.test(window.parent.location.pathname); } catch (e) { dailyFrame = false; }
   try {
-    if (!sessionStorage.getItem("dyw_pass")) { location.replace("../rite.html"); return; }
-  } catch (e) { location.replace("../rite.html"); return; }
+    if (!dailyFrame && !sessionStorage.getItem("dyw_pass")) { location.replace("../rite.html"); return; }
+  } catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }
   var NS = "dyw::";
   try {
     var real = window.localStorage;
@@ -170,6 +172,7 @@ cat > "$PRE" <<'PREAMBLE'
   function addGem(){
     if (document.getElementById("dyw-gate-return")) return;
     if (window.top !== window && /[?&]wire=1(&|$)/.test(location.search)) return; /* S-HALL-WIRE-1 (R5): never inside the Hall's battle frame - a tap would navigate the battle away mid-match */
+    if (dailyFrame) return; /* MINI-GAMES-1: nor inside the Daily Puzzle's frame - the page around it is the way back */
     var a = document.createElement("a");
     a.id = "dyw-gate-return";
     a.href = "../index.html";
@@ -295,6 +298,7 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - Honest-door session check: no site pass -> redirect to ../rite.html. A courtesy redirect, not security.
 - localStorage namespace shim (prefix "$NS_PREFIX"): the copy keeps its own memory, isolated from the free game (both live on the same github.io origin, which otherwise shares localStorage).
 - Return-to-gate gem-mark (bottom-left, safe-area aware). Skipped when the page is framed with ?wire=1 (the Hall's battle frame): a tap there would navigate the battle away mid-match (S-HALL-WIRE-1 R5).
+- MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle (/play/daily/) frames this copy with ?puzzle=1. That frame — same origin, parent under /play/daily/ — is the ONE road that skips the pass (the puzzle is free for everyone) and the gem. A direct visit with ?puzzle=1, or any other frame, still goes to the rite.
 
 ## Notes at sync time
 - Source working tree dirty files: $SRC_DIRTY (ignored by the archive method).
@@ -321,6 +325,10 @@ if [ "$(cat "$DEST/STAMP")" != "$SRC_SHORT" ] || ! grep -qE '^[0-9a-f]{7,}$' "$D
 fi
 echo "sync_game: STAMP -> $SRC_SHORT"
 # S-HALL-WIRE-1 (R5) — the gate gem must skip the Hall's battle frame; assert the skip line landed exactly once.
+if [ "$(grep -c 'nor inside the Daily Puzzle' "$DEST/index.html")" != "1" ] || [ "$(grep -c 'if (!dailyFrame && !sessionStorage.getItem("dyw_pass"))' "$DEST/index.html")" != "1" ]; then
+  echo "error: the Daily Puzzle frame's gate road is missing from the injected preamble" >&2
+  exit 1
+fi
 if [ "$(grep -c 'S-HALL-WIRE-1 (R5): never inside the Hall' "$DEST/index.html")" != "1" ]; then
   echo "error: the gate gem's battle-frame skip is missing from the injected preamble" >&2
   exit 1

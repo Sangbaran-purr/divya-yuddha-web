@@ -6,6 +6,14 @@
  * reads the engine's own round result. The offline solver proved exactly one play wins, so "you won the round" means
  * "you found it". "Show me the answer" runs the same solver here in the browser; no answer key is shipped.
  * Plain words in every instruction; the mythic voice stays in the headings.
+ *
+ * DAILY PUZZLE EFFECTS R2: the try is played in THE REAL BATTLE SCREEN, framed in puzzle mode (game/index.html?puzzle=1,
+ * the URL stamped from game/STAMP like the Hall's). The frame builds the same position with this same puzzle code, lets
+ * the player make one play (+ Leaps) and End turn, plays every effect, and reports only the round's result, score and
+ * the events it showed. The page keeps the rules: solved, streak, best, countdown, the reveal. It covers the battle with
+ * its own result the moment the frame reports, so the battle's banners and round 2 are never seen. Before the reveal the
+ * page never sends the frame an answer; the reveal sends the solver's line and the frame plays it with its effects.
+ * If the battle cannot start (no word from the frame in 20 s, or an error), the page falls back to its own board below.
  */
 (function () {
   "use strict";
@@ -38,6 +46,8 @@
     cantPlay: "Can't be played now.",
     solvedAlready: "You've solved today's puzzle.",
     boardAfter: "The board after your play, before the round is scored.",
+    tryAgain: "Try again",
+    frameTitle: "The battle",
     // no puzzle today (owner ruling 2026-10-14): before the first puzzle, and after a batch runs out
     firstArrives: function (when) { return "The first Daily Puzzle arrives on " + when + "."; },
     onItsWay: "A new puzzle is on its way. Try an earlier one below.",
@@ -51,6 +61,10 @@
   var list = [], P = null, isToday = false, today = D.utcDate(now);
   var g = null, mode = "idle", sel = null, cardPlayed = false, leapA = null, tries = 0, done = false;
   var actions = [];   // this try's moves (Leaps and the card), replayed to show the board as it stood before scoring
+  // the framed battle: live once it has said it is ready; failed → the page's own board takes over
+  var FRAME = { el: null, win: null, live: false, failed: false, revealing: false, revealText: "", timer: 0, safety: 0 };
+  var FRAME_WAIT_MS = 20000, REVEAL_WAIT_MS = 60000;
+  var sent = [];     // every word sent to the frame (read by the page tests: no answer before the reveal)
 
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function homeFaction(c) { for (var f in E.DECKS) if (E.DECKS[f].some(function (d) { return d.n === c.n; })) return f; return null; }
@@ -156,6 +170,7 @@
     var a = $("dd-actions"); a.innerHTML = "";
     var d = $("dd-detail"); d.innerHTML = ""; d.hidden = true;
     if (done) return;
+    if (FRAME.live) { if (tries > 0 && !revealed()) a.appendChild(btn("Show me the answer", "dd-reveal", askReveal)); return; }
     if (sel != null && mode === "card") {
       var c = g.players[0].hand[sel];
       d.hidden = false;
@@ -253,6 +268,7 @@
       var r = PZ.solve(P, E, null);
       var w = r.ok ? r.winners[0] : null;
       if (isToday) { D.markRevealed(state, P.date, today); D.save(store, state); }
+      if (FRAME.live && w) { done = true; revealInFrame(w); return; }
       done = true; fresh(); render();
       say(w ? winningLine(w) : "", "dd-good");
       showAfter(true);
@@ -273,6 +289,80 @@
       s += " Then use your free Leap: " + leaps.join("; ") + ".";
     }
     return s;
+  }
+
+  // ── THE FRAMED BATTLE ──
+  function stage(withFrame) {
+    var game = $("dd-game"); game.innerHTML = ""; game.className = "dd-stage" + (withFrame ? "" : " dd-stage-still");
+    var cov = el("div", "dd-cover"); cov.id = "dd-cover"; cov.hidden = true;
+    cov.appendChild(el("p", "dd-covertext")).id = "dd-covertext";
+    var acts = el("div", "dd-actions"); acts.id = "dd-coveracts"; cov.appendChild(acts);
+    game.appendChild(cov);
+    return game;
+  }
+  function cover(text, buttons) {
+    var c = $("dd-cover"); if (!c) return;
+    $("dd-covertext").textContent = text;
+    var a = $("dd-coveracts"); a.innerHTML = ""; (buttons || []).forEach(function (b) { a.appendChild(b); });
+    c.hidden = false;
+  }
+  function uncover() { var c = $("dd-cover"); if (c) c.hidden = true; }
+  function settle() { var gm = $("dd-game"); gm.classList.add("dd-stage-still", "dd-stage-done"); }   // the day is settled: a compact panel, the battle put away
+  function toFrame(m) { if (!FRAME.win) return; sent.push(JSON.parse(JSON.stringify(m))); try { FRAME.win.postMessage(m, location.origin); } catch (e) {} }
+  function frameStart() {
+    var game = stage(true);
+    var f = el("iframe", "dd-frame"); f.id = "dd-frame"; f.title = T.frameTitle; f.setAttribute("allow", "autoplay");
+    game.insertBefore(f, game.firstChild);
+    FRAME.el = f; FRAME.win = f.contentWindow;
+    FRAME.timer = setTimeout(function () { if (!FRAME.live) frameFail(); }, FRAME_WAIT_MS);
+    var go = function (v) { if (FRAME.failed) return; f.src = "../../game/index.html?" + (v ? "v=" + v + "&" : "") + "puzzle=1"; FRAME.win = f.contentWindow; };
+    try {
+      fetch("../../game/STAMP", { cache: "no-store" }).then(function (r) { return r.text(); })
+        .then(function (t) { var s = String(t).trim(); go(/^[0-9a-f]{7,40}$/.test(s) ? s : null); }, function () { go(null); });
+    } catch (e) { go(null); }
+  }
+  function frameFail() {   // the battle could not start: the page's own board takes over, nothing is lost
+    if (FRAME.failed) return;
+    FRAME.failed = true; FRAME.live = false; clearTimeout(FRAME.timer); clearTimeout(FRAME.safety);
+    if (FRAME.el && FRAME.el.parentNode) FRAME.el.parentNode.removeChild(FRAME.el);
+    FRAME.el = null; FRAME.win = null;
+    $("dd-game").className = "";
+    if (FRAME.revealing) { FRAME.revealing = false; fresh(); render(); showAfter(true); return; }
+    if (done) { render(); return; }
+    fresh(); say(T.instruction); render();
+  }
+  function onFrame(ev) {
+    if (!FRAME.el || FRAME.failed || ev.origin !== location.origin || ev.source !== FRAME.el.contentWindow) return;   // only our own frame, same origin
+    var m = ev.data || {};
+    if (m.type === "puzzle:ready") { FRAME.win = FRAME.el.contentWindow; clearTimeout(FRAME.timer); FRAME.live = true; toFrame({ type: "puzzle:load", puzzle: P }); renderActions(); return; }
+    if (m.type === "puzzle:error") { frameFail(); return; }
+    if (m.type === "puzzle:result") onFrameResult(m);
+  }
+  // the frame reports the round; the page keeps the rules exactly as before (a draw is not a win)
+  function onFrameResult(m) {
+    if (FRAME.revealing) { FRAME.revealing = false; clearTimeout(FRAME.safety); cover(FRAME.revealText); settle(); showAfter(true); renderActions(); return; }
+    if (done) return;
+    if (m.win === true) {
+      done = true;
+      var t = T.win(m.you, m.them);
+      say(t, "dd-good"); cover(t); settle();
+      if (isToday) { D.markSolved(state, P.date, today); D.save(store, state); }
+      showAfter(false); renderActions(); return;
+    }
+    tries++;
+    var w = T.wrong + " " + T.roundEnded(m.you, m.them);
+    say(w, "dd-bad");
+    cover(w, [btn(T.tryAgain, "dd-go", tryAgain)]);
+    renderActions();
+  }
+  function tryAgain() { uncover(); say(T.instruction); toFrame({ type: "puzzle:reset" }); }
+  // the reveal: the solver's own line, played in the battle with its effects; the explanation follows the result
+  function revealInFrame(w) {
+    FRAME.revealing = true; FRAME.revealText = winningLine(w);
+    say(FRAME.revealText, "dd-good"); uncover(); renderActions();
+    FRAME.safety = setTimeout(function () { if (FRAME.revealing) { FRAME.revealing = false; cover(FRAME.revealText); settle(); showAfter(true); } }, REVEAL_WAIT_MS);   // never left without the explanation
+    toFrame({ type: "puzzle:perform", line: { play: w.play, target: w.target || null, pos: w.line ? w.line.pos : null,
+      before: w.line ? w.line.before : [], after: w.line ? w.line.after : [] } });
   }
 
   function showAfter(byReveal) {
@@ -332,12 +422,15 @@
     $("dd-ptitle").textContent = P.title;
     $("dd-diff").textContent = P.difficulty;
     g = PZ.load(P, E, 1);
-    if (isToday && state.solved[today]) { done = true; say(T.solvedAlready, "dd-good"); render(); showAfter(false); return; }
-    if (isToday && state.revealed[today]) { done = true; render(); var r = PZ.solve(P, E, null); say(r.ok ? winningLine(r.winners[0]) : "", "dd-good"); showAfter(true); return; }
+    // a day already settled: no battle to load, just the page's word over the stage
+    if (isToday && state.solved[today]) { done = true; stage(false); say(T.solvedAlready, "dd-good"); cover(T.solvedAlready); showAfter(false); return; }
+    if (isToday && state.revealed[today]) { done = true; stage(false); var r = PZ.solve(P, E, null); var wl = r.ok ? winningLine(r.winners[0]) : ""; say(wl, "dd-good"); cover(wl); showAfter(true); return; }
     say(T.instruction);
-    render();
+    frameStart();
+    renderActions();
   }
 
+  window.addEventListener("message", onFrame);
   $("dd-confirm-yes").addEventListener("click", doReveal);
   $("dd-confirm-no").addEventListener("click", function () { $("dd-confirm").hidden = true; });
   setInterval(function () { if (!$("dd-after").hidden) renderStreak(); }, 30000);
@@ -346,5 +439,5 @@
   fetch("puzzles.json?v=" + (window.DY_DAILY_V || "1"), { cache: "no-cache" }).then(function (r) { return r.json(); }).then(start)
     .catch(function () { $("dd-none").hidden = false; $("dd-play").hidden = true; });
 
-  window.__DY_DAILY_PAGE = { get g() { return g; }, E: E };   // read-only handle for the page tests
+  window.__DY_DAILY_PAGE = { get g() { return g; }, E: E, get sent() { return sent.slice(); }, get frame() { return { live: FRAME.live, failed: FRAME.failed, revealing: FRAME.revealing }; } };   // read-only handle for the page tests
 })();

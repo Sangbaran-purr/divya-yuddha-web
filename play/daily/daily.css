@@ -88,3 +88,14 @@ button.dd-card { cursor: pointer; }
 .dd-none { text-align: center; margin: 18px 0 6px; }
 .dd-noneline { font-size: 1.1rem; color: var(--flame-core); margin: 0; }
 .dd-slot { font-size: .62rem; }
+
+/* Daily Puzzle Effects R2 — the real battle screen in a frame, and the page's own result cover over it */
+.dd-stage { position: relative; width: 100%; height: 82vh; height: min(86svh, 880px); min-height: 560px; border: 1px solid var(--gold-aged); background: var(--stone-void); overflow: hidden; }
+.dd-stage-still { height: auto; min-height: 150px; }
+.dd-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--stone-void); }
+.dd-cover { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px 18px;
+  background: radial-gradient(ellipse at 50% 40%, var(--stone-lit), var(--stone-void) 75%); text-align: center; }
+.dd-stage-still .dd-cover { position: relative; inset: auto; min-height: 150px; }
+.dd-covertext { margin: 0; max-width: 34ch; font-family: var(--display); letter-spacing: .04em; font-size: 1.2rem; line-height: 1.4; color: var(--flame-core); }
+.dd-cover .dd-actions { margin-top: 0; }
+.dd-stage-done .dd-frame { display: none; }

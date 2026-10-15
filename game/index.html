@@ -5,9 +5,11 @@
 <!-- DYW-GATE-START (injected by scripts/sync_game.sh; re-sync replaces this block) -->
 <script>
 (function(){
+  var dailyFrame = false; /* MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle frames this copy in puzzle mode (?puzzle=1) from /play/daily/ on THIS origin. That frame alone skips the pass; nothing else does (a direct visit, any other frame, any other page). */
+  try { dailyFrame = window.top !== window && /[?&]puzzle=1(&|$)/.test(location.search) && window.parent.location.origin === location.origin && /^\/play\/daily\//.test(window.parent.location.pathname); } catch (e) { dailyFrame = false; }
   try {
-    if (!sessionStorage.getItem("dyw_pass")) { location.replace("../rite.html"); return; }
-  } catch (e) { location.replace("../rite.html"); return; }
+    if (!dailyFrame && !sessionStorage.getItem("dyw_pass")) { location.replace("../rite.html"); return; }
+  } catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }
   var NS = "dyw::";
   try {
     var real = window.localStorage;
@@ -24,6 +26,7 @@
   function addGem(){
     if (document.getElementById("dyw-gate-return")) return;
     if (window.top !== window && /[?&]wire=1(&|$)/.test(location.search)) return; /* S-HALL-WIRE-1 (R5): never inside the Hall's battle frame - a tap would navigate the battle away mid-match */
+    if (dailyFrame) return; /* MINI-GAMES-1: nor inside the Daily Puzzle's frame - the page around it is the way back */
     var a = document.createElement("a");
     a.id = "dyw-gate-return";
     a.href = "../index.html";
@@ -2139,6 +2142,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .vault-gate{ padding:0 12px 24px; font-size:11px; line-height:1.5; color:var(--parchment); opacity:.88; text-align:center; }   /* TASK 31: 10px/.75 measured too dim at 390px — nudged for legibility */
 .vault-set{ margin:0 12px 14px; padding:9px; border:1px solid var(--gold-dim-25); border-radius:9px;
   background:linear-gradient(180deg,var(--plaque-hi),var(--plaque-lo)); text-align:center; }
+body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn{ display:none !important; }   /* MINI-GAMES-1 puzzle mode: no settings (speed is fixed), no shield/unbind (not puzzle moves) */
 </style>
 </head>
 <body>
@@ -10304,7 +10308,7 @@ const Audio2 = (()=>{
     musicGain=ctx.createGain(); musicGain.gain.value=musicOn?MUSIC_LEVEL:0.0001; musicGain.connect(master);
   }
   function loadAudio(){ if(loading) return loading; if(!ctx) return Promise.resolve();
-    loading=Promise.all(Object.entries(AUDIO_SRC).map(async ([k,url])=>{ try{ const r=await fetch(url); const a=await r.arrayBuffer(); buffers[k]=await ctx.decodeAudioData(a); }catch(e){} })).then(()=>{ loaded=true; });
+    loading=Promise.all(Object.entries(AUDIO_SRC).filter(([k])=>!(PUZZLE_MODE && (k==='menu'||k==='battle'))).map(async ([k,url])=>{ try{ const r=await fetch(url); const a=await r.arrayBuffer(); buffers[k]=await ctx.decodeAudioData(a); }catch(e){} })).then(()=>{ loaded=true; });
     return loading;
   }
   function unlock(){ ensure(); if(!ctx) return; if(ctx.state==='suspended') ctx.resume(); if(!started){ started=true; loadAudio().then(()=>{ if(musicOn) crossTo(desired,1.5); }); } }
@@ -11471,7 +11475,7 @@ fn _bp(c:vec3<f32>, thr:f32)->vec3<f32>{ let l=max(c.r,max(c.g,c.b)); return c*s
     setTimeout(()=>{ if(ready) brahmastraSmoke(ix,iy); }, (90+100+60+140)*s);                            // afterglow tail (flash div) → smoke + embers
   }
   return { init, resize, cardLand, astraBurst, mythic,
-           preloadSprites, loadMatchSheets, spritesReady:()=>spritesReady, sheetsReady:()=>sheetsReady, sprCount:()=>sprites.length, bakeMs:()=>bakeMs,
+           preloadSprites, loadMatchSheets, loadSheets:(keys)=>(keys||[]).forEach(loadSheet) /* MINI-GAMES-1: the puzzle's own list */, spritesReady:()=>spritesReady, sheetsReady:()=>sheetsReady, sprCount:()=>sprites.length, bakeMs:()=>bakeMs,
            applyQuality(setting){ const q=(setting==='auto'||!RUNG[setting])?pickRung():setting; if(q!==vfxRung){ vfxRung=q; SHEET_CELL=RUNG[q].cell; sheetImg={}; sheetGrid={}; sheetsReady=false; sheetLoading={}; } return q; },   // T90: resolve the player's VFX-quality setting (auto=heuristic) → set the rung. Clears the sheet caches ONLY if the rung changed, so the NEXT loadMatchSheets re-fetches at the new rung (take-effect-next-match). currentRung() reads the resolved rung for the jank prompt.
            currentRung(){ return vfxRung; },
            __advance2D:(dt)=>{ try{ frame(dt, performance.now()); }catch(e){} },   // G-test: drive the Canvas2D frame synchronously (bypasses the pane's rAF throttling)
@@ -12324,6 +12328,7 @@ function runAction(mutate, opts={}){
   try{ MF.before = (MF.reg && !reducedMotion()) ? mfSnap(G) : null; }catch(e){ MF.before=null; }   // EXPORT-2: the board BEFORE this action, for a Hero manifestation's board difference (a pure read)
   actionActorSeat = (opts && opts.actor!=null) ? opts.actor : null;   // EXPORT-8: remote vs local, for the ready-anchored wait
   venomStrikeNpAtAction = vsStriker();   // EXPORT-6 (ruling C): the striker by ABSOLUTE seat — the engine flag, or the cast's own play event on the staked road   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
+  if (PUZZLE_MODE) pzActionStart(evStart);   // MINI-GAMES-1: time this action (start → its choreography released)
   mutate();
   const evs = G.events.slice(evStart);
   blogRecord(G, blogBefore, evs, opts.actor);   // GL-2 — record this batch NOW, names resolved at this instant (never at result time); before any choreography, on every road
@@ -12341,7 +12346,7 @@ function runAction(mutate, opts={}){
     showResultSummary(evs); announcePassIfAny(passedBefore, opts.actor); afterChoreo(); return;   // pass banner (if a pass just landed) enqueued BEFORE afterChoreo's round banner → pass shows first, round after
   }
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[];
-  const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=skipChoreo;
+  const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=PUZZLE_MODE ? null : skipChoreo;   // MINI-GAMES-1: no tap-to-skip in a puzzle — every try plays in full
   (async()=>{
     try{
       const playEv = evs.find(e=>e.type==='play');
@@ -12437,6 +12442,7 @@ function doPlay(i, uid, srcRect, position){
 }
 
 function startPlay(i, srcRect){
+  if (PUZZLE_MODE && !pzMay('card')) return;   // MINI-GAMES-1: one card play per try
   const c=G.players[ME].hand[i]; if(!c) return;
   // Vanara Unit placement: pick a slot on the Yuddha Row (only when it can matter — units already present).
   if (c.t==='unit' && G.players[ME].faction==='vanaras' && G.players[ME].units.some(u=>!u.ghost)){
@@ -12819,7 +12825,204 @@ function showWireResult(){
   if (w===ME) Audio2.fileSfx('sfx_victory'); else if (w===OPP) Audio2.fileSfx('sfx_defeat'); else Audio2.sfx('roundloss');
 }
 
+/* ══ MINI-GAMES-1 · DAILY PUZZLE EFFECTS (R1) — PUZZLE MODE, switched on ONLY by ?puzzle=1 ═══════════════════════
+   The site's Daily Puzzle page (/play/daily/) runs THIS battle screen in a frame so a try plays with every effect the
+   battle has. Without ?puzzle=1 nothing here runs: the boot line takes the old road and every hook below is guarded.
+   THE POSITION is built by the site's own puzzle code (play/daily/puzzle-core.js, PZ.load) over this page's engine —
+   never re-implemented here. The parent page speaks only through postMessage, same origin, our own parent:
+     → puzzle:load {puzzle}   build the position and show it silently (no realm sweep, no conch, no mulligan, no intro)
+     → puzzle:reset           the same position again, for another try
+     → puzzle:perform {line}  play a given line (the reveal): {play, target?, pos?, before:[[i,j]], after:[[i,j]]}, then End turn
+     ← puzzle:ready · puzzle:loaded {id, sheets, clips, actors} · puzzle:result · puzzle:error {code, message}
+   OWNER RULINGS (2026-10-15): no tap-to-skip (every try plays in full) · speed fixed at Normal · sound effects ON,
+   battle music OFF (the music files are not even fetched) · reduced motion mirrors the battle (choreography bypassed)
+   · round-end effects (drains, Kalki's +2, the count-up) play BEFORE the result is reported · only the effects this
+   position can trigger are loaded · the device picks the effect rung. The player may make ONE card play, any free
+   Leaps, and End turn — nothing else (no shield designation, no unbind: the solver's candidate set). No AI move ever.
+   NOTE: the puzzle code is handed the engine's functions by NAME (PE) — the free road, where Q IS the engine. */
+const PUZZLE_MODE = /[?&]puzzle=1(&|$)/.test(location.search) && !WIRE_MODE;   // the wire road always wins
+let Pz = null;   // null = not loaded; else this try's state
+const PZ_CORE_URL = '../play/daily/puzzle-core.js';   // the site layout: /game/index.html → /play/daily/puzzle-core.js
+const PE = { newGame: newGame, playCard: playCard, pass: pass, playableIndices: playableIndices, targetSpec: targetSpec,
+  effPower: effPower, isShielded: isShielded, totalPower: totalPower, adjacentUnits: adjacentUnits, doLeap: doLeap,
+  leapLimit: leapLimit, sweepDeaths: sweepDeaths, REALMS: REALMS, REALM_INFO: REALM_INFO, DECKS: DECKS };
+// card id → the sheets its PLAY can draw (the cast/arrival, and any follow-on the same try can reach)
+const PZ_PLAY_SHEETS = { brahmastra:['brahmastra'], pashupata:['pashupatastra'], tamasa:['tamasa'],
+  amrita:['amrita_bless','amrita_revive'], kishkindhacrown:['kishkindhacrown'], ramasignet:['ramasignet'], chandrahas:['chandrahas'],
+  patala:['patala'], anantacoil:['anantacoil','anantacoil_birth'], tripura:['tripura_rise','tripura_fall'], kavacha:['kavacha'],
+  gayatri:['gayatri'], venomstrike:['venomstrike_surge','venomstrike_drain'], pavamana:['pavamana'], ramanaam:['ramanaam'],
+  kishkindhaoath:['kishkindhaoath_cast','kishkindhaoath_fire'], vajra:['vajra'], sarpasatra:['sarpasatra_a','sarpasatra_b'],
+  gandiva:['gandiva'], sudarshana:['sudarshana'], nagapasha:['nagapasha'], ahamkara:['ahamkara'], sanjivani:['sanjivani'],
+  mohini:['mohini'], mrityunjaya:['mrityunjaya'], sanjeevani:['sanjeevani'], nagastra:['nagastra'], lankadahan:['lankadahan_fire','lankadahan_wash'] };
+const PZ_LANDING = { devas:'c1a_deva', asuras:'landing_asura', vanaras:'landing_vanara', nagas:'landing_naga' };   // = the VFX LANDING_SHEET
+const PZ_HERO_ENTRY = { indra:'indra_hero_entry', agni:'agni_hero_entry', varuna:'varuna_hero_entry' };              // = HERO_ENTRY_OVERRIDE (sheet names)
+const PZ_SHARED = ['damage','buff','shield','venom'];   // the status quartet every match loads
+function pzPost(msg){ try{ window.parent.postMessage(msg, location.origin); }catch(e){} }
+function pzErr(code, message){ pzPost({ type:'puzzle:error', code: String(code||'ERROR'), message: String(message||'') }); }
+function puzzleBoot(){
+  document.body.classList.add('puzzle');
+  ['landing','introv','factionselect','factionintro','mulligan'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hidden'); });
+  $('passbtn').textContent = 'END TURN';
+  $('passbtn').onclick = ()=>{ if(!pzMay('end')) return; runAction(()=>pass(G,ME)); };
+  $('leapbtn').onclick = ()=>{ if(pzMay('leap')) startLeap(); };
+  $('shieldbtn').onclick = ()=>{};   // not a puzzle move (hidden by body.puzzle too)
+  $('unbindbtn').onclick = ()=>{};
+  // the hand-entry prefetch (called by render) is re-pointed for this page only: my legal plays' clips and actors, not both hands
+  fxPrefetchHands = ()=>pzPrefetch('fx'); mfPrefetchHands = ()=>pzPrefetch('mf');
+  window.addEventListener('message', onPuzzleMessage);
+  const go = ()=>pzPost({ type:'puzzle:ready' });
+  if (window.DY_PUZZLE) { go(); return; }
+  const s=document.createElement('script'); s.src=PZ_CORE_URL; s.onload=go; s.onerror=()=>pzErr('NO_CORE', 'the puzzle code could not be loaded');
+  document.head.appendChild(s);
+}
+function onPuzzleMessage(ev){
+  if (!(ev && ev.origin === location.origin && ev.source === window.parent)) return;   // never '*', never a sibling frame
+  const m = ev.data || {};
+  try{
+    if (m.type === 'puzzle:load') pzLoad(m.puzzle);
+    else if (m.type === 'puzzle:reset') { if (Pz) pzLoad(Pz.P); }
+    else if (m.type === 'puzzle:perform') pzPerform(m.line);
+  }catch(e){ pzErr(e && e.code, e && e.message); }
+}
+// the cards whose effects this position can trigger: my legal plays now (a Leap adds no card), plus what the board can fire
+function pzTriggers(){
+  const me=G.players[ME], legal=PE.playableIndices(G,ME), plays=legal.map(i=>me.hand[i]);
+  const ids=plays.map(c=>c.id);
+  if (ids.indexOf('brihaspati')>=0 && G.lastMantra) ids.push(G.lastMantra);   // Brihaspati speaks the last Mantra again
+  const units=G.players.flatMap(p=>p.units.filter(u=>!u.ghost));
+  return { plays, ids, units, vsDrain: G.players.some(p=>p.venomStrike===G.round) };
+}
+function pzSheetKeys(t){
+  const me=G.players[ME], keys=PZ_SHARED.slice();
+  if (t.plays.some(c=>c.t==='unit'||c.t==='hero')) keys.push(PZ_LANDING[me.faction]);
+  if (me.faction==='asuras') keys.push('chaos_wash','chaos_mark');                 // my Chaos Surge (the opponent has passed)
+  if (DEVA_HERO_ENTRY_ON) t.plays.forEach(c=>{ if(c.t==='hero' && me.faction==='devas') keys.push(PZ_HERO_ENTRY[c.id]||'deva_hero_entry'); });
+  t.ids.forEach(id=>(PZ_PLAY_SHEETS[id]||[]).forEach(k=>keys.push(k)));
+  if (t.units.some(u=>u.ward)) keys.push('kishkindhaoath_fire');                   // a ward on the board can fire this round
+  if (t.units.some(u=>u.aegis)) keys.push('amrita_revive');                        // an Amrita aegis can revive this round
+  G.players.forEach(p=>{ if(p.artifact && p.artifact.id==='tripura') keys.push('tripura_fall');
+    if(p.artifact && p.artifact.id==='anantacoil' && p.faction==='nagas') keys.push('anantacoil_birth'); });
+  if (t.vsDrain) keys.push('venomstrike_drain');
+  return [...new Set(keys.filter(Boolean))];
+}
+// the premium clips (FX) and Hero actors (MF) — for my legal plays only (the opponent has passed: nothing in its hand can cast)
+function pzPrefetch(kind){
+  if (!Pz || !G) return;
+  if (kind==='fx'){
+    if(FX.routes===null && !FX.boot) fxBoot();
+    if(!FX.routes) return;
+    for (const id of Pz.trig.ids) if (FX.routes[id]){ if(!fxReady(id)) fxPrefetch(id); if(FX.routes[id].drain && !fxReady(id+':drain')) fxPrefetch(id+':drain'); }
+    if (Pz.trig.vsDrain && FX.routes.venomstrike && FX.routes.venomstrike.drain && !fxReady('venomstrike:drain')) fxPrefetch('venomstrike:drain');
+  } else {
+    if(MF.reg===null && !MF.boot) mfBoot();
+    if(!MF.reg) return;
+    const want=mfLayoutRung();
+    for (const id of Pz.trig.ids) if (MF.reg[id]){
+      if(!MF.specP[id]) mfPrefetch(id, want);
+      else if(MF.specs[id] && !MF.blobP[mfAtlasUrl(MF.specs[id], want)] && !MF.blobs[mfAtlasUrl(MF.specs[id], want)]) mfPrefetch(id, want);
+    }
+  }
+}
+function pzLoad(P){
+  const PZM = window.DY_PUZZLE; if (!PZM) { pzErr('NO_CORE', 'the puzzle code is not loaded'); return; }
+  resetChoreo(); Story = null; Wire = null; setSeats(0);
+  G = PZM.load(P, PE);   // the site's code builds the position on this engine (throws a coded error on a bad puzzle)
+  const me = G.players[ME];
+  Pz = { P, id: P.id, round: G.round, roundsAtLoad: G.roundHistory.length, handUids: new Set(me.hand.map(c=>c.uid)),
+         trig: null, tries: Pz ? Pz.tries + 1 : 1, events: [], steps: [], open: null, first: 0, cardPlayed: false,
+         performing: null, reported: false, cut: false };
+  Pz.trig = pzTriggers();
+  currentFactions = { p0: me.faction, p1: G.players[OPP].faction };
+  matchRecorded = true; goStampDone = true; lastEarn = null;   // rewards OFF: no telemetry, no stamp
+  knownUids = boardUidSet(); lastPowers = {}; lastRoundLen = G.roundHistory.length; pendingFly = null; inspectContext = null;   // the setup is shown as it stands: no landing pops, no round banner from the setup
+  lastTotals = {o:null,p:null}; leapMode = null; placeMode = null; shieldMode = false; hideBoardTargetBar();
+  bannerQ = []; bannerActive = false; { const b=$('banner'); clearTimeout(b._t); b.classList.add('hidden'); }
+  ['battlelog','gameover','targeting','inspect','banner','realmpop','mulligan','oppeek'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hidden'); });
+  $('diffchip').classList.add('hidden'); $('hudwrap').classList.remove('hidden');
+  $('logbody').innerHTML = ''; $('loglast').textContent = ''; $('logdrawer').classList.remove('open'); seenLog = G.log.length;
+  conchPending = false;                         // no match start: no conch
+  speedMult = SPEEDS.normal; applyVfxT();       // speed fixed at Normal (the player's own setting is not touched)
+  applyFactionTheme(); applyRealmBoard(G.realm); makeEmbers(); battleStageStart();
+  $('realmname').textContent = REALM_INFO[G.realm].name; $('realmchip').classList.remove('hidden');   // the chip, without the realm sweep
+  render();
+  VFX.init(); VFX.resize(); VFX.preloadSprites(); VFX.applyQuality('auto');   // the device picks the rung
+  const sheets = pzSheetKeys(Pz.trig); VFX.loadSheets(sheets);
+  const me1 = Pz, ids = [...new Set(Pz.trig.ids)];
+  Promise.all([fxBoot(), mfBoot()]).catch(()=>null).then(()=>{   // the clip registry is known → prefetch now (render may have run before it), then say what loads
+    if (Pz !== me1) return;
+    pzPrefetch('fx'); pzPrefetch('mf');
+    pzPost({ type:'puzzle:loaded', id: Pz.id, tries: Pz.tries, sheets,
+             clips: FX.routes ? ids.filter(id=>FX.routes[id]) : [], actors: MF.reg ? ids.filter(id=>MF.reg[id]) : [] });
+  });
+}
+// may the player do this now? one card, any Leaps, then End turn — never during a reveal, never after the result
+function pzMay(kind){
+  if (!Pz || Pz.reported || Pz.performing || choreoActive || !G || G.over) return false;
+  if (!(G.turn===ME && !G.players[ME].passed)) return false;
+  if (kind==='card' && Pz.cardPlayed){ toast('One play only — now Leap or end your turn.'); return false; }
+  return true;
+}
+function pzActionStart(evStart){ if (!Pz) return; const t=performance.now(); if (!Pz.first) Pz.first=t; Pz.open={ t, evStart }; }
+// pump's puzzle seam: close the action that just finished, then either drive the reveal or report the round
+function pzPump(){
+  if (!Pz || choreoActive) return;
+  if (Pz.open){
+    const o=Pz.open, evs=G.events.slice(o.evStart), me=G.players[ME];
+    const kind = G.roundHistory.length>Pz.roundsAtLoad || G.over ? 'end' : evs.some(e=>e.type==='play' && Pz.handUids.has(e.sourceUid)) ? 'play' : 'leap';
+    if (kind==='play') Pz.cardPlayed = true;
+    Pz.events = Pz.events.concat(evs); Pz.steps.push({ kind, ms: Math.round(performance.now()-o.t), events: evs.length });
+    if (choreoSkip) Pz.cut = true;   // only the watchdog / a hidden tab can cut a puzzle choreography short
+    Pz.open = null;
+  }
+  if (Pz.reported) return;
+  if (G.roundHistory.length>Pz.roundsAtLoad || G.over){ pzReport(); return; }
+  if (Pz.performing) pzPerformStep();
+}
+function pzReport(){
+  Pz.reported = true;
+  const rh = G.roundHistory.find(x=>x.round===Pz.round) || G.roundHistory[G.roundHistory.length-1];
+  const now = performance.now();
+  pzPost({ type:'puzzle:result', id: Pz.id, tries: Pz.tries, performed: !!Pz.performing, win: rh.winner===ME,
+           you: rh['t'+ME], them: rh['t'+OPP], winner: rh.winner==null ? 'draw' : rh.winner===ME ? 'you' : 'them',
+           events: JSON.parse(JSON.stringify(Pz.events)), steps: Pz.steps, choreoMs: Pz.steps.reduce((a,s)=>a+s.ms,0),
+           wallMs: Math.round(now-(Pz.first||now)), reducedMotion: reducedMotion(), cut: Pz.cut });
+  Pz.performing = null;
+}
+// THE REVEAL: the parent hands a line (the solver's), played step by step through the same choreography road
+function pzPerform(line){
+  if (!Pz) { pzErr('NOT_LOADED', 'no puzzle is loaded'); return; }
+  if (Pz.reported || Pz.first || choreoActive) pzLoad(Pz.P);   // always from the position itself
+  const L = line || {}, q = [];
+  (L.before||[]).forEach(pr=>q.push({ leap: pr }));
+  if (L.play) q.push({ play: L.play, target: L.target==null ? null : L.target, pos: L.pos==null ? null : L.pos });
+  (L.after||[]).forEach(pr=>q.push({ leap: pr }));
+  q.push({ end: true });
+  Pz.performing = q;
+  pzPerformStep();
+}
+function pzPerformStep(){
+  const st = Pz.performing.shift(); if (!st) return;
+  const me = G.players[ME];
+  if (st.leap){ const a=me.units[st.leap[0]], b=me.units[st.leap[1]];
+    if (!a || !b) { Pz.performing=null; pzErr('ILLEGAL', 'that Leap is not on the board'); return; }
+    runAction(()=>doLeap(G,ME, a, b, false)); return; }
+  if (st.play){
+    const legal = PE.playableIndices(G,ME), i = me.hand.findIndex((c,k)=>c.n===st.play && legal.indexOf(k)>=0);
+    if (i<0) { Pz.performing=null; pzErr('ILLEGAL', st.play+' is not a legal play now'); return; }
+    let uid = null;
+    if (st.target!=null){
+      const sp = PE.targetSpec(G,ME, me.hand[i]), opts = (sp && sp.options) || [];
+      const m = /^(.*)#(\d+)$/.exec(st.target), name = m ? m[1] : st.target; let k = m ? Number(m[2]) : 1;
+      const t = opts.find(o=>o.n===name && --k===0);
+      if (!t) { Pz.performing=null; pzErr('ILLEGAL', st.target+' is not a legal target'); return; }
+      uid = t.uid;
+    }
+    doPlay(i, uid, null, st.pos); return; }
+  runAction(()=>pass(G,ME));
+}
+
 function pump(){
+  if (PUZZLE_MODE){ pzPump(); return; }   // MINI-GAMES-1 puzzle mode: no AI, no conch, no relay — close the action, drive the reveal or report
   if (G.over) return;
   if (Wire && !(G.players[ME].mulliganed && G.players[OPP].mulliganed)){ if (!choreoActive) wireDrain(); return; }   // BW1 — a relayed mulligan is not round 1: no conch yet
   fireConch();                                    // round-1 start = first pump of the match (mulligan resolved); guard makes it once-per-match, so rounds 2/3 are silent
@@ -12853,6 +13056,7 @@ function renderEarnStamp(lineEl, extraEl, e){
 }
 function showGameOver(){
   if(Wire){ showWireResult(); return; }     // BW1 (R7, F6) — REWARDS OFF on the wire: no recordMatchResult, no quests, no stamp
+  if(PUZZLE_MODE) return;                   // MINI-GAMES-1: the puzzle page owns the result — no rewards, no result face
   if(Story){ showStoryResult(); return; }   // story matches: separate result screen, and NEVER touch PvAI telemetry
   recordMatchResult();   // one-shot: bump telemetry + capture lastEarn (guarded against re-render)
   const me=G.players[ME];
@@ -12914,7 +13118,7 @@ function playIntro(done){
 }
 VFX.init();
 VFX.preloadSprites();   // T67b: preload the painted kit at PAGE LOAD (not match start) — sprites get the whole intro→landing→faction-select→mulligan window to load, so they're ready before the first play even on slow device connections (fixes the match-start race that made effects fire "occasionally/never" cold). Async, non-blocking; idempotent so the startGame call no-ops.
-if (WIRE_MODE) wireBoot(); else playIntro(showLanding);   // R-A: the intro gates every launch; showLanding is the single home entry. BW1 (R5): ?wire=1 skips intro + landing and waits for the Hall
+if (WIRE_MODE) wireBoot(); else if (PUZZLE_MODE) puzzleBoot(); else playIntro(showLanding);   // R-A: the intro gates every launch; showLanding is the single home entry. BW1 (R5): ?wire=1 skips intro + landing and waits for the Hall
 </script>
 </body>
 </html>

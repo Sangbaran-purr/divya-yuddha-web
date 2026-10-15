@@ -10,10 +10,12 @@
     <link rel="preload" href="../../assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="../../assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="../../css/threshold.css?v=s1g" />
-    <link rel="stylesheet" href="daily.css?v=d2" />
+    <link rel="stylesheet" href="daily.css?v=d3" />
   </head>
   <body class="daily">
     <!-- MINI-GAMES-1 R2 — the Daily Puzzle. Free for everyone: no wallet, no Torana, no DYC, no badges, no leaderboard.
+         Daily Puzzle Effects R2: #dd-game holds the real battle screen in puzzle mode (an iframe of ../../game/, built by
+         page.js) and the page's own result cover over it; the page's own board is the fallback if the battle cannot start.
          Not linked from the site yet (owner ruling: the owner decides where it is linked from). -->
     <header class="dd-top">
       <a class="dd-crest" href="../../index.html">
@@ -72,7 +74,7 @@
     <script src="puzzle-core.js?v=d1"></script>
     <script src="daily.js?v=d1"></script>
     <script src="notes.js?v=d2"></script>
-    <script>window.DY_DAILY_V = "d2";</script>
-    <script src="page.js?v=d2"></script>
+    <script>window.DY_DAILY_V = "d3";</script>
+    <script src="page.js?v=d3"></script>
   </body>
 </html>
