@@ -105,6 +105,10 @@ async function framed(dom, o) {
 }
 async function fallback(dom) { const f = await framed(dom, { silent: true }); f.send({ type: "puzzle:error", code: "TEST", message: "the battle could not start" }); await tick(); return f; }
 const covered = (dom) => { const c = doc(dom).getElementById("dd-cover"); return c && !c.hidden ? doc(dom).getElementById("dd-covertext").textContent : null; };
+// what the page says now: the result panel when it is up (owner ruling 2026-10-16: a result is said ONCE, in the panel), else the line under the title
+const said = (dom) => covered(dom) || msg(dom);
+// the line appears exactly ONCE on the page, in the result panel — not under the title
+const once = (dom, line) => !!line && msg(dom) === "" && covered(dom) === line && doc(dom).getElementById("dd-play").textContent.split(line).length === 2;
 const stored = (dom) => { try { return JSON.parse(dom.window.localStorage.getItem(D.STORE_KEY) || "null"); } catch (e) { return null; } };
 // the winning play for a puzzle, found by the solver here (this file names none)
 const winnerOf = (P) => PZ.solve(P, E, null).winners[0];
@@ -190,10 +194,10 @@ async function main() {
     f1.try(lineOf(w)); await tick();
     const s1 = stored(d1);
     ok("G5 · the WINNING try (reported by the frame): 'You win the round', the day is solved, streak 1, best 1, and the explanation is shown",
-      /^You win the round, \d+–\d+\.$/.test(msg(d1)) && msg(d1) === "You win the round, " + w.you + "–" + w.them + "." && s1.solved[`${day(0)}`] && doc(d1).getElementById("dd-streak").textContent === "1"
-        && doc(d1).getElementById("dd-best").textContent === "1" && doc(d1).getElementById("dd-explain").textContent.length > 60, msg(d1));
+      /^You win the round, \d+–\d+\.$/.test(said(d1)) && once(d1, "You win the round, " + w.you + "–" + w.them + ".") && s1.solved[`${day(0)}`] && doc(d1).getElementById("dd-streak").textContent === "1"
+        && doc(d1).getElementById("dd-best").textContent === "1" && doc(d1).getElementById("dd-explain").textContent.length > 60, said(d1) + " | under the title: " + msg(d1));
     ok("G5b · after the win the cover holds the result and the battle is put away (the stage settles to a panel)",
-      covered(d1) === msg(d1) && doc(d1).getElementById("dd-game").classList.contains("dd-stage-done"));
+      once(d1, covered(d1)) && doc(d1).getElementById("dd-game").classList.contains("dd-stage-done"));
     const keep = { [D.STORE_KEY]: JSON.stringify(s1) };
     const P2 = byDate(`${day(1)}`), w2 = winnerOf(P2);
     const d2 = pageAt(`${day(1)}T21:00:00Z`, { store: keep }); await tick();
@@ -226,7 +230,7 @@ async function main() {
     ok("R4b · …the explanation waits for the move to finish playing (nothing after it yet)", doc(d3).getElementById("dd-after").hidden);
     f3.release(); await tick();
     const s3 = stored(d3);
-    ok("R4c · when the frame reports the move played, the cover shows the winning play and the explanation follows", covered(d3) === msg(d3) && doc(d3).getElementById("dd-explain").textContent.length > 60);
+    ok("R4c · when the frame reports the move played, the cover shows the winning play — ONCE, in the panel, no longer under the title — and the explanation follows", !!covered(d3) && covered(d3).indexOf("The winning play: " + w3.play) === 0 && once(d3, covered(d3)) && doc(d3).getElementById("dd-explain").textContent.length > 60);
     ok("R5 · …the day is NOT solved, the streak is over (0), best is kept (2), and it says so",
       s3.revealed[`${day(2)}`] && !s3.solved[`${day(2)}`] && doc(d3).getElementById("dd-streak").textContent === "0" && s3.best === 2
         && doc(d3).getElementById("dd-afternote").textContent === "Today doesn't count as solved, and your streak is over.");
@@ -234,7 +238,7 @@ async function main() {
     f3.try(lineOf(w3)); await tick();
     ok("R6 · a revealed day can never become solved, even with the right play afterwards (the rules, and a late frame result)", D.markSolved(s3, `${day(2)}`, `${day(2)}`) === false && !s3.solved[`${day(2)}`] && !stored(d3).solved[`${day(2)}`]);
     const back3 = pageAt(`${day(2)}T11:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify(stored(d3)) } }); await tick();
-    ok("R6b · coming back after a reveal: the winning play in words and the explanation, no battle loaded", msg(back3).indexOf("The winning play: " + w3.play) === 0 && !doc(back3).getElementById("dd-frame") && !doc(back3).getElementById("dd-after").hidden);
+    ok("R6b · coming back after a reveal: the winning play in words and the explanation, no battle loaded — the winning play said ONCE, in the panel", said(back3).indexOf("The winning play: " + w3.play) === 0 && once(back3, covered(back3)) && !doc(back3).getElementById("dd-frame") && !doc(back3).getElementById("dd-after").hidden);
     // the next day after a reveal starts again from 1
     const P4 = byDate(`${day(3)}`), w4 = winnerOf(P4);
     const d4 = pageAt(`${day(3)}T10:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify(s3) } }); await tick();
@@ -257,7 +261,7 @@ async function main() {
     click(d8, "#dd-actions .dd-btn", "Show me the answer");
     await new Promise((r) => setTimeout(r, 120));
     ok("R8 · revealing an EARLIER puzzle: no streak warning, the move plays in the battle, and the note never says 'Today doesn't count…' — only 'Earlier puzzles don't count toward your streak.'",
-      doc(d8).getElementById("dd-confirm").hidden && msg(d8).indexOf("The winning play: ") === 0 && f8.got.some((m) => m.type === "puzzle:perform")
+      doc(d8).getElementById("dd-confirm").hidden && said(d8).indexOf("The winning play: ") === 0 && f8.got.some((m) => m.type === "puzzle:perform")
         && doc(d8).getElementById("dd-afternote").textContent === "Earlier puzzles don't count toward your streak."
         && doc(d8).querySelector("main").textContent.indexOf("Today doesn't count as solved") < 0 && JSON.stringify(stored(d8)) === keep8);
 
@@ -268,7 +272,7 @@ async function main() {
     ok(`E1 · an earlier puzzle opens from the list (${dm(4)}, marked as earlier)`, doc(d7).getElementById("dd-date").textContent === `${day(4)} · an earlier puzzle`);
     (await framed(d7)).try(lineOf(w7)); await tick();
     ok("E2 · solving an EARLIER puzzle wins the round but does NOT mark it solved or change the streak, and says so",
-      /^You win the round/.test(msg(d7)) && JSON.stringify(stored(d7)) === before && doc(d7).getElementById("dd-afternote").textContent === "Earlier puzzles don't count toward your streak.");
+      /^You win the round/.test(said(d7)) && once(d7, covered(d7)) && JSON.stringify(stored(d7)) === before && doc(d7).getElementById("dd-afternote").textContent === "Earlier puzzles don't count toward your streak.");
 
     // the hidden-tab fast-forward: the frame flags the result (cut) — the engine still scored the round, so it counts
     const dc = pageAt(`${day(0)}T09:00:00Z`); await tick();
@@ -278,7 +282,7 @@ async function main() {
     const again = [...doc(dc).querySelectorAll("#dd-coveracts .dd-btn")].find((x) => x.textContent === "Try again"); if (again) again.click();
     fc.try(lineOf(w), { cut: true }); await tick();
     ok("H1 · a try cut short by a hidden tab (flagged cut by the frame) still scores exactly: the wrong one is 'Not this one', the winning one solves the day",
-      /^Not this one/.test(wrongCut) && msg(dc) === "You win the round, " + w.you + "–" + w.them + "." && stored(dc).solved[`${day(0)}`] && doc(dc).getElementById("dd-streak").textContent === "1", wrongCut + " | " + msg(dc));
+      /^Not this one/.test(wrongCut) && said(dc) === "You win the round, " + w.you + "–" + w.them + "." && stored(dc).solved[`${day(0)}`] && doc(dc).getElementById("dd-streak").textContent === "1", wrongCut + " | " + said(dc));
     // the frame's words are believed only from the page's own frame, same origin
     const dx = pageAt(`${day(0)}T09:30:00Z`); await tick();
     const fx = await framed(dx);
@@ -328,7 +332,7 @@ async function main() {
     ok("L3 · …WITH the free Leap (chosen on the page: the Unit, then the neighbour to copy) the same card wins the round", /^You win the round/.test(msg(d)), msg(d));
     const dl = pageAt(`${day(10)}T11:00:00Z`); await tick();
     (await framed(dl)).try(lineOf(w)); await tick();
-    ok("L4 · in the battle frame, the try reported with the solver's Leap wins it too (the frame plays the Leap itself)", /^You win the round/.test(msg(dl)), msg(dl));
+    ok("L4 · in the battle frame, the try reported with the solver's Leap wins it too (the frame plays the Leap itself)", /^You win the round/.test(said(dl)), said(dl));
   });
 
   // ═══ STORAGE BLOCKED ═══
@@ -337,7 +341,7 @@ async function main() {
     let threw = null;
     let d;
     try { d = pageAt(`${day(0)}T10:00:00Z`, { blocked: true }); await tick(); (await framed(d)).try(lineOf(w)); await tick(); } catch (e) { threw = e; }
-    ok("S1 · storage BLOCKED: the page still loads, the battle plays and the round is won", !threw && /^You win the round/.test(msg(d)), threw && threw.message);
+    ok("S1 · storage BLOCKED: the page still loads, the battle plays and the round is won", !threw && /^You win the round/.test(said(d)), threw && threw.message);
     ok("S2 · …and says plainly that progress isn't being saved", doc(d).getElementById("dd-store").textContent === "This browser isn't saving your progress, so your streak won't be kept.");
     const junk = pageAt(`${day(0)}T10:00:00Z`, { store: { [D.STORE_KEY]: "{not json" } }); await tick();
     ok("S3 · a corrupt store is treated as empty, never as an error", msg(junk) === "Your opponent has passed. Find the one play that wins this round.");
@@ -458,9 +462,9 @@ async function main() {
     ok("ML7 · THE FALLBACK BOARD: its buttons ('Play …', 'End my turn', 'Leap', 'Show me the answer') are plaque buttons too", allPlaque(fb, "#dd-actions button") && plaques(fb, "#dd-actions button").some((b) => /^Play /.test(b.textContent))
       && /function btn\(text, cls, fn\) \{ var b = el\("button", "dd-btn mg-btn "/.test(R("play/daily/page.js")));
     const css = R("play/daily/daily.css"), html = R("play/daily/index.html");
-    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d4, page.js d4, mini.css g2 — on both mini games)",
+    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d4, page.js d5, mini.css g2 — on both mini games)",
       !/\.dd-btn \{/.test(css) && !/\.dd-btn\.dd-go/.test(css) && /body\.daily \{[^}]*overflow-x: hidden/.test(css) && /body\.dd-framing \.mg-stage \{ opacity: \.35; \}/.test(css)
-        && /daily\.css\?v=d4/.test(html) && /page\.js\?v=d4/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
+        && /daily\.css\?v=d4/.test(html) && /page\.js\?v=d5/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
   });
 
   await section('THE RULES, DIRECTLY', async () => {

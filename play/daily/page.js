@@ -342,12 +342,12 @@
   }
   // the frame reports the round; the page keeps the rules exactly as before (a draw is not a win)
   function onFrameResult(m) {
-    if (FRAME.revealing) { FRAME.revealing = false; clearTimeout(FRAME.safety); cover(FRAME.revealText); settle(); showAfter(true); renderActions(); return; }
+    if (FRAME.revealing) { FRAME.revealing = false; clearTimeout(FRAME.safety); say(""); cover(FRAME.revealText); settle(); showAfter(true); renderActions(); return; }   // the winning line moves into the panel: said once
     if (done) return;
     if (m.win === true) {
       done = true;
       var t = T.win(m.you, m.them);
-      say(t, "dd-good"); cover(t); settle();
+      say(""); cover(t); settle();   // said ONCE, in the result panel (owner ruling 2026-10-16)
       if (isToday) { D.markSolved(state, P.date, today); D.save(store, state); }
       showAfter(false); renderActions(); return;
     }
@@ -362,7 +362,7 @@
   function revealInFrame(w) {
     FRAME.revealing = true; FRAME.revealText = winningLine(w);
     say(FRAME.revealText, "dd-good"); uncover(); renderActions();
-    FRAME.safety = setTimeout(function () { if (FRAME.revealing) { FRAME.revealing = false; cover(FRAME.revealText); settle(); showAfter(true); } }, REVEAL_WAIT_MS);   // never left without the explanation
+    FRAME.safety = setTimeout(function () { if (FRAME.revealing) { FRAME.revealing = false; say(""); cover(FRAME.revealText); settle(); showAfter(true); } }, REVEAL_WAIT_MS);   // never left without the explanation
     toFrame({ type: "puzzle:perform", line: { play: w.play, target: w.target || null, pos: w.line ? w.line.pos : null,
       before: w.line ? w.line.before : [], after: w.line ? w.line.after : [] } });
   }
@@ -426,7 +426,7 @@
     g = PZ.load(P, E, 1);
     // a day already settled: no battle to load, just the page's word over the stage
     if (isToday && state.solved[today]) { done = true; stage(false); say(""); cover(T.solvedAlready); showAfter(false); return; }   // said ONCE, in the result panel (owner ruling 2026-10-16)
-    if (isToday && state.revealed[today]) { done = true; stage(false); var r = PZ.solve(P, E, null); var wl = r.ok ? winningLine(r.winners[0]) : ""; say(wl, "dd-good"); cover(wl); showAfter(true); return; }
+    if (isToday && state.revealed[today]) { done = true; stage(false); var r = PZ.solve(P, E, null); var wl = r.ok ? winningLine(r.winners[0]) : ""; say(""); cover(wl); showAfter(true); return; }   // said once, in the panel
     say(T.instruction);
     frameStart();
     renderActions();
