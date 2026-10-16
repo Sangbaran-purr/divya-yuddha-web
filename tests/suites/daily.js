@@ -184,9 +184,9 @@ async function main() {
     ok("G2 · no answer button before a wrong try", ![...doc(d1).querySelectorAll("#dd-actions .dd-btn")].some((b) => /Show me the answer/.test(b.textContent)));
     f1.try(plainLine(l)); await tick();
     ok("G3 · a WRONG try (reported by the frame): 'Not this one. Try again.' with the round's score, NOT solved, nothing stored as solved",
-      /^Not this one\. Try again\. The round ended \d+–\d+\.$/.test(msg(d1)) && !(stored(d1) && stored(d1).solved[`${day(0)}`]), msg(d1));
-    ok("G3b · …the page COVERS the battle with the same words (its banners and round 2 are never seen), with a 'Try again' button",
-      covered(d1) === msg(d1) && [...doc(d1).querySelectorAll("#dd-coveracts .dd-btn")].map((b) => b.textContent).join() === "Try again");
+      /^Not this one\. Try again\. The round ended \d+–\d+\.$/.test(said(d1)) && !(stored(d1) && stored(d1).solved[`${day(0)}`]), said(d1));
+    ok("G3b · …the page COVERS the battle with those words — ONCE, in the result panel, not under the title (owner ruling 2026-10-16) — (its banners and round 2 are never seen), with a 'Try again' button",
+      once(d1, covered(d1)) && /^Not this one\. Try again\./.test(covered(d1)) && [...doc(d1).querySelectorAll("#dd-coveracts .dd-btn")].map((b) => b.textContent).join() === "Try again");
     click(d1, "#dd-coveracts .dd-btn", "Try again");
     ok("G4 · 'Try again' resets the position in the frame (puzzle:reset), uncovers it, and the answer button is there",
       f1.got[f1.got.length - 1].type === "puzzle:reset" && covered(d1) === null && msg(d1) === "Your opponent has passed. Find the one play that wins this round."
@@ -278,7 +278,7 @@ async function main() {
     const dc = pageAt(`${day(0)}T09:00:00Z`); await tick();
     const fc = await framed(dc);
     fc.try(plainLine(l), { cut: true }); await tick();
-    const wrongCut = msg(dc);
+    const wrongCut = said(dc);
     const again = [...doc(dc).querySelectorAll("#dd-coveracts .dd-btn")].find((x) => x.textContent === "Try again"); if (again) again.click();
     fc.try(lineOf(w), { cut: true }); await tick();
     ok("H1 · a try cut short by a hidden tab (flagged cut by the frame) still scores exactly: the wrong one is 'Not this one', the winning one solves the day",
@@ -297,7 +297,7 @@ async function main() {
     const P = byDate(`${day(7)}`), draw = PZ.solve(P, E, null).plays.find((p) => !p.win && p.play && p.you === p.them);
     const d = pageAt(`${day(7)}T10:00:00Z`); await tick();
     (await framed(d)).try(plainLine(draw)); await tick();
-    ok("W1 · a play that only DRAWS the round (" + draw.you + "–" + draw.them + ") is 'Not this one', not solved", /^Not this one/.test(msg(d)) && !(stored(d) && stored(d).solved[`${day(7)}`]), msg(d));
+    ok("W1 · a play that only DRAWS the round (" + draw.you + "–" + draw.them + ") is 'Not this one', not solved", /^Not this one/.test(said(d)) && !(stored(d) && stored(d).solved[`${day(7)}`]), said(d));
   });
 
   // ═══ THE FALLBACK: the battle can't start → the page's own board (and the Leap through it) ═══
@@ -462,9 +462,9 @@ async function main() {
     ok("ML7 · THE FALLBACK BOARD: its buttons ('Play …', 'End my turn', 'Leap', 'Show me the answer') are plaque buttons too", allPlaque(fb, "#dd-actions button") && plaques(fb, "#dd-actions button").some((b) => /^Play /.test(b.textContent))
       && /function btn\(text, cls, fn\) \{ var b = el\("button", "dd-btn mg-btn "/.test(R("play/daily/page.js")));
     const css = R("play/daily/daily.css"), html = R("play/daily/index.html");
-    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d4, page.js d5, mini.css g2 — on both mini games)",
+    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d4, page.js d6, mini.css g2 — on both mini games)",
       !/\.dd-btn \{/.test(css) && !/\.dd-btn\.dd-go/.test(css) && /body\.daily \{[^}]*overflow-x: hidden/.test(css) && /body\.dd-framing \.mg-stage \{ opacity: \.35; \}/.test(css)
-        && /daily\.css\?v=d4/.test(html) && /page\.js\?v=d5/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
+        && /daily\.css\?v=d4/.test(html) && /page\.js\?v=d6/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
   });
 
   await section('THE RULES, DIRECTLY', async () => {

@@ -353,7 +353,7 @@
     }
     tries++;
     var w = T.wrong + " " + T.roundEnded(m.you, m.them);
-    say(w, "dd-bad");
+    say("");   // said ONCE, in the result panel (owner ruling 2026-10-16); the fallback board (no panel) keeps its line
     cover(w, [btn(T.tryAgain, "dd-go", tryAgain)]);
     renderActions();
   }
