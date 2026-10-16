@@ -10,7 +10,7 @@
     <link rel="preload" href="../../assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="../../assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="../../css/threshold.css?v=s1g" />
-    <link rel="stylesheet" href="smriti.css?v=m1" />
+    <link rel="stylesheet" href="smriti.css?v=m2" />
   </head>
   <body class="smriti">
     <!-- MINI-GAMES-2 — SMRITI, the memory game. Free for everyone: no wallet, no Torana, no DYC, no badges, no leaderboard.
@@ -30,12 +30,15 @@
       </section>
 
       <section id="sm-play" hidden>
-        <div class="sm-bar">
-          <span class="sm-level" id="sm-level"></span>
-          <span class="sm-stat">Tries: <b id="sm-tries">0</b></span>
-          <span class="sm-stat">Best: <b id="sm-best">—</b></span>
+        <!-- the board art (landscape on wide screens, portrait on phones); every position is set by layout.js from the
+             art's measured edges: the cards in its inner navy field, the words in its banners -->
+        <div class="sm-boardart" id="sm-boardart">
+          <img class="sm-art" id="sm-art" alt="" draggable="false" />
+          <div class="sm-banner" id="sm-btop"><span class="sm-bz sm-title" id="sm-title">Smriti</span><span class="sm-bz sm-epi-in" id="sm-epi-in">What is seen once is never lost.</span></div>
+          <div class="sm-board" id="sm-board"></div>
+          <div class="sm-banner" id="sm-bbot"><span class="sm-bz sm-stat">Tries: <b id="sm-tries">0</b></span><span class="sm-bz sm-stat">Best: <b id="sm-best">—</b></span></div>
         </div>
-        <div class="sm-board" id="sm-board"></div>
+        <p class="sm-epi-out" id="sm-epi-out">What is seen once is never lost.</p>
         <div class="sm-actions"><button type="button" class="sm-btn" id="sm-back">Choose a level</button></div>
       </section>
 
@@ -57,7 +60,9 @@
     <script src="../../game/src/engine.js?v=33d0757"></script>
     <script src="manifest.js?v=m1"></script>
     <script src="smriti.js?v=m1"></script>
-    <script src="player.js?v=m1"></script>
-    <script src="page.js?v=m1"></script>
+    <script src="player.js?v=m2"></script>
+    <script src="art/geometry.js?v=m2"></script>
+    <script src="layout.js?v=m2"></script>
+    <script src="page.js?v=m2"></script>
   </body>
 </html>

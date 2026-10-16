@@ -23,6 +23,7 @@
     RUNG: 256,                          // phones and desktops alike: the 256 px sheets only
     WAKE_MS: 400,                       // the card wakes before the figure rises
     SETTLE_MS: 400,                     // the figure settles back into the card
+    BIG_FRACTION: 0.64,                 // PHONES: the large figure's height, as a share of the board's height (clamped to the field)
     MANIFEST_BASE: "https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/",   // the free game's packs (CORS open)
     LOCAL: { meghnad: "actors/meghnad/manifest.json" },                                 // relative to the page: the pinned copy
   };
@@ -32,6 +33,21 @@
     var sp = OUT.ANIMATION_SPEED > 0 ? OUT.ANIMATION_SPEED : 1, ph = m && m.phaseMs;
     if (!ph) return 0;
     return Math.round((OUT.WAKE_MS + ph.emerge + ph.act + OUT.SETTLE_MS) / sp);
+  };
+
+  // PHONES — the large placement: the clip's own bounding box over every frame it draws (emerge + act), scaled so it is
+  // `maxH` tall at most, no wider than `bound` (the whole board, frame included — most figures are wider than tall, so the
+  // phone board's WIDTH is what limits them) and no taller than the field; centred in the field, kept inside `bound`.
+  // → { k, footX, footY, box }
+  OUT.bigFit = function (m, field, maxH, bound) {
+    var B = bound || field;
+    var ix = m.phases.emerge.concat(m.phases.act), x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    ix.forEach(function (i) { var c = m.cells[i]; x0 = Math.min(x0, -c.pivot.x); x1 = Math.max(x1, c.w - c.pivot.x); y0 = Math.min(y0, -c.pivot.y); y1 = Math.max(y1, c.h - c.pivot.y); });
+    var bw = x1 - x0, bh = y1 - y0, k = Math.min(maxH / bh, B.w * 0.98 / bw, field.h * 0.96 / bh);
+    var bx = field.x + field.w / 2 - bw * k / 2, by = field.y + field.h / 2 - bh * k / 2;
+    bx = Math.max(B.x + B.w * 0.01, Math.min(bx, B.x + B.w * 0.99 - bw * k));
+    var footX = bx - x0 * k, footY = by - y0 * k;
+    return { k: k, footX: footX, footY: footY, box: { x: bx, y: by, w: bw * k, h: bh * k } };
   };
 
   OUT.create = function (env) {
@@ -92,13 +108,23 @@
 
     // PLAY: draw the figure out of the card. rect = the card on the canvas (canvas pixels): {x, y, w, h}.
     // → a Promise that resolves (true) when the play has ended, or (false) at once when the card has no ready pack.
-    function play(id, ctx, rect, onFrame) {
+    function play(id, ctx, rect, onFrame, big) {
       var s = cache[id];
       if (!s || s.state !== "ready" || !ctx) return Promise.resolve(false);
       var m = s.m, img = s.img, sp = OUT.ANIMATION_SPEED > 0 ? OUT.ANIMATION_SPEED : 1;
       var wake = OUT.WAKE_MS / sp, em = m.phaseMs.emerge / sp, act = m.phaseMs.act / sp, settle = OUT.SETTLE_MS / sp, total = wake + em + act + settle;
       var E = m.phases.emerge, A = m.phases.act;
       var H = rect.h * 1.18, k = H / m.refHeight, footX = rect.x + rect.w / 2, footY = rect.y + rect.h * 0.94;
+      // PHONES (big given): rise from the card over the emerge phase, play LARGE and centred, and shrink back into the card
+      // as it settles; the board under it dims a little while it is large. Without `big` nothing below changes (desktop).
+      var BF = big ? OUT.bigFit(m, big, big.maxH, big.bound) : null, k0 = k, fx0 = footX, fy0 = footY;
+      var ease = function (u) { u = Math.max(0, Math.min(1, u)); return 1 - Math.pow(1 - u, 3); };
+      function placeAt(t) {
+        if (!BF) return 0;
+        var g = t < wake ? 0 : t < wake + em ? ease((t - wake) / em) : t < total - settle ? 1 : 1 - ease((t - (total - settle)) / settle);
+        k = k0 + (BF.k - k0) * g; footX = fx0 + (BF.footX - fx0) * g; footY = fy0 + (BF.footY - fy0) * g;
+        return g;
+      }
       function cellAt(t) {
         if (t < wake) return null;
         var u = t - wake;
@@ -117,7 +143,8 @@
           if (t >= total) { finish(); return; }
           try {
             ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            var ix = cellAt(t);
+            var ix = cellAt(t), g = placeAt(t);
+            if (BF && g > 0) { ctx.fillStyle = "rgba(6,8,16," + (0.38 * g).toFixed(3) + ")"; ctx.fillRect(big.x, big.y, big.w, big.h); }
             if (ix != null) {
               var c = m.cells[ix], a = 1;
               if (t < wake + 160 / sp) a = Math.max(0, (t - wake) / (160 / sp));

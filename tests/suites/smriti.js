@@ -127,7 +127,7 @@ function checkBest(Sx) {
     Object.defineProperty(Img.prototype, "src", { get() { return this._src; }, set(v) { this._src = v; if (!v) return; const me = this; setTimeout(() => { if (me._src !== v) return; const bad = o.fail && o.fail(v); if (bad) { if (me.onerror) me.onerror(); } else if (me.onload) me.onload(); }, 1); } });
     return { Img, made };
   }
-  const fakeCtx = () => { const calls = []; return { calls, canvas: { width: 400, height: 800 }, clearRect() {}, drawImage() { calls.push([].slice.call(arguments, 1, 5)); }, set globalAlpha(v) {}, get globalAlpha() { return 1; } }; };
+  const fakeCtx = () => { const calls = []; return { calls, canvas: { width: 400, height: 800 }, clearRect() {}, fillRect() {}, fillStyle: "", drawImage() { calls.push([].slice.call(arguments, 1, 5)); }, set globalAlpha(v) {}, get globalAlpha() { return 1; } }; };
   const nodeEnv = (PLx, o) => { const f = makeFetch(o), im = makeImage(o);
     return { f, im, p: PLx.create({ AM, fetch: f.fetch, Image: im.Img, raf: (fn) => setTimeout(fn, 4), now: () => Date.now(), pageUrl: "https://divyayuddha.games/play/smriti/" }) }; };
 
@@ -209,16 +209,17 @@ function checkBest(Sx) {
         w.fetch = (u, x) => f.fetch(String(u), x);
         w.Image = im.Img;
         w.matchMedia = (q) => ({ matches: !!o.reduce && /reduce/.test(q), media: q, addListener() {}, removeListener() {} });
-        w.HTMLCanvasElement.prototype.getContext = function () { const cv = this; return { canvas: cv, clearRect() {}, drawImage() { draws.push(1); }, set globalAlpha(v) {}, get globalAlpha() { return 1; } }; };
+        w.HTMLCanvasElement.prototype.getContext = function () { const cv = this; return { canvas: cv, clearRect() {}, fillRect() {}, fillStyle: "", drawImage() { draws.push(1); }, set globalAlpha(v) {}, get globalAlpha() { return 1; } }; };
+        if (o.vw) { Object.defineProperty(w, "innerWidth", { value: o.vw, configurable: true }); Object.defineProperty(w, "innerHeight", { value: o.vh, configurable: true }); Object.defineProperty(w, "devicePixelRatio", { value: o.dpr || 1, configurable: true }); }
         if (o.blocked) Object.defineProperty(w, "localStorage", { get() { throw new Error("SecurityError: storage blocked"); } });
         else if (o.store) Object.keys(o.store).forEach((k) => w.localStorage.setItem(k, o.store[k]));
         if (o.random) { const seq = o.random.slice(); w.Math.random = () => (seq.length ? seq.shift() : 0.5); }
       } });
     const w = dom.window, P = w.__DY_SMRITI_PAGE;
-    const plays = [], asks = [], origPlay = P.player.play, origReady = P.player.whenReady;
-    P.player.play = function (id) { plays.push(id); return origPlay.apply(this, arguments); };
+    const plays = [], bigs = [], asks = [], origPlay = P.player.play, origReady = P.player.whenReady;
+    P.player.play = function (id, ctx, rect, onFrame, big) { plays.push(id); bigs.push(big || null); return origPlay.apply(this, arguments); };
     P.player.whenReady = function (id) { asks.push(id); return origReady.apply(this, arguments); };   // every animation the page ASKS for, played or not
-    return { dom, w, P, f, plays, asks, draws, $: (id) => w.document.getElementById(id) };
+    return { dom, w, P, f, plays, bigs, asks, draws, $: (id) => w.document.getElementById(id) };
   }
   const startLevel = async (pg, lv) => { pg.w.document.querySelector('.sm-lv[data-level="' + lv + '"]').click(); await until(() => pg.P.game && !pg.P.busy && pg.P.game.level === lv, 15000); await sleep(30); };
   const card = (pg, i) => pg.w.document.querySelector('.sm-card[data-i="' + i + '"]');
@@ -300,11 +301,11 @@ function checkBest(Sx) {
     ok("P4 · ON THE PAGE, seed " + seed + ": with its picture published The Setu Stones is dealt like any card; with its picture missing it is set aside and the SAME seed is dealt again without it",
       withArt.P.game.tiles.some((t) => t.id === "setustones") && J(withArt.P.missing) === J([]) && !noArt.P.game.tiles.some((t) => t.id === "setustones")
         && J(noArt.P.missing) === J(["setustones"]) && J(noArt.P.game.tiles.map((t) => t.id)) === J(expect175));
-    // layout (the real widths are measured in the browser; here the rules that make them hold)
+    // layout: the rules live in layout.js (section B checks them at every size); here the page's own CSS guards
     const css = R("play/smriti/smriti.css");
-    ok("L1 · layouts: at 390 px Easy and Medium in four columns, Hard six by four (the whole board in view); from 720 px six / eight columns; the page never scrolls sideways; the animation canvas never takes a tap",
-      /\.sm-board \{ display: grid; gap: 8px; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); max-width: 420px;/.test(css) && /\n\.sm-board\.sm-hard \{ grid-template-columns: repeat\(6,/.test(css) && /\.sm-board\.sm-easy \{ grid-template-columns: repeat\(6/.test(css) && /  \.sm-board\.sm-hard \{ grid-template-columns: repeat\(8/.test(css)
-        && /body\.smriti \{[^}]*overflow-x: hidden/.test(css) && /\.sm-stage \{[^}]*pointer-events: none/.test(css));
+    ok("L1 · the page never scrolls sideways; the animation canvas never takes a tap; in play the board's offset is PADDING (a margin collapses through <main>/<body> and scrolled the page 6–12 px) and the storage note steps aside so the whole board fits",
+      /body\.smriti \{[^}]*overflow-x: hidden/.test(css) && /\.sm-stage \{[^}]*pointer-events: none/.test(css) && /body\.sm-playing \.sm \{[^}]*padding: var\(--sm-top, 0px\) 0 0;/.test(css)
+        && /body\.sm-playing \.sm-store \{ display: none; \}/.test(css) && SRC.page.indexOf('art.style.marginTop = "0px"') >= 0 && !/\.sm-board\.sm-hard/.test(css));
     // the owner's R2/R3 breakages, on the page
     const k3 = pageAt({ src: { page: SRC.page.split("player.prepare(tiles.filter(function (t) { return S.isAnimated(t.card); }).map(function (t) { return t.id; }));").join("player.prepare(CARDS.filter(S.isAnimated).map(function (c) { return c.id; }));") } });
     await startLevel(k3, "easy");
@@ -320,6 +321,112 @@ function checkBest(Sx) {
     const plain = k5.P.game.tiles.find((t) => !S.isAnimated(t.card));
     tapT(k5, plain.i); await idle(k5);
     ok("M8 · breakage 'animate a non-Hero card' is caught (W2/W5 go red)", k5.asks.indexOf(plain.id) >= 0);
+  });
+
+  // ═══ B · THE BOARD ART (the owner's two originals, baked by scripts/smriti_art.py) and THE LAYOUT ═══
+  await section("B", async () => {
+    console.log("\n── B · the board art and the layout ──");
+    const ART = require(path.join(DIR, "art", "geometry.js")), LY = require(path.join(DIR, "layout.js"));
+    const crypto = require("crypto"), shaOf = (f) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+    const inside = (a, b, e) => { e = e || 0.01; return a.x >= b.x - e && a.y >= b.y - e && a.x + a.w <= b.x + b.w + e && a.y + a.h <= b.y + b.h + e; };
+    const box = (q) => ({ x: q[0], y: q[1], w: q[2] - q[0], h: q[3] - q[1] });
+    const files = Object.keys(ART.files), artDir = path.join(DIR, "art");
+    ok("B1 · the art: six WebP files (landscape 960/1280/1672, portrait 480/720/941), each the bytes geometry.js records; no PNG original is in the site; both originals' sha256 recorded",
+      J(files.slice().sort()) === J(["board-land-1280.webp", "board-land-1672.webp", "board-land-960.webp", "board-port-480.webp", "board-port-720.webp", "board-port-941.webp"])
+        && files.every((f) => { const p = path.join(artDir, f); return fs.existsSync(p) && fs.statSync(p).size === ART.files[f].bytes && shaOf(p) === ART.files[f].sha256 && fs.readFileSync(p).slice(8, 12).toString() === "WEBP"; })
+        && fs.readdirSync(artDir).every((f) => !/\.png$/i.test(f)) && /^[0-9a-f]{64}$/.test(ART.originals.land.sha256) && /^[0-9a-f]{64}$/.test(ART.originals.port.sha256)
+        && J(ART.land.size) === J([1672, 941]) && J(ART.port.size) === J([941, 1672]));
+    const geomOK = ["land", "port"].every((k) => { const G = ART[k], F = box(G.field), S0 = box(G.safe), A = { x: 0, y: 0, w: G.size[0], h: G.size[1] };
+      return inside(S0, F) && inside(F, A) && ["Top", "Bottom"].every((t) => { const B = box(G["banner" + t]); return inside(B, A) && !(B.y < F.y + F.h && B.y + B.h > F.y) && G["zones" + t].every((z) => inside(box(z), B)); }); });
+    ok("B2 · the measured geometry holds together: the safe card area inside the inner navy field, the field inside the art; each banner clear of the field, its two text zones inside it", geomOK);
+    const E4 = ART.port.emblems, corners = ["tl", "tr", "bl", "br"];
+    ok("B3 · PHONE EMBLEMS: each corner's emblem is cropped from the SAME corner of the desktop art (water, flame, leaf, serpent) and baked centred in its ring, its radius (" + ART.emblemR + ") inside the ring's inner edge",
+      corners.every((k) => J(E4[k].from) === J(ART.land.emblems[k]) && J(E4[k].ring) === J(ART.port.rings[k]) && E4[k].to[0] === E4[k].ring[0] && E4[k].to[1] === E4[k].ring[1] && E4[k].to[2] === ART.emblemR && ART.emblemR < E4[k].ring[2]));
+    // every screen the owner named (desktop 768 / 1280 / 1920; phone 360 / 390 / 430 and a short phone), every level
+    const VIEWS = [[768, 600], [1280, 800], [1920, 1080], [360, 740], [390, 844], [430, 932], [360, 560], [390, 640]];
+    const PAIRS = { easy: 6, medium: 8, hard: 12 }, bad = [], sizes = {};
+    for (const [vw, vh] of VIEWS) for (const lv of Object.keys(PAIRS)) {
+      const L = LY.layout({ vw, vh, pairs: PAIRS[lv] }), g = L.grid, tag = vw + "x" + vh + " " + lv;
+      if (L.art !== (vw >= vh ? "land" : "port")) bad.push(tag + " art");
+      if (!inside(g, L.safe) || !inside(L.safe, L.field)) bad.push(tag + " grid outside the field");
+      if (g.cols * g.rows !== 2 * PAIRS[lv] || Math.abs(g.cardH / g.cardW - 1.4) > 1e-9 || g.cardW < 30) bad.push(tag + " cards");
+      if (L.board.x < 0 || L.board.x + L.board.w > vw + 0.01 || L.board.y + L.board.h + LY.CHROME[L.art].below > vh + 0.01) bad.push(tag + " scroll");
+      sizes[tag] = g.cols + "x" + g.rows + " " + g.cardW + "x" + Math.floor(g.cardH);
+    }
+    ok("B4 · at all 8 screens × 3 levels the cards sit inside the art's inner field (in its safe area), keep the frame's 5:7, and the whole board + the line + the button fit the screen (no scrolling); wide screens get the landscape art, tall ones the portrait", bad.length === 0, J(bad));
+    const gridOf = (vw, vh, lv) => { const g = LY.layout({ vw, vh, pairs: PAIRS[lv] }).grid; return g.cols + "x" + g.rows; };
+    ok("B5 · DESKTOP grids as ruled at 768, 1280 and 1920: Easy 6×2, Medium 8×2, Hard 8×3",
+      [[768, 600], [1280, 800], [1920, 1080]].every(([w, h]) => gridOf(w, h, "easy") === "6x2" && gridOf(w, h, "medium") === "8x2" && gridOf(w, h, "hard") === "8x3"));
+    const largest = [[360, 740], [390, 844], [430, 932], [360, 560], [390, 640]].every(([vw, vh]) => Object.keys(PAIRS).every((lv) => {
+      const L = LY.layout({ vw, vh, pairs: PAIRS[lv] }), n = 2 * PAIRS[lv];
+      for (let c = 1; c <= n; c++) { if (n % c) continue; const r = n / c, w = Math.floor(Math.min((L.safe.w - (c - 1) * L.grid.gap) / c, (L.safe.h - (r - 1) * L.grid.gap) / r / 1.4)); if (w > L.grid.cardW) return false; }
+      return true; }));
+    ok("B6 · PHONE grids are the largest cards that fit (no exact grid of any width gives bigger): Easy 3×4, Medium 4×4, Hard 4×6 at 360, 390 and 430 wide and on short screens (Hard is no longer 6×4)",
+      largest && [[360, 740], [390, 844], [430, 932], [360, 560]].every(([w, h]) => gridOf(w, h, "easy") === "3x4" && gridOf(w, h, "medium") === "4x4" && gridOf(w, h, "hard") === "4x6"), J(sizes));
+    const fontOK = VIEWS.every(([vw, vh]) => { const L = LY.layout({ vw, vh, pairs: 8 }), f = L.bannerFont, z = L.zonesBottom, t = L.zonesTop;
+      return f >= 11 && f <= L.bannerTop.h * 0.55 && f <= L.bannerBottom.h * 0.55 && z.every((q) => "Tries: 99".length * 0.6 * f <= q.w && "Best: 99".length * 0.6 * f <= q.w) && "Smriti".length * 0.9 * f <= t[0].w
+        && (!L.epithetInBanner || ("What is seen once is never lost.".length * 0.5 * L.epithetFont <= t[1].w && L.epithetFont <= L.bannerTop.h * 0.55)); });
+    ok("B7 · BANNERS: 'Smriti' rides the top banner (with the epithet on desktop, below the board on phones), 'Tries: N' and 'Best: N' the bottom one — each in a zone inside its banner, the type sized to fit 'Tries: 99' (≥ 11 px at every size; 0.6 em a character — Chrome draws 'Tries: 99' at 0.55 em in Cinzel, 54 px in a 65 px zone on the shortest phone)", fontOK);
+    ok("B8 · the art file is the narrowest that covers the drawn width at the screen's pixel density (≤ 3×): a phone never loads the landscape art, a desktop never the portrait",
+      LY.artSrc("port", 160, 2) === "board-port-480.webp" && LY.artSrc("port", 300, 2) === "board-port-720.webp" && LY.artSrc("port", 378, 3) === "board-port-941.webp" && LY.artSrc("land", 900, 1) === "board-land-960.webp" && LY.artSrc("land", 1248, 2) === "board-land-1672.webp");
+    // on the page (jsdom, a 390×844 phone and a 1280×800 desktop)
+    const ph = pageAt({ vw: 390, vh: 844, dpr: 3 }); await startLevel(ph, "hard");
+    const PLh = ph.P.layout, c0 = card(ph, 0);
+    ok("B9 · ON THE PAGE (390×844, Hard): the portrait art, a 4×6 grid of " + PLh.grid.cardW + " px cards, the title in the top banner, the epithet below the board, the page head stepped aside",
+      ph.$("sm-art").getAttribute("src") === "art/board-port-941.webp" && ph.$("sm-board").dataset.grid === "4x6" && c0.style.width === PLh.grid.cardW + "px" && ph.w.document.body.classList.contains("sm-playing")
+        && !ph.$("sm-title").hidden && ph.$("sm-epi-in").hidden && !ph.$("sm-epi-out").hidden && ph.$("sm-tries").textContent === "0");
+    const dk = pageAt({ vw: 1280, vh: 800, dpr: 2 }); await startLevel(dk, "medium");
+    ok("B10 · ON THE PAGE (1280×800, Medium): the landscape art, 8×2, the epithet in the top banner",
+      dk.$("sm-art").getAttribute("src") === "art/board-land-1672.webp" && dk.$("sm-board").dataset.grid === "8x2" && !dk.$("sm-epi-in").hidden && dk.$("sm-epi-out").hidden);
+    dk.$("sm-back").click();
+    ok("B11 · leaving play gives the page head back", !dk.w.document.body.classList.contains("sm-playing") && !dk.$("sm-choose").hidden);
+  });
+
+  // ═══ BF · THE LARGE HERO FIGURE ON PHONES ═══
+  await section("BF", async () => {
+    console.log("\n── BF · the large Hero figure on phones ──");
+    const LY = require(path.join(DIR, "layout.js")), PL = loadUMD(SRC.player);
+    const mans = CARDS.filter(S.isAnimated).map((c) => [c.id, AM.forRung(c.id === "meghnad" ? JSON.parse(R("play/smriti/actors/meghnad/manifest.json")) : JSON.parse(fs.readFileSync(path.join(GAME, "assets", "manifest", "actors", c.id, "manifest.json"), "utf8")), 256)]);
+    const bad = [], fr = [];
+    for (const [vw, vh] of [[360, 740], [390, 844], [430, 932], [360, 560]]) for (const lv of [6, 8, 12]) {
+      const L = LY.layout({ vw, vh, pairs: lv }), board = { x: 0, y: 0, w: L.board.w, h: L.board.h }, maxH = L.board.h * PL.BIG_FRACTION;
+      for (const [id, m] of mans) {
+        const B = PL.bigFit(m, L.field, maxH, board), b = B.box, cardK = L.grid.cardH * 1.18 / m.refHeight;
+        if (!(b.x >= -0.01 && b.y >= -0.01 && b.x + b.w <= board.w + 0.01 && b.y + b.h <= board.h + 0.01)) bad.push(vw + "x" + vh + " " + id + " outside the board");
+        if (b.h > maxH + 0.01 || b.h > L.field.h + 0.01) bad.push(id + " too tall");
+        if (B.k < cardK * 1.5) bad.push(vw + "x" + vh + "/" + lv + " " + id + " not large");
+        if (vw === 390 && vh === 844 && lv === 12) fr.push(Math.round(100 * b.h / L.board.h));
+      }
+    }
+    ok("BF1 · for all 21 animations at 360, 390 and 430 wide and a short phone, the large figure stays inside the board, is never taller than " + Math.round(PL.BIG_FRACTION * 100) + "% of it nor than the field, and plays at least 1.5× its in-card size (at 390×844: " + Math.min(...fr) + "–" + Math.max(...fr) + "% of the board's height)", bad.length === 0 && fr.length === 21, J(bad.slice(0, 5)));
+    // the same clock for an old and a new player: the desktop draw (no `big`) is byte-for-byte the R2 build
+    let old = null; try { old = execFileSync("git", ["-C", SITE, "show", "e779900:play/smriti/player.js"], { encoding: "utf8" }); } catch (e) { old = null; }
+    async function trace(src, big) {
+      const P2 = loadUMD(src); P2.ANIMATION_SPEED = 1; let t = 0; const f = makeFetch(), im = makeImage();
+      const p = P2.create({ AM, fetch: f.fetch, Image: im.Img, raf: (fn) => { t += 16; setImmediate(fn); }, now: () => t, pageUrl: "https://divyayuddha.games/play/smriti/" });
+      await p.prepare(["indra"]); const calls = [];
+      const ctx = { canvas: { width: 400, height: 800 }, clearRect() {}, fillStyle: "", fillRect() { calls.push(["fill", this.fillStyle].concat([].slice.call(arguments))); }, drawImage() { calls.push([].slice.call(arguments, 1).map((v) => Math.round(v * 1000) / 1000)); }, globalAlpha: 1 };
+      await p.play("indra", ctx, { x: 100, y: 300, w: 80, h: 112 }, null, big);
+      return calls;
+    }
+    const tNew = await trace(SRC.player), tOld = old ? await trace(old) : null;
+    ok("BF2 · DESKTOP UNCHANGED: with no large placement every frame the player draws is identical to the R2 build (e779900) — " + tNew.length + " draws", !!tOld && tNew.length > 20 && J(tNew) === J(tOld));
+    const big = { x: 10, y: 60, w: 310, h: 500, maxH: 430, bound: { x: 0, y: 0, w: 378, h: 672 } };
+    const tBig = await trace(SRC.player, big), dr = tBig.filter((c) => c[0] !== "fill"), fills = tBig.filter((c) => c[0] === "fill");
+    const maxW = Math.max(...dr.map((c) => c[6])), firstW = dr[0][6];
+    ok("BF3 · PHONE: the figure rises from the card size, grows LARGE (" + Math.round(firstW) + " → " + Math.round(maxW) + " px wide frame), and shrinks back as it settles; the board under it dims a little (veil ≤ 0.38) over the board's field only",
+      maxW > firstW * 1.5 && dr[dr.length - 1][6] < maxW * 0.8 && fills.length > 10 && fills.every((c) => c[2] === 10 && c[3] === 60 && c[4] === 310 && c[5] === 500 && parseFloat(c[1].split(",")[3]) <= 0.38));
+    // on the page: phones pass the large placement, desktops do not; reduced motion still skips
+    const ph = pageAt({ vw: 390, vh: 844, dpr: 3 }); await startLevel(ph, "easy");
+    const ht = ph.P.game.tiles.find((t) => S.isAnimated(t.card)); tapT(ph, ht.i); await idle(ph);
+    const dk = pageAt({ vw: 1280, vh: 800, dpr: 2 }); await startLevel(dk, "easy");
+    const dt = dk.P.game.tiles.find((t) => S.isAnimated(t.card)); tapT(dk, dt.i); await idle(dk);
+    const pb = ph.bigs[0];
+    ok("BF4 · ON THE PAGE a phone asks for the large figure (" + Math.round(PL.BIG_FRACTION * 100) + "% of the board's height, bounded by the board) and the board waits; a desktop plays it out of the card as built",
+      ph.plays.length === 1 && !!pb && Math.abs(pb.maxH - ph.P.layout.board.h * PL.BIG_FRACTION * 2) < 0.01 && !!pb.bound && dk.plays.length === 1 && dk.bigs[0] === null, J({ php: ph.plays, pb: pb && { maxH: pb.maxH, bound: !!pb.bound }, want: ph.P.layout && ph.P.layout.board.h * PL.BIG_FRACTION * 2, dkp: dk.plays, dkb: dk.bigs }));
+    const rm = pageAt({ vw: 390, vh: 844, reduce: true }); await startLevel(rm, "hard");
+    const rh = rm.P.game.tiles.find((t) => S.isAnimated(t.card)); tapT(rm, rh.i);
+    ok("BF5 · reduced motion on a phone: no figure, small or large, and no wait", rm.plays.length === 0 && rm.P.busy === false && rm.P.game.tiles[rh.i].up);
   });
 
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));

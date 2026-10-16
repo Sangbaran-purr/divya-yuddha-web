@@ -10,7 +10,7 @@
  */
 (function () {
   "use strict";
-  var S = window.DY_SMRITI, PL = window.DY_SMRITI_PLAYER, AM = window.ActorManifest;
+  var S = window.DY_SMRITI, PL = window.DY_SMRITI_PLAYER, AM = window.ActorManifest, LY = window.DY_SMRITI_LAYOUT;
   var ART = "https://sangbaran-purr.github.io/divya-yuddha/assets/thumbs/", ART_V = "?v=t65";
   var MISS_MS = 900, THUMB_WAIT_MS = 6000, PACK_WAIT_MS = 1500;
 
@@ -53,7 +53,9 @@
       box.appendChild(b);
     });
   }
-  function show(which) { ["sm-choose", "sm-play", "sm-done"].forEach(function (id) { $(id).hidden = id !== which; }); }
+  function show(which) { ["sm-choose", "sm-play", "sm-done"].forEach(function (id) { $(id).hidden = id !== which; });
+    document.body.classList.toggle("sm-playing", which === "sm-play");   // in play the board art carries the title: the page head steps aside so the whole board fits
+    if (which === "sm-play") applyLayout(); }
   function choose() { gen++; endPlay(); player.release(); game = null; busy = false; renderLevels(); show("sm-choose"); }
 
   // ── a new board: deal, check the pictures, deal again without any card whose picture is missing ──
@@ -94,8 +96,34 @@
       d.addEventListener("click", function () { tap(t.i); });
       b.appendChild(d);
     });
+    applyLayout();
     paint();
   }
+  // ── the board art and every position on it (layout.js: the art's measured edges, the screen's size) ──
+  var lastLayout = null;
+  function px(n) { return Math.round(n * 100) / 100 + "px"; }
+  function place(node, r) { node.style.left = px(r.x); node.style.top = px(r.y); node.style.width = px(r.w); node.style.height = px(r.h); }
+  function applyLayout() {
+    if (!game || $("sm-play").hidden) return;
+    var L = LY.layout({ vw: window.innerWidth, vh: window.innerHeight, pairs: game.pairs }); lastLayout = L;
+    var art = $("sm-boardart"), g = L.grid;
+    art.className = "sm-boardart sm-art-" + L.art;
+    art.style.width = px(L.board.w); art.style.height = px(L.board.h); art.style.marginTop = "0px"; $("sm-board").closest("main").style.setProperty("--sm-top", px(L.board.y));   // padding, not margin: a margin would collapse through <main>/<body> and scroll the page
+    var src = "art/" + LY.artSrc(L.art, L.board.w, window.devicePixelRatio || 1);
+    if ($("sm-art").getAttribute("src") !== src) $("sm-art").setAttribute("src", src);
+    var b = $("sm-board");
+    b.style.left = px(g.x); b.style.top = px(g.y); b.style.width = px(g.w); b.style.height = px(g.h);
+    b.style.gridTemplateColumns = "repeat(" + g.cols + ", " + px(g.cardW) + ")"; b.style.gap = px(g.gap);
+    b.setAttribute("data-grid", g.cols + "x" + g.rows);
+    [].forEach.call(b.querySelectorAll(".sm-card"), function (c) { c.style.width = px(g.cardW); c.style.height = px(g.cardH); });
+    b.style.setProperty("--sm-name", px(Math.max(8, Math.min(12, g.cardW * 0.12))));
+    var top = $("sm-btop").children, bot = $("sm-bbot").children;
+    place(top[0], L.zonesTop[0]); place(top[1], L.zonesTop[1]); place(bot[0], L.zonesBottom[0]); place(bot[1], L.zonesBottom[1]);
+    [top[0], bot[0], bot[1]].forEach(function (n) { n.style.fontSize = px(L.bannerFont); });
+    top[1].style.fontSize = px(L.epithetFont);
+    top[1].hidden = !L.epithetInBanner; $("sm-epi-out").hidden = L.epithetInBanner;
+  }
+  window.addEventListener("resize", function () { applyLayout(); });
   function paint() {
     if (!game) return;
     game.tiles.forEach(function (t) {
@@ -104,7 +132,6 @@
       d.classList.toggle("sm-matched", t.matched);
       d.setAttribute("aria-label", t.up || t.matched ? t.card.n : T.faceDown);
     });
-    $("sm-level").textContent = T.level[level];
     $("sm-tries").textContent = String(game.tries);
     $("sm-best").textContent = rec.best[level] != null ? String(rec.best[level]) : "—";
     $("sm-board").classList.toggle("sm-busy", busy);
@@ -139,9 +166,16 @@
       var dpr = Math.min(2, window.devicePixelRatio || 1), W = window.innerWidth, H = window.innerHeight;
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
       var ctx = cv.getContext("2d"); if (!ctx) return false;
-      var r = card.getBoundingClientRect();
+      var r = card.getBoundingClientRect(), big = null;
+      // PHONES: the figure rises from the card, plays LARGE and centred over the board, and fades back into the card.
+      // DESKTOP: as built — it plays out of the card.
+      if (lastLayout && lastLayout.art === "port") {
+        var a = $("sm-boardart").getBoundingClientRect(), f = lastLayout.field;
+        big = { x: (a.left + f.x) * dpr, y: (a.top + f.y) * dpr, w: f.w * dpr, h: f.h * dpr, maxH: lastLayout.board.h * PL.BIG_FRACTION * dpr,
+                bound: { x: a.left * dpr, y: a.top * dpr, w: a.width * dpr, h: a.height * dpr } };   // the whole board: the figure may cross the frame, never leave the art
+      }
       playing = tile.i; card.classList.add("sm-waking");
-      return player.play(tile.id, ctx, { x: r.left * dpr, y: r.top * dpr, w: r.width * dpr, h: r.height * dpr }).then(function (played) {
+      return player.play(tile.id, ctx, { x: r.left * dpr, y: r.top * dpr, w: r.width * dpr, h: r.height * dpr }, null, big).then(function (played) {
         playing = null; card.classList.remove("sm-waking"); return played;
       });
     });
@@ -165,5 +199,5 @@
   renderLevels(); show("sm-choose");
 
   // a read-only handle for the page tests
-  window.__DY_SMRITI_PAGE = { get game() { return game; }, get busy() { return busy; }, get playing() { return playing; }, player: player, get missing() { return Object.keys(missing); }, get rec() { return rec; } };
+  window.__DY_SMRITI_PAGE = { get layout() { return lastLayout; }, get game() { return game; }, get busy() { return busy; }, get playing() { return playing; }, player: player, get missing() { return Object.keys(missing); }, get rec() { return rec; } };
 })();

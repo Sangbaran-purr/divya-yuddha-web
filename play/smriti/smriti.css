@@ -17,14 +17,22 @@ body.smriti { background: var(--stone-void); overflow-x: hidden; }
 .sm-lvpairs { grid-area: pairs; color: var(--gold-hairline); font-size: .95rem; }
 .sm-lvbest { grid-area: best; color: var(--flame-core); font-size: .92rem; }
 
-.sm-bar { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; align-items: baseline; margin: 0 0 10px; }
-.sm-level { font-family: var(--display); color: var(--gold-burnished); letter-spacing: .08em; }
-.sm-stat { color: var(--gold-hairline); }
-.sm-stat b { color: var(--flame-core); font-family: var(--display); font-weight: 500; font-size: 1.1rem; }
+/* THE BOARD ART (play): every position below is set in px by layout.js from the art's measured edges */
+body.sm-playing .sm-top, body.sm-playing .sm-h1, body.sm-playing .sm-epithet { display: none; }   /* the art carries the title */
+body.sm-playing .sm { max-width: none; padding: var(--sm-top, 0px) 0 0; }
+body.sm-playing .sm-store { display: none; }   /* the storage note shows on the level and result screens; in play the whole board must fit */
+.sm-boardart { position: relative; margin: 0 auto; }
+.sm-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; user-select: none; -webkit-user-drag: none; }
+.sm-banner { position: absolute; inset: 0; pointer-events: none; }
+.sm-bz { position: absolute; display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden;
+  font-family: var(--display); letter-spacing: .08em; color: #f3dc9a; text-shadow: 0 1px 2px #000, 0 0 8px rgba(0,0,0,.9); }
+.sm-title { letter-spacing: .14em; }
+.sm-epi-in { font-family: var(--text); font-style: italic; letter-spacing: .02em; color: #ead6a2; }
+.sm-stat b { font-weight: 600; color: #ffd27a; margin-left: .3em; }
+.sm-epi-out { text-align: center; font-family: var(--text); font-style: italic; color: var(--gold-hairline); font-size: .95rem; margin: 6px 12px 0; }
 
-.sm-board { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 420px; margin: 0 auto; }
-.sm-board.sm-hard { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }   /* 24 cards: 6 × 4 so the whole board is in view on a phone */
-.sm-card { position: relative; aspect-ratio: 5 / 7; padding: 0; border: 0; background: none; cursor: pointer; perspective: 800px; font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+.sm-board { position: absolute; display: grid; }   /* placed inside the art's inner navy field (layout.js sets left/top/size/columns/gap) */
+.sm-card { position: relative; padding: 0; border: 0; background: none; cursor: pointer; perspective: 800px; font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
 .sm-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .35s ease; }
 .sm-up .sm-inner { transform: rotateY(180deg); }
 .sm-back, .sm-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border: 1px solid var(--gold-aged); overflow: hidden; }
@@ -33,7 +41,7 @@ body.smriti { background: var(--stone-void); overflow-x: hidden; }
 .sm-mark { font-family: var(--display); color: var(--gold-burnished); font-size: 1.4rem; opacity: .8; }
 .sm-face { transform: rotateY(180deg); background: var(--stone-relief); display: flex; flex-direction: column; }
 .sm-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sm-face .sm-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 3px 4px; font-size: .66rem; line-height: 1.1; text-align: center; color: var(--parchment);
+.sm-face .sm-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 2px 3px; font-size: var(--sm-name, .66rem); line-height: 1.1; text-align: center; color: var(--parchment);
   background: linear-gradient(0deg, rgba(11,10,8,.9), rgba(11,10,8,0)); }
 .sm-face.sm-noart { justify-content: center; }
 .sm-face.sm-noart .sm-name { position: static; background: none; font-size: .8rem; }
@@ -60,9 +68,6 @@ body.smriti { background: var(--stone-void); overflow-x: hidden; }
   .sm { max-width: 980px; }
   .sm-h1 { font-size: 1.9rem; }
   .sm-levels { grid-template-columns: repeat(3, 1fr); max-width: 760px; }
-  .sm-board.sm-easy { grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: 760px; }
-  .sm-board.sm-medium { grid-template-columns: repeat(8, minmax(0, 1fr)); max-width: 900px; }
-  .sm-board.sm-hard { grid-template-columns: repeat(8, minmax(0, 1fr)); max-width: 900px; gap: 8px; }
-  .sm-face .sm-name { font-size: .74rem; }
+  .sm-face .sm-name { font-size: var(--sm-name, .74rem); }
 }
 @media (prefers-reduced-motion: reduce) { .sm-inner { transition: none; } }
