@@ -78,7 +78,7 @@ const SUITES = [
   // MINI-GAMES-2: SMRITI, the memory game — R1 rules (deal, animated-pair rule, tries, best, storage), R2 the animation player
   // (the game's manifest reader and Meghnad's pack pinned byte-for-byte; 256 px only; load/release), R3 the page (the board
   // waits on every Hero/Meghnad turn; reduced motion skips; layouts); every owner-named breakage applied and caught.
-  { name: "smriti",        file: path.join(__dirname, "suites", "smriti.js"), chain: false, expect: 68 },
+  { name: "smriti",        file: path.join(__dirname, "suites", "smriti.js"), chain: false, expect: 80 },
 ];
 
 function freePort() {

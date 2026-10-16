@@ -45,7 +45,8 @@
   function renderLevels() {
     var box = $("sm-levels"); box.innerHTML = "";
     S.LEVEL_ORDER.forEach(function (lv) {
-      var b = el("button", "sm-lv"); b.type = "button"; b.setAttribute("data-level", lv);
+      var b = el("button", "sm-lv mg-btn"); b.type = "button";   // the mulligan plaque button (play/shared/mini.css)
+      b.setAttribute("data-level", lv);
       b.appendChild(el("span", "sm-lvname", T.level[lv]));
       b.appendChild(el("span", "sm-lvpairs", T.pairs(S.LEVELS[lv])));
       b.appendChild(el("span", "sm-lvbest", bestText(lv)));

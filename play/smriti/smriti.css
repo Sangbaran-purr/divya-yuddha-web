@@ -1,21 +1,26 @@
 /* MINI-GAMES-2 · SMRITI — stone · gold · flame (threshold.css tokens). Mobile first: nothing is wider than the screen; the
    board wraps into columns that always fit, it never scrolls sideways. */
-body.smriti { background: var(--stone-void); overflow-x: hidden; }
+body.smriti { background: #070402; overflow-x: hidden; }
+/* the level and finished screens stand on the game's MULLIGAN plate (play/shared/mini.css); the page sits above it */
+.sm-top, .sm, .sm-store { position: relative; z-index: 1; }
+body.sm-playing .mg-stage { display: none; }   /* the board art is the in-game ground, unchanged */
 .sm-top { padding: 14px 16px 0; text-align: center; }
 .sm-crest .brand-logo { width: 150px; height: auto; }
 .sm { max-width: 760px; margin: 0 auto; padding: 8px 14px 48px; color: var(--parchment); font-family: var(--text); }
-.sm-h1 { font-family: var(--display); letter-spacing: var(--track-display); color: var(--gold-burnished); text-align: center; font-size: 1.55rem; margin: 6px 0 0; font-weight: 500; }
-.sm-epithet { text-align: center; font-family: var(--display); letter-spacing: var(--track-epithet); color: var(--gold-aged); font-size: .7rem; text-transform: uppercase; margin: 4px 0 16px; }
-.sm-h2 { font-family: var(--display); color: var(--flame-core); text-align: center; font-size: 1.2rem; letter-spacing: .06em; margin: 6px 0 10px; font-weight: 500; }
-.sm-how { text-align: center; font-size: 1.05rem; line-height: 1.45; margin: 0 auto 16px; max-width: 34em; }
+/* the mulligan's own type over its plate: Cinzel gold titles, parchment italics, a dark shadow under every line */
+.sm-h1 { font-family: var(--display); letter-spacing: .22em; color: #f4df9a; text-align: center; font-size: 1.55rem; margin: 6px 0 0; font-weight: 500; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,.95); }
+.sm-epithet { text-align: center; font-family: var(--text); font-style: italic; letter-spacing: .02em; color: #d8c9a3; font-size: 1rem; margin: 4px 0 16px; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+.sm-h2 { font-family: var(--display); color: #f4df9a; text-align: center; font-size: 1.3rem; letter-spacing: .14em; margin: 6px 0 10px; font-weight: 500; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,.95); }
+.sm-how { text-align: center; font-size: 1.05rem; line-height: 1.45; margin: 0 auto 18px; max-width: 34em; color: #d8c9a3; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
 
-.sm-levels { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 420px; margin: 0 auto; }
-.sm-lv { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name pairs" "best best"; gap: 2px 10px; align-items: baseline; text-align: left;
-  padding: 12px 16px; min-height: 64px; background: var(--stone-relief); border: 1px solid var(--gold-aged); color: var(--parchment); font: inherit; cursor: pointer; }
-.sm-lv:hover, .sm-lv:focus-visible { border-color: var(--flame-core); }
-.sm-lvname { grid-area: name; font-family: var(--display); color: var(--gold-burnished); letter-spacing: .08em; font-size: 1.05rem; }
-.sm-lvpairs { grid-area: pairs; color: var(--gold-hairline); font-size: .95rem; }
-.sm-lvbest { grid-area: best; color: var(--flame-core); font-size: .92rem; }
+/* THE LEVEL BUTTONS — the mulligan plaque button (.mg-btn), three lines: the level, its pairs, its best */
+.sm-levels { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 360px; margin: 0 auto; }
+.sm-lv { min-height: 84px; padding: 14px 16px; gap: 3px; width: 100%; }
+.sm-lvname { font-size: 1.05rem; letter-spacing: .22em; color: inherit; }
+.sm-lvpairs, .sm-lvbest { font-family: var(--text); text-transform: none; letter-spacing: .02em; font-size: .95rem; font-weight: 400; }
+.sm-lvpairs { color: #d8c9a3; }
+.sm-lvbest { color: #ffd27a; font-style: italic; }
+.sm-home { margin-top: 22px; }
 
 /* THE BOARD ART (play): every position below is set in px by layout.js from the art's measured edges */
 body.sm-playing .sm-top, body.sm-playing .sm-h1, body.sm-playing .sm-epithet { display: none; }   /* the art carries the title */
@@ -53,11 +58,13 @@ body.sm-playing .sm-store { display: none; }   /* the storage note shows on the 
 .sm-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; justify-content: center; }
 .sm-btn { font-family: var(--display); letter-spacing: .06em; font-size: .85rem; padding: 10px 14px; min-height: 44px; background: var(--stone-relief);
   color: var(--gold-burnished); border: 1px solid var(--gold-aged); cursor: pointer; }
-.sm-btn.sm-go { color: var(--stone-void); background: var(--gold-burnished); border-color: var(--flame-core); }
-.sm-done { text-align: center; border: 1px solid var(--gold-aged); background: var(--stone-lit); padding: 14px 16px 18px; max-width: 460px; margin: 6px auto 0; }
-.sm-result { font-size: 1.15rem; margin: 0 0 6px; }
-.sm-bestline { color: var(--flame-core); font-family: var(--display); letter-spacing: .05em; margin: 0; }
-.sm-store { color: var(--gold-hairline); font-size: .85rem; text-align: center; margin-top: 18px; }
+/* THE FINISHED SCREEN — on the plate like the level screen; Play again / Choose a level / Back as mulligan buttons, stacked */
+.sm-done { text-align: center; padding: 18px 8px 8px; max-width: 460px; margin: 6px auto 0; }
+.sm-result { font-size: 1.2rem; margin: 0 0 6px; color: #d8c9a3; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+.sm-bestline { color: #ffd27a; font-family: var(--display); letter-spacing: .08em; margin: 0; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+.sm-done .sm-actions { flex-direction: column; align-items: center; gap: 12px; margin-top: 22px; }
+.sm-endbtn { width: min(300px, 86%); }
+.sm-store { color: #d8c9a3; font-size: .9rem; text-align: center; margin-top: 18px; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
 .sm-store:empty { display: none; }
 .sm-stage { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 30; }
 
@@ -66,8 +73,15 @@ body.sm-playing .sm-store { display: none; }   /* the storage note shows on the 
 
 @media (min-width: 720px) {
   .sm { max-width: 980px; }
-  .sm-h1 { font-size: 1.9rem; }
-  .sm-levels { grid-template-columns: repeat(3, 1fr); max-width: 760px; }
+  .sm-h1 { font-size: 2.1rem; }
+  .sm-levels { grid-template-columns: repeat(3, 1fr); max-width: 820px; gap: 18px; }
+  .sm-lv { min-height: 120px; }
+  .sm-lvname { font-size: 1.25rem; }
   .sm-face .sm-name { font-size: var(--sm-name, .74rem); }
+}
+@media (min-width: 1024px) {
+  body.smriti:not(.sm-playing) .sm { padding-top: 4vh; }
+  .sm-crest .brand-logo { width: 190px; }
+  .sm-how { font-size: 1.15rem; }
 }
 @media (prefers-reduced-motion: reduce) { .sm-inner { transition: none; } }

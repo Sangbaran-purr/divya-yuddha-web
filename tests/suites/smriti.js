@@ -4,7 +4,7 @@
 // this repo) exactly where the live site reads them on the free game's site; Meghnad from the site's pinned copy.
 // Every breakage named by the owner is applied to the real source text and must turn its check red (M·).
 const path = require("path"), fs = require("fs"), { execFileSync } = require("child_process");
-const { JSDOM } = require("jsdom");
+const { JSDOM, VirtualConsole } = require("jsdom");
 const H = require("../lib.js");
 const SITE = H.SITE, DIR = path.join(SITE, "play", "smriti");
 const GAME = process.env.DY_GAME || path.resolve(SITE, "..", "divya-yuddha");
@@ -204,7 +204,8 @@ function checkBest(Sx) {
     });
     const f = makeFetch(o), im = makeImage({ fail: (u) => (o.artMissing || ["TheSetuStones"]).some((n) => u.indexOf("_" + n + "_") >= 0) });
     const draws = [];
-    const dom = new JSDOM(html, { url: "https://divyayuddha.games/play/smriti/", runScripts: "dangerously", pretendToBeVisual: true,
+    const navs = [], vcon = new VirtualConsole(); vcon.on("jsdomError", (e) => { if (/navigation/.test(e.message)) navs.push(e.message); });
+    const dom = new JSDOM(html, { url: "https://divyayuddha.games/play/smriti/", runScripts: "dangerously", pretendToBeVisual: true, virtualConsole: vcon, referrer: o.referrer,
       beforeParse(w) {
         w.fetch = (u, x) => f.fetch(String(u), x);
         w.Image = im.Img;
@@ -219,7 +220,7 @@ function checkBest(Sx) {
     const plays = [], bigs = [], asks = [], origPlay = P.player.play, origReady = P.player.whenReady;
     P.player.play = function (id, ctx, rect, onFrame, big) { plays.push(id); bigs.push(big || null); return origPlay.apply(this, arguments); };
     P.player.whenReady = function (id) { asks.push(id); return origReady.apply(this, arguments); };   // every animation the page ASKS for, played or not
-    return { dom, w, P, f, plays, bigs, asks, draws, $: (id) => w.document.getElementById(id) };
+    return { dom, w, P, f, plays, bigs, asks, draws, navs, $: (id) => w.document.getElementById(id) };
   }
   const startLevel = async (pg, lv) => { pg.w.document.querySelector('.sm-lv[data-level="' + lv + '"]').click(); await until(() => pg.P.game && !pg.P.busy && pg.P.game.level === lv, 15000); await sleep(30); };
   const card = (pg, i) => pg.w.document.querySelector('.sm-card[data-i="' + i + '"]');
@@ -427,6 +428,76 @@ function checkBest(Sx) {
     const rm = pageAt({ vw: 390, vh: 844, reduce: true }); await startLevel(rm, "hard");
     const rh = rm.P.game.tiles.find((t) => S.isAnimated(t.card)); tapT(rm, rh.i);
     ok("BF5 · reduced motion on a phone: no figure, small or large, and no wait", rm.plays.length === 0 && rm.P.busy === false && rm.P.game.tiles[rh.i].up);
+  });
+
+  // ═══ G · THE MULLIGAN LOOK AND THE WAY BACK (owner rulings 2026-10-16) ═══
+  await section("G", async () => {
+    console.log("\n── G · the mulligan look and '← Back to the game' ──");
+    const crypto = require("crypto"), shaB = (b) => crypto.createHash("sha256").update(b).digest("hex");
+    const PLATE = JSON.parse(R("play/shared/plate.json")), SH = path.join(SITE, "play", "shared");
+    let origOK = false;
+    try { origOK = ["port", "wide"].every((k) => shaB(execFileSync("git", ["-C", GAME, "show", PLATE.gameCommit + ":" + PLATE.originals[k].path], { maxBuffer: 1 << 26 })) === PLATE.originals[k].sha256); } catch (e) { origOK = false; }
+    ok("G1 · THE BACKGROUND is the game's own mulligan plate: both originals (" + PLATE.originals.port.path + ", " + PLATE.originals.wide.path + ") match the game at " + PLATE.gameCommit + " byte for byte, baked to four WebP files whose bytes plate.json records; no PNG copied",
+      PLATE.gameCommit === "ad978f0" && origOK && J(Object.keys(PLATE.files).sort()) === J(["mull-port-480.webp", "mull-port-853.webp", "mull-wide-1024.webp", "mull-wide-1536.webp"])
+        && Object.keys(PLATE.files).every((f) => { const b = fs.readFileSync(path.join(SH, f)); return b.length === PLATE.files[f].bytes && shaB(b) === PLATE.files[f].sha256 && b.slice(8, 12).toString() === "WEBP"; })
+        && fs.readdirSync(SH).every((f) => !/\.png$/i.test(f)));
+    let gameHtml = ""; try { gameHtml = execFileSync("git", ["-C", GAME, "show", PLATE.gameCommit + ":index.html"], { maxBuffer: 1 << 26, encoding: "utf8" }); } catch (e) {}
+    const mini = R("play/shared/mini.css");
+    const fromGame = [/\.ms-dim\{ background:(linear-gradient\([^;]*\)); \}/, /\.ms-vig\{ background:(radial-gradient\([^;]*\)); \}/, /#mullplate\{[^}]*filter:(brightness\(\.6\) saturate\(\.9\) contrast\(1\.02\));/,
+      /\.fsel-start\{[^}]*background:(linear-gradient\(180deg,#e6c47a 0%,#a5813a 45%,#6e5526 100%\)); box-shadow:(0 6px 18px rgba\(0,0,0,\.55\));/, /\.fsel-start:hover\{ filter:(brightness\(1\.1\) drop-shadow\(0 0 12px rgba\(255,205,120,\.3\)\));/]
+      .map((re) => (gameHtml.match(re) || []).slice(1)).flat();
+    const norm = (t) => t.replace(/\s+/g, "").replace(/,/g, ",");
+    ok("G2 · the scrim, vignette, plate filter and the plaque button's bevel, shadow and glow are the game mulligan's own values (read from the game at " + PLATE.gameCommit + ")",
+      fromGame.length === 6 && fromGame.every((v) => norm(mini).indexOf(norm(v)) >= 0) && /\.mg-btn::before \{[^}]*linear-gradient\(180deg, #2b1c0a 0%, #160d05 52%, #221407 100%\)/.test(mini) && /min-height: 44px/.test(mini), J(fromGame));
+    ok("G3 · like the game: the portrait plate below 1024 px wide, the wide plate from 1024 px, the smaller file on small low-density screens; if the plate fails the page stays on the mulligan's ink ground (#070402)",
+      /\.mg-plate \{[^}]*#070402 url\("mull-port-480\.webp"\)/.test(mini) && /\(min-width: 600px\), \(min-resolution: 1\.5dppx\) \{ \.mg-plate \{ background-image: url\("mull-port-853\.webp"\)/.test(mini)
+        && /\(min-width: 1024px\) \{ \.mg-plate \{ background-image: url\("mull-wide-1024\.webp"\)/.test(mini) && /\.mg-stage \{[^}]*background: #070402/.test(mini));
+    // the rule
+    const BK = require(path.join(SITE, "play", "shared", "back.js")), FREE = "https://sangbaran-purr.github.io/divya-yuddha/";
+    const here = "https://divyayuddha.games/play/smriti/", T = (r) => BK.target(r, here);
+    ok("G4 · THE WAY BACK: from the site's /game/ copy → that copy (its stamp kept); from the free game (a cross-site referrer is only its origin, or its full menu URL) → the free game's menu; from anywhere else, or nowhere (a direct link, a new tab) → the free game's menu",
+      BK.FREE === FREE && J(T("https://divyayuddha.games/game/index.html?v=ad978f0")) === J({ url: "https://divyayuddha.games/game/index.html?v=ad978f0", from: "site" })
+        && J(T("https://divyayuddha.games/game/")) === J({ url: "https://divyayuddha.games/game/", from: "site" })
+        && J(T("https://sangbaran-purr.github.io/")) === J({ url: FREE, from: "free" }) && J(T("https://sangbaran-purr.github.io/divya-yuddha/index.html")) === J({ url: FREE, from: "free" })
+        && J(T("")) === J({ url: FREE, from: null }) && J(T("https://www.google.com/")) === J({ url: FREE, from: null }) && J(T("https://divyayuddha.games/dashboard.html")) === J({ url: FREE, from: null })
+        && J(T("https://divyayuddha.games/rite.html")) === J({ url: FREE, from: null }) && J(T("https://evil.example/game/index.html")) === J({ url: FREE, from: null }));
+    const fakeWin = (ref, len, leaves) => { const w = { calls: [], location: { href: here }, history: { length: len, back() { w.calls.push("back"); if (leaves) w.hide && w.hide(); } },
+      addEventListener(ev, fn) { if (ev === "pagehide") w.hide = fn; }, setTimeout(fn) { w.calls.push("timer"); fn(); } }; BK.go({ referrer: ref }, w); return w; };
+    const a = fakeWin("https://divyayuddha.games/game/index.html?v=ad978f0", 3, true), b = fakeWin("https://sangbaran-purr.github.io/", 2, false), c = fakeWin("https://sangbaran-purr.github.io/", 1, false), d = fakeWin("", 4, false);
+    ok("G5 · …in the SAME tab: with the game menu in this tab's history it goes back through history (the menu as it was); if history can't go back it follows the link; arrived any other way it opens the free game's menu — never a new window",
+      J(a.calls) === J(["back", "timer"]) && a.location.href === here && J(b.calls) === J(["back", "timer"]) && b.location.href === FREE && J(c.calls) === J([]) && c.location.href === FREE
+        && J(d.calls) === J([]) && d.location.href === FREE && !/window\.open|_blank/.test(R("play/shared/back.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "")));
+    // the Smriti page
+    const pg = pageAt({ store: { dy_smriti: JSON.stringify({ v: 1, best: { easy: 7, hard: 15 } }) } });
+    const lvs = [...pg.w.document.querySelectorAll(".sm-lv")];
+    const backs = (sel) => [...pg.w.document.querySelectorAll(sel + " [data-back-to-game]")];
+    ok("G6 · the level screen: the three levels are mulligan buttons, each with its name, pairs and best ('Best: 7 tries' / 'No best yet' / 'Best: 15 tries'); '← Back to the game' below them, a link to the free game's menu even without scripts; the mulligan background behind",
+      lvs.length === 3 && lvs.every((b) => b.classList.contains("mg-btn")) && lvs.map((b) => b.querySelector(".sm-lvbest").textContent).join("|") === "Best: 7 tries|No best yet|Best: 15 tries"
+        && backs("#sm-choose").length === 1 && backs("#sm-choose")[0].textContent === "← Back to the game" && backs("#sm-choose")[0].getAttribute("href") === FREE
+        && !!pg.w.document.querySelector(".mg-stage .mg-plate") && /body\.sm-playing \.mg-stage \{ display: none; \}/.test(R("play/smriti/smriti.css")), J(lvs.map((b) => b.textContent)));
+    const ev = new pg.w.MouseEvent("click", { bubbles: true, cancelable: true }); backs("#sm-choose")[0].dispatchEvent(ev);
+    ok("G7 · tapping it is the shared rule (the click is taken by back.js, and the page navigates once)", ev.defaultPrevented === true && pg.navs.length === 1, J(pg.navs));
+    lvs[1].click(); await until(() => pg.P.game && !pg.P.busy, 15000);
+    ok("G8 · a level button starts its level: Medium deals 16 cards", pg.P.game.level === "medium" && pg.P.game.tiles.length === 16 && pg.$("sm-choose").hidden && !pg.$("sm-play").hidden);
+    await solveAll(pg);
+    const ends = ["sm-again", "sm-choose-again"].map((i) => pg.$(i));
+    ok("G9 · the finished screen: 'Play again', 'Choose a level' and '← Back to the game' are mulligan buttons", ends.every((b) => b.classList.contains("mg-btn")) && ends.map((b) => b.textContent).join("|") === "Play again|Choose a level"
+      && backs("#sm-done").length === 1 && backs("#sm-done")[0].classList.contains("mg-btn") && backs("#sm-done")[0].textContent === "← Back to the game" && !pg.$("sm-done").hidden);
+    const sb = pageAt({ blocked: true });
+    ok("G10 · storage blocked: the level screen still says 'This browser isn't saving your best scores.' (hidden only during play)", sb.$("sm-store").textContent === "This browser isn't saving your best scores." && !sb.w.document.body.classList.contains("sm-playing"));
+    // the Daily Puzzle: ONLY the back button
+    const dNow = R("play/daily/index.html"); let dHead = ""; try { dHead = execFileSync("git", ["show", "HEAD:play/daily/index.html"], { cwd: SITE, encoding: "utf8" }); } catch (e) {}
+    const undone = dNow.replace('\n    <link rel="stylesheet" href="../shared/mini.css?v=g1" />', "")
+      .replace(/\n      <!-- MINI-GAMES-2 \(owner ruling 2026-10-16\): the mini games' shared way home[^\n]*\n      <a class="mg-btn mg-back dd-home" href="https:\/\/sangbaran-purr\.github\.io\/divya-yuddha\/" data-back-to-game>← Back to the game<\/a>/, "")
+      .replace('\n    <script src="../shared/back.js?v=g1"></script>', "");
+    const headIsOld = dHead.indexOf("data-back-to-game") < 0;
+    ok("G11 · THE DAILY PUZZLE gains ONLY '← Back to the game' (the mulligan button, under the logo, the same shared rule); remove it and the page is byte-for-byte what it was",
+      dNow !== undone && (headIsOld ? undone === dHead : undone === dHead.replace('\n    <link rel="stylesheet" href="../shared/mini.css?v=g1" />', "").replace(/\n      <!-- MINI-GAMES-2[^\n]*\n      <a class="mg-btn mg-back dd-home"[^\n]*/, "").replace('\n    <script src="../shared/back.js?v=g1"></script>', ""))
+        && /<header class="dd-top">[\s\S]*data-back-to-game>← Back to the game<\/a>\n    <\/header>/.test(dNow) && dNow.indexOf("mg-stage") < 0);
+    const dvc = []; const vc = new VirtualConsole(); vc.on("jsdomError", (e) => { if (/navigation/.test(e.message)) dvc.push(1); });
+    const dd = new JSDOM(dNow.replace(/<script src="[^"]*"><\/script>/g, "") + "<script>" + R("play/shared/back.js") + "</script>", { url: "https://divyayuddha.games/play/daily/", runScripts: "dangerously", virtualConsole: vc });
+    const db = dd.window.document.querySelector("[data-back-to-game]"), dev = new dd.window.MouseEvent("click", { bubbles: true, cancelable: true }); db.dispatchEvent(dev);
+    ok("G12 · …and on the Daily Puzzle page it is wired to the same rule (taken by back.js, one navigation)", dev.defaultPrevented === true && dvc.length === 1 && db.getAttribute("href") === FREE);
   });
 
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));

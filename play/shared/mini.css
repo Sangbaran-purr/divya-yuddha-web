@@ -1,0 +1,28 @@
+/* MINI-GAMES-2 · the mini games' MULLIGAN look (owner ruling 2026-10-16) — the game's mulligan screen ("The Divine Choice")
+   brought to the site's mini-game pages: its plate (baked to WebP by scripts/mini_plate.py from the game's own PNGs),
+   its scrim and vignette, and its plaque button (.fsel-start), value for value. The game repo is never changed.
+   The game picks the portrait plate below 1024 px wide and the wide plate from 1024 px — so does this sheet; each
+   size loads only the file it needs. If the plate fails to load the page stays on the mulligan's own ink ground. */
+.mg-stage { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: #070402; }
+.mg-plate { position: absolute; inset: 0; background: #070402 url("mull-port-480.webp") center / cover no-repeat;
+  filter: brightness(.6) saturate(.9) contrast(1.02); }
+@media (min-width: 600px), (min-resolution: 1.5dppx) { .mg-plate { background-image: url("mull-port-853.webp"); } }
+@media (min-width: 1024px) { .mg-plate { background-image: url("mull-wide-1024.webp"); } }
+@media (min-width: 1024px) and (min-resolution: 1.5dppx), (min-width: 1300px) { .mg-plate { background-image: url("mull-wide-1536.webp"); } }
+.mg-dim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,4,2,.58) 0%, rgba(7,4,2,.4) 26%, rgba(7,4,2,.3) 52%, rgba(7,4,2,.1) 72%, rgba(7,4,2,.06) 100%); }
+.mg-vig { position: absolute; inset: 0; background: radial-gradient(125% 100% at 50% 38%, transparent 44%, rgba(0,0,0,.74) 100%); }
+
+/* the mulligan's plaque button: a gold bevel frame with the dark plaque face painted by ::before (z -1 inside an
+   isolated stacking context, so it sits above the bevel and below the label). Cinzel 600 — the site's Cinzel stops
+   at 600 (the game's 700 is the Google face). */
+.mg-btn { position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 44px; padding: 12px 16px; border: 0; border-radius: 10px; cursor: pointer; text-decoration: none; text-align: center;
+  background: linear-gradient(180deg, #e6c47a 0%, #a5813a 45%, #6e5526 100%); box-shadow: 0 6px 18px rgba(0,0,0,.55);
+  font-family: Cinzel, serif; font-size: 13px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase;
+  color: #e8c874; transition: filter .25s ease, color .25s ease; -webkit-tap-highlight-color: transparent; }
+.mg-btn::before { content: ""; position: absolute; inset: 1.6px; z-index: -1; border-radius: 8px;
+  background: linear-gradient(180deg, #2b1c0a 0%, #160d05 52%, #221407 100%); }
+.mg-btn:hover, .mg-btn:focus-visible { filter: brightness(1.1) drop-shadow(0 0 12px rgba(255,205,120,.3)); color: #f4df9a; }
+.mg-btn:active { transform: scale(.98); }
+.mg-back { width: min(300px, 86%); margin: 0 auto; letter-spacing: .14em; font-size: 12px; }
+.dd-top .mg-back { margin-top: 10px; }   /* the Daily Puzzle: the button sits under the logo */

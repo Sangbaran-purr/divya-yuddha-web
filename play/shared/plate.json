@@ -1,0 +1,39 @@
+{
+ "gameCommit": "ad978f0",
+ "originals": {
+  "port": {
+   "path": "assets/img/mulligan_plate_port.png",
+   "w": 853,
+   "h": 1844,
+   "sha256": "fa2c6d1a4608dc350ab982048ca03e6537e0f53a5b7bcf318fdee306e50f4f18"
+  },
+  "wide": {
+   "path": "assets/img/mulligan_plate_wide.png",
+   "w": 1536,
+   "h": 1024,
+   "sha256": "13eb545f164129de30f23924f6d9dad8ab1d5aca8167890330e59e06c4253d20"
+  }
+ },
+ "files": {
+  "mull-port-480.webp": {
+   "w": 480,
+   "bytes": 95284,
+   "sha256": "d13dcba6ac7516c6cf4dabeb52f2bf7883b634dcaceaae80e60524da7246e2f4"
+  },
+  "mull-port-853.webp": {
+   "w": 853,
+   "bytes": 237274,
+   "sha256": "618e3c600ff862db63c9c3214e8b8f10fefa9691ab316db4bc211d2aad501108"
+  },
+  "mull-wide-1024.webp": {
+   "w": 1024,
+   "bytes": 133236,
+   "sha256": "68f4d92d973b63a5dacfa090fadb0ac25ca04806aadeef6317d1f88a9c4a97e2"
+  },
+  "mull-wide-1536.webp": {
+   "w": 1536,
+   "bytes": 252310,
+   "sha256": "fc969caaba635a70d54a1c630210728ee0d40af6b54db974276b6ad1889ecb68"
+  }
+ }
+}
