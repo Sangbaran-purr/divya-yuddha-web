@@ -50,13 +50,15 @@ for (const P of PUZZLES) {
   // the batch START is the owner's ruling (2026-10-15: batch 1 starts that day, 4 days earlier than first planned);
   // every other date follows from it — one puzzle per consecutive UTC day, each id carrying its own date
   const START = "2026-10-15";
-  const want = Array.from({ length: 14 }, (_, i) => new Date(Date.parse(START + "T00:00:00Z") + i * 86400000).toISOString().slice(0, 10));
-  ok("D1 · fourteen puzzles, one per consecutive UTC day from the ruled start " + START + " (Thursday) to " + want[13] + ", each id = dp-<date>, ids unique",
-    JSON.stringify(dates) === JSON.stringify(want) && new Date(START + "T00:00:00Z").getUTCDay() === 4
-      && PUZZLES.every((p) => p.id === "dp-" + p.date) && new Set(PUZZLES.map((p) => p.id)).size === 14);
+  // batch 1 (hand-authored, 14 days) and every generated batch after it (scripts/daily-gen) — one puzzle per day, no gaps
+  const want = Array.from({ length: PUZZLES.length }, (_, i) => new Date(Date.parse(START + "T00:00:00Z") + i * 86400000).toISOString().slice(0, 10));
+  ok("D1 · one puzzle per consecutive UTC day from the ruled start " + START + " (Thursday) — batch 1 to " + want[13] + ", then the generated batches to " + want[want.length - 1] + " — each id = dp-<date>, ids unique",
+    PUZZLES.length >= 28 && JSON.stringify(dates) === JSON.stringify(want) && new Date(START + "T00:00:00Z").getUTCDay() === 4
+      && PUZZLES.every((p) => p.id === "dp-" + p.date) && new Set(PUZZLES.map((p) => p.id)).size === PUZZLES.length);
   const ladder = ["easy", "easy", "medium", "medium", "medium", "hard", "hard"];
-  ok("D2 · the approved order is kept: puzzles 1–2 easy, 3–5 medium, 6–7 hard, then the same again for 8–14",
-    PUZZLES.every((p, i) => p.difficulty === ladder[i % 7]), PUZZLES.map((p) => p.difficulty).join(","));
+  const byDay = { 1: "easy", 2: "easy", 3: "medium", 4: "medium", 5: "medium", 6: "hard", 0: "hard" };   // owner ruling 2026-10-16: weeks run Mon–Sun
+  ok("D2 · batch 1 keeps its approved order (1–2 easy, 3–5 medium, 6–7 hard, twice); from batch 2 the difficulty follows the weekday (Mon–Tue easy, Wed–Fri medium, Sat–Sun hard)",
+    PUZZLES.slice(0, 14).every((p, i) => p.difficulty === ladder[i % 7]) && PUZZLES.slice(14).every((p) => p.difficulty === byDay[new Date(p.date + "T00:00:00Z").getUTCDay()]), PUZZLES.map((p) => p.difficulty).join(","));
   const mine = new Set(PUZZLES.map((p) => p.you.faction)), all = new Set(PUZZLES.map((p) => p.you.faction).concat(PUZZLES.map((p) => p.them.faction)));
   ok("D3 · all four factions are played (and all four are faced)", mine.size === 4 && all.size === 4, [...mine].join(","));
   const mech = PUZZLES.map((p) => p.mechanic).join(" | ");
@@ -96,8 +98,8 @@ for (const P of PUZZLES) {
   ok("R1 · every winning line (card, target, slot, Leaps), replayed by hand through the engine, WINS the round at the solver's exact score", all, why);
   // the page must offer the free Leap: exactly one puzzle cannot be won without one (named by date, not by play)
   const needLeap = PUZZLES.filter((P) => solved[P.id].ok && (solved[P.id].winners[0].line.before.length + solved[P.id].winners[0].line.after.length) > 0).map((P) => P.date);
-  ok("R2 · the page needs Leap control: puzzle 11 is won only with a free Leap (and every other puzzle without one)",
-    JSON.stringify(needLeap) === JSON.stringify([PUZZLES[10].date]), needLeap.join(","));
+  ok("R2 · the page needs Leap control: in batch 1 puzzle 11 is the one won only with a free Leap (generated batches may use Leaps too)",
+    JSON.stringify(needLeap.filter((d) => d <= PUZZLES[13].date)) === JSON.stringify([PUZZLES[10].date]), needLeap.join(","));
 }
 
 // ── the solver's refusals ──

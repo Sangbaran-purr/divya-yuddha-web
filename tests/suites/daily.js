@@ -165,9 +165,9 @@ async function main() {
     const early = pageAt(`${day(-5)}T10:00:00Z`, { puzzles: shifted }); await tick();
     ok(`F4c · the date is READ FROM THE DATA, not hard-coded: a batch starting ${dm(2)} says '${longDay(day(2))}'`,
       noneLine(early) === "The first Daily Puzzle arrives on " + longDay(day(2)) + ".", noneLine(early));
-    const after = pageAt(`${day(14)}T10:00:00Z`); await tick();
-    ok(`F5 · after the batch runs out (${dm(14)}): 'A new puzzle is on its way. Try an earlier one below.' and all 14 earlier puzzles listed`,
-      noneLine(after) === "A new puzzle is on its way. Try an earlier one below." && doc(after).getElementById("dd-play").hidden && doc(after).querySelectorAll("#dd-pastlist li").length === 14, noneLine(after));
+    const after = pageAt(`${day(PUZZLES.length)}T10:00:00Z`); await tick();
+    ok(`F5 · after the puzzles run out (${dm(PUZZLES.length)}): 'A new puzzle is on its way. Try an earlier one below.' and all ${PUZZLES.length} earlier puzzles listed`,
+      noneLine(after) === "A new puzzle is on its way. Try an earlier one below." && doc(after).getElementById("dd-play").hidden && doc(after).querySelectorAll("#dd-pastlist li").length === PUZZLES.length, noneLine(after));
   });
 
   // ═══ PLAYING (in the battle frame): a win, a wrong play, a reveal, a missed day ═══
@@ -404,7 +404,8 @@ async function main() {
     // file may carry a line that names a winning card (or its target) together with a win/answer word
     const dpFiles = ["play/daily/index.html", "play/daily/page.js", "play/daily/daily.js", "play/daily/notes.js", "play/daily/puzzle-core.js",
       "tests/suites/puzzles.js", "tests/suites/daily.js", "scripts/puzzle-solve.js", "scripts/daily-notes-encode.js",
-      "scripts/puzzle-answer-digest.js", "docs/MINI_GAMES_R1_DAILY_PUZZLE.md", "tests/fixtures/daily-answers.sha256.json"];
+      "scripts/puzzle-answer-digest.js", "docs/MINI_GAMES_R1_DAILY_PUZZLE.md", "tests/fixtures/daily-answers.sha256.json",
+      "scripts/daily-gen/lib.js", "scripts/daily-gen/batch.js", "tests/suites/dailygen.js"];   // + the generator (R1, 2026-10-16)
     const wnames = [...new Set(PUZZLES.flatMap((P) => { const w = winnerOf(P); return [w.play, w.target && w.target.replace(/#\d+$/, "")].filter(Boolean); }))].map((n) => n.toLowerCase());
     const WORD = /\b(win|wins|won|winning|winner|answer|solution|solves|correct)\b/i;
     const leaks = [];

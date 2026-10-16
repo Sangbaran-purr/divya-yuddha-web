@@ -13,16 +13,20 @@ const puzzles = JSON.parse(fs.readFileSync(path.join(SITE, "play", "daily", "puz
 const plain = fs.readFileSync(src, "utf8");
 const { encodeNote } = require(path.join(SITE, "play", "daily", "daily.js"));
 
-// the file lists puzzles 1..14 in date order: "N. <Day> <d> <Mon> · <title> · …" then ONE explanation paragraph
+// the file lists a batch in date order: "N. <Day> <d> <Mon> · <title> · …" then ONE explanation paragraph. Since the
+// generator (scripts/daily-gen) the data holds more than one batch: each block is matched to its puzzle by its title
+// (in date order, from the first title that matches) and merged into the explanations already encoded.
 const blocks = plain.split(/\n(?=\d+\. )/).filter((b) => /^\d+\. /.test(b));
-if (blocks.length !== puzzles.length) throw new Error("expected " + puzzles.length + " puzzles in " + src + ", found " + blocks.length);
-const out = {};
+const titleIn = (line, P) => line.indexOf(" · " + P.title + " · ") >= 0 || line.indexOf(" · " + P.title.replace(/’/g, "'") + " · ") >= 0;
+const startAt = puzzles.findIndex((P) => blocks.length && titleIn(blocks[0].split("\n")[0], P));
+if (startAt < 0 || startAt + blocks.length > puzzles.length) throw new Error("the puzzles in " + src + " do not match a run of the data");
+const out = Object.assign({}, require(path.join(SITE, "play", "daily", "notes.js")));
 blocks.forEach((b, i) => {
-  const lines = b.split("\n");
+  const P = puzzles[startAt + i], lines = b.split("\n");
   const text = lines.slice(1).filter((l) => l.trim() && !/^\s{2,}/.test(l)).join(" ").trim();   // indented lines are owner notes, never shipped
   if (!text) throw new Error("puzzle " + (i + 1) + " has no explanation");
-  if (lines[0].indexOf(puzzles[i].title.replace(/’/g, "'")) < 0 && lines[0].indexOf(puzzles[i].title) < 0) throw new Error("puzzle " + (i + 1) + " title does not match " + puzzles[i].title);
-  out[puzzles[i].id] = encodeNote(puzzles[i].id, text);
+  if (!titleIn(lines[0], P)) throw new Error("puzzle " + (i + 1) + " title does not match " + P.title);
+  out[P.id] = encodeNote(P.id, text);
 });
 const body = "/* MINI-GAMES-1 R2 — Daily Puzzle explanations, ENCODED (scripts/daily-notes-encode.js builds this from the owner's\n"
   + "   plain file outside the repo). Decoded only after the puzzle is solved or the answer is shown. This stops ACCIDENTAL\n"
