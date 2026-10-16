@@ -226,7 +226,7 @@ function narrate(P, play, opts) {
   });
   // the card you played must account for itself: it enters, or a change names it, or the engine's record says why it did
   // nothing (an Astra a card cancels) — else, verified by the absence of any change it caused, "<card> adds no power"
-  const itself = played && changes.some((c) => c.text.indexOf(played.n + " enters at") === 0 || c.text.indexOf("from " + played.n + " ") >= 0 || c.text.indexOf("by " + played.n + " ") >= 0 || c.text.indexOf(played.n + " puts a Venom Token") === 0);
+  const itself = played && changes.some((c) => c.text.indexOf(played.n + " enters at") === 0 || c.text.indexOf("from " + played.n + " ") >= 0 || c.text.indexOf("by " + played.n + " ") >= 0 || c.text.indexOf(played.n + " puts a Venom Token") === 0 || c.text.indexOf(" through " + played.n + " at ") >= 0);
   const noPower = played && !itself ? (noPowerReason(g, log0, played) || played.n + " adds no power") : null;
   // the round end: Venom split by source, every other change one named event
   const round = g.round;
