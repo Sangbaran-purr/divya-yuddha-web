@@ -70,7 +70,7 @@ const SUITES = [
   { name: "hallstake",     file: path.join(__dirname, "suites", "hallstake.js"), chain: false, expect: 34 },
   // MINI-GAMES-1 R1: the Daily Puzzle — 14 puzzles, each solved to EXACTLY ONE winning play by the offline solver over the
   // site's copy of the real engine; the solver's refusals (two wins, none, malformed, unknown card, luck) and mutants.
-  { name: "puzzles",       file: path.join(__dirname, "suites", "puzzles.js"), chain: false, expect: 48 },
+  { name: "puzzles",       file: path.join(__dirname, "suites", "puzzles.js"), chain: false, expect: 62 },
   // MINI-GAMES-1 R2: the Daily Puzzle PAGE — the real page in jsdom (controlled clock and store): UTC dates incl. +5:30
   // and -8, win / wrong / draw / reveal / missed day, storage blocked, no future puzzle, in-page solver = offline solver,
   // no plain answer or explanation in any served file.

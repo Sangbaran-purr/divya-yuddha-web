@@ -93,7 +93,7 @@ function arithmetic(text) {
   const corpus = tracked.map((f) => { try { return fs.readFileSync(path.join(SITE, f), "utf8"); } catch (e) { return ""; } }).join("\n");
   const sentences = decoded.flatMap((t) => t.split(/(?<=\.) /)).filter((x) => x.length > 30);
   ok("N1 · no generated explanation sentence appears in plain text in any tracked file (" + sentences.length + " sentences, " + tracked.length + " files); the owner's plain file is not in the repo",
-    sentences.every((s) => corpus.indexOf(s) < 0) && !/DAILY PUZZLE, .* — ANSWERS AND EXPLANATIONS \(GENERATED\)/.test(corpus));
+    sentences.every((s) => corpus.indexOf(s) < 0) && !/DAILY PUZZLE, [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2} – [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2} \d{4} — ANSWERS AND EXPLANATIONS \(GENERATED\)/.test(corpus));   // a written file's dated heading (batch.js's own template line is not one)
   const runDates = ["2027-01-04", "2027-01-05"];
   const log = execFileSync(process.execPath, [path.join(SITE, "scripts", "daily-gen", "batch.js"), "--from", runDates[0], "--to", runDates[1], "--dry"], { cwd: SITE, encoding: "utf8" });
   const same = G.generate(runDates, PUZZLES);
