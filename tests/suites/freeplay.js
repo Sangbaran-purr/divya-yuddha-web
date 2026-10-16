@@ -261,7 +261,10 @@ async function run() {
   // Puzzle plaque + its door, and the stamp 07c3530 -> 49555c0. Those exact pieces are taken out before comparing, so
   // ANY other drift in the copy still turns this red.
   const withoutDoor = (t) => t.replace(/      <button class="mode plaque-lg active" id="mode-daily">[^\n]*<\/button>\n/, "")
-    .replace(/\/\* MINI-GAMES-1 R2 — THE DAILY PUZZLE DOOR[\s\S]*?\n\}\)\(\);\n/, "");
+    .replace(/\/\* MINI-GAMES-1 R2 — THE DAILY PUZZLE DOOR[\s\S]*?\n\}\)\(\);\n/, "")
+    // MINI-GAMES-2 (owner ruling 2026-10-16) re-synced from game ad978f0: the Smriti plaque right after Daily Puzzle + its door, undone exactly
+    .replace(/      <button class="mode plaque-lg active" id="mode-smriti">[^\n]*<\/button>\n/, "")
+    .replace(/\/\* MINI-GAMES-2 — THE SMRITI DOOR[\s\S]*?\n\}\)\(\);\n/, "");
   // MINI-GAMES-1 Daily Puzzle Effects R2 (2026-10-15) re-synced from game 1fad925, then 6b8d0ea (the owner's two changes): the battle screen's puzzle mode (?puzzle=1) —
   // ONE guarded block above pump() + nine one-line guards, each undone here EXACTLY (any other drift still turns red).
   const withoutPuzzleMode = (t) => {
@@ -289,10 +292,10 @@ async function run() {
     .replace('} catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }', '} catch (e) { location.replace("../rite.html"); return; }')
     .replace(/\n    if \(dailyFrame\) return; \/\* MINI-GAMES-1: nor inside the Daily Puzzle's frame[^\n]*/, "");
   const nowCopy = withoutDailyFrame(withoutPuzzleMode(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")));
-  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle door, the Daily Puzzle's battle mode (?puzzle=1) and its gate road (MINI-GAMES-1), and the stamp",
+  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle and Smriti doors (MINI-GAMES-1/-2), the Daily Puzzle's battle mode (?puzzle=1) and its gate road (MINI-GAMES-1), and the stamp",
      outsideS3(head("game/index.html")) === outsideS3(withoutDoor(nowCopy)) && withoutDoor(nowCopy) !== nowCopy &&
      withoutPuzzleMode(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")).indexOf("PUZZLE_MODE") < 0 &&
-     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === "ae56424");
+     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === "ad978f0");
   // SITE-AUDIT-1 grew the sync script (GAME_REF + the Store relink); the GATE it injects must not have moved
   const gateBlock = (t) => (t.match(/<!-- DYW-GATE-START[\s\S]*?<!-- DYW-S3-SUPPRESS-START/) || [""])[0];
   const shNow = fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8"), copyNow = fs.readFileSync(path.join(SITE, "game/index.html"), "utf8");
@@ -303,7 +306,7 @@ async function run() {
   const demo = fs.readFileSync(path.join(SITE, "demo/index.html"), "utf8"), demoHead = head("demo/index.html");
   ok("DG3 · the demo still seeds the pass and its mark the same way; ONLY its button changed ('Play free' → the rite)",
      demo.replace('<a class="demo-cta" href="../rite.html">Play free</a>', '<a class="demo-cta" href="../index.html">Get Access</a>')
-       .replace("../game/index.html?v=ae56424", "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows the MINI-GAMES-1 re-syncs
+       .replace("../game/index.html?v=ad978f0", "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows the MINI-GAMES-1/-2 re-syncs
      /sessionStorage\.setItem\("dyw_pass", "1"\)/.test(demo) && /sessionStorage\.setItem\("dyw_demo", "1"\)/.test(demo));
 
   // ═══════════════ ST · THE STAMPS ═══════════════

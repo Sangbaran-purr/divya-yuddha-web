@@ -107,7 +107,7 @@ async function run() {
     const navs = []; const vc = new VirtualConsole(); vc.on("jsdomError", (e) => { if (/navigation/.test(e.message)) navs.push(1); });
     const dom = new JSDOM(`<!doctype html><body><div class="roundels"><button class="roundel locked" data-soon title="Store — coming soon"><svg></svg><span class="rlock">🔒</span></button>
       <button class="roundel locked" data-soon title="Decks — coming soon"><span class="rlock">🔒</span></button></div></body>`,
-      { url: "https://divyayuddha.games/game/index.html?v=ae56424", runScripts: "outside-only", pretendToBeVisual: true, virtualConsole: vc });
+      { url: "https://divyayuddha.games/game/index.html?v=ad978f0", runScripts: "outside-only", pretendToBeVisual: true, virtualConsole: vc });
     const w = dom.window; let toasts = 0;
     w.eval(code);
     w.document.querySelectorAll("[data-soon]").forEach((b) => { b.onclick = () => toasts++; });   // the game's own "Coming soon" handler
@@ -121,13 +121,13 @@ async function run() {
     const block = (t) => (t.match(/<!-- DYW-S3-SUPPRESS-START[\s\S]*?<!-- DYW-S3-SUPPRESS-END -->/) || [""])[0];
     ok("GM3 · the copy's S3 block is BYTE-IDENTICAL to what the sync script injects (re-applied every sync, never hand-edited)",
        block(R("scripts/sync_game.sh")).length > 500 && block(R("scripts/sync_game.sh")) === block(g) && block(g).indexOf("(6) SITE-AUDIT-1") >= 0 &&
-       R("game/STAMP").trim() === "ae56424");
+       R("game/STAMP").trim() === "ad978f0");
     // MINI-GAMES-1 — the Daily Puzzle door on the game's main menu (owner ruling 2026-10-14: found from the game only)
     const btn = (g.match(/<button class="mode plaque-lg active" id="mode-daily">[\s\S]*?<\/button>/) || [""])[0];
     const door = (g.match(/\(function\(\)\{\n  var dp = document\.getElementById\('mode-daily'\);[\s\S]*?\n\}\)\(\);/) || [""])[0];
     const run = (demo) => {
       const navs = []; const vc2 = new VirtualConsole(); vc2.on("jsdomError", (e) => { if (/navigation/.test(e.message)) navs.push(e.message); });
-      const d = new JSDOM("<!doctype html><body><div id='landing'>" + btn + "</div></body>", { url: "https://divyayuddha.games/game/index.html?v=ae56424", runScripts: "outside-only", virtualConsole: vc2 });
+      const d = new JSDOM("<!doctype html><body><div id='landing'>" + btn + "</div></body>", { url: "https://divyayuddha.games/game/index.html?v=ad978f0", runScripts: "outside-only", virtualConsole: vc2 });
       if (demo) d.window.sessionStorage.setItem("dyw_demo", "1");
       d.window.eval(door);
       const b = d.window.document.getElementById("mode-daily");
@@ -139,6 +139,24 @@ async function run() {
        /Daily Puzzle<small class="cap">A new puzzle every day<\/small>/.test(btn) && live.b && live.b.dataset.href === "https://divyayuddha.games/play/daily/"
          && live.navs.length === 1 && /location\.href = dp\.dataset\.href/.test(door) && !/window\.open|_blank/.test(door), JSON.stringify(live.navs));
     ok("GM5 · inside the site's demo the Daily Puzzle plaque is not shown (the demo keeps its face, like Multiplayer)", !demoRun.b && demoRun.navs.length === 0);
+    // MINI-GAMES-2 — the Smriti door (owner ruling 2026-10-16: found from the game's menu only; right after Daily Puzzle)
+    const sbtn = (g.match(/<button class="mode plaque-lg active" id="mode-smriti">[\s\S]*?<\/button>/) || [""])[0];
+    const sdoor = (g.match(/\(function\(\)\{\n  var sm = document\.getElementById\('mode-smriti'\);[\s\S]*?\n\}\)\(\);/) || [""])[0];
+    const srun = (demo) => {
+      const navs = []; const vc3 = new VirtualConsole(); vc3.on("jsdomError", (e) => { if (/navigation/.test(e.message)) navs.push(e.message); });
+      const d = new JSDOM("<!doctype html><body><div id='landing'>" + sbtn + "</div></body>", { url: "https://divyayuddha.games/game/index.html?v=ad978f0", runScripts: "outside-only", virtualConsole: vc3 });
+      if (demo) d.window.sessionStorage.setItem("dyw_demo", "1");
+      d.window.eval(sdoor);
+      const b = d.window.document.getElementById("mode-smriti");
+      if (b) b.click();
+      return { b: b, navs: navs };
+    };
+    const slive = srun(false), sdemo = srun(true);
+    const order = [...g.matchAll(/<button class="mode plaque-lg[^"]*"(?: id="([^"]+)")?/g)].map((m) => m[1] || "locked");
+    ok("GM6 · the game copy's main menu carries the Smriti plaque ('Smriti' / 'Match the pairs from memory') RIGHT AFTER Daily Puzzle, and tapping it opens https://divyayuddha.games/play/smriti/ in the SAME tab",
+       /Smriti<small class="cap">Match the pairs from memory<\/small>/.test(sbtn) && order[order.indexOf("mode-daily") + 1] === "mode-smriti" && slive.b && slive.b.dataset.href === "https://divyayuddha.games/play/smriti/"
+         && slive.navs.length === 1 && /location\.href = sm\.dataset\.href/.test(sdoor) && !/window\.open|_blank/.test(sdoor), JSON.stringify({ order, navs: slive.navs }));
+    ok("GM7 · inside the site's demo the Smriti plaque is not shown (like Daily Puzzle and Multiplayer)", !sdemo.b && sdemo.navs.length === 0);
   }
 
   // ═══ SY · THE SYNC'S ENTRY-LINK LEDGER COVERS EVERY PAGE THAT LINKS THE GAME (owner ruling 2026-10-15) ═══

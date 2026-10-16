@@ -1,8 +1,8 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `ae56424dd5de72266d97dc4b245e537f1f573908` (ae56424)
-- Source committed: 2026-10-15 17:14:48 +0530
+- Source commit: `ad978f01112f7f560edf295d2867a038bebbc7d4` (ad978f0)
+- Source committed: 2026-10-16 12:53:36 +0530
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -31,14 +31,14 @@
 - MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle (/play/daily/) frames this copy with ?puzzle=1. That frame — same origin, parent under /play/daily/ — is the ONE road that skips the pass (the puzzle is free for everyone) and the gem. A direct visit with ?puzzle=1, or any other frame, still goes to the rite.
 
 ## Notes at sync time
-- Source working tree dirty files: 8 (ignored by the archive method).
+- Source working tree dirty files: 13 (ignored by the archive method).
 - game/ in-repo size: 2272 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty-two site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2, my-invites.html x2) are stamped game/index.html?v=ae56424 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 22.
+- The twenty-two site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2, my-invites.html x2) are stamped game/index.html?v=ad978f0 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 22.
 
 ## STAMP (S-HALL-WIRE-1 R4)
-- game/STAMP holds the source short sha (ae56424), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
+- game/STAMP holds the source short sha (ad978f0), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh

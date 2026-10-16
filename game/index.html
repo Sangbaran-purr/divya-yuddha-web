@@ -2364,6 +2364,7 @@ body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn, body.puzzl
       <button class="mode plaque-lg active" id="mode-vault"><div class="frame"><div class="face">Ratna Vault<small class="cap">The season's rarest — a showcase</small></div></div></button>
       <button class="mode plaque-lg active" id="mode-factions"><div class="frame"><div class="face">Factions &amp; Realms<small class="cap">Meet the armies and the realms</small></div></div></button>
       <button class="mode plaque-lg active" id="mode-daily"><div class="frame"><div class="face">Daily Puzzle<small class="cap">A new puzzle every day</small></div></div></button>
+      <button class="mode plaque-lg active" id="mode-smriti"><div class="frame"><div class="face">Smriti<small class="cap">Match the pairs from memory</small></div></div></button>
       <button class="mode plaque-lg locked" data-soon><div class="frame"><div class="face">Multiplayer<small class="cap">Coming soon</small></div></div>
         <span class="lockic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
       </button>
@@ -7929,6 +7930,17 @@ $('sadhanapick').onclick=(e)=>{ if(e.target===$('sadhanapick')) $('sadhanapick')
   if (isDemo) { dp.remove(); return; }
   dp.dataset.href = 'https://divyayuddha.games/play/daily/';
   dp.onclick = function(){ location.href = dp.dataset.href; };   // normal navigation, same tab
+})();
+/* MINI-GAMES-2 — THE SMRITI DOOR (owner ruling 2026-10-16: players find Smriti, the memory game, from the game's main
+   menu only — no site-nav or dashboard link). It lives on the site (divyayuddha.games/play/smriti/), free for everyone.
+   The Daily Puzzle door's pattern exactly: an ABSOLUTE host, normal navigation in the same tab, removed in the site's demo. */
+(function(){
+  var sm = document.getElementById('mode-smriti');
+  if (!sm) return;
+  var isDemo = false; try { isDemo = !!sessionStorage.getItem('dyw_demo'); } catch (e) {}
+  if (isDemo) { sm.remove(); return; }
+  sm.dataset.href = 'https://divyayuddha.games/play/smriti/';
+  sm.onclick = function(){ location.href = sm.dataset.href; };   // normal navigation, same tab
 })();
 document.querySelectorAll('#landing .mode.locked').forEach(b=> b.onclick=()=>toastMute('Coming soon'));
 
