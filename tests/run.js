@@ -82,7 +82,7 @@ const SUITES = [
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R1: the generator (scripts/daily-gen) and the batch it wrote — exactly one winner
   // on 8 seeds, explanations from the engine with a named cause per change and arithmetic read back from the words, the
   // content rules, no near-duplicates, launch cards only, no answer in a run's log; five owner-named breakages, each caught.
-  { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 26 },
+  { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 39 },
 ];
 
 function freePort() {

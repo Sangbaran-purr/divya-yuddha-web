@@ -21,17 +21,23 @@ const from = arg("--from"), to = arg("--to"), dry = process.argv.indexOf("--dry"
 if (!/^\d{4}-\d{2}-\d{2}$/.test(from || "") || !/^\d{4}-\d{2}-\d{2}$/.test(to || "")) { console.error("usage: batch.js --from YYYY-MM-DD --to YYYY-MM-DD [--plain file] [--dry]"); process.exit(2); }
 const plainPath = arg("--plain", path.join(os.homedir(), "Desktop", "DY_daily_answers_" + from + ".txt"));
 
-const existing = JSON.parse(fs.readFileSync(PUZ, "utf8"));
+const all0 = JSON.parse(fs.readFileSync(PUZ, "utf8"));
 const dates = G.datesFrom(from, to);
-if (existing.some((p) => dates.indexOf(p.date) >= 0)) { console.error("refused: some of these dates already have a puzzle"); process.exit(1); }
+// --recheck: re-judge the stored puzzles for these dates under today's rules (keeping those that pass); --veto d1,d2: those
+// dates are replaced whatever happens (and their positions are never offered again)
+const recheck = process.argv.indexOf("--recheck") >= 0, vetoed = (arg("--veto", "") || "").split(",").filter(Boolean);
+const stored = all0.filter((p) => dates.indexOf(p.date) >= 0);
+if (stored.length && !recheck) { console.error("refused: some of these dates already have a puzzle (use --recheck)"); process.exit(1); }
+const existing = all0.filter((p) => dates.indexOf(p.date) < 0);
+const keep = {}; stored.forEach((p) => { if (vetoed.indexOf(p.date) < 0) keep[p.date] = p; });
 const t0 = Date.now();
-const out = G.generate(dates, existing);
-out.forEach((x) => console.log(x.puzzle.date + "  " + x.puzzle.difficulty.padEnd(6) + "  " + x.puzzle.you.faction + " vs " + x.puzzle.them.faction + "  " + x.puzzle.realm + "  " + x.mechanic));
+const out = G.generate(dates, existing, { keep, avoid: stored.filter((p) => vetoed.indexOf(p.date) >= 0) });
+out.forEach((x) => console.log(x.puzzle.date + "  " + x.puzzle.difficulty.padEnd(6) + "  " + x.puzzle.you.faction + " vs " + x.puzzle.them.faction + "  " + x.puzzle.realm + "  " + x.mechanic + (recheck ? (x.kept ? "  (kept)" : "  (new)") : "")));
 console.log(out.length + " puzzles in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" + (dry ? " (dry run: nothing written)" : ""));
 if (dry) process.exit(0);
 
 // the repo: positions, fingerprints, encoded explanations
-const all = existing.concat(out.map((x) => x.puzzle)).sort((a, b) => (a.date < b.date ? -1 : 1));
+const all = existing.concat(out.map((x) => x.puzzle)).sort((a, b) => (a.date < b.date ? -1 : 1));   // replaces this run's dates
 fs.writeFileSync(PUZ, "[\n" + all.map((p) => "  " + JSON.stringify(p)).join(",\n") + "\n]\n");   // the file's own layout: one puzzle per line
 const fx = JSON.parse(fs.readFileSync(FIX, "utf8"));
 out.forEach((x) => { fx.digests[x.puzzle.id] = answerDigest(fx.salt, x.puzzle.id, x.winner.play, x.winner.target); });

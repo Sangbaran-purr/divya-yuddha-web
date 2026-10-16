@@ -23,28 +23,50 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 function libFrom(src) { const m = new Module(LIB_PATH, null); m.filename = LIB_PATH; m.paths = Module._nodeModulePaths(path.dirname(LIB_PATH)); m._compile(src, LIB_PATH); return m.exports; }
 function mutant(from, to) { if (LIB_SRC.indexOf(from) < 0) throw new Error("mutant anchor gone: " + from.slice(0, 60)); return libFrom(LIB_SRC.split(from).join(to)); }
 
-// the explanation's numbers, read back from its own words: before + every change = after the play; + the round end = final
-function arithmetic(text) {
-  const m = /^Before your play the round stands (\d+)–(\d+)(?: in [^.]+)?\. Play [^:]+: (.*?) — (\d+)–(\d+)\. (?:At the round's end (.*?)\. )?You win (\d+)–(\d+)\./.exec(text);
-  if (!m) return { ok: false, why: "pattern" };
-  const [A, B, C, Dd, E2, F] = [m[1], m[2], m[4], m[5], m[7], m[8]].map(Number);
+// the explanation's numbers, read back from its own words — for the winning play AND for every tempting wrong play:
+// the position + every named change = the score after the play; + every named round-end change = the final score
+function readChanges(list, start) {
   const sum = [0, 0], named = [];
-  for (const it of m[3].split("; ")) {
+  for (const it of list) {
     let x;
     const side = /^the opponent's /.test(it) || / joins the opponent's side/.test(it) ? 1 : 0;
-    const ARR = / (?:enters|joins (?:your|the opponent's) side(?: through .+?)?) at (\d+)/;   // "enters at 5" / "joins your side through Nala at 2"
+    const ARR = / (?:enters|joins (?:your|the opponent's) side through .+?) at (\d+)/;
     if ((x = / and (gains|loses) (\d+) from ([^(]+) \(\d+\)$/.exec(it)) && ARR.test(it)) { sum[side] += +ARR.exec(it)[1] + (x[1] === "gains" ? 1 : -1) * +x[2]; named.push(true); }
     else if ((x = new RegExp(ARR.source + "$").exec(it))) sum[side] += +x[1];
-    else if ((x = / Leaps onto .* and gains (\d+) \((\d+)→(\d+)\)$/.exec(it))) { sum[0] += +x[1]; named.push(+x[3] - +x[2] === +x[1]); }
-    else if (/^(first|then) .* Leaps onto [^;]+$/.test(it)) { /* a Leap that changes nothing countable */ }
-    else if ((x = / (gains|loses) (\d+) from ([^(]+) \((\d+)→(\d+)\)$/.exec(it))) { const d = (x[1] === "gains" ? 1 : -1) * +x[2]; sum[side] += d; named.push(+x[5] - +x[4] === d); }
+    else if ((x = / (?:Leaps onto|makes a free Leap onto) .+ and gains (\d+) \((\d+)→(\d+)\)$/.exec(it))) { sum[side] += +x[1]; named.push(+x[3] - +x[2] === +x[1]); }
+    else if (/^(first|then) .* Leaps onto [^;]+$/.test(it)) { /* a Leap that changes nothing */ }
+    else if ((x = / (gains|loses) (\d+) from ([^(]+) \((\d+)→(\d+)\)$/.exec(it))) { const d = (x[1] === "gains" ? 1 : -1) * +x[2]; sum[side] += d; named.push(+x[5] - +x[4] === d && x[3].trim() !== "Leap"); }
     else if ((x = / is removed by (.+) \(−(\d+)\)$/.exec(it))) { sum[side] -= +x[2]; named.push(true); }
+    else if (/ puts a Venom Token on /.test(it) || / adds no power$/.test(it) || / is an Artifact: it adds no power$/.test(it) || / cancels /.test(it)) { /* no power moves */ }
     else return { ok: false, why: "unread change: " + it };
   }
-  const end = [0, 0];
-  if (m[6]) for (const it of m[6].split("; ")) { const x = /^(your|the opponent's) .+ ([+−])(\d+) from (.+)$/.exec(it); if (!x) return { ok: false, why: "unread end change: " + it }; end[x[1] === "your" ? 0 : 1] += (x[2] === "+" ? 1 : -1) * +x[3]; named.push(!!x[4]); }
-  const good = A + sum[0] === C && B + sum[1] === Dd && C + end[0] === E2 && Dd + end[1] === F && E2 > F && named.every(Boolean);
-  return { ok: good, final: [E2, F], why: J({ A, B, C, D: Dd, E: E2, F, sum, end }) };
+  return { ok: true, sum, named };
+}
+function readEnd(text) {
+  const end = [0, 0], named = [];
+  if (text) for (const it of text.split("; ")) { const x = /^(your|the opponent's) .+ ([+−])(\d+) from (.+)$/.exec(it); if (!x) return { ok: false, why: "unread end change: " + it };
+    end[x[1] === "your" ? 0 : 1] += (x[2] === "+" ? 1 : -1) * +x[3]; named.push(!/^(Venom)$/.test(x[4])); }
+  return { ok: true, end, named };
+}
+function arithmetic(text) {
+  const m = /^Before your play the round stands (\d+)–(\d+)(?: in [^.]+)?\. Play [^:]+: (.*?) — (\d+)–(\d+)\. (?:At the round's end (.*?)\. )?You win (\d+)–(\d+)\.(?: ([^.]+) decides it: [^.]+\.)? Tempting but wrong: (.*)\.$/.exec(text);
+  if (!m) return { ok: false, why: "pattern" };
+  const [A, B, C, Dd, E2, F] = [m[1], m[2], m[4], m[5], m[7], m[8]].map(Number);
+  const pc = readChanges(m[3].split("; ")), pe = readEnd(m[6]);
+  if (!pc.ok) return pc; if (!pe.ok) return pe;
+  let good = A + pc.sum[0] === C && B + pc.sum[1] === Dd && C + pe.end[0] === E2 && Dd + pe.end[1] === F && E2 > F && pc.named.concat(pe.named).every(Boolean);
+  const wrongs = m[10].split(/\. (?=[A-Z][^:]* falls short: )/);
+  for (const w of wrongs) {
+    const x = /^(.+?) falls short: (.*?); the round ends (\d+)–(\d+), (?:a draw, and a draw is not a win|(\d+) short)$/.exec(w);
+    if (!x) return { ok: false, why: "wrong-play pattern: " + w.slice(0, 80) };
+    const parts = x[2].split("; "), at = parts.findIndex((q) => /^at the round's end /.test(q));
+    const playParts = at < 0 ? parts : parts.slice(0, at), endPart = at < 0 ? "" : parts.slice(at).join("; ").replace(/^at the round's end /, "");
+    const wc = readChanges(playParts), we = readEnd(endPart);
+    if (!wc.ok) return wc; if (!we.ok) return we;
+    const fy = A + wc.sum[0] + we.end[0], ft = B + wc.sum[1] + we.end[1];
+    if (fy !== +x[3] || ft !== +x[4] || !wc.named.concat(we.named).every(Boolean) || (x[5] ? +x[4] - +x[3] !== +x[5] : +x[3] !== +x[4])) { good = false; return { ok: false, why: "wrong play " + x[1] + " does not add up: " + J({ fy, ft, said: [x[3], x[4]] }) }; }
+  }
+  return { ok: good, final: [E2, F], why: J({ A, B, C, D: Dd, E: E2, F, sum: pc.sum, end: pe.end }) };
 }
 
 (async () => {
@@ -60,12 +82,12 @@ function arithmetic(text) {
   ok("G2 · every explanation is the one the engine writes today: the encoded note equals a fresh write-up from the engine's own numbers and events",
     decoded.every((t, i) => t && t === fresh[i]), B2.filter((P, i) => decoded[i] !== fresh[i]).map((P) => P.date).join(", "));
   const ar = decoded.map(arithmetic);
-  ok("G3 · THE ARITHMETIC, read back from each explanation's own words: the position + every change = the score after the play; + the round end = the final score, which is the solver's",
+  ok("G3 · THE ARITHMETIC (Rule B), read back from each explanation's own words — for the winning play AND every tempting wrong play: the position + every named change = after the play; + every named round-end change = the final score (the winner's is the solver's)",
     ar.every((a, i) => a.ok && a.final[0] === solved[B2[i].id].winners[0].you && a.final[1] === solved[B2[i].id].winners[0].them),
     ar.map((a, i) => (a.ok ? "" : B2[i].date + " " + a.why)).filter(Boolean).join(" | "));
-  ok("G4 · ONE NAMED CAUSE per change: every gain, loss and removal names the ability behind it (\"from …\", \"by …\")",
-    decoded.every((t) => { const play = t.split(" Tempting")[0].replace(/ Leaps onto [^;]*? and gains \d+ \(\d+→\d+\)/g, " Leaps");   // a Leaper's gain IS the Leap, told with it
-      return !/(gains|loses) \d+ \(/.test(play) && !/ is removed \(/.test(play); }));
+  ok("G4 · EVERY CAUSE NAMED (Rule B): every gain, loss and removal names its ability, realm or effect; a Leap names what it copies; Venom is split by source (the Naga drain, a Unit's own Tokens); no vague line ('lifts your side', a bare 'from Leap', a bare 'from Venom')",
+    decoded.every((t) => !/(gains|loses) \d+ \(/.test(t.replace(/ (?:Leaps onto|makes a free Leap onto) [^;]*? and gains \d+ \(\d+→\d+\)/g, "")) && !/ is removed \(/.test(t)
+      && !/lifts your side/.test(t) && !/ from Leap \(/.test(t) && !/ from Venom[;.]/.test(t)));
   ok("G5 · the explanation follows the fixed pattern: the position, the play and its changes, the round end, the final score, then the two most tempting wrong plays with the reason each falls short",
     decoded.every((t) => /^Before your play the round stands \d+–\d+/.test(t) && / You win \d+–\d+\./.test(t) && / Tempting but wrong: .+ falls short: .+(\d+ short|a draw is not a win)/.test(t)));
   // the content rules
@@ -77,8 +99,14 @@ function arithmetic(text) {
   ok("S3 · realms and mechanics spread: " + realms.size + " realms; no mechanic but Hero more than 3 times (" + J(mech) + ")", realms.size >= 4 && Object.keys(mech).every((k) => k === "hero" || mech[k] <= 3) && Object.keys(mech).length >= 5);
   ok("S4 · difficulty rises Monday→Sunday (Mon–Tue easy, Wed–Fri medium, Sat–Sun hard), following the weekday from Thu 29 Oct",
     B2.every((p) => p.difficulty === G.DIFF_BY_DAY[new Date(p.date + "T00:00:00Z").getUTCDay()]));
-  ok("S5 · realm puzzles are labelled so only when the engine says the realm decides it (the same position in Mrityulok is not the same puzzle)",
-    B2.filter((p) => /^realm: /.test(p.mechanic)).every((p) => G.realmMatters(p, solved[p.id])) && B2.filter((p) => p.realm !== "mrityulok" && !/^realm: /.test(p.mechanic)).every((p) => !G.realmMatters(p, solved[p.id])));
+  const rc = (p) => { const w = solved[p.id].winners[0], n = G.narrate(p, w); return n ? G.realmCheck(p, w, n, w.line) : { ok: false }; };
+  ok("S5 · THE REALM RULE: a realm-labelled puzzle names its realm as the cause of a change AND says how it decides the round ('… decides it: in Mrityulok the same play ends …'); every other realm puzzle's numbers are exactly Mrityulok's (the realm changes nothing, so it is not the label)",
+    B2.filter((p) => /^realm: /.test(p.mechanic)).every((p, i) => { const t = decoded[B2.indexOf(p)], r = rc(p); return r.ok && r.matters && t.indexOf("from " + r.name) >= 0 && t.indexOf(r.name + " decides it: ") >= 0; })
+      && B2.filter((p) => p.realm !== "mrityulok" && !/^realm: /.test(p.mechanic)).every((p) => { const r = rc(p); return r.ok && !r.matters; }));
+  ok("S10 · RULE A: no stolen or off-faction card on either side of any position — every card belongs to its side's own faction",
+    B2.every((p) => G.factionsTrue(G.PZ.load(p, E, 1), p)));
+  ok("S11 · every card left in your hand can be played (no card locked, no second Hero, no revive with no one to revive)",
+    B2.every((p) => { const g = G.PZ.load(p, E, 1); return E.playableIndices(g, 0).length === g.players[0].hand.length; }));
   const sigs = B1.concat(B2).map(G.signature); let worst = 0;
   for (let i = 0; i < sigs.length; i++) for (let k = i + 1; k < sigs.length; k++) worst = Math.max(worst, G.similarity(sigs[i], sigs[k]));
   ok("S6 · NO NEAR-DUPLICATES across batches 1 and 2 (largest overlap " + worst.toFixed(2) + " < " + G.NEAR_DUP + ")", worst < G.NEAR_DUP);
@@ -125,6 +153,44 @@ function arithmetic(text) {
   const m4 = mutant('(d > 0 ? "gains " + d : "loses " + (-d)) + " from " + cs[0].name + " (" + a.p + "→" + b.p + ")"', '(d > 0 ? "gains " + (d + 1) : "loses " + (-d + 1)) + " from " + cs[0].name + " (" + a.p + "→" + b.p + ")"');
   const bad = B2.map((P) => { const e = m4.explain(P, solved[P.id]); return e ? arithmetic(e.text) : { ok: true }; });
   ok("M4 · breakage 'an explanation that doesn't add up' is caught (G3 goes red)", bad.some((a) => !a.ok));
+  // R2 (owner rulings 2026-10-16): Rule A, Rule B and the realm rule — each on a real position, each with its breakage
+  const R2P = JSON.parse(execFileSync("git", ["show", "b9bff27:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" }));
+  const old = (d) => clone(R2P.find((p) => p.date === d));
+  let stolen = null; { const r = G.mulberry32(11); for (let i = 0; i < 20000 && !stolen; i++) { const P = G.candidate(r, { date: "2026-10-29", you: "asuras", realm: "mrityulok" }); if (P && G.judge(P).reason === "STOLEN_CARD") stolen = P; } }
+  ok("K5 · RULE A: a position with a stolen card on the board is REFUSED (STOLEN_CARD)", !!stolen && rejects(G, stolen, "STOLEN_CARD"));
+  const m6 = mutant("function factionsTrue(g, P) {", "function factionsTrue(g, P) { return true;");
+  ok("M6 · breakage 'allow a stolen card' is caught (K5 goes red)", !!stolen && !rejects(m6, stolen, "STOLEN_CARD"));
+  const vague = old("2026-10-30");   // the R2 preview's 30 Oct: its Vanara Scout line could only say "lifts your side"
+  ok("K6 · RULE B: a puzzle whose tempting wrong play cannot be told with every cause named is REFUSED (EXPLANATION) — the R2 preview's 30 Oct", rejects(G, vague, "EXPLANATION"));
+  // the breakage: a wrong play the writer cannot tell is printed anyway as a vague line, and the "most tempting must be
+  // told" guard is dropped — the R2 preview's 30 Oct would then be ACCEPTED
+  const STRICT = "    const L = lineFor(P, p); if (!L) return null;\n    const nl = narrate(P, p, { line: L }); if (!nl || nl.T2[0] !== p.you || nl.T2[1] !== p.them) return null;";
+  const VAGUE = "    const L = lineFor(P, p); const nl = L && narrate(P, p, { line: L });\n    if (!nl || nl.T2[0] !== p.you || nl.T2[1] !== p.them) { wrong.push(clean(p.key) + \" falls short: it lifts your side to \" + p.you + \"; the round ends \" + p.you + \"–\" + p.them); continue; }";
+  const GUARD = "  if (!wrong.length || pick.some((p) => wrong.every((t) => t.indexOf(clean(p.key) + \" falls short\") !== 0))) return null;";
+  if (LIB_SRC.indexOf(STRICT) < 0 || LIB_SRC.indexOf(GUARD) < 0) throw new Error("mutant anchor gone: the wrong-play guard");
+  const m7 = libFrom(LIB_SRC.split(STRICT).join(VAGUE).split(GUARD).join(""));
+  ok("M7 · breakage 'a vague wrong-play line' is caught (K6 goes red)", !rejects(m7, vague, "EXPLANATION"));
+  const m8 = mutant('  const mid = n.changes.filter((c) => !used.has(c)).map((c) => (c.leap ? whose(c.side) + c.leap.who + " makes a free Leap onto " + c.leap.onto + " and gains " + c.d + c.text.slice(c.text.lastIndexOf(" (")) : c.text));',
+    '  const mid = n.changes.filter((c) => !used.has(c)).map((c) => c.text);');
+  const leapy = B2.filter((p) => /makes a free Leap onto/.test(decoded[B2.indexOf(p)]));
+  const m8txt = leapy.map((p) => (m8.explain(p, solved[p.id]) || {}).text || "");
+  ok("K7 · RULE B: a Leap gain names what it copies — a card's own free Leap reads 'makes a free Leap onto …' (" + leapy.length + " puzzle(s) with one)", leapy.length >= 1);
+  ok("M8 · breakage 'an unnamed Leap gain' is caught (G4 goes red)", m8txt.some((t) => / from Leap \(/.test(t)));
+  const b1v = { 7: { side: 1, n: "Ravana", venom: 0, base: 12 } };
+  const deep = [{ type: "toast", abilityName: "Venom", text: "Venom drains Opponent’s Units −2" }, { type: "venom", targetUids: [7], amount: -2, abilityName: "Venom" }];
+  const tokens2 = [{ type: "venom", targetUids: [7], amount: -2, abilityName: "Venom" }];
+  ok("K8 · RULE B: a multi-source Venom change cannot be split, so it is REFUSED — a −2 drain (base drain + its deepener) and Tokens that don't match the Unit's own count", G.venomSources(deep, b1v) === null && G.venomSources(tokens2, b1v) === null
+    && J(G.venomSources([{ type: "toast", abilityName: "Venom", text: "Venom drains Opponent’s Units −1" }, { type: "venom", targetUids: [7], amount: -1 }], b1v)) === J([{ side: 1, n: "Ravana", amount: -1, name: "the Naga Venom drain" }]));
+  const m9 = mutant("if (drainAmt !== 1 || e.amount !== -1) return null; out.push({ side: who.side, n: who.n, amount: -1, name: \"the Naga Venom drain\" });",
+    "out.push({ side: who.side, n: who.n, amount: e.amount, name: \"the Naga Venom drain\" });");
+  ok("M9 · breakage 'an unsplit multi-source change' is caught (K8 goes red)", m9.venomSources(deep, b1v) !== null);
+  const yaksha = B2.find((p) => p.realm === "yaksha");
+  ok("K9 · THE REALM RULE: a puzzle set in a realm that changes nothing is NOT labelled a realm puzzle (" + (yaksha ? yaksha.date + ": " + G.judge(yaksha).mechanic : "none") + ")", !!yaksha && !/^realm: /.test(G.judge(yaksha).mechanic));
+  const m10 = mutant('  if (realm && realm.matters) return "realm: " + REALM_NAME[P.realm].toLowerCase();', '  if (P.realm !== "mrityulok") return "realm: " + REALM_NAME[P.realm].toLowerCase();');
+  ok("M10 · breakage 'label any non-Mrityulok puzzle a realm puzzle' is caught (K9 goes red)", !!yaksha && /^realm: /.test(m10.judge(yaksha).mechanic));
+  const locked = old("2026-11-03");   // the R2 preview's 3 Nov: Kesari locked by the opponent's Narada
+  ok("K10 · a position with a card in your hand the engine forbids (Kesari, locked by Narada) is REFUSED (UNPLAYABLE_CARD)", rejects(G, locked, "UNPLAYABLE_CARD"));
+
   // a duplicate: the generator, offered the very puzzle it would make, must not make it again
   const d1 = G.generate(["2027-01-04"], B1, { maxTries: 20000 })[0];
   const again = G.generate(["2027-01-04"], B1.concat([d1.puzzle]), { maxTries: 20000 })[0];
