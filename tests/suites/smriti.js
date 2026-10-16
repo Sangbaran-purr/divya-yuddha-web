@@ -486,14 +486,10 @@ function checkBest(Sx) {
     const sb = pageAt({ blocked: true });
     ok("G10 · storage blocked: the level screen still says 'This browser isn't saving your best scores.' (hidden only during play)", sb.$("sm-store").textContent === "This browser isn't saving your best scores." && !sb.w.document.body.classList.contains("sm-playing"));
     // the Daily Puzzle: ONLY the back button
-    const dNow = R("play/daily/index.html"); let dHead = ""; try { dHead = execFileSync("git", ["show", "HEAD:play/daily/index.html"], { cwd: SITE, encoding: "utf8" }); } catch (e) {}
-    const undone = dNow.replace('\n    <link rel="stylesheet" href="../shared/mini.css?v=g1" />', "")
-      .replace(/\n      <!-- MINI-GAMES-2 \(owner ruling 2026-10-16\): the mini games' shared way home[^\n]*\n      <a class="mg-btn mg-back dd-home" href="https:\/\/sangbaran-purr\.github\.io\/divya-yuddha\/" data-back-to-game>← Back to the game<\/a>/, "")
-      .replace('\n    <script src="../shared/back.js?v=g1"></script>', "");
-    const headIsOld = dHead.indexOf("data-back-to-game") < 0;
-    ok("G11 · THE DAILY PUZZLE gains ONLY '← Back to the game' (the mulligan button, under the logo, the same shared rule); remove it and the page is byte-for-byte what it was",
-      dNow !== undone && (headIsOld ? undone === dHead : undone === dHead.replace('\n    <link rel="stylesheet" href="../shared/mini.css?v=g1" />', "").replace(/\n      <!-- MINI-GAMES-2[^\n]*\n      <a class="mg-btn mg-back dd-home"[^\n]*/, "").replace('\n    <script src="../shared/back.js?v=g1"></script>', ""))
-        && /<header class="dd-top">[\s\S]*data-back-to-game>← Back to the game<\/a>\n    <\/header>/.test(dNow) && dNow.indexOf("mg-stage") < 0);
+    const dNow = R("play/daily/index.html");
+    ok("G11 · THE DAILY PUZZLE carries the same '← Back to the game' (the mulligan button, under the logo, the shared rule and stylesheet) — the page's own mulligan restyle is checked in the daily suite (ML1–ML8)",
+      /<header class="dd-top">[\s\S]*<a class="mg-btn mg-back dd-home" href="https:\/\/sangbaran-purr\.github\.io\/divya-yuddha\/" data-back-to-game>← Back to the game<\/a>\n    <\/header>/.test(dNow)
+        && /<script src="\.\.\/shared\/back\.js\?v=g1"><\/script>/.test(dNow) && /<link rel="stylesheet" href="\.\.\/shared\/mini\.css\?v=g2" \/>/.test(dNow));
     const dvc = []; const vc = new VirtualConsole(); vc.on("jsdomError", (e) => { if (/navigation/.test(e.message)) dvc.push(1); });
     const dd = new JSDOM(dNow.replace(/<script src="[^"]*"><\/script>/g, "") + "<script>" + R("play/shared/back.js") + "</script>", { url: "https://divyayuddha.games/play/daily/", runScripts: "dangerously", virtualConsole: vc });
     const db = dd.window.document.querySelector("[data-back-to-game]"), dev = new dd.window.MouseEvent("click", { bubbles: true, cancelable: true }); db.dispatchEvent(dev);

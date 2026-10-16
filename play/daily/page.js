@@ -165,7 +165,8 @@
     renderActions();
   }
 
-  function btn(text, cls, fn) { var b = el("button", "dd-btn " + (cls || ""), text); b.type = "button"; b.addEventListener("click", fn); return b; }
+  function btn(text, cls, fn) { var b = el("button", "dd-btn mg-btn " + (cls || ""), text);   // the mulligan plaque button (play/shared/mini.css)
+    b.type = "button"; b.addEventListener("click", fn); return b; }
   function renderActions() {
     var a = $("dd-actions"); a.innerHTML = "";
     var d = $("dd-detail"); d.innerHTML = ""; d.hidden = true;
@@ -295,8 +296,9 @@
   function stage(withFrame) {
     var game = $("dd-game"); game.innerHTML = ""; game.className = "dd-stage" + (withFrame ? "" : " dd-stage-still");
     var cov = el("div", "dd-cover"); cov.id = "dd-cover"; cov.hidden = true;
-    cov.appendChild(el("p", "dd-covertext")).id = "dd-covertext";
-    var acts = el("div", "dd-actions"); acts.id = "dd-coveracts"; cov.appendChild(acts);
+    var box = cov.appendChild(el("div", "dd-coverbox mg-panel"));   // the result, framed in the mulligan panel; over the battle the cover dims it
+    box.appendChild(el("p", "dd-covertext")).id = "dd-covertext";
+    var acts = el("div", "dd-actions"); acts.id = "dd-coveracts"; box.appendChild(acts);
     game.appendChild(cov);
     return game;
   }
@@ -307,10 +309,10 @@
     c.hidden = false;
   }
   function uncover() { var c = $("dd-cover"); if (c) c.hidden = true; }
-  function settle() { var gm = $("dd-game"); gm.classList.add("dd-stage-still", "dd-stage-done"); }   // the day is settled: a compact panel, the battle put away
+  function settle() { var gm = $("dd-game"); gm.classList.add("dd-stage-still", "dd-stage-done"); document.body.classList.remove("dd-framing"); }   // the day is settled: a compact panel, the battle put away
   function toFrame(m) { if (!FRAME.win) return; sent.push(JSON.parse(JSON.stringify(m))); try { FRAME.win.postMessage(m, location.origin); } catch (e) {} }
   function frameStart() {
-    var game = stage(true);
+    var game = stage(true); document.body.classList.add("dd-framing");   // the mulligan background dims behind the battle (mini.css / daily.css)
     var f = el("iframe", "dd-frame"); f.id = "dd-frame"; f.title = T.frameTitle; f.setAttribute("allow", "autoplay");
     game.insertBefore(f, game.firstChild);
     FRAME.el = f; FRAME.win = f.contentWindow;
@@ -326,7 +328,7 @@
     FRAME.failed = true; FRAME.live = false; clearTimeout(FRAME.timer); clearTimeout(FRAME.safety);
     if (FRAME.el && FRAME.el.parentNode) FRAME.el.parentNode.removeChild(FRAME.el);
     FRAME.el = null; FRAME.win = null;
-    $("dd-game").className = "";
+    $("dd-game").className = ""; document.body.classList.remove("dd-framing");
     if (FRAME.revealing) { FRAME.revealing = false; fresh(); render(); showAfter(true); return; }
     if (done) { render(); return; }
     fresh(); say(T.instruction); render();
@@ -385,7 +387,7 @@
     var box = $("dd-past"), ul = $("dd-pastlist"); ul.innerHTML = "";
     box.hidden = !past.length;
     past.forEach(function (p) {
-      var li = el("li"), a = el("a", null, p.date + " · " + p.title);
+      var li = el("li"), a = el("a", "mg-btn dd-pastbtn", p.date + " · " + p.title);
       a.href = "?d=" + p.date;
       if (state.solved[p.date] && !state.revealed[p.date]) li.appendChild(el("span", "dd-tick", "Solved on the day"));
       li.insertBefore(a, li.firstChild);
@@ -423,7 +425,7 @@
     $("dd-diff").textContent = P.difficulty;
     g = PZ.load(P, E, 1);
     // a day already settled: no battle to load, just the page's word over the stage
-    if (isToday && state.solved[today]) { done = true; stage(false); say(T.solvedAlready, "dd-good"); cover(T.solvedAlready); showAfter(false); return; }
+    if (isToday && state.solved[today]) { done = true; stage(false); say(""); cover(T.solvedAlready); showAfter(false); return; }   // said ONCE, in the result panel (owner ruling 2026-10-16)
     if (isToday && state.revealed[today]) { done = true; stage(false); var r = PZ.solve(P, E, null); var wl = r.ok ? winningLine(r.winners[0]) : ""; say(wl, "dd-good"); cover(wl); showAfter(true); return; }
     say(T.instruction);
     frameStart();

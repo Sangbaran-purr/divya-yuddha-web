@@ -26,3 +26,15 @@
 .mg-btn:active { transform: scale(.98); }
 .mg-back { width: min(300px, 86%); margin: 0 auto; letter-spacing: .14em; font-size: 12px; }
 .dd-top .mg-back { margin-top: 10px; }   /* the Daily Puzzle: the button sits under the logo */
+
+/* the mulligan's PANEL — the plaque button's gold bevel and dark face, at panel scale (the Daily Puzzle's result cover,
+   "How it was won", the confirm box). The host sets its own position; the face is ::before at z -1 inside the panel's
+   isolated stacking context, so text and buttons sit above it. */
+.mg-panel { isolation: isolate; border-radius: 12px; background: linear-gradient(180deg, #e6c47a 0%, #a5813a 45%, #6e5526 100%);
+  box-shadow: 0 6px 18px rgba(0,0,0,.55); color: #d8c9a3; }
+.mg-panel::before { content: ""; position: absolute; inset: 1.6px; z-index: -1; border-radius: 10.5px;
+  background: linear-gradient(180deg, rgba(43,28,10,.95) 0%, rgba(22,13,5,.95) 52%, rgba(34,20,7,.95) 100%); }
+/* a small framed stat box (Streak / Best streak / Next puzzle in) */
+.mg-stat { position: relative; isolation: isolate; border-radius: 9px; padding: 8px 6px; text-align: center;
+  background: linear-gradient(180deg, #c9a84c 0%, #8a6a2c 55%, #5a4212 100%); }
+.mg-stat::before { content: ""; position: absolute; inset: 1.2px; z-index: -1; border-radius: 8px; background: linear-gradient(180deg, #2b1c0a 0%, #160d05 100%); }

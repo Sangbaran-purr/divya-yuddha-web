@@ -10,10 +10,12 @@
     <link rel="preload" href="../../assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="../../assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="../../css/threshold.css?v=s1g" />
-    <link rel="stylesheet" href="daily.css?v=d3" />
-    <link rel="stylesheet" href="../shared/mini.css?v=g1" />
+    <link rel="stylesheet" href="daily.css?v=d4" />
+    <link rel="stylesheet" href="../shared/mini.css?v=g2" />
   </head>
   <body class="daily">
+    <!-- MINI-GAMES-2 (owner ruling 2026-10-16): the game's MULLIGAN background behind the page (dims while the battle plays) -->
+    <div class="mg-stage" aria-hidden="true"><div class="mg-plate"></div><div class="mg-dim"></div><div class="mg-vig"></div></div>
     <!-- MINI-GAMES-1 R2 — the Daily Puzzle. Free for everyone: no wallet, no Torana, no DYC, no badges, no leaderboard.
          Daily Puzzle Effects R2: #dd-game holds the real battle screen in puzzle mode (an iframe of ../../game/, built by
          page.js) and the page's own result cover over it; the page's own board is the fallback if the battle cannot start.
@@ -37,14 +39,14 @@
         <div id="dd-detail" class="dd-detail" hidden></div>
         <div id="dd-actions" class="dd-actions"></div>
 
-        <section id="dd-after" class="dd-after" hidden>
+        <section id="dd-after" class="dd-after mg-panel" hidden>
           <h3 class="dd-h3">How it was won</h3>
           <p id="dd-explain" class="dd-explain"></p>
           <p id="dd-afternote" class="dd-afternote"></p>
           <dl class="dd-stats">
-            <div><dt>Streak</dt><dd id="dd-streak">0</dd></div>
-            <div><dt>Best streak</dt><dd id="dd-best">0</dd></div>
-            <div><dt>Next puzzle in</dt><dd id="dd-next"></dd></div>
+            <div class="mg-stat"><dt>Streak</dt><dd id="dd-streak">0</dd></div>
+            <div class="mg-stat"><dt>Best streak</dt><dd id="dd-best">0</dd></div>
+            <div class="mg-stat"><dt>Next puzzle in</dt><dd id="dd-next"></dd></div>
           </dl>
         </section>
       </section>
@@ -63,11 +65,11 @@
     </main>
 
     <div id="dd-confirm" class="dd-modal" role="dialog" aria-modal="true" aria-labelledby="dd-confirm-q" hidden>
-      <div class="dd-modalbox">
+      <div class="dd-modalbox mg-panel">
         <p id="dd-confirm-q">This ends your streak. Show the answer?</p>
         <div class="dd-actions">
-          <button type="button" id="dd-confirm-yes" class="dd-btn dd-reveal">Show the answer</button>
-          <button type="button" id="dd-confirm-no" class="dd-btn">Keep trying</button>
+          <button type="button" id="dd-confirm-yes" class="dd-btn mg-btn dd-reveal">Show the answer</button>
+          <button type="button" id="dd-confirm-no" class="dd-btn mg-btn">Keep trying</button>
         </div>
       </div>
     </div>
@@ -78,7 +80,7 @@
     <script src="daily.js?v=d1"></script>
     <script src="notes.js?v=d2"></script>
     <script>window.DY_DAILY_V = "d3";</script>
-    <script src="page.js?v=d3"></script>
+    <script src="page.js?v=d4"></script>
     <script src="../shared/back.js?v=g1"></script>
   </body>
 </html>

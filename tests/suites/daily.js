@@ -200,8 +200,8 @@ async function main() {
     (await framed(d2)).try(lineOf(w2)); await tick();
     ok("G6 · solving the next day too extends the streak to 2 (best 2)", doc(d2).getElementById("dd-streak").textContent === "2" && stored(d2).best === 2);
     const reload = pageAt(`${day(1)}T22:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify(stored(d2)) } }); await tick();
-    ok("G7 · coming back the same day: 'You've solved today's puzzle.' with the explanation, no replay needed — and no battle is loaded for it",
-      msg(reload) === "You've solved today's puzzle." && !doc(reload).getElementById("dd-after").hidden && !doc(reload).getElementById("dd-frame") && covered(reload) === "You've solved today's puzzle.");
+    ok("G7 · coming back the same day: 'You've solved today's puzzle.' ONCE, in the result panel (owner ruling 2026-10-16: no second line under the title), with the explanation, no replay needed — and no battle is loaded for it",
+      msg(reload) === "" && (doc(reload).getElementById("dd-play").textContent.split("You've solved today's puzzle.").length - 1) === 1 && !doc(reload).getElementById("dd-after").hidden && !doc(reload).getElementById("dd-frame") && covered(reload) === "You've solved today's puzzle.");
 
     // the reveal on day 2: a wrong try, the confirm, then the answer played in the battle — not solved, the streak ends
     const P3 = byDate(`${day(2)}`), l3 = loserOf(P3), w3 = winnerOf(P3);
@@ -414,6 +414,55 @@ async function main() {
   });
 
   // ═══ THE RULES, DIRECTLY ═══
+  // ═══ MINI-GAMES-2 (owner ruling 2026-10-16): THE MULLIGAN LOOK, IN EVERY STATE ═══
+  await section("THE MULLIGAN LOOK", async () => {
+    const plaques = (dom, sel) => [...doc(dom).querySelectorAll(sel)];
+    const allPlaque = (dom, sel) => { const b = plaques(dom, sel); return b.length > 0 && b.every((x) => x.classList.contains("mg-btn")); };
+    const stageOK = (dom) => !!doc(dom).querySelector("body > .mg-stage .mg-plate");
+    const back = (dom) => doc(dom).querySelector(".dd-top [data-back-to-game]");
+    // ready (today open; two earlier puzzles)
+    const r = pageAt(`${day(2)}T08:00:00Z`); await tick(); const fr = await framed(r);
+    ok("ML1 · PUZZLE READY: the mulligan background behind the page (dimmed behind the battle), '← Back to the game' and every earlier puzzle as plaque buttons",
+      stageOK(r) && doc(r).body.classList.contains("dd-framing") && back(r).classList.contains("mg-btn") && back(r).textContent === "← Back to the game"
+        && allPlaque(r, "#dd-pastlist a") && plaques(r, "#dd-pastlist a").length === 2 && plaques(r, "#dd-pastlist a").every((a) => /^\?d=\d{4}-\d{2}-\d{2}$/.test(a.getAttribute("href"))));
+    // a wrong try, then the confirm
+    fr.try(plainLine(loserOf(byDate(day(2))))); await tick();
+    const box = doc(r).querySelector("#dd-cover .dd-coverbox");
+    ok("ML2 · A WRONG TRY: the result in a framed mulligan panel over the dimmed battle, 'Try again' and 'Show me the answer' as plaque buttons",
+      !!box && box.classList.contains("mg-panel") && box.contains(doc(r).getElementById("dd-covertext")) && allPlaque(r, "#dd-coveracts button") && allPlaque(r, "#dd-actions button")
+        && plaques(r, "#dd-actions button").some((b) => b.textContent === "Show me the answer"));
+    click(r, "#dd-actions .dd-btn", "Show me the answer");
+    ok("ML3 · THE REVEAL CONFIRM: a framed panel; 'Show the answer' and 'Keep trying' as plaque buttons",
+      !doc(r).getElementById("dd-confirm").hidden && doc(r).querySelector("#dd-confirm .dd-modalbox").classList.contains("mg-panel") && allPlaque(r, "#dd-confirm button")
+        && plaques(r, "#dd-confirm button").map((b) => b.textContent).join("|") === "Show the answer|Keep trying");
+    click(r, "#dd-confirm-no");
+    // solved (coming back the same day)
+    const sv = pageAt(`${day(2)}T09:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify({ v: 1, solved: { [day(1)]: true, [day(2)]: true }, revealed: {}, best: 2 }) } }); await tick();
+    const svText = doc(sv).getElementById("dd-play").textContent;
+    ok("ML4 · SOLVED: 'You've solved today's puzzle.' ONCE — in the framed result panel, not under the title; the panel is compact (no empty button row); 'How it was won' framed; Streak / Best streak / Next puzzle in as three framed stat boxes; the background no longer dimmed",
+      msg(sv) === "" && svText.split("You've solved today's puzzle.").length === 2 && covered(sv) === "You've solved today's puzzle." && doc(sv).getElementById("dd-coveracts").children.length === 0
+        && doc(sv).getElementById("dd-after").classList.contains("mg-panel") && [...doc(sv).querySelectorAll(".dd-stats .mg-stat dt")].map((x) => x.textContent).join("|") === "Streak|Best streak|Next puzzle in"
+        && !doc(sv).body.classList.contains("dd-framing") && /\.dd-coverbox \.dd-actions:empty \{ display: none; \}/.test(R("play/daily/daily.css")));
+    // revealed
+    const rv = pageAt(`${day(2)}T09:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify({ v: 1, solved: {}, revealed: { [day(2)]: true }, best: 0 }) } }); await tick();
+    ok("ML5 · REVEALED: the answer in the framed result panel, the explanation framed below it", !!covered(rv) && doc(rv).querySelector("#dd-cover .dd-coverbox").classList.contains("mg-panel")
+      && !doc(rv).getElementById("dd-after").hidden && doc(rv).getElementById("dd-after").classList.contains("mg-panel"));
+    // no puzzle, after the batch
+    const last = PUZZLES.map((p) => p.date).sort().pop();
+    const np = pageAt(`${D.addDays(last, 3)}T08:00:00Z`); await tick();
+    ok("ML6 · NO PUZZLE: the background, the line, and every earlier puzzle as a plaque button", stageOK(np) && doc(np).querySelector(".dd-noneline").textContent === "A new puzzle is on its way. Try an earlier one below."
+      && allPlaque(np, "#dd-pastlist a") && plaques(np, "#dd-pastlist a").length === PUZZLES.length && back(np).classList.contains("mg-btn"));
+    // the page's own fallback board: its buttons too
+    const fb = pageAt(`${day(0)}T08:00:00Z`); await tick(); await fallback(fb);
+    click(fb, ".dd-hand .dd-card");
+    ok("ML7 · THE FALLBACK BOARD: its buttons ('Play …', 'End my turn', 'Leap', 'Show me the answer') are plaque buttons too", allPlaque(fb, "#dd-actions button") && plaques(fb, "#dd-actions button").some((b) => /^Play /.test(b.textContent))
+      && /function btn\(text, cls, fn\) \{ var b = el\("button", "dd-btn mg-btn "/.test(R("play/daily/page.js")));
+    const css = R("play/daily/daily.css"), html = R("play/daily/index.html");
+    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d4, page.js d4, mini.css g2 — on both mini games)",
+      !/\.dd-btn \{/.test(css) && !/\.dd-btn\.dd-go/.test(css) && /body\.daily \{[^}]*overflow-x: hidden/.test(css) && /body\.dd-framing \.mg-stage \{ opacity: \.35; \}/.test(css)
+        && /daily\.css\?v=d4/.test(html) && /page\.js\?v=d4/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
+  });
+
   await section('THE RULES, DIRECTLY', async () => {
     const s = D.blank();
     ok("U1 · solving a day that is not today never counts", D.markSolved(s, `${day(0)}`, `${day(1)}`) === false && !s.solved[`${day(0)}`]);
