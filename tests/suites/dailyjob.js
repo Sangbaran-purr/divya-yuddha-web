@@ -88,7 +88,7 @@ function clashHook(w) {
 
 // ── THE LOG IS PUBLIC: every line must be one of the job's own messages, filled only with dates, counts, ids and hashes;
 // and no card, title, explanation clause or address may appear anywhere in it ──
-const ARG = "(?:\\d{4}-\\d{2}-\\d{2}|dp-\\d{4}-\\d{2}-\\d{2}|\\d+|[0-9a-f]{7,40}|weekly|veto|watchdog|[a-z0-9-]{2,40})";
+const ARG = "(?:RESEND_API_KEY|PREVIEW_EMAIL|\\d{4}-\\d{2}-\\d{2}|dp-\\d{4}-\\d{2}-\\d{2}|\\d+|[0-9a-f]{7,40}|weekly|veto|watchdog|[a-z0-9-]{2,40})";
 const TEMPLATES = Object.values(JOB.MSG).map((f) => { const parts = f.apply(null, Array(f.length).fill("\u0000")).split("\u0000"); return new RegExp("^" + parts.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(ARG) + "$"); });
 const CARDS = [...new Set(Object.values(G.E.DECKS).flatMap((d) => d.map((c) => c.n)))];
 function logLeaks(log, texts) {
@@ -186,6 +186,14 @@ const window28 = (t) => G.datesFrom(t, JOB.addDays(t, JOB.AHEAD - 1));
       && !/run:.*inputs\.date/.test(wf[2]) && wf.every((w) => /secrets\.RESEND_API_KEY/.test(w) && /secrets\.PREVIEW_EMAIL/.test(w) && /if: failure\(\)[\s\S]*job\.js alert/.test(w))
       && /contents: write/.test(wf[0]) && /contents: read/.test(wf[1]) && /contents: write/.test(wf[2]));
 
+  // ═══ SECRETS FIRST (owner ruling 2026-10-23): a missing secret stops the weekly or veto job before anything is generated ═══
+  const S1 = fresh(), noMail = run(S1, ["weekly", "--today", T0], { PREVIEW_EMAIL: "" }), noKey = run(S1, ["veto", "--date", "2026-11-05", "--today", "2026-10-23"], { RESEND_API_KEY: " " });
+  ok("J17 · SECRETS FIRST: with PREVIEW_EMAIL or RESEND_API_KEY missing, the weekly and veto jobs stop at once — no generation, no commit, no push, no email; the log names only the missing secret",
+    noMail.status !== 0 && /missing secret: PREVIEW_EMAIL/.test(noMail.log) && !/missing secret: RESEND_API_KEY/.test(noMail.log) && !/block |generator|checked|wrote/.test(noMail.log)
+      && noKey.status !== 0 && /missing secret: RESEND_API_KEY/.test(noKey.log) && !/block |generator|checked|wrote/.test(noKey.log)
+      && subjects(S1)[0] === "test base" && noMail.mails.length + noKey.mails.length === 0 && noMail.log.indexOf("test-key-never-sent") < 0 && noKey.log.indexOf(ADDR) < 0
+      && clean(logLeaks(noMail.log)) && clean(logLeaks(noKey.log)), noMail.log.trim().split("\n").join(" | ") + " // " + noKey.log.trim().split("\n").join(" | "));
+
   // ═══ THE OWNER'S BREAKAGES — each applied to the job's source, each caught ═══
   const M1 = fresh([['    say("checked", P.id);', '    say("checked", P.id); console.log(j.winner.play);']]), r1 = run(M1, ["weekly", "--today", T0]);
   ok("B1 · breakage 'print an answer to the log' is caught (J4 goes red)", !clean(logLeaks(r1.log, [])));
@@ -201,6 +209,9 @@ const window28 = (t) => G.datesFrom(t, JOB.addDays(t, JOB.AHEAD - 1));
   const M4 = fresh([['  if (args.some((a) => /^--force/.test(a)', '  if (false && args.some((a) => /^--force/.test(a)'], ['["push", "origin", "HEAD:main"]', '["push", "--force", "origin", "HEAD:main"]']]);
   const r4 = run(M4, ["weekly", "--today", T0], { DY_JOB_BEFORE_PUSH: clashHook(M4) });
   ok("B4 · breakage 'force-push' is caught (J2 goes red: the approval bot's digest commit is wiped off the remote)", !subjects(M4).some((s) => s === "chore(invites): daily record digest (test)"), "exit " + r4.status + " · " + r4.log.trim().split("\n").slice(-3).join(" | ") + " · " + subjects(M4).slice(0, 3).join(" / "));
+
+  const M5 = fresh([['  say("start", "weekly", t);\n  requireSecrets();', '  say("start", "weekly", t);']]), r5 = run(M5, ["weekly", "--today", T0], { PREVIEW_EMAIL: "" });
+  ok("B5 · breakage 'generate before checking the secrets' is caught (J17 goes red: the job generates, commits and pushes with no address to preview to)", subjects(M5)[0] !== "test base" && /wrote 14 day/.test(r5.log), r5.log.trim().split("\n").slice(-3).join(" | "));
 
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));

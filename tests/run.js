@@ -88,7 +88,7 @@ const SUITES = [
   // workflows), run for real in throwaway clones pushing to a throwaway bare repo: 28 days ready, the digest-commit clash
   // retried (never forced), exactly the vetoed day replaced, the watchdog's gap email, every rule in the job path, a log of
   // dates/counts/ids only; four owner-named breakages, each caught.
-  { name: "dailyjob",      file: path.join(__dirname, "suites", "dailyjob.js"), chain: false, expect: 21 },
+  { name: "dailyjob",      file: path.join(__dirname, "suites", "dailyjob.js"), chain: false, expect: 23 },
 ];
 
 function freePort() {

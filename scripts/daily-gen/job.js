@@ -48,6 +48,7 @@ const MSG = {
   gap: (n) => n + " of the next 14 days without a puzzle: owner emailed",
   ready: () => "all of the next 14 days have a puzzle",
   alert: () => "failure email sent",
+  secret: (name) => "missing secret: " + name,
   fail: (code) => "failed: " + code,
 };
 const say = (k, ...a) => console.log(MSG[k](...a));
@@ -226,13 +227,25 @@ async function sendMail(m) {
   if (!r.ok) throw new JobError("mail-http-" + r.status);
 }
 
+// (owner ruling 2026-10-23) SECRETS FIRST: the weekly and veto jobs check that both secrets are set BEFORE generating
+// anything — a missing one stops the job at once (no generation, no commit, no push). The log names the missing secret,
+// never a value.
+const SECRETS = ["RESEND_API_KEY", "PREVIEW_EMAIL"];
+function requireSecrets() {
+  const missing = SECRETS.filter((k) => !String(process.env[k] || "").trim());
+  missing.forEach((k) => say("secret", k));
+  if (missing.length) throw new JobError("secret-missing");
+}
+
 // ── the three jobs ──
 const arg = (k) => { const i = process.argv.indexOf(k); return i >= 0 ? process.argv[i + 1] : null; };
 function today() { const t = arg("--today") || process.env.DY_JOB_TODAY; if (t && !isDate(t)) throw new JobError("bad-today"); return t || iso(Date.now()); }
 
 async function weekly() {
   const t = today(), win = G.datesFrom(t, addDays(t, AHEAD - 1));
-  say("start", "weekly", t); say("window", win[0], win[win.length - 1]);
+  say("start", "weekly", t);
+  requireSecrets();
+  say("window", win[0], win[win.length - 1]);
   let st = readState();
   const have = new Set(st.puzzles.map((p) => p.date)), missing = win.filter((d) => !have.has(d));
   say("missing", missing.length);
@@ -255,6 +268,7 @@ async function weekly() {
 async function veto() {
   const t = today(), d = arg("--date") || process.env.DY_JOB_DATE;
   say("start", "veto", t);
+  requireSecrets();
   if (!isDate(d)) throw new JobError("bad-date");
   if (d < t) throw new JobError("date-in-the-past");
   const st = readState(), old = st.puzzles.find((p) => p.date === d);
