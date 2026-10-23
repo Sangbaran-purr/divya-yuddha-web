@@ -2,7 +2,7 @@
 "use strict";
 // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION — write a generated run of puzzles into the site, the way batch 1 was written.
 //
-//   node scripts/daily-gen/batch.js --from 2026-10-29 --to 2026-11-11 [--plain <owner file>] [--dry]
+//   node scripts/daily-gen/batch.js --from 2026-10-29 --to 2026-11-11 [--plain <owner file>] [--dry] [--avoid-cards A,B]
 //
 // Into the REPO (all public): play/daily/puzzles.json gains the positions; tests/fixtures/daily-answers.sha256.json gains
 // one salted fingerprint per winning play; play/daily/notes.js gains each explanation ENCODED (decoded only after a solve
@@ -62,8 +62,14 @@ async function parallel() {
         w.send({ slot, opts: { maxTries, poolSize, salt: genOpts.salt } });
       }
     };
+    if (!open.length) return done();   // nothing to search (every day kept or re-checked): resolve, or Node exits silently
     launch();
   });
+  // --avoid-cards A,B: no NEW day may put these cards on your side — hand, board or Heroes (variety: a lesson another day
+  // already carries)
+  const avoidCards = (arg("--avoid-cards", "") || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const yourSide = (P) => { const pl = G.PZ.load(P, G.E, G.PZ.SEEDS[0]).players[0]; return pl.hand.concat(pl.units, pl.heroes, pl.artifact ? [pl.artifact] : []); };
+  if (avoidCards.length) open.forEach((s) => { pools[s.date] = (pools[s.date] || []).filter((c) => !yourSide(c.puzzle).some((h) => avoidCards.indexOf(h.n) >= 0)); console.log(s.date + "  " + pools[s.date].length + " candidates without the avoided cards"); });
   // a kept puzzle's Hero traps: a Hero in its hand that loses AND its stored explanation tells why
   const fixedTraps = {}; Object.values(pinned).forEach((p) => { const res = G.PZ.solve(p, G.E, null); fixedTraps[p.date] = G.heroTraps(p, res).filter((h) => (pinnedText[p.date] || "").indexOf(h + " falls short: ") >= 0).length; });
   const c = G.choose(slots, pools, Object.values(pinned), existing, Object.assign({ fixedTraps }, genOpts));

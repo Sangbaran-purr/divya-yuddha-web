@@ -284,6 +284,31 @@ function missingEnd(P, base, n, playName) {
     if (/first passes/i.test(def.txt || "") && side === 1) { out.push(playName + " moves your Venom drain to the moment either player first passes; the opponent has already passed, so your drain does not fire this round"); continue; }
     return null;
   }
+  // (owner ruling 2026-10-23, made general) a Naga side's Venom drain that does not fire at this round's end while the drained
+  // side still has Units is a cause the player would count on — absent before ANY play (e.g. a Karkotaka already on the board
+  // spent it at the first pass) it must be told too; there is no writer for that, so the position is refused
+  const facOf = (side) => (side === 0 ? P.you.faction : P.them.faction);
+  for (const side of [0, 1]) {
+    if (facOf(1 - side) !== "nagas" || has(n, side)) continue;
+    if (has(base, side)) continue;   // the play itself stops it: told above (or already refused)
+    const units = Object.values(n.after || {}).filter((u) => u.side === side && (defOf(facOf(side), u.n) || {}).t !== "hero");
+    if (units.length) return null;
+  }
+  // (same ruling) a Unit that keeps a Venom Token to the round's end but takes no token tick: the reason is told — Rama's
+  // Signet negates Venom on Vanara Units (the engine skips the tick with no event, so the reader would count it) — or the
+  // position is refused
+  let g0 = null;
+  for (const u of Object.values(n.after || {})) {
+    if (!u.venom || n.endChanges.some((c) => c.side === u.side && c.n === u.n && /Venom Token/.test(c.name))) continue;
+    g0 = g0 || PZ.load(P, E, PZ.SEEDS[0]);
+    const pl = g0.players[u.side], art = pl.artifact;
+    if (facOf(u.side) === "vanaras" && art && art.id === "ramasignet") {
+      const said = (u.side === 1 ? "the opponent's " : "your ") + art.n + " negates Venom on " + (u.side === 1 ? "their" : "your") + " Vanara Units, so the Venom Token on " + u.n + " does not drain it";
+      if (out.indexOf(said) < 0) out.push(said);
+      continue;
+    }
+    return null;
+  }
   return out.join("; ");
 }
 const endText = (n) => n.endChanges.map((c) => whose(c.side) + c.n + " " + (c.amount > 0 ? "+" + c.amount : "−" + Math.abs(c.amount)) + " from " + c.name).join("; ");
@@ -435,6 +460,7 @@ function swingOf(P, p, line) {
 const REMOVAL = /destroy|deal \d|damage|remov/i;
 function astraHit(P, play, target) {
   const nw = narrate(P, { play, target: target || null });
+  if (!nw) return -1;   // not narratable: a losing Astra then looks like nothing, an answer fails Rule C
   return nw.changes.filter((c) => c.side === 1 && c.d < 0 && (c.text.indexOf(" by " + play + " (") >= 0 || c.text.indexOf(" from " + play + " (") >= 0)).reduce((t, c) => t - c.d, 0);
 }
 function looksOf(P, res, c, target) {
@@ -446,6 +472,7 @@ function looksOf(P, res, c, target) {
 function looksList(P, res, hand, wc, w) {
   const aw = looksOf(P, res, wc, w.target || null);
   const loses = (c) => res.plays.some((p) => p.play === c.n) && !res.plays.some((p) => p.play === c.n && p.win);
+  if (aw < 0) return { aw, looks: [] };
   return { aw, looks: hand.filter((c) => c !== wc && loses(c) && looksOf(P, res, c) >= aw && looksOf(P, res, c) > 0) };
 }
 function ruleC(P, res, nw, realm) {

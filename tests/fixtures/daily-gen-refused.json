@@ -1,0 +1,63 @@
+{
+ "_note": "Positions the generator must REFUSE, kept as test inputs. Positions only: never served, and nothing is written beside them.",
+ "drainSpentOnBoard": {
+  "id": "refused-drain-spent",
+  "date": "2026-11-07",
+  "title": "(refused position, never served)",
+  "difficulty": "hard",
+  "mechanic": "venom",
+  "realm": "patala",
+  "first": 0,
+  "you": {
+   "faction": "nagas",
+   "hand": [
+    "Patala Throne",
+    "Karkotaka",
+    "Vasuki Venom Strike",
+    "Naga Archer",
+    "Ulupi",
+    "Naga Sadhu",
+    "Naga Hatchling",
+    "Naga Enchantress"
+   ]
+  },
+  "them": {
+   "faction": "vanaras",
+   "hand": [
+    "Neela",
+    "Angad",
+    "Kishkindha Crown",
+    "Kesari",
+    "Dadhimukha",
+    "Gandiva Arrow",
+    "Tara"
+   ]
+  },
+  "setup": [
+   {
+    "side": "you",
+    "play": "Patala Throne"
+   },
+   {
+    "side": "them",
+    "play": "Tara"
+   },
+   {
+    "side": "you",
+    "play": "Karkotaka"
+   },
+   {
+    "side": "them",
+    "play": "Angad"
+   },
+   {
+    "side": "you",
+    "play": "Vasuki Venom Strike"
+   },
+   {
+    "side": "them",
+    "pass": true
+   }
+  ]
+ }
+}
