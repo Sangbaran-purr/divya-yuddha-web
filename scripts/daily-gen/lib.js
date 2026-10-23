@@ -425,10 +425,29 @@ function swingOf(P, p, line) {
   return (T1[0] - T1[1]) - (T0[0] - T0[1]);
 }
 // (owner ruling 2026-10-19, the LOOKS-AS-STRONG reading): a position passes only if some LOSING card in your hand looks at
-// least as strong as the answer — equal or higher printed power, or a removal Astra; the answer is never the single
-// highest-printed-power card in your hand unless its win needs a round-end or realm effect the explanation names; and a
-// single removal of an enemy Unit worth half the opponent's total or more is the obvious pick. → null, or why it fails
+// least as strong as the answer; the answer is never the single highest-printed-power card in your hand unless its win needs
+// a round-end or realm effect the explanation names; and removals adding up to half the opponent's total or more (one Unit
+// or a sweep, ruling 2026-10-23) are the obvious pick. → null, or why it fails
+// (owner ruling 2026-10-23, THE ASTRA LOOPHOLE) how strong a card LOOKS: a Unit or Hero by its printed power; a removal or
+// damage Astra by what it removes or deals to the opponent at the moment of play (an Astra removing an 8-power Unit looks like 8, not
+// 0) — the answer by its winning target, a losing Astra by its strongest target (what the player sees it could do); any
+// other card looks like 0
 const REMOVAL = /destroy|deal \d|damage|remov/i;
+function astraHit(P, play, target) {
+  const nw = narrate(P, { play, target: target || null });
+  return nw.changes.filter((c) => c.side === 1 && c.d < 0 && (c.text.indexOf(" by " + play + " (") >= 0 || c.text.indexOf(" from " + play + " (") >= 0)).reduce((t, c) => t - c.d, 0);
+}
+function looksOf(P, res, c, target) {
+  if (c.t === "unit" || c.t === "hero") return c.base;
+  if (c.t !== "astra") return 0;
+  if (target !== undefined) return astraHit(P, c.n, target);
+  return res.plays.filter((p) => p.play === c.n).reduce((m, p) => Math.max(m, astraHit(P, c.n, p.target)), 0);
+}
+function looksList(P, res, hand, wc, w) {
+  const aw = looksOf(P, res, wc, w.target || null);
+  const loses = (c) => res.plays.some((p) => p.play === c.n) && !res.plays.some((p) => p.play === c.n && p.win);
+  return { aw, looks: hand.filter((c) => c !== wc && loses(c) && looksOf(P, res, c) >= aw && looksOf(P, res, c) > 0) };
+}
 function ruleC(P, res, nw, realm) {
   const g0 = PZ.load(P, E, PZ.SEEDS[0]), hand = g0.players[0].hand, w = res.winners[0];
   const printed = (c) => (c.t === "unit" || c.t === "hero" ? c.base : 0);
@@ -439,17 +458,14 @@ function ruleC(P, res, nw, realm) {
   const single = wp > 0 && hand.every((c) => c === wc || printed(c) < wp);
   const needsEnd = nw.T1[0] <= nw.T1[1] || (realm && realm.matters);   // it would not win before the round end, or the realm decides it
   if (single && !needsEnd) return "STRONGEST_CARD";
-  const loses = (c) => res.plays.some((p) => p.play === c.n) && !res.plays.some((p) => p.play === c.n && p.win);
-  const looks = hand.filter((c) => c !== wc && loses(c) && (((c.t === "unit" || c.t === "hero") && printed(c) >= wp) || (c.t === "astra" && REMOVAL.test((defOf(P.you.faction, c.n) || {}).txt || ""))));
-  if (!looks.length) return "NOTHING_LOOKS_AS_STRONG";
+  if (!looksList(P, res, hand, wc, w).looks.length) return "NOTHING_LOOKS_AS_STRONG";
   return null;
 }
 // the cards that make Rule C hold (named in the owner's preview), and the HERO TRAPS (a Hero in your hand that loses)
 function looksAsStrong(P, res) {
-  const hand = PZ.load(P, E, PZ.SEEDS[0]).players[0].hand, w = res.winners[0], printed = (c) => (c.t === "unit" || c.t === "hero" ? c.base : 0);
-  const wc = hand.find((c) => c.n === w.play) || { base: 0 }, wp = printed(wc);
-  const loses = (c) => res.plays.some((p) => p.play === c.n) && !res.plays.some((p) => p.play === c.n && p.win);
-  return hand.filter((c) => c !== wc && loses(c) && (((c.t === "unit" || c.t === "hero") && printed(c) >= wp) || (c.t === "astra" && REMOVAL.test((defOf(P.you.faction, c.n) || {}).txt || "")))).map((c) => c.n);
+  const hand = PZ.load(P, E, PZ.SEEDS[0]).players[0].hand, w = res.winners[0];
+  const wc = hand.find((c) => c.n === w.play) || { t: "pass", base: 0 };
+  return looksList(P, res, hand, wc, w).looks.map((c) => c.n);
 }
 function heroTraps(P, res) {
   const hand = PZ.load(P, E, PZ.SEEDS[0]).players[0].hand;
@@ -664,6 +680,7 @@ function construct(P0, slot, r, opts) {
   }
   const winners = rows.filter((x) => x.wins === 1 && (!slot.hero || x.hero) && (slot.hero || !x.hero)), losers = rows.filter((x) => x.lose);
   const out = [];
+  // a loose PRE-FILTER only (the corrected Rule C, ruling 2026-10-23, is enforced by judge → ruleC on every candidate)
   const looksRow = (l, w) => ((l.t === "unit" || l.t === "hero") && l.base >= (w.t === "unit" || w.t === "hero" ? w.base : 0)) || (l.t === "astra" && REMOVAL.test((defOf(P0.you.faction, l.n) || {}).txt || ""));
   for (const w of winners) {
     const traps = losers.filter((l) => looksRow(l, w) && !(l.hero && w.hero));
@@ -735,5 +752,5 @@ function describe(P) {
     + "Your side: " + side(0) + ". Their side: " + side(1) + ". Your hand: " + g.players[0].hand.map((c) => c.n).join(", ") + ".";
 }
 
-module.exports = { missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
+module.exports = { looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
   judge, planSlots, datesFrom, generate, describe, clean, defOf };

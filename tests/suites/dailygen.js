@@ -113,7 +113,7 @@ function arithmetic(text) {
   const ht = {}; B2.forEach((P) => { ht[P.date] = trapsOf(P).length; });
   ok("S12 · the whole run keeps its rules (G.checkSpread): factions played 4/4/3/3, each faction the OPPONENT 3–4 times, no mirror match, Venom ≤ 5, ≥ 3 Hero traps", J(G.checkSpread(B2, { heroTraps: ht })) === "[]", J(G.checkSpread(B2, { heroTraps: ht })));
   const rcNew = NEW.map((P) => { const j = G.judge(P); return { d: P.date, ok: j.ok, looks: j.looks || [], why: j.reason + (j.detail ? ":" + j.detail : "") }; });
-  ok("S13 · RULE C (looks-as-strong) holds for every NEW puzzle: a losing card in your hand looks at least as strong as the answer (" + rcNew.map((x) => x.d.slice(5) + ": " + x.looks.join("/")).join("; ") + ")",
+  ok("S13 · RULE C (looks-as-strong) holds for every NEW puzzle: a losing card in your hand looks at least as strong as the answer (" + rcNew.map((x) => x.d.slice(5) + ": " + x.looks.length).join("; ") + " — counts only: the cards are traps, and a log may be public)",
     rcNew.every((x) => x.ok && x.looks.length), rcNew.filter((x) => !x.ok).map((x) => x.d + " " + x.why).join(", "));
   ok("S4 · difficulty rises Monday→Sunday (Mon–Tue easy, Wed–Fri medium, Sat–Sun hard), following the weekday from Thu 29 Oct",
     B2.every((p) => p.difficulty === G.DIFF_BY_DAY[new Date(p.date + "T00:00:00Z").getUTCDay()]));
@@ -266,6 +266,16 @@ function arithmetic(text) {
     si >= 0 && decoded.every((t) => !SHORT.test(t)));
   const m19 = mutant("function fullName(name, cards) {\n  if (!name) return name;", "function fullName(name, cards) {\n  return name;");
   ok("M19 · breakage 'use the engine's short name' is caught (K19 goes red)", !!p4 && SHORT.test((m19.explain(p4, solved[p4.id]) || {}).text || ""));
+
+  // ── owner ruling 2026-10-23, THE ASTRA LOOPHOLE: a removal/damage Astra looks as strong as what it removes or deals ──
+  // (the position used is the vetoed 5 Nov as pushed in 26d284d; no card, target or number from it is written here)
+  const vet5 = clone(JSON.parse(execFileSync("git", ["show", "26d284d:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).find((p) => p.date === "2026-11-05"));
+  ok("K20 · AN ASTRA ANSWER IS JUDGED BY WHAT IT REMOVES: an Astra answer whose removal outweighs every losing card is REFUSED (the vetoed 5 Nov)", cOf(G, vet5) === "NOTHING_LOOKS_AS_STRONG", cOf(G, vet5));
+  const astraLook = B2.map((P) => { const r = solved[P.id] || PZ.solve(P, E, null), h = PZ.load(P, E, PZ.SEEDS[0]).players[0].hand, w = r.winners[0], wc = h.find((c) => c.n === w.play) || { t: "pass", base: 0 };
+    return { P, aw: G.looksOf(P, r, wc, w.target || null), astras: G.looksAsStrong(P, r).map((n) => h.find((c) => c.n === n)).filter((c) => c && c.t === "astra").map((c) => G.looksOf(P, r, c)) }; }).find((x) => x.astras.length);
+  ok("K20b · …and a LOSING Astra still counts when what it would remove reaches the answer's strength (one batch-2 day)", !!astraLook && astraLook.astras.every((v) => v >= astraLook.aw && v > 0));
+  const m20 = mutant('  if (c.t !== "astra") return 0;', '  if (true) return 0;');
+  ok("M20 · breakage 'an Astra looks like 0 power again' is caught (K20 goes red)", cOf(m20, vet5) !== "NOTHING_LOOKS_AS_STRONG");
 
   // a duplicate: the generator, offered the very puzzle it would make, must not make it again
   const d1 = G.generate(["2027-01-04"], B1, { maxTries: 20000 })[0];
