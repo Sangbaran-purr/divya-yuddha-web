@@ -183,6 +183,11 @@ async function main() {
       pickd(one) === pickd(two) && pickd(one) === D.archiveFor(PUZZLES, a1).title && picks.every((d) => d <= last) && new Set(picks).size > 5, pickd(one) + " / " + pickd(two));
     ok("AR2 · the archive's day line: 'From the archive' beside the date, and under the title 'Today's puzzle is on its way. Here is one from the archive.'",
       / · From the archive$/.test(doc(one).getElementById("dd-date").textContent) && doc(one).getElementById("dd-archive").textContent === "Today's puzzle is on its way. Here is one from the archive." && !doc(one).getElementById("dd-archive").hidden);
+    {
+      const css = R("play/daily/daily.css"), meta = (css.match(/\.dd-meta \{[^}]*\}/) || [""])[0];
+      ok("AR2b · the tag reads 'From the archive' as written: the date line is never capitalised — only the difficulty is",
+        meta && !/text-transform/.test(meta) && /#dd-diff \{ text-transform: capitalize; \}/.test(css) && !/#dd-date[^{]*\{[^}]*text-transform/.test(css), meta);
+    }
     const P = D.archiveFor(PUZZLES, a1), w = winnerOf(P);
     const s0 = { v: 1, solved: { [D.addDays(last, -1)]: true, [last]: true }, revealed: {}, best: 2 };
     const sv = pageAt(`${a1}T10:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify(s0) } }); await tick();
@@ -490,9 +495,9 @@ async function main() {
     ok("ML7 · THE FALLBACK BOARD: its buttons ('Play …', 'End my turn', 'Leap', 'Show me the answer') are plaque buttons too", allPlaque(fb, "#dd-actions button") && plaques(fb, "#dd-actions button").some((b) => /^Play /.test(b.textContent))
       && /function btn\(text, cls, fn\) \{ var b = el\("button", "dd-btn mg-btn "/.test(R("play/daily/page.js")));
     const css = R("play/daily/daily.css"), html = R("play/daily/index.html");
-    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d5, page.js d7, mini.css g2 — on both mini games)",
+    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d6, page.js d7, mini.css g2 — on both mini games)",
       !/\.dd-btn \{/.test(css) && !/\.dd-btn\.dd-go/.test(css) && /body\.daily \{[^}]*overflow-x: hidden/.test(css) && /body\.dd-framing \.mg-stage \{ opacity: \.35; \}/.test(css)
-        && /daily\.css\?v=d5/.test(html) && /page\.js\?v=d7/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
+        && /daily\.css\?v=d6/.test(html) && /page\.js\?v=d7/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
   });
 
   await section('THE RULES, DIRECTLY', async () => {
