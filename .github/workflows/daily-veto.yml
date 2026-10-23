@@ -1,0 +1,48 @@
+# MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4 — VETO: by hand only ("Run workflow", enter the date). Replaces that day's
+# puzzle under every generator rule (its old position is never offered again), runs the Daily Puzzle suites, commits,
+# pushes (rebase + retry; never forced), asks Pages to build, and emails the owner a preview of the replacement.
+# Today or a later date only. THE LOG IS PUBLIC: the job prints only dates, counts, ids and commit hashes.
+name: Daily Puzzle — veto
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "The date to replace (YYYY-MM-DD), as shown in the preview email"
+        required: true
+        type: string
+permissions:
+  contents: write
+  pages: write
+concurrency:
+  group: daily-puzzles
+  cancel-in-progress: false
+jobs:
+  veto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install the test dependencies
+        run: npm ci --prefix tests --no-audit --no-fund --loglevel=error
+      - name: Replace the day
+        env:
+          DY_JOB_DATE: ${{ inputs.date }}   # passed as data, never pasted into the command; the job checks its form
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PREVIEW_EMAIL: ${{ secrets.PREVIEW_EMAIL }}
+        run: node scripts/daily-gen/job.js veto
+      - name: Ask Pages to build
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${{ github.repository }}/pages/builds" --silent || echo "pages build request not accepted (a push build may already be running)"
+      - name: Email the owner on failure
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PREVIEW_EMAIL: ${{ secrets.PREVIEW_EMAIL }}
+        run: node scripts/daily-gen/job.js alert --what veto

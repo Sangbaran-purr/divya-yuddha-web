@@ -449,7 +449,8 @@ async function main() {
     const dpFiles = ["play/daily/index.html", "play/daily/page.js", "play/daily/daily.js", "play/daily/notes.js", "play/daily/puzzle-core.js",
       "tests/suites/puzzles.js", "tests/suites/daily.js", "scripts/puzzle-solve.js", "scripts/daily-notes-encode.js",
       "scripts/puzzle-answer-digest.js", "docs/MINI_GAMES_R1_DAILY_PUZZLE.md", "tests/fixtures/daily-answers.sha256.json",
-      "scripts/daily-gen/lib.js", "scripts/daily-gen/batch.js", "tests/suites/dailygen.js"];   // + the generator (R1, 2026-10-16)
+      "scripts/daily-gen/lib.js", "scripts/daily-gen/batch.js", "tests/suites/dailygen.js",
+      "scripts/daily-gen/job.js", "tests/suites/dailyjob.js"];   // + the generator (R1, 2026-10-16)
     const wnames = [...new Set(PUZZLES.flatMap((P) => { const w = winnerOf(P); return [w.play, w.target && w.target.replace(/#\d+$/, "")].filter(Boolean); }))].map((n) => n.toLowerCase());
     const WORD = /\b(win|wins|won|winning|winner|answer|solution|solves|correct)\b/i;
     const leaks = [];

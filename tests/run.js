@@ -70,7 +70,8 @@ const SUITES = [
   { name: "hallstake",     file: path.join(__dirname, "suites", "hallstake.js"), chain: false, expect: 34 },
   // MINI-GAMES-1 R1: the Daily Puzzle — 14 puzzles, each solved to EXACTLY ONE winning play by the offline solver over the
   // site's copy of the real engine; the solver's refusals (two wins, none, malformed, unknown card, luck) and mutants.
-  { name: "puzzles",       file: path.join(__dirname, "suites", "puzzles.js"), chain: false, expect: 62 },
+  // R4: the weekly job adds puzzles, and this suite checks each one (check P) — 34 fixed checks + one per puzzle
+  { name: "puzzles",       file: path.join(__dirname, "suites", "puzzles.js"), chain: false, expect: 34 + JSON.parse(fs.readFileSync(path.join(H.SITE, "play", "daily", "puzzles.json"), "utf8")).length },
   // MINI-GAMES-1 R2: the Daily Puzzle PAGE — the real page in jsdom (controlled clock and store): UTC dates incl. +5:30
   // and -8, win / wrong / draw / reveal / missed day, storage blocked, no future puzzle, in-page solver = offline solver,
   // no plain answer or explanation in any served file.
@@ -82,7 +83,12 @@ const SUITES = [
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R1: the generator (scripts/daily-gen) and the batch it wrote — exactly one winner
   // on 8 seeds, explanations from the engine with a named cause per change and arithmetic read back from the words, the
   // content rules, no near-duplicates, launch cards only, no answer in a run's log; five owner-named breakages, each caught.
-  { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 74 },   // +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24)
+  { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 75 },   // +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24) · +1 bounded chooser (K25)
+  // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4: the weekly job, watchdog and veto (scripts/daily-gen/job.js + the three
+  // workflows), run for real in throwaway clones pushing to a throwaway bare repo: 28 days ready, the digest-commit clash
+  // retried (never forced), exactly the vetoed day replaced, the watchdog's gap email, every rule in the job path, a log of
+  // dates/counts/ids only; four owner-named breakages, each caught.
+  { name: "dailyjob",      file: path.join(__dirname, "suites", "dailyjob.js"), chain: false, expect: 21 },
 ];
 
 function freePort() {

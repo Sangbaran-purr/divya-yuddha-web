@@ -18,6 +18,11 @@ const NOTES = path.join(G.SITE, "play", "daily", "notes.js");
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i >= 0 ? process.argv[i + 1] : d; };
 const from = arg("--from"), to = arg("--to"), dry = process.argv.indexOf("--dry") >= 0;
+// R4 (the weekly job): --quiet logs only dates and counts (a job's log is public: no faction, realm, mechanic, card or
+// reason text); --out-json <file> writes the chosen NEW days' positions to a file OUTSIDE the repo and writes nothing else —
+// the job re-judges them and writes the repo files itself
+const quiet = process.argv.indexOf("--quiet") >= 0, outJson = arg("--out-json", "");
+const say = (full, short) => console.log(quiet ? short : full);
 if (!/^\d{4}-\d{2}-\d{2}$/.test(from || "") || !/^\d{4}-\d{2}-\d{2}$/.test(to || "")) { console.error("usage: batch.js --from YYYY-MM-DD --to YYYY-MM-DD [--plain file] [--dry]"); process.exit(2); }
 const plainPath = arg("--plain", path.join(os.homedir(), "Desktop", "DY_daily_answers_" + from + ".txt"));
 
@@ -57,7 +62,7 @@ async function parallel() {
     const launch = () => {
       while (running < limit && next < open.length) {
         const slot = open[next++], w = fork(path.join(__dirname, "worker.js"), [], { silent: true }); running++;
-        w.on("message", (m) => { if (m.error) return fail(new Error(m.date + ": " + m.error)); pools[m.date] = m.pool; console.log(m.date + "  " + m.pool.length + " candidates"); });
+        w.on("message", (m) => { if (m.error) return fail(new Error(m.date + ": " + (quiet ? "worker failed" : m.error))); pools[m.date] = m.pool; console.log(m.date + "  " + m.pool.length + " candidates"); });
         w.on("exit", () => { running--; if (next >= open.length && running === 0) done(); else launch(); });
         w.send({ slot, opts: { maxTries, poolSize, salt: genOpts.salt } });
       }
@@ -69,7 +74,7 @@ async function parallel() {
   // already carries)
   const avoidCards = (arg("--avoid-cards", "") || "").split(",").map((x) => x.trim()).filter(Boolean);
   const yourSide = (P) => { const pl = G.PZ.load(P, G.E, G.PZ.SEEDS[0]).players[0]; return pl.hand.concat(pl.units, pl.heroes, pl.artifact ? [pl.artifact] : []); };
-  if (avoidCards.length) open.forEach((s) => { pools[s.date] = (pools[s.date] || []).filter((c) => !yourSide(c.puzzle).some((h) => avoidCards.indexOf(h.n) >= 0)); console.log(s.date + "  " + pools[s.date].length + " candidates without the avoided cards"); });
+  if (avoidCards.length) open.forEach((s) => { pools[s.date] = (pools[s.date] || []).filter((c) => !yourSide(c.puzzle).some((h) => avoidCards.indexOf(h.n) >= 0)); console.log(s.date + "  " + pools[s.date].length + " candidates after avoiding"); });
   // a kept puzzle's Hero traps: a Hero in its hand that loses AND its stored explanation tells why
   const fixedTraps = {}; Object.values(pinned).forEach((p) => { const res = G.PZ.solve(p, G.E, null); fixedTraps[p.date] = G.heroTraps(p, res).filter((h) => (pinnedText[p.date] || "").indexOf(h + " falls short: ") >= 0).length; });
   const c = G.choose(slots, pools, Object.values(pinned), existing, Object.assign({ fixedTraps }, genOpts));
@@ -77,7 +82,7 @@ async function parallel() {
   return slots.map((s) => {
     if (pinned[s.date]) { const P = pinned[s.date], res = G.PZ.solve(P, G.E, null); return { puzzle: P, res, winner: res.winners[0], gr: G.grade(P, res), ex: { text: pinnedText[s.date] }, mechanic: P.mechanic, pinned: true }; }
     const P = c.pick[s.date], j = G.judge(P);
-    if (!j.ok) throw new Error(s.date + ": the chosen puzzle no longer passes (" + j.reason + ")");
+    if (!j.ok) throw new Error(s.date + ": the chosen puzzle no longer passes" + (quiet ? "" : " (" + j.reason + ")"));
     return Object.assign(j, { puzzle: P, mechanic: P.mechanic });
   });
 }
@@ -85,10 +90,15 @@ async function parallel() {
 const out = process.argv.indexOf("--parallel") >= 0 ? await parallel() : G.generate(dates, existing, genOpts);
 if (dates.length === 14) {
   const ht = {}; out.forEach((x) => { const res = x.res || G.PZ.solve(x.puzzle, G.E, null); ht[x.puzzle.date] = G.heroTraps(x.puzzle, res).filter((h) => (x.ex.text || "").indexOf(h + " falls short: ") >= 0).length; });
-  const errs = G.checkSpread(out.map((x) => x.puzzle), { heroTraps: ht }); if (errs.length) { console.error("refused: the run breaks a spread rule: " + errs.join("; ")); process.exit(1); }
+  const errs = G.checkSpread(out.map((x) => x.puzzle), { heroTraps: ht }); if (errs.length) { console.error(quiet ? "refused: the run breaks " + errs.length + " spread rule(s)" : "refused: the run breaks a spread rule: " + errs.join("; ")); process.exit(1); }
 }
-out.forEach((x) => console.log(x.puzzle.date + "  " + x.puzzle.difficulty.padEnd(6) + "  " + x.puzzle.you.faction + " vs " + x.puzzle.them.faction + "  " + x.puzzle.realm + "  " + x.mechanic + (recheck ? (x.pinned ? "  (kept by the owner)" : x.kept ? "  (kept)" : "  (new)") : "")));
+if (!quiet) out.forEach((x) => console.log(x.puzzle.date + "  " + x.puzzle.difficulty.padEnd(6) + "  " + x.puzzle.you.faction + " vs " + x.puzzle.them.faction + "  " + x.puzzle.realm + "  " + x.mechanic + (recheck ? (x.pinned ? "  (kept by the owner)" : x.kept ? "  (kept)" : "  (new)") : "")));
 console.log(out.length + " puzzles in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" + (dry ? " (dry run: nothing written)" : ""));
+if (outJson) {   // the job's road: the chosen new days only, positions as chosen (title, mechanic, difficulty set) — nothing else written
+  fs.writeFileSync(outJson, JSON.stringify(out.filter((x) => !x.pinned).map((x) => x.puzzle)));
+  console.log(out.filter((x) => !x.pinned).length + " new days handed to the job");
+  process.exit(0);
+}
 if (dry) process.exit(0);
 
 // the repo: positions, fingerprints, encoded explanations
@@ -121,4 +131,4 @@ out.forEach((x, i) => {
 });
 fs.writeFileSync(plainPath, txt);
 console.log("wrote the repo files and the owner's plain file (outside the repo)");
-})().catch((e) => { console.error(String(e && e.message || e)); process.exit(1); });
+})().catch((e) => { const m = String(e && e.message || e); console.error(quiet ? (/^\d{4}-\d{2}-\d{2}: /.test(m) ? m.slice(0, 12) + "failed" : /no combination/.test(m) ? "no combination keeps every run rule" : "generator failed") : m); process.exit(1); });

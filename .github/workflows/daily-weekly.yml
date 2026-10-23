@@ -1,0 +1,45 @@
+# MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4 — WEEKLY: keep Daily Puzzles ready 28 days ahead.
+# Mondays 03:30 UTC (09:00 IST), or by hand ("Run workflow"). Generates any missing days under every generator rule
+# (scripts/daily-gen/job.js weekly), runs the Daily Puzzle suites, commits, pushes (rebase + retry on a clash with the
+# approval bot's digest commits; never forced), asks Pages to build, then emails the owner a preview of every new day.
+# THE LOG IS PUBLIC: the job prints only dates, counts, ids and commit hashes.
+name: Daily Puzzle — weekly
+on:
+  schedule:
+    - cron: "30 3 * * 1"
+  workflow_dispatch: {}
+permissions:
+  contents: write   # commit and push the new days
+  pages: write      # ask Pages to build after the push
+concurrency:
+  group: daily-puzzles   # the weekly job and a veto never run at the same time
+  cancel-in-progress: false
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the generator suite reads earlier commits; a rebase needs the history
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install the test dependencies
+        run: npm ci --prefix tests --no-audit --no-fund --loglevel=error
+      - name: Fill the next 28 days
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PREVIEW_EMAIL: ${{ secrets.PREVIEW_EMAIL }}
+        run: node scripts/daily-gen/job.js weekly
+      - name: Ask Pages to build
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${{ github.repository }}/pages/builds" --silent || echo "pages build request not accepted (a push build may already be running)"
+      - name: Email the owner on failure
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PREVIEW_EMAIL: ${{ secrets.PREVIEW_EMAIL }}
+        run: node scripts/daily-gen/job.js alert --what weekly

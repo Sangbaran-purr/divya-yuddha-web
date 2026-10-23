@@ -603,7 +603,8 @@ function datesFrom(from, to) {
 const fs = require("fs");
 const DP_FILES = ["play/daily/index.html", "play/daily/page.js", "play/daily/daily.js", "play/daily/notes.js", "play/daily/puzzle-core.js",
   "tests/suites/puzzles.js", "tests/suites/daily.js", "tests/suites/dailygen.js", "scripts/puzzle-solve.js", "scripts/daily-notes-encode.js",
-  "scripts/puzzle-answer-digest.js", "docs/MINI_GAMES_R1_DAILY_PUZZLE.md", "tests/fixtures/daily-answers.sha256.json", "scripts/daily-gen/lib.js", "scripts/daily-gen/batch.js"];
+  "scripts/puzzle-answer-digest.js", "docs/MINI_GAMES_R1_DAILY_PUZZLE.md", "tests/fixtures/daily-answers.sha256.json", "scripts/daily-gen/lib.js", "scripts/daily-gen/batch.js",
+  "scripts/daily-gen/job.js", "tests/suites/dailyjob.js"];   // + the weekly job and its suite (R4)
 const WIN_WORD = /\b(win|wins|won|winning|winner|answer|solution|solves|correct)\b/i;
 function leakyLines() {
   const lines = [];
@@ -767,14 +768,18 @@ function choose(slots, pools, fixed, existing, opts) {
     const left = n - all.length, needYou = FACTIONS.reduce((t, f) => t + Math.max(0, floor - (you[f] || 0)), 0), needThem = FACTIONS.reduce((t, f) => t + Math.max(0, floor - (them[f] || 0)), 0);
     return needYou <= left && needThem <= left;
   }
+  // R4: a BOUNDED search. With no combination left (e.g. the titles run out) the backtracking would otherwise run for hours;
+  // past the budget it gives up (→ null), so a weekly job fails in minutes and the owner is emailed
+  let steps = 0; const maxSteps = opts.maxSteps || 300000, deadline = Date.now() + (opts.maxMs || 5 * 60000);
   function go(i, list, sigs, titles, cards, traps) {
+    if (++steps > maxSteps || (steps % 1000 === 0 && Date.now() > deadline)) return false;
     if (i === open.length) return traps >= TRAPS;
     if (traps + (open.length - i) < TRAPS) return false;   // not enough days left to reach 3 Hero traps
     const s = open[i];
     const pool = pools[s.date].slice().sort((a, b) => ((b.traps > 0) - (a.traps > 0)));   // Hero traps first
     for (const c of pool) {
       if (cards.has(c.play) || leaks(leakLines, [c.play, c.target && clean(c.target)])) continue;
-      const sig = signature(c.puzzle); if (sigs.some((x) => similarity(x, sig) >= NEAR_DUP)) continue;
+      const sig = c.sig || (c.sig = signature(c.puzzle)); if (sigs.some((x) => similarity(x, sig) >= NEAR_DUP)) continue;   // worked out once per candidate
       const P = JSON.parse(JSON.stringify(c.puzzle));
       const t = c.keptTitle && !titles.has(c.keptTitle) ? c.keptTitle : titleFor(c.mechanic, titles, [c.play].concat(c.target ? [clean(c.target)] : [])); if (!t) continue;
       P.title = t;
@@ -787,7 +792,8 @@ function choose(slots, pools, fixed, existing, opts) {
   }
   const fixedTraps = fixed.filter((p) => (opts.fixedTraps || {})[p.date] > 0).length;
   const fixedCards = new Set(fixed.map((p) => PZ.solve(p, E, null).winners[0].play));
-  return go(0, [], sigs0, titles0, fixedCards, fixedTraps) ? { pick } : null;
+  const found = go(0, [], sigs0, titles0, fixedCards, fixedTraps);
+  return found ? { pick, steps } : null;
 }
 
 // the position in plain words (for the owner's private preview — never written into the repo)
@@ -801,5 +807,5 @@ function describe(P) {
     + "Your side: " + side(0) + ". Their side: " + side(1) + ". Your hand: " + g.players[0].hand.map((c) => c.n).join(", ") + ".";
 }
 
-module.exports = { looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
+module.exports = { leaks, looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
   judge, planSlots, datesFrom, generate, describe, clean, defOf };

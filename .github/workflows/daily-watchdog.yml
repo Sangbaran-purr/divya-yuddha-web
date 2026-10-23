@@ -1,0 +1,30 @@
+# MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4 — WATCHDOG: every day at 04:00 UTC (09:30 IST), email the owner if any of the
+# next 14 days has no puzzle (players see an archive puzzle meanwhile). Reads the repo only; writes nothing.
+# THE LOG IS PUBLIC: the job prints only dates and counts.
+name: Daily Puzzle — watchdog
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check the next 14 days
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PREVIEW_EMAIL: ${{ secrets.PREVIEW_EMAIL }}
+        run: node scripts/daily-gen/job.js watchdog
+      - name: Email the owner on failure
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PREVIEW_EMAIL: ${{ secrets.PREVIEW_EMAIL }}
+        run: node scripts/daily-gen/job.js alert --what watchdog

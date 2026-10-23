@@ -320,6 +320,15 @@ function arithmetic(text) {
   const m23b = mutant('  const plain = E.effPower(g, side, Object.assign({}, u, { id: "__plain__" })), own = to - plain;', "  const plain = to, own = 0;");
   ok("K23b · …and a Leap gain whose rest is NOT the leaper's own ability cannot be named, so the position is REFUSED (Rule B)", splitDays.length >= 1 && splitDays.every((P) => rejects(m23b, P, "EXPLANATION")));
 
+  // R4: THE CHOOSER IS BOUNDED — a run that can never be completed (here: no Hero trap anywhere, so the 3-per-14 rule fails
+  // at every leaf) gives up within its budget instead of trying all 14! orders (a weekly job then fails in minutes)
+  {
+    const slots = G.planSlots(G.datesFrom("2099-03-02", "2099-03-15")), pools = {};
+    const cands = B2.map((P) => ({ puzzle: clone(P), mechanic: P.mechanic, play: (solved[P.id] || PZ.solve(P, E, null)).winners[0].play, target: null, traps: 0, keptTitle: P.title }));
+    slots.forEach((s) => { pools[s.date] = cands.map((c) => Object.assign({}, c, { puzzle: Object.assign(clone(c.puzzle), { date: s.date }) })); });
+    const t0 = Date.now(), r = G.choose(slots, pools, [], [], { maxSteps: 20000 });
+    ok("K25 · THE CHOOSER IS BOUNDED: an impossible run gives up within its budget (" + (Date.now() - t0) + " ms) rather than searching for hours", r === null && Date.now() - t0 < 60000);
+  }
   // a duplicate: the generator, offered the very puzzle it would make, must not make it again
   const d1 = G.generate(["2027-01-04"], B1, { maxTries: 20000 })[0];
   const again = G.generate(["2027-01-04"], B1.concat([d1.puzzle]), { maxTries: 20000 })[0];
