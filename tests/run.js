@@ -74,7 +74,7 @@ const SUITES = [
   // MINI-GAMES-1 R2: the Daily Puzzle PAGE — the real page in jsdom (controlled clock and store): UTC dates incl. +5:30
   // and -8, win / wrong / draw / reveal / missed day, storage blocked, no future puzzle, in-page solver = offline solver,
   // no plain answer or explanation in any served file.
-  { name: "daily",         file: path.join(__dirname, "suites", "daily.js"), chain: false, expect: 85 },   // Daily Puzzle Effects R2: +19 (the battle frame) · R3 tag style +1
+  { name: "daily",         file: path.join(__dirname, "suites", "daily.js"), chain: false, expect: 86 },   // Daily Puzzle Effects R2: +19 (the battle frame) · R3 tag style +1 · N2b +1
   // MINI-GAMES-2: SMRITI, the memory game — R1 rules (deal, animated-pair rule, tries, best, storage), R2 the animation player
   // (the game's manifest reader and Meghnad's pack pinned byte-for-byte; 256 px only; load/release), R3 the page (the board
   // waits on every Hero/Meghnad turn; reduced motion skips; layouts); every owner-named breakage applied and caught.

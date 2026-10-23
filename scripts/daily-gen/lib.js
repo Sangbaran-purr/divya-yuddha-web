@@ -258,8 +258,8 @@ function narrate(P, play, opts) {
 }
 
 // ── 3. THE EXPLANATION — one fixed plain pattern ──
-// a Leap is told as a Leap: "then Vanara Warrior Leaps onto Dwivida and gains 3 (4→7)"; a card's own free Leap (Mainda's)
-// names what it copies: "Mainda makes a free Leap onto Jambavan and gains 2 (4→6)"
+// a Leap is told as a Leap: "then <Leaper> Leaps onto <Unit> and gains <n> (<a>→<b>)"; a card's own free Leap (Mainda's)
+// names what it copies: "<Leaper> makes a free Leap onto <Unit> and gains <n> (<a>→<b>)"
 function sentenceOf(n) {
   const used = new Set();
   const gainOf = (name) => { const c = n.changes.find((x) => !used.has(x) && x.leap && x.leap.who === name); if (!c) return ""; used.add(c); return " and gains " + c.d + c.text.slice(c.text.lastIndexOf(" (")); };

@@ -427,6 +427,18 @@ async function main() {
     decoded.forEach((t) => t.split(/(?<=\.)\s+/).forEach((s) => { if (s.length >= 30) sentences.push(s); }));
     const found = sentences.filter((s) => corpus.indexOf(s) >= 0);
     ok("N2 · not one explanation sentence (" + sentences.length + " checked) appears in plain text in any served file (" + tracked.length + " files)", found.length === 0, found.slice(0, 2).join(" | "));
+    // N2b — the leak that slipped past N2 (2026-10-23): a test pinned a CLAUSE of a batch-2 explanation inside a longer
+    // sentence, and a code comment used a phrase from another as its example. So also check every clause (split at . ; : — , →)
+    // that names a card or a number, and every 5-word run holding both a number and a name — in every served file except notes.js
+    const corpusX = tracked.filter((f) => f !== "play/daily/notes.js").map((f) => { try { return fs.readFileSync(path.join(SITE, f), "utf8"); } catch (e) { return ""; } }).join("\n");
+    const frags = new Set();
+    decoded.forEach((t) => t.split(/[.;:—,→]\s+|\s+—\s+/).map((c) => c.trim()).forEach((c) => {
+      if (c.length >= 22 && (/\d/.test(c) || /\s[A-Z][a-z]/.test(c))) frags.add(c);
+      const w = c.split(/\s+/);
+      for (let i = 0; i + 5 <= w.length; i++) { const g = w.slice(i, i + 5).join(" "); if (/\d/.test(g) && /(^|\s)[A-Z][a-z]{2,}/.test(g.replace(/^\S+/, ""))) frags.add(g); }
+    }));
+    const fragHits = [...frags].filter((f) => corpusX.indexOf(f) >= 0);
+    ok("N2b · not one explanation CLAUSE or name-and-number phrase (" + frags.size + " checked) appears in any served file but the encoded notes", frags.size > 300 && fragHits.length === 0, fragHits.length + " found (not printed: the log is public)");
     ok("N3 · no answer key: no answers.json, no \"answer\" object anywhere", !fs.existsSync(path.join(DIR, "answers.json")) && !/"answer"\s*:\s*\{/.test(corpus));
     const page = R("play/daily/page.js") + R("play/daily/index.html") + R("play/daily/daily.js");
     const winningNames = PUZZLES.map((P) => winnerOf(P).play);

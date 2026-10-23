@@ -251,18 +251,21 @@ function arithmetic(text) {
   const m17 = mutant('  const removed = nw.changes.filter((c) => c.side === 1 && / is removed by /.test(c.text)).reduce((t, c) => t - c.d, 0);\n  if (removed > 0 && removed * 2 >= nw.T0[1]) return "OBVIOUS_REMOVAL";',
     '  const removed = nw.changes.filter((c) => c.side === 1 && / is removed by /.test(c.text)).map((c) => -c.d);\n  if (removed.some((x) => x * 2 >= nw.T0[1])) return "OBVIOUS_REMOVAL";');
   ok("M17 · breakage 'count only the single biggest removal' is caught (K17 goes red)", cOf(m17, sweep) !== "OBVIOUS_REMOVAL");
-  const kark = B2.find((p) => p.date === "2026-11-10"), kt = decoded[B2.indexOf(kark)];
-  ok("K18 · A ROUND-END EFFECT THAT DOES NOT HAPPEN IS TOLD (Rule B): 10 Nov's Karkotaka line says why your Venom drain does not fire",
-    kt.indexOf("Karkotaka falls short: Karkotaka enters at 6; Karkotaka moves your Venom drain to the moment either player first passes; the opponent has already passed, so your drain does not fire this round; the round ends 14–15, 1 short.") >= 0);
+  // PUBLIC REPO: these checks find their day by searching the decoded notes and assert only the general wording — no date,
+  // card name or number from an explanation is ever written here (a test file is served like every other file)
+  const DRAIN = /([A-Z][A-Za-z' ]+) moves your Venom drain to the moment either player first passes; the opponent has already passed, so your drain does not fire this round/;
+  const ki = decoded.findIndex((t) => DRAIN.test(t)), kark = B2[ki];
+  ok("K18 · A ROUND-END EFFECT THAT DOES NOT HAPPEN IS TOLD (Rule B): the batch's wrong play that skips the Venom drain says why", ki >= 0 && DRAIN.exec(decoded[ki])[1].trim().length > 2);
   const blind = mutant('    if (/first passes/i.test(def.txt || "") && side === 1)', '    if (false)');
-  ok("K18b · …and a missing effect the writer cannot explain REFUSES the puzzle (the reason taken away: 10 Nov is refused)", rejects(blind, kark, "EXPLANATION"));
+  ok("K18b · …and a missing effect the writer cannot explain REFUSES the puzzle (the reason taken away: that day is refused)", !!kark && rejects(blind, kark, "EXPLANATION"));
   const silent = libFrom(LIB_SRC.split('    if (/first passes/i.test(def.txt || "") && side === 1)').join('    if (false)').split('    return null;\n  }\n  return out.join("; ");').join('    continue;\n  }\n  return out.join("; ");'));
-  ok("M18 · breakage 'leave a missing drain unexplained' is caught (K18b goes red)", !rejects(silent, kark, "EXPLANATION"));
-  ok("K19 · CARDS BY THEIR FULL NAME: no explanation names the engine's short form ('by Sudarshana (' / 'from Sudarshana ('); 4 Nov reads 'removed by Sudarshana Chakra (−6)'",
-    decoded.every((t) => !/(by|from) Sudarshana \(/.test(t)) && decoded[B2.findIndex((p) => p.date === "2026-11-04")].indexOf("is removed by Sudarshana Chakra (−6)") >= 0);
+  ok("M18 · breakage 'leave a missing drain unexplained' is caught (K18b goes red)", !!kark && !rejects(silent, kark, "EXPLANATION"));
+  const FULL = /(by|from) Sudarshana Chakra \(/, SHORT = /(by|from) Sudarshana \(/;
+  const si = decoded.findIndex((t) => FULL.test(t)), p4 = B2[si];
+  ok("K19 · CARDS BY THEIR FULL NAME: no explanation names the engine's short form ('by Sudarshana (' / 'from Sudarshana ('), and the one that names it uses 'Sudarshana Chakra'",
+    si >= 0 && decoded.every((t) => !SHORT.test(t)));
   const m19 = mutant("function fullName(name, cards) {\n  if (!name) return name;", "function fullName(name, cards) {\n  return name;");
-  const p4 = B2.find((p) => p.date === "2026-11-04");
-  ok("M19 · breakage 'use the engine's short name' is caught (K19 goes red)", /removed by Sudarshana \(/.test((m19.explain(p4, solved[p4.id]) || {}).text || ""));
+  ok("M19 · breakage 'use the engine's short name' is caught (K19 goes red)", !!p4 && SHORT.test((m19.explain(p4, solved[p4.id]) || {}).text || ""));
 
   // a duplicate: the generator, offered the very puzzle it would make, must not make it again
   const d1 = G.generate(["2027-01-04"], B1, { maxTries: 20000 })[0];
