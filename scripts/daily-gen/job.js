@@ -123,7 +123,9 @@ function gate(st, block, fresh) {
   const ht = {};
   all.forEach((x) => { const P = x.puzzle, t = x.text != null ? x.text : D.decodeNote(P.id, st.notes[P.id] || ""); ht[P.date] = G.heroTraps(P, G.PZ.solve(P, G.E, null)).filter((h) => t.indexOf(h + " falls short: ") >= 0).length; });
   if (G.checkSpread(all.map((x) => x.puzzle), { heroTraps: ht }).length) throw new JobError("gate-spread");
-  const titles = new Set(others.map((p) => p.title)); all.forEach((x) => { if (titles.has(x.puzzle.title)) throw new JobError("gate-title"); titles.add(x.puzzle.title); });
+  // the 90-day title rule (2026-10-23): no title within 90 days of the same title, before or after
+  const used = others.map((p) => [p.title, p.date]);
+  all.forEach((x) => { if (G.titleClash(used, x.puzzle.title, x.puzzle.date)) throw new JobError("gate-title"); used.push([x.puzzle.title, x.puzzle.date]); });
   return checked;
 }
 

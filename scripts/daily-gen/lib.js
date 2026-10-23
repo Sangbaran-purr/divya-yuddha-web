@@ -435,9 +435,38 @@ const TITLES = {
   "read the card": ["Count Carefully", "The Quiet Answer", "Every Point Matters", "Weigh the Hand", "Read Before You Play", "The Small Card", "Not the Biggest", "Measure Twice", "The Patient Choice", "Less Is More"],
   "realm": ["Under a Strange Sky", "The Land Decides", "The Realm's Favour", "Where the Ground Helps", "The Field Remembers", "Ground Rules"],
 };
-function titleFor(mech, used, avoid) {
+// (owner ruling 2026-10-23) THE 90-DAY TITLE RULE: a title may return once it has not been used for 90 days of puzzles —
+// never two puzzles with one title less than 90 days apart (before OR after: puzzles are made weeks ahead). And the title rule
+// is NEVER the reason a run fails: when no listed title fits, one is BUILT from the puzzle itself (its mechanic, realm or a
+// card on the board — never the winning card or its target, and no win/answer word), under the same 90-day rule; the last
+// built form carries the date, so one is always free.
+const TITLE_GAP = 90;
+const dayGap = (a, b) => Math.abs(Math.round((Date.parse(a + "T00:00:00Z") - Date.parse(b + "T00:00:00Z")) / 86400000));
+// used: [[title, date], ...] — does this title clash with any of them for this date?
+const titleClash = (used, t, date) => used.some((u) => u[0] === t && dayGap(u[1], date) < TITLE_GAP);
+const MECH_WORD = { "venom": "Venom", "leap": "The Leap", "hero": "A Hero", "chaos surge": "Chaos Surge", "astras": "An Astra", "mantras": "A Mantra",
+  "artifacts": "A Relic", "removal": "Removal", "read the card": "A Close Count" };
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function builtTitles(P, mech) {
+  const R = REALM_NAME[P.realm] || "Mrityulok", F = FAC_NAME[P.them.faction] || "the Foe", realmDay = mech.indexOf("realm") === 0;
+  const M = realmDay ? R : MECH_WORD[mech] || "A Close Count";
+  let mine = [], theirs = [];
+  try { const g = PZ.load(P, E, PZ.SEEDS[0]); const names = (pi) => g.players[pi].heroes.concat(g.players[pi].units).filter((u) => !u.ghost).map((u) => u.n); mine = names(0); theirs = names(1); } catch (e) {}
+  const t = new Date(P.date + "T00:00:00Z");
+  const out = (realmDay ? [R + " Decides", "The Ground of " + R, R + " Tips the Scale"] : [M + " in " + R]).concat([M + " against the " + F])
+    .concat(theirs.map((n) => "Facing " + n), theirs.map((n) => "Past " + n), mine.map((n) => n + "'s Stand"), mine.map((n) => n + "'s Hour"),
+      [(realmDay ? R + " Rules" : M + " in " + R) + ", " + MONTHS[t.getUTCMonth()], M + " on " + t.getUTCDate() + " " + MONTHS[t.getUTCMonth()]]);   // the last: the date's own
+  return out.filter((x, i) => out.indexOf(x) === i && !WIN_WORD.test(x));
+}
+// a title for this puzzle on this date: a listed one if one fits, else a built one — never null
+function titleFor(mech, clash, avoid, P) {
   const pool = TITLES[mech] || TITLES[mech.indexOf("realm") === 0 ? "realm" : "read the card"];
-  return pool.concat(TITLES["read the card"]).find((t) => !used.has(t) && !avoid.filter(Boolean).some((a) => t.toLowerCase().indexOf(a.toLowerCase()) >= 0)) || null;
+  const names = (avoid || []).filter(Boolean).map((a) => a.toLowerCase());
+  const fits = (t) => !clash(t) && !names.some((a) => t.toLowerCase().indexOf(a) >= 0);
+  const listed = pool.concat(TITLES["read the card"]).find(fits);
+  if (listed || !P) return listed || null;
+  const built = builtTitles(P, mech);
+  return built.find((t) => t.length <= 34 && fits(t)) || built.find(fits) || built[built.length - 1];
 }
 // what the player looks at: the faction pair, and every card name in your hand and on both sides of the field
 function signature(P) {
@@ -619,7 +648,7 @@ function generate(dates, existing, opts) {
   opts = opts || {};
   const maxTries = opts.maxTries || 20000;
   const slots = planSlots(dates, opts);
-  const chosen = [], sigs = existing.map(signature), usedTitles = new Set(existing.map((p) => p.title));
+  const chosen = [], sigs = existing.map(signature), usedTitles = existing.map((p) => [p.title, p.date]);
   const mechCount = {}, winCards = new Set(), leakLines = opts.leakLines || leakyLines();
   function search(slot) {
     const r = mulberry32(hashStr("dy-daily|" + slot.date + "|" + slot.realm + "|" + (opts.salt || "") + (keep[slot.date] ? "|r2" : "")));
@@ -633,7 +662,7 @@ function generate(dates, existing, opts) {
       if (leaks(leakLines, [j.winner.play, j.winner.target && clean(j.winner.target)])) continue;   // the leak guard (N5)
       const sig = signature(P);
       if (sigs.some((s) => similarity(s, sig) >= NEAR_DUP)) continue;       // no near-duplicates (this run and earlier)
-      const title = titleFor(j.mechanic, usedTitles, [j.winner.play].concat(j.winner.target ? [clean(j.winner.target)] : []));
+      const title = titleFor(j.mechanic, (t) => titleClash(usedTitles, t, slot.date), [j.winner.play].concat(j.winner.target ? [clean(j.winner.target)] : []), Object.assign({}, P, { date: slot.date }));
       if (!title) continue;
       P.title = title; P.mechanic = j.mechanic; P.difficulty = slot.difficulty;
       return Object.assign(j, { puzzle: P, tries, sig });
@@ -653,7 +682,7 @@ function generate(dates, existing, opts) {
     const sig = signature(P); if (sigs.some((x) => similarity(x, sig) >= NEAR_DUP)) return null;
     const K = JSON.parse(JSON.stringify(P));
     const pool = TITLES[j.mechanic] || TITLES[j.mechanic.indexOf("realm") === 0 ? "realm" : "read the card"];
-    if (pool.indexOf(K.title) < 0 || usedTitles.has(K.title)) { const t = titleFor(j.mechanic, usedTitles, [j.winner.play].concat(j.winner.target ? [clean(j.winner.target)] : [])); if (!t) return null; K.title = t; }
+    if (pool.indexOf(K.title) < 0 || titleClash(usedTitles, K.title, slot.date)) { const t = titleFor(j.mechanic, (x) => titleClash(usedTitles, x, slot.date), [j.winner.play].concat(j.winner.target ? [clean(j.winner.target)] : []), Object.assign({}, K, { date: slot.date })); if (!t) return null; K.title = t; }
     K.mechanic = j.mechanic;
     return Object.assign(j, { puzzle: K, tries: 0, sig, kept: true });
   }
@@ -665,7 +694,7 @@ function generate(dates, existing, opts) {
     if (pinned[slot.date]) {
       const P = pinned[slot.date], res = PZ.solve(P, E, null);
       const got = { puzzle: P, res, winner: res.winners[0], gr: grade(P, res), ex: { text: opts.pinnedText[slot.date] }, mechanic: P.mechanic, kept: true, pinned: true, sig: signature(P) };
-      chosen.push(got); sigs.push(got.sig); usedTitles.add(P.title); mechCount[P.mechanic] = (mechCount[P.mechanic] || 0) + 1; winCards.add(got.winner.play);
+      chosen.push(got); sigs.push(got.sig); usedTitles.push([P.title, P.date]); mechCount[P.mechanic] = (mechCount[P.mechanic] || 0) + 1; winCards.add(got.winner.play);
       if (P.mechanic === "hero") heroWins++;
       continue;
     }
@@ -676,7 +705,7 @@ function generate(dates, existing, opts) {
     // a realm that yields nothing within the budget gives way to Mrityulok (the realm-spread rule is checked afterwards)
     if (!got && slot.realm !== "mrityulok") { slot.realm = "mrityulok"; slot.fellBack = true; got = search(slot); }
     if (!got) throw new Error("no puzzle found for " + slot.date + " after " + maxTries + " tries");
-    chosen.push(got); sigs.push(got.sig); usedTitles.add(got.puzzle.title); mechCount[got.mechanic] = (mechCount[got.mechanic] || 0) + 1; winCards.add(got.winner.play);
+    chosen.push(got); sigs.push(got.sig); usedTitles.push([got.puzzle.title, slot.date]); mechCount[got.mechanic] = (mechCount[got.mechanic] || 0) + 1; winCards.add(got.winner.play);
     if (got.mechanic === "hero") heroWins++;
   }
   if (dates.length === 14) { const errs = checkSpread(chosen.map((x) => x.puzzle)); if (errs.length) throw new Error("the run breaks a spread rule: " + errs.join("; ")); }
@@ -755,7 +784,7 @@ function choose(slots, pools, fixed, existing, opts) {
   opts = opts || {};
   const leakLines = opts.leakLines || leakyLines();
   const sigs0 = existing.map(signature).concat((opts.avoid || []).map(signature)).concat(fixed.map(signature));
-  const titles0 = new Set(existing.map((p) => p.title).concat(fixed.map((p) => p.title)));
+  const titles0 = existing.concat(fixed).map((p) => [p.title, p.date]);   // the 90-day rule (2026-10-23)
   const pick = {}, open = slots.filter((s) => pools[s.date]);
   const TRAPS = 3;   // owner ruling 2026-10-19: at least 3 days of 14 carry a Hero trap
   const n = slots.length, cap = Math.ceil(n / 4), floor = Math.floor(n / 4);
@@ -781,11 +810,12 @@ function choose(slots, pools, fixed, existing, opts) {
       if (cards.has(c.play) || leaks(leakLines, [c.play, c.target && clean(c.target)])) continue;
       const sig = c.sig || (c.sig = signature(c.puzzle)); if (sigs.some((x) => similarity(x, sig) >= NEAR_DUP)) continue;   // worked out once per candidate
       const P = JSON.parse(JSON.stringify(c.puzzle));
-      const t = c.keptTitle && !titles.has(c.keptTitle) ? c.keptTitle : titleFor(c.mechanic, titles, [c.play].concat(c.target ? [clean(c.target)] : [])); if (!t) continue;
+      const clash = (x) => titleClash(titles, x, s.date);
+      const t = c.keptTitle && !clash(c.keptTitle) ? c.keptTitle : titleFor(c.mechanic, clash, [c.play].concat(c.target ? [clean(c.target)] : []), Object.assign({}, c.puzzle, { date: s.date })); if (!t) continue;
       P.title = t;
       if (!ok(list.concat([P]))) continue;
       pick[s.date] = P;
-      if (go(i + 1, list.concat([P]), sigs.concat([sig]), new Set([...titles, t]), new Set([...cards, c.play]), traps + (c.traps > 0 ? 1 : 0))) return true;
+      if (go(i + 1, list.concat([P]), sigs.concat([sig]), titles.concat([[t, s.date]]), new Set([...cards, c.play]), traps + (c.traps > 0 ? 1 : 0))) return true;
       delete pick[s.date];
     }
     return false;
@@ -807,5 +837,5 @@ function describe(P) {
     + "Your side: " + side(0) + ". Their side: " + side(1) + ". Your hand: " + g.players[0].hand.map((c) => c.n).join(", ") + ".";
 }
 
-module.exports = { leaks, looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
+module.exports = { TITLE_GAP, titleClash, titleFor, builtTitles, TITLES, leaks, looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
   judge, planSlots, datesFrom, generate, describe, clean, defOf };

@@ -138,8 +138,8 @@ function arithmetic(text) {
   const allNames = Object.values(E.DECKS).flat();
   ok("S7 · LAUNCH CARDS ONLY and every name exists: each card in every hand is a launch card of that side's own faction",
     B2.every((p) => ["you", "them"].every((s) => p[s].hand.every((n) => { const d = E.DECKS[p[s].faction].find((x) => x.n === n); return d && !d.wave; }))) && B2.every((p) => p.setup.every((st) => st.pass || allNames.some((d) => d.n === st.play))));
-  ok("S8 · titles are unique (with batch 1) and never name the winning card or its target",
-    new Set(PUZZLES.map((p) => p.title)).size === PUZZLES.length && B2.every((p) => { const w = solved[p.id].winners[0]; return [w.play, w.target && G.clean(w.target)].filter(Boolean).every((n) => p.title.toLowerCase().indexOf(n.toLowerCase()) < 0); }));
+  ok("S8 · no two puzzles share a title within 90 days (the title rule, 2026-10-23), and no title names the winning card or its target",
+    PUZZLES.every((p, i) => !G.titleClash(PUZZLES.filter((q, k) => k !== i).map((q) => [q.title, q.date]), p.title, p.date)) && B2.every((p) => { const w = solved[p.id].winners[0]; return [w.play, w.target && G.clean(w.target)].filter(Boolean).every((n) => p.title.toLowerCase().indexOf(n.toLowerCase()) < 0); }));
   ok("S9 · the winning line replays to the solver's exact score in every generated puzzle (the reveal and the page agree)", B2.every((P) => { const n = G.narrate(P, solved[P.id].winners[0]); return n && n.T2[0] === solved[P.id].winners[0].you && n.T2[1] === solved[P.id].winners[0].them; }));
   // secrecy: nothing plain in the repo; the run's log names no answer
   const tracked = execFileSync("git", ["ls-files"], { cwd: SITE, encoding: "utf8" }).split("\n").filter((f) => /\.(js|json|html|md|txt|css)$/.test(f) && f.indexOf("node_modules") < 0);
@@ -319,6 +319,25 @@ function arithmetic(text) {
   ok("M23 · breakage 'tell the whole Leap gain as one' is caught (K23 goes red)", splitDays.length >= 1 && splitDays.some((P) => !splitOk(G, P, ((m23.judge(P) || {}).ex || {}).text || "")));
   const m23b = mutant('  const plain = E.effPower(g, side, Object.assign({}, u, { id: "__plain__" })), own = to - plain;', "  const plain = to, own = 0;");
   ok("K23b · …and a Leap gain whose rest is NOT the leaper's own ability cannot be named, so the position is REFUSED (Rule B)", splitDays.length >= 1 && splitDays.every((P) => rejects(m23b, P, "EXPLANATION")));
+
+  // ═══ THE TITLE RULE (owner ruling 2026-10-23): a year of title choices, simulated with the real titleFor — 52 weekly blocks
+  // of 14 days, each day a real position (batch 2's, re-dated) with its real mechanic. No day ever lacks a title; no title
+  // comes back within 90 days; no title names its winning card or its target, or holds a win/answer word ═══
+  const simTitles = (L) => {
+    const used = [], out = [], days = G.datesFrom("2027-01-04", "2028-12-31");   // 52 blocks × 14 = 728 days
+    const tpl = B2.map((P) => { const w = (solved[P.id] || PZ.solve(P, E, null)).winners[0]; return { P, mech: P.mechanic, avoid: [w.play, w.target && G.clean(w.target)] }; });
+    days.forEach((d, i) => { const x = tpl[i % tpl.length], P = Object.assign(clone(x.P), { date: d });
+      const t = L.titleFor(x.mech, (s) => L.titleClash(used, s, d), x.avoid, P); out.push({ d, t, avoid: x.avoid }); if (t) used.push([t, d]); });
+    let minGap = Infinity; const last = {};
+    out.forEach((o) => { if (o.t && last[o.t]) minGap = Math.min(minGap, Math.round((Date.parse(o.d) - Date.parse(last[o.t])) / 86400000)); if (o.t) last[o.t] = o.d; });
+    return { days: out.length, missing: out.filter((o) => !o.t).length, minGap, built: out.filter((o) => o.t && Object.values(G.TITLES).flat().indexOf(o.t) < 0).length,
+      named: out.filter((o) => o.t && o.avoid.filter(Boolean).some((a) => o.t.toLowerCase().indexOf(a.toLowerCase()) >= 0)).length, winWord: out.filter((o) => o.t && Object.values(G.TITLES).flat().indexOf(o.t) < 0 && G.WIN_WORD.test(o.t)).length };   // built titles: no win/answer word
+  };
+  const sim = simTitles(G);
+  ok("K26 · A YEAR OF TITLES (52 weekly blocks, " + sim.days + " days): every day gets a title (" + sim.built + " built from the puzzle), none returns within 90 days (closest " + sim.minGap + "), none names its winning card, no built one holds a win/answer word",
+    sim.days === 728 && sim.missing === 0 && sim.minGap >= 90 && sim.named === 0 && sim.winWord === 0, JSON.stringify(sim));
+  const m26 = mutant("const TITLE_GAP = 90;", "const TITLE_GAP = 30;"), sim26 = simTitles(m26);
+  ok("M26 · breakage 'a title may return after 30 days' is caught (K26 goes red: closest repeat " + sim26.minGap + " days)", sim26.minGap < 90);
 
   // R4: THE CHOOSER IS BOUNDED — a run that can never be completed (here: no Hero trap anywhere, so the 3-per-14 rule fails
   // at every leaf) gives up within its budget instead of trying all 14! orders (a weekly job then fails in minutes)
