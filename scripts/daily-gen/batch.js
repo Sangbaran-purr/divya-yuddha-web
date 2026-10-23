@@ -29,10 +29,52 @@ const recheck = process.argv.indexOf("--recheck") >= 0, vetoed = (arg("--veto", 
 const stored = all0.filter((p) => dates.indexOf(p.date) >= 0);
 if (stored.length && !recheck) { console.error("refused: some of these dates already have a puzzle (use --recheck)"); process.exit(1); }
 const existing = all0.filter((p) => dates.indexOf(p.date) < 0);
-const keep = {}; stored.forEach((p) => { if (vetoed.indexOf(p.date) < 0) keep[p.date] = p; });
+// --keep d1,d2: the owner kept these AS THEY ARE — copied unchanged (position, title, explanation), never re-judged
+const kept = (arg("--keep", "") || "").split(",").filter(Boolean);
+const { decodeNote } = require(path.join(G.SITE, "play", "daily", "daily.js"));
+const notes0 = require(NOTES), pinned = {}, pinnedText = {};
+stored.forEach((p) => { if (kept.indexOf(p.date) >= 0) { pinned[p.date] = p; pinnedText[p.date] = decodeNote(p.id, notes0[p.id]); } });
+const keep = {}; stored.forEach((p) => { if (vetoed.indexOf(p.date) < 0 && kept.indexOf(p.date) < 0) keep[p.date] = p; });
 const t0 = Date.now();
-const out = G.generate(dates, existing, { keep, avoid: stored.filter((p) => vetoed.indexOf(p.date) >= 0) });
-out.forEach((x) => console.log(x.puzzle.date + "  " + x.puzzle.difficulty.padEnd(6) + "  " + x.puzzle.you.faction + " vs " + x.puzzle.them.faction + "  " + x.puzzle.realm + "  " + x.mechanic + (recheck ? (x.kept ? "  (kept)" : "  (new)") : "")));
+const genOpts = { keep, pinned, pinnedText, salt: arg("--salt", ""), avoid: stored.filter((p) => vetoed.indexOf(p.date) >= 0) };
+// --parallel: each open day searched in its own process (workers), then one combination chosen for the whole run
+async function parallel() {
+  const { fork } = require("child_process");
+  const slots = G.planSlots(dates);
+  const ALL = ["mrityulok", "kalki", "kalki", "patala", "yaksha", "gandharva", "rishi", "swarga"];   // Kalki twice: it is the realm that separates plays
+  const open = slots.filter((s) => !pinned[s.date]).map((s) => Object.assign(s, { you: null, them: null, realms: s.hero ? ["mrityulok", "kalki"] : ALL }));   // free pairs: the chooser balances
+  const maxTries = +arg("--tries", "60000"), poolSize = +arg("--pool", "16"), limit = +arg("--workers", String(Math.min(8, require("os").cpus().length - 1)));
+  const pools = {}; let next = 0;
+  await new Promise((done, fail) => {
+    let running = 0;
+    const launch = () => {
+      while (running < limit && next < open.length) {
+        const slot = open[next++], w = fork(path.join(__dirname, "worker.js"), [], { silent: true }); running++;
+        w.on("message", (m) => { if (m.error) return fail(new Error(m.date + ": " + m.error)); pools[m.date] = m.pool; console.log(m.date + "  " + m.pool.length + " candidates"); });
+        w.on("exit", () => { running--; if (next >= open.length && running === 0) done(); else launch(); });
+        w.send({ slot, opts: { maxTries, poolSize, salt: genOpts.salt } });
+      }
+    };
+    launch();
+  });
+  // a kept puzzle's Hero traps: a Hero in its hand that loses AND its stored explanation tells why
+  const fixedTraps = {}; Object.values(pinned).forEach((p) => { const res = G.PZ.solve(p, G.E, null); fixedTraps[p.date] = G.heroTraps(p, res).filter((h) => (pinnedText[p.date] || "").indexOf(h + " falls short: ") >= 0).length; });
+  const c = G.choose(slots, pools, Object.values(pinned), existing, Object.assign({ fixedTraps }, genOpts));
+  if (!c) throw new Error("no combination of the pools keeps every run rule — widen the search (--tries)");
+  return slots.map((s) => {
+    if (pinned[s.date]) { const P = pinned[s.date], res = G.PZ.solve(P, G.E, null); return { puzzle: P, res, winner: res.winners[0], gr: G.grade(P, res), ex: { text: pinnedText[s.date] }, mechanic: P.mechanic, pinned: true }; }
+    const P = c.pick[s.date], j = G.judge(P);
+    if (!j.ok) throw new Error(s.date + ": the chosen puzzle no longer passes (" + j.reason + ")");
+    return Object.assign(j, { puzzle: P, mechanic: P.mechanic });
+  });
+}
+(async () => {
+const out = process.argv.indexOf("--parallel") >= 0 ? await parallel() : G.generate(dates, existing, genOpts);
+if (dates.length === 14) {
+  const ht = {}; out.forEach((x) => { const res = x.res || G.PZ.solve(x.puzzle, G.E, null); ht[x.puzzle.date] = G.heroTraps(x.puzzle, res).filter((h) => (x.ex.text || "").indexOf(h + " falls short: ") >= 0).length; });
+  const errs = G.checkSpread(out.map((x) => x.puzzle), { heroTraps: ht }); if (errs.length) { console.error("refused: the run breaks a spread rule: " + errs.join("; ")); process.exit(1); }
+}
+out.forEach((x) => console.log(x.puzzle.date + "  " + x.puzzle.difficulty.padEnd(6) + "  " + x.puzzle.you.faction + " vs " + x.puzzle.them.faction + "  " + x.puzzle.realm + "  " + x.mechanic + (recheck ? (x.pinned ? "  (kept by the owner)" : x.kept ? "  (kept)" : "  (new)") : "")));
 console.log(out.length + " puzzles in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" + (dry ? " (dry run: nothing written)" : ""));
 if (dry) process.exit(0);
 
@@ -66,3 +108,4 @@ out.forEach((x, i) => {
 });
 fs.writeFileSync(plainPath, txt);
 console.log("wrote the repo files and the owner's plain file (outside the repo)");
+})().catch((e) => { console.error(String(e && e.message || e)); process.exit(1); });

@@ -14,6 +14,9 @@ const PUZZLES = JSON.parse(fs.readFileSync(path.join(SITE, "play", "daily", "puz
 const FP = JSON.parse(fs.readFileSync(path.join(SITE, "tests", "fixtures", "daily-answers.sha256.json"), "utf8"));
 const { answerDigest } = require(path.join(SITE, "scripts", "puzzle-answer-digest.js"));
 const B1 = PUZZLES.slice(0, 14), B2 = PUZZLES.filter((p) => p.date >= "2026-10-29" && p.date <= "2026-11-11");
+// owner ruling 2026-10-19: seven batch-2 puzzles KEPT exactly as they were (two predate Rule C); the other seven are new
+const KEPT = ["2026-10-29", "2026-10-31", "2026-11-02", "2026-11-03", "2026-11-06", "2026-11-07", "2026-11-11"];
+const NEW = B2.filter((p) => KEPT.indexOf(p.date) < 0);
 
 let pass = 0, fail = 0;
 const ok = (n, c, d) => { c ? (pass++, console.log("  ✓ " + n)) : (fail++, console.log("  ✖ " + n + (d ? "\n      " + d : ""))); };
@@ -79,8 +82,14 @@ function arithmetic(text) {
     B2.filter((P) => !solved[P.id].ok).map((P) => P.date + " " + solved[P.id].reason).join(", "));
   const decoded = B2.map((P) => D.decodeNote(P.id, NOTES[P.id] || ""));
   const fresh = B2.map((P) => { const e = G.explain(P, solved[P.id]); return e ? e.text : null; });
-  ok("G2 · every explanation is the one the engine writes today: the encoded note equals a fresh write-up from the engine's own numbers and events",
-    decoded.every((t, i) => t && t === fresh[i]), B2.filter((P, i) => decoded[i] !== fresh[i]).map((P) => P.date).join(", "));
+  ok("G2 · every NEW explanation is the one the engine writes today (the encoded note equals a fresh write-up from the engine's own numbers and events)",
+    NEW.every((P) => decoded[B2.indexOf(P)] && decoded[B2.indexOf(P)] === fresh[B2.indexOf(P)]), NEW.filter((P) => decoded[B2.indexOf(P)] !== fresh[B2.indexOf(P)]).map((P) => P.date).join(", "));
+  let keptSame = false;
+  try { const then = JSON.parse(execFileSync("git", ["show", "9a1f798:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" }));
+    const thenNotes = execFileSync("git", ["show", "9a1f798:play/daily/notes.js"], { cwd: SITE, encoding: "utf8" });
+    keptSame = KEPT.every((d) => { const a = then.find((p) => p.date === d), b = B2.find((p) => p.date === d); const m = new RegExp('"' + b.id + '": "([^"]+)"').exec(thenNotes);
+      return a && b && J(a) === J(b) && m && D.decodeNote(b.id, m[1]) === decoded[B2.indexOf(b)]; }); } catch (e) { keptSame = false; }
+  ok("G2b · the seven KEPT puzzles are exactly as the owner kept them — position, title and explanation unchanged since 9a1f798", keptSame);
   const ar = decoded.map(arithmetic);
   ok("G3 · THE ARITHMETIC (Rule B), read back from each explanation's own words — for the winning play AND every tempting wrong play: the position + every named change = after the play; + every named round-end change = the final score (the winner's is the solver's)",
     ar.every((a, i) => a.ok && a.final[0] === solved[B2[i].id].winners[0].you && a.final[1] === solved[B2[i].id].winners[0].them),
@@ -93,10 +102,18 @@ function arithmetic(text) {
   // the content rules
   const facs = B2.reduce((a, p) => (a[p.you.faction] = (a[p.you.faction] || 0) + 1, a), {});
   ok("S1 · the factions you play rotate evenly: 4/4/3/3 across the 14 (" + J(facs) + ")", J(Object.values(facs).sort()) === J([3, 3, 4, 4]) && Object.keys(facs).length === 4);
-  const heroes = B2.filter((P) => (G.defOf(P.you.faction, solved[P.id].winners[0].play) || {}).t === "hero");
-  ok("S2 · at least 3 of the 14 winning plays are HEROES (" + heroes.length + "), on different factions", heroes.length >= 3 && new Set(heroes.map((p) => p.you.faction)).size === heroes.length);
+  const trapsOf = (P) => G.heroTraps(P, solved[P.id]).filter((h) => decoded[B2.indexOf(P)].indexOf(h + " falls short: ") >= 0);
+  const trapDays = B2.filter((P) => trapsOf(P).length);
+  ok("S2 · HEROES AS THE TRAP: at least 3 of the 14 days have a Hero in your hand that LOSES, listed with exactly why (" + trapDays.map((p) => p.date + ": " + trapsOf(p).join("/")).join(", ") + ")",
+    trapDays.length >= 3 && trapDays.every((P) => trapsOf(P).every((h) => new RegExp(h + " falls short: .+?the round ends \\d+–\\d+").test(decoded[B2.indexOf(P)]))));
   const realms = new Set(B2.map((p) => p.realm)), mech = B2.reduce((a, p) => (a[p.mechanic] = (a[p.mechanic] || 0) + 1, a), {});
-  ok("S3 · realms and mechanics spread: " + realms.size + " realms; no mechanic but Hero more than 3 times (" + J(mech) + ")", realms.size >= 4 && Object.keys(mech).every((k) => k === "hero" || mech[k] <= 3) && Object.keys(mech).length >= 5);
+  ok("S3 · realms and mechanics spread: " + realms.size + " realms; Venom at most 5 (" + (mech.venom || 0) + "), no other mechanic more than 3 (" + J(mech) + ")",
+    realms.size >= 4 && Object.keys(mech).every((k) => mech[k] <= (k === "venom" ? 5 : 3)) && Object.keys(mech).length >= 5);
+  const ht = {}; B2.forEach((P) => { ht[P.date] = trapsOf(P).length; });
+  ok("S12 · the whole run keeps its rules (G.checkSpread): factions played 4/4/3/3, each faction the OPPONENT 3–4 times, no mirror match, Venom ≤ 5, ≥ 3 Hero traps", J(G.checkSpread(B2, { heroTraps: ht })) === "[]", J(G.checkSpread(B2, { heroTraps: ht })));
+  const rcNew = NEW.map((P) => { const j = G.judge(P); return { d: P.date, ok: j.ok, looks: j.looks || [], why: j.reason + (j.detail ? ":" + j.detail : "") }; });
+  ok("S13 · RULE C (looks-as-strong) holds for every NEW puzzle: a losing card in your hand looks at least as strong as the answer (" + rcNew.map((x) => x.d.slice(5) + ": " + x.looks.join("/")).join("; ") + ")",
+    rcNew.every((x) => x.ok && x.looks.length), rcNew.filter((x) => !x.ok).map((x) => x.d + " " + x.why).join(", "));
   ok("S4 · difficulty rises Monday→Sunday (Mon–Tue easy, Wed–Fri medium, Sat–Sun hard), following the weekday from Thu 29 Oct",
     B2.every((p) => p.difficulty === G.DIFF_BY_DAY[new Date(p.date + "T00:00:00Z").getUTCDay()]));
   const rc = (p) => { const w = solved[p.id].winners[0], n = G.narrate(p, w); return n ? G.realmCheck(p, w, n, w.line) : { ok: false }; };
@@ -185,11 +202,47 @@ function arithmetic(text) {
     "out.push({ side: who.side, n: who.n, amount: e.amount, name: \"the Naga Venom drain\" });");
   ok("M9 · breakage 'an unsplit multi-source change' is caught (K8 goes red)", m9.venomSources(deep, b1v) !== null);
   const yaksha = B2.find((p) => p.realm === "yaksha");
-  ok("K9 · THE REALM RULE: a puzzle set in a realm that changes nothing is NOT labelled a realm puzzle (" + (yaksha ? yaksha.date + ": " + G.judge(yaksha).mechanic : "none") + ")", !!yaksha && !/^realm: /.test(G.judge(yaksha).mechanic));
+  const mechOf = (L, P) => { const res = L.PZ.solve(P, E, null), ex = L.explain(P, res); return ex ? L.mechanicOf(P, res, ex.narration, ex.realm) : null; };
+  ok("K9 · THE REALM RULE: a puzzle set in a realm that changes nothing is NOT labelled a realm puzzle (" + (yaksha ? yaksha.date + ": " + mechOf(G, yaksha) : "none") + ")", !!yaksha && !/^realm: /.test(mechOf(G, yaksha)));
   const m10 = mutant('  if (realm && realm.matters) return "realm: " + REALM_NAME[P.realm].toLowerCase();', '  if (P.realm !== "mrityulok") return "realm: " + REALM_NAME[P.realm].toLowerCase();');
-  ok("M10 · breakage 'label any non-Mrityulok puzzle a realm puzzle' is caught (K9 goes red)", !!yaksha && /^realm: /.test(m10.judge(yaksha).mechanic));
+  ok("M10 · breakage 'label any non-Mrityulok puzzle a realm puzzle' is caught (K9 goes red)", !!yaksha && /^realm: /.test(mechOf(m10, yaksha)));
   const locked = old("2026-11-03");   // the R2 preview's 3 Nov: Kesari locked by the opponent's Narada
   ok("K10 · a position with a card in your hand the engine forbids (Kesari, locked by Narada) is REFUSED (UNPLAYABLE_CARD)", rejects(G, locked, "UNPLAYABLE_CARD"));
+
+  // ── R2 round 2 (owner rulings 2026-10-19): Rule C looks-as-strong, Hero traps, the Venom limit, opponent balance ──
+  const was = (d) => clone(JSON.parse(execFileSync("git", ["show", "9a1f798:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).find((p) => p.date === d));
+  const strongest = was("2026-10-30"), removal = was("2026-11-01");   // the vetoed 30 Oct (Bali, your strongest card) and 1 Nov (Vajra on a 21)
+  const cOf = (L, P) => { const j = L.judge(P); return j.reason === "RULE_C" ? j.detail : (j.ok ? "PASSES" : j.reason); };
+  ok("K11 · RULE C: the strongest card in your hand as the answer, winning without any round-end or realm effect, is REFUSED (the vetoed 30 Oct)", cOf(G, strongest) === "STRONGEST_CARD", cOf(G, strongest));
+  const m11 = mutant('  if (single && !needsEnd) return "STRONGEST_CARD";', '');
+  ok("M11 · breakage 'accept the strongest card' is caught (K11 goes red)", cOf(m11, strongest) !== "STRONGEST_CARD");
+  ok("K12 · RULE C: one obvious removal — an Astra on an enemy Unit worth half the opponent's total — is REFUSED (the vetoed 1 Nov)", cOf(G, removal) === "OBVIOUS_REMOVAL", cOf(G, removal));
+  const m12 = mutant('  if (removed.some((x) => x * 2 >= nw.T0[1])) return "OBVIOUS_REMOVAL";', '');
+  ok("M12 · breakage 'accept the obvious removal' is caught (K12 goes red)", cOf(m12, removal) !== "OBVIOUS_REMOVAL");
+  const zero = {}; B2.forEach((P) => { zero[P.date] = 0; });
+  ok("K13 · a run with fewer than 3 Hero traps is REFUSED", G.checkSpread(B2, { heroTraps: zero }).some((e) => /Hero traps/.test(e)));
+  const m13 = mutant('  if (opts2 && opts2.heroTraps && traps < 3) errs.push("Hero traps " + traps);', '');
+  ok("M13 · breakage 'allow fewer than 3 Hero traps' is caught (K13 goes red)", !m13.checkSpread(B2, { heroTraps: zero }).some((e) => /Hero traps/.test(e)));
+  const trapDay = NEW.find((P) => trapsOf(P).length);
+  // the writer made to leave a losing Hero out of the finished text (its line dropped)
+  const TELL = '  s += " Tempting but wrong: " + wrong.join(". ") + ".";';
+  const SKIP = '  s += " Tempting but wrong: " + wrong.filter((t) => !heroes.some((h) => t.indexOf(clean(h.key) + " falls short") === 0)).join(". ") + ".";';
+  const untold = mutant(TELL, SKIP);
+  ok("K14 · a Hero trap whose losing reason is not told is REFUSED (HERO_TRAP_UNTOLD) — the writer, made to skip the Hero, on " + (trapDay ? trapDay.date : "?"), !!trapDay && rejects(untold, trapDay, "HERO_TRAP_UNTOLD"));
+  const m14 = libFrom(LIB_SRC.split(TELL).join(SKIP)
+    .split('  if (traps.some((h) => ex.text.indexOf(" " + h + " falls short: ") < 0 && ex.text.indexOf("wrong: " + h + " falls short: ") < 0)) return { ok: false, reason: "HERO_TRAP_UNTOLD", res, gr };').join(""));
+  ok("M14 · breakage 'drop the untold-Hero guard' is caught (K14 goes red)", !!trapDay && !rejects(m14, trapDay, "HERO_TRAP_UNTOLD"));
+  // exactly 6 Venom puzzles: the run's own Venom days, plus as many others relabelled as it takes to reach 6
+  let vn = B2.filter((p) => p.mechanic === "venom").length;
+  const six = B2.map((p) => { const c = clone(p); if (c.mechanic !== "venom" && vn < 6) { c.mechanic = "venom"; vn++; } return c; });
+  ok("K15 · a run with 6 Venom puzzles is REFUSED (the limit is 5)", G.checkSpread(six, { heroTraps: ht }).some((e) => /mechanics/.test(e)));
+  const m15 = mutant('const MECH_CAP = (k) => (k === "venom" ? 5 : 3);', 'const MECH_CAP = (k) => (k === "venom" ? 6 : 3);');
+  ok("M15 · breakage 'allow 6 Venom' is caught (K15 goes red)", !m15.checkSpread(six, { heroTraps: ht }).some((e) => /mechanics/.test(e)));
+  const seven = JSON.parse(execFileSync("git", ["show", "9a1f798:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).filter((p) => p.date >= "2026-10-29" && p.date <= "2026-11-11");
+  const sevenOpp = seven.filter((p) => p.them.faction === "asuras").length;
+  ok("K16 · a run with " + sevenOpp + " of one opponent is REFUSED (the R2 preview's batch: Asuras faced " + sevenOpp + " times)", sevenOpp === 7 && G.checkSpread(seven).some((e) => /opponents/.test(e)));
+  const m16 = mutant('  if (!FACTIONS.every((f) => (them[f] || 0) >= quarter && (them[f] || 0) <= cap)) errs.push("opponents " + JSON.stringify(them));', '');
+  ok("M16 · breakage 'ignore the opponent balance' is caught (K16 goes red)", !m16.checkSpread(seven).some((e) => /opponents/.test(e)));
 
   // a duplicate: the generator, offered the very puzzle it would make, must not make it again
   const d1 = G.generate(["2027-01-04"], B1, { maxTries: 20000 })[0];
