@@ -50,7 +50,8 @@
     frameTitle: "The battle",
     // no puzzle today (owner ruling 2026-10-14): before the first puzzle, and after a batch runs out
     firstArrives: function (when) { return "The first Daily Puzzle arrives on " + when + "."; },
-    onItsWay: "A new puzzle is on its way. Try an earlier one below.",
+    archiveTag: "From the archive",
+    archiveLine: "Today's puzzle is on its way. Here is one from the archive.",
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -250,7 +251,7 @@
   function onWin(h) {
     done = true;
     say(T.win(h.t0, h.t1), "dd-good");
-    if (isToday) { D.markSolved(state, P.date, today); D.save(store, state); }
+    if (isToday) { D.markSolved(state, P.date, today, list); D.save(store, state); }
     g = replay(actions);                        // show the board as your play left it, not the next round's empty field
     render();
     var note = el("p", "dd-boardnote", T.boardAfter); $("dd-game").insertBefore(note, $("dd-game").firstChild);
@@ -348,7 +349,7 @@
       done = true;
       var t = T.win(m.you, m.them);
       say(""); cover(t); settle();   // said ONCE, in the result panel (owner ruling 2026-10-16)
-      if (isToday) { D.markSolved(state, P.date, today); D.save(store, state); }
+      if (isToday) { D.markSolved(state, P.date, today, list); D.save(store, state); }
       showAfter(false); renderActions(); return;
     }
     tries++;
@@ -378,7 +379,7 @@
     renderStreak();
   }
   function renderStreak() {
-    $("dd-streak").textContent = String(D.streak(state, today));
+    $("dd-streak").textContent = String(D.streak(state, today, list));
     $("dd-best").textContent = String(state.best || 0);
     $("dd-next").textContent = D.countdown(Date.now());
   }
@@ -400,7 +401,8 @@
   function noPuzzle(v) {
     var first = list.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0];
     var none = $("dd-none"); none.innerHTML = "";
-    var line = (first && v.today < first.date) ? T.firstArrives(dayName(first.date)) : T.onItsWay;
+    // (2026-10-16) after the first puzzle every day without one shows the archive, so only "the first arrives" remains here
+    var line = first ? T.firstArrives(dayName(first.date)) : "";
     none.appendChild(el("p", "dd-noneline", line));
     none.hidden = false; $("dd-play").hidden = true;
   }
@@ -420,7 +422,8 @@
     if (!store) $("dd-store").textContent = T.noStore;
     if (!P) { noPuzzle(v); return; }
     $("dd-play").hidden = false;
-    $("dd-date").textContent = P.date + (isToday ? "" : " · an earlier puzzle");
+    $("dd-date").textContent = P.date + (isToday ? "" : pk.archive ? " · " + T.archiveTag : " · an earlier puzzle");
+    var ar = $("dd-archive"); ar.textContent = pk.archive ? T.archiveLine : ""; ar.hidden = !pk.archive;
     $("dd-ptitle").textContent = P.title;
     $("dd-diff").textContent = P.difficulty;
     g = PZ.load(P, E, 1);

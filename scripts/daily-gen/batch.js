@@ -42,9 +42,16 @@ async function parallel() {
   const { fork } = require("child_process");
   const slots = G.planSlots(dates);
   const ALL = ["mrityulok", "kalki", "kalki", "patala", "yaksha", "gandharva", "rishi", "swarga"];   // Kalki twice: it is the realm that separates plays
-  const open = slots.filter((s) => !pinned[s.date]).map((s) => Object.assign(s, { you: null, them: null, realms: s.hero ? ["mrityulok", "kalki"] : ALL }));   // free pairs: the chooser balances
+  // a RE-CHECKED day (not pinned, not vetoed): its stored position is re-judged under today's rules and, if it passes, is the
+  // day's only candidate (its explanation rewritten by today's writer); if it fails, the day is searched like an open one
+  const pools = {};
+  slots.filter((s) => !pinned[s.date] && keep[s.date]).forEach((s) => {
+    const P = keep[s.date], j = G.judge(P); if (!j.ok || j.gr.difficulty !== s.difficulty) return;
+    pools[s.date] = [{ puzzle: Object.assign(JSON.parse(JSON.stringify(P)), { mechanic: j.mechanic }), mechanic: j.mechanic, play: j.winner.play, target: j.winner.target || null, isHero: false, traps: j.heroTraps.length, keptTitle: P.title }];
+  });
+  const open = slots.filter((s) => !pinned[s.date] && !pools[s.date]).map((s) => Object.assign(s, { you: null, them: null, realms: s.hero ? ["mrityulok", "kalki"] : ALL }));   // free pairs: the chooser balances
   const maxTries = +arg("--tries", "60000"), poolSize = +arg("--pool", "16"), limit = +arg("--workers", String(Math.min(8, require("os").cpus().length - 1)));
-  const pools = {}; let next = 0;
+  let next = 0;
   await new Promise((done, fail) => {
     let running = 0;
     const launch = () => {

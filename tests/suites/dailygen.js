@@ -41,6 +41,7 @@ function readChanges(list, start) {
     else if ((x = / (gains|loses) (\d+) from ([^(]+) \((\d+)→(\d+)\)$/.exec(it))) { const d = (x[1] === "gains" ? 1 : -1) * +x[2]; sum[side] += d; named.push(+x[5] - +x[4] === d && x[3].trim() !== "Leap"); }
     else if ((x = / is removed by (.+) \(−(\d+)\)$/.exec(it))) { sum[side] -= +x[2]; named.push(true); }
     else if (/ puts a Venom Token on /.test(it) || / adds no power$/.test(it) || / is an Artifact: it adds no power$/.test(it) || / cancels /.test(it)) { /* no power moves */ }
+    else if (/ moves your Venom drain to the moment either player first passes$/.test(it) || /^the opponent has already passed, so your drain does not fire this round$/.test(it)) { /* a missing round-end effect, told */ }
     else return { ok: false, why: "unread change: " + it };
   }
   return { ok: true, sum, named };
@@ -217,7 +218,7 @@ function arithmetic(text) {
   const m11 = mutant('  if (single && !needsEnd) return "STRONGEST_CARD";', '');
   ok("M11 · breakage 'accept the strongest card' is caught (K11 goes red)", cOf(m11, strongest) !== "STRONGEST_CARD");
   ok("K12 · RULE C: one obvious removal — an Astra on an enemy Unit worth half the opponent's total — is REFUSED (the vetoed 1 Nov)", cOf(G, removal) === "OBVIOUS_REMOVAL", cOf(G, removal));
-  const m12 = mutant('  if (removed.some((x) => x * 2 >= nw.T0[1])) return "OBVIOUS_REMOVAL";', '');
+  const m12 = mutant('  if (removed > 0 && removed * 2 >= nw.T0[1]) return "OBVIOUS_REMOVAL";', '');
   ok("M12 · breakage 'accept the obvious removal' is caught (K12 goes red)", cOf(m12, removal) !== "OBVIOUS_REMOVAL");
   const zero = {}; B2.forEach((P) => { zero[P.date] = 0; });
   ok("K13 · a run with fewer than 3 Hero traps is REFUSED", G.checkSpread(B2, { heroTraps: zero }).some((e) => /Hero traps/.test(e)));
@@ -243,6 +244,25 @@ function arithmetic(text) {
   ok("K16 · a run with " + sevenOpp + " of one opponent is REFUSED (the R2 preview's batch: Asuras faced " + sevenOpp + " times)", sevenOpp === 7 && G.checkSpread(seven).some((e) => /opponents/.test(e)));
   const m16 = mutant('  if (!FACTIONS.every((f) => (them[f] || 0) >= quarter && (them[f] || 0) <= cap)) errs.push("opponents " + JSON.stringify(them));', '');
   ok("M16 · breakage 'ignore the opponent balance' is caught (K16 goes red)", !m16.checkSpread(seven).some((e) => /opponents/.test(e)));
+
+  // ── owner rulings 2026-10-23: sweeps, a missing round-end effect must be told, full card names ──
+  const sweep = clone(JSON.parse(execFileSync("git", ["show", "b6881d9:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).find((p) => p.date === "2026-11-05"));
+  ok("K17 · OBVIOUS REMOVAL INCLUDES SWEEPS: an answer whose removals add up to half the opponent's total across several Units is REFUSED (the vetoed 5 Nov: a Brahmastra taking 17 of 24)", cOf(G, sweep) === "OBVIOUS_REMOVAL", cOf(G, sweep));
+  const m17 = mutant('  const removed = nw.changes.filter((c) => c.side === 1 && / is removed by /.test(c.text)).reduce((t, c) => t - c.d, 0);\n  if (removed > 0 && removed * 2 >= nw.T0[1]) return "OBVIOUS_REMOVAL";',
+    '  const removed = nw.changes.filter((c) => c.side === 1 && / is removed by /.test(c.text)).map((c) => -c.d);\n  if (removed.some((x) => x * 2 >= nw.T0[1])) return "OBVIOUS_REMOVAL";');
+  ok("M17 · breakage 'count only the single biggest removal' is caught (K17 goes red)", cOf(m17, sweep) !== "OBVIOUS_REMOVAL");
+  const kark = B2.find((p) => p.date === "2026-11-10"), kt = decoded[B2.indexOf(kark)];
+  ok("K18 · A ROUND-END EFFECT THAT DOES NOT HAPPEN IS TOLD (Rule B): 10 Nov's Karkotaka line says why your Venom drain does not fire",
+    kt.indexOf("Karkotaka falls short: Karkotaka enters at 6; Karkotaka moves your Venom drain to the moment either player first passes; the opponent has already passed, so your drain does not fire this round; the round ends 14–15, 1 short.") >= 0);
+  const blind = mutant('    if (/first passes/i.test(def.txt || "") && side === 1)', '    if (false)');
+  ok("K18b · …and a missing effect the writer cannot explain REFUSES the puzzle (the reason taken away: 10 Nov is refused)", rejects(blind, kark, "EXPLANATION"));
+  const silent = libFrom(LIB_SRC.split('    if (/first passes/i.test(def.txt || "") && side === 1)').join('    if (false)').split('    return null;\n  }\n  return out.join("; ");').join('    continue;\n  }\n  return out.join("; ");'));
+  ok("M18 · breakage 'leave a missing drain unexplained' is caught (K18b goes red)", !rejects(silent, kark, "EXPLANATION"));
+  ok("K19 · CARDS BY THEIR FULL NAME: no explanation names the engine's short form ('by Sudarshana (' / 'from Sudarshana ('); 4 Nov reads 'removed by Sudarshana Chakra (−6)'",
+    decoded.every((t) => !/(by|from) Sudarshana \(/.test(t)) && decoded[B2.findIndex((p) => p.date === "2026-11-04")].indexOf("is removed by Sudarshana Chakra (−6)") >= 0);
+  const m19 = mutant("function fullName(name, cards) {\n  if (!name) return name;", "function fullName(name, cards) {\n  return name;");
+  const p4 = B2.find((p) => p.date === "2026-11-04");
+  ok("M19 · breakage 'use the engine's short name' is caught (K19 goes red)", /removed by Sudarshana \(/.test((m19.explain(p4, solved[p4.id]) || {}).text || ""));
 
   // a duplicate: the generator, offered the very puzzle it would make, must not make it again
   const d1 = G.generate(["2027-01-04"], B1, { maxTries: 20000 })[0];

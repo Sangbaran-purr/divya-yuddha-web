@@ -166,8 +166,35 @@ async function main() {
     ok(`F4c · the date is READ FROM THE DATA, not hard-coded: a batch starting ${dm(2)} says '${longDay(day(2))}'`,
       noneLine(early) === "The first Daily Puzzle arrives on " + longDay(day(2)) + ".", noneLine(early));
     const after = pageAt(`${day(PUZZLES.length)}T10:00:00Z`); await tick();
-    ok(`F5 · after the puzzles run out (${dm(PUZZLES.length)}): 'A new puzzle is on its way. Try an earlier one below.' and all ${PUZZLES.length} earlier puzzles listed`,
-      noneLine(after) === "A new puzzle is on its way. Try an earlier one below." && doc(after).getElementById("dd-play").hidden && doc(after).querySelectorAll("#dd-pastlist li").length === PUZZLES.length, noneLine(after));
+    const arch = D.archiveFor(PUZZLES, day(PUZZLES.length));
+    ok(`F5 · after the puzzles run out (${dm(PUZZLES.length)}): never "no puzzle" — the ARCHIVE's puzzle for the day, 'From the archive' beside its date and 'Today's puzzle is on its way. Here is one from the archive.' under its title; the other earlier puzzles listed (owner ruling 2026-10-16)`,
+      noneLine(after) === null && !doc(after).getElementById("dd-play").hidden && doc(after).getElementById("dd-date").textContent === arch.date + " · From the archive"
+        && doc(after).getElementById("dd-ptitle").textContent === arch.title && doc(after).getElementById("dd-archive").textContent === "Today's puzzle is on its way. Here is one from the archive."
+        && doc(after).querySelectorAll("#dd-pastlist li").length === PUZZLES.length - 1 && R("play/daily/page.js").indexOf("A new puzzle is on its way") < 0, doc(after).getElementById("dd-date").textContent);
+  });
+
+  // ═══ THE ARCHIVE DAY AND THE STREAK (owner rulings 2026-10-16) ═══
+  await section("THE ARCHIVE", async () => {
+    const last = PUZZLES.map((p) => p.date).sort().pop(), a1 = D.addDays(last, 1), a2 = D.addDays(last, 2);
+    const one = pageAt(`${a1}T01:00:00Z`), two = pageAt(`${a1}T23:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify({ v: 1, solved: {}, revealed: {}, best: 3 }) } }); await tick();
+    const pickd = (dom) => doc(dom).getElementById("dd-ptitle").textContent;
+    const days = Array.from({ length: 30 }, (_, i) => D.addDays(last, i + 1)), picks = days.map((d) => D.archiveFor(PUZZLES, d).date);
+    ok("AR1 · an archive day shows the SAME earlier puzzle for every player all day (two players, 01:00 and 23:00 UTC), chosen from the date alone — and it is always an EARLIER puzzle",
+      pickd(one) === pickd(two) && pickd(one) === D.archiveFor(PUZZLES, a1).title && picks.every((d) => d <= last) && new Set(picks).size > 5, pickd(one) + " / " + pickd(two));
+    ok("AR2 · the archive's day line: 'From the archive' beside the date, and under the title 'Today's puzzle is on its way. Here is one from the archive.'",
+      / · From the archive$/.test(doc(one).getElementById("dd-date").textContent) && doc(one).getElementById("dd-archive").textContent === "Today's puzzle is on its way. Here is one from the archive." && !doc(one).getElementById("dd-archive").hidden);
+    const P = D.archiveFor(PUZZLES, a1), w = winnerOf(P);
+    const s0 = { v: 1, solved: { [D.addDays(last, -1)]: true, [last]: true }, revealed: {}, best: 2 };
+    const sv = pageAt(`${a1}T10:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify(s0) } }); await tick();
+    (await framed(sv)).try(lineOf(w)); await tick();
+    ok("AR3 · SOLVING the archive puzzle wins the round but does NOT extend the streak (still 2) and stores nothing for the day", /^You win the round/.test(said(sv)) && doc(sv).getElementById("dd-streak").textContent === "2"
+      && !stored(sv).solved[a1] && JSON.stringify(stored(sv).solved) === JSON.stringify(s0.solved), said(sv) + " | streak " + doc(sv).getElementById("dd-streak").textContent);
+    ok("AR4 · an archive day does NOT BREAK the streak: solved the last two puzzle days → still 2 on the first archive day, and on the second", D.streak(s0, a1, PUZZLES) === 2 && D.streak(s0, a2, PUZZLES) === 2);
+    const more = PUZZLES.concat([{ id: "dp-" + D.addDays(last, 3), date: D.addDays(last, 3) }]);
+    ok("AR5 · …but a day that HAD a puzzle and was missed still ENDS it (two archive days, then a puzzle day missed → 0 the day after)",
+      D.streak(s0, D.addDays(last, 3), more) === 2 && D.streak(s0, D.addDays(last, 4), more) === 0 && D.streak({ v: 1, solved: { [last]: true }, revealed: {}, best: 1 }, D.addDays(last, 2), PUZZLES.filter((p) => p.date !== last).concat([{ date: last }, { date: D.addDays(last, 1) }])) === 0);
+    const solvedOnArchive = { v: 1, solved: { [last]: true }, revealed: {}, best: 1 };
+    ok("AR6 · and an archive day then a new puzzle solved continues the streak (archive days neither break nor add): 1 → 2", D.streak(Object.assign({}, solvedOnArchive, { solved: { [last]: true, [D.addDays(last, 3)]: true } }), D.addDays(last, 3), more) === 2);
   });
 
   // ═══ PLAYING (in the battle frame): a win, a wrong play, a reveal, a missed day ═══
@@ -452,20 +479,20 @@ async function main() {
     const rv = pageAt(`${day(2)}T09:00:00Z`, { store: { [D.STORE_KEY]: JSON.stringify({ v: 1, solved: {}, revealed: { [day(2)]: true }, best: 0 }) } }); await tick();
     ok("ML5 · REVEALED: the answer in the framed result panel, the explanation framed below it", !!covered(rv) && doc(rv).querySelector("#dd-cover .dd-coverbox").classList.contains("mg-panel")
       && !doc(rv).getElementById("dd-after").hidden && doc(rv).getElementById("dd-after").classList.contains("mg-panel"));
-    // no puzzle, after the batch
+    // an archive day, after the batch
     const last = PUZZLES.map((p) => p.date).sort().pop();
     const np = pageAt(`${D.addDays(last, 3)}T08:00:00Z`); await tick();
-    ok("ML6 · NO PUZZLE: the background, the line, and every earlier puzzle as a plaque button", stageOK(np) && doc(np).querySelector(".dd-noneline").textContent === "A new puzzle is on its way. Try an earlier one below."
-      && allPlaque(np, "#dd-pastlist a") && plaques(np, "#dd-pastlist a").length === PUZZLES.length && back(np).classList.contains("mg-btn"));
+    ok("ML6 · AN ARCHIVE DAY: the background, the archive line, and every other earlier puzzle as a plaque button", stageOK(np) && doc(np).getElementById("dd-archive").textContent === "Today's puzzle is on its way. Here is one from the archive."
+      && allPlaque(np, "#dd-pastlist a") && plaques(np, "#dd-pastlist a").length === PUZZLES.length - 1 && back(np).classList.contains("mg-btn"));
     // the page's own fallback board: its buttons too
     const fb = pageAt(`${day(0)}T08:00:00Z`); await tick(); await fallback(fb);
     click(fb, ".dd-hand .dd-card");
     ok("ML7 · THE FALLBACK BOARD: its buttons ('Play …', 'End my turn', 'Leap', 'Show me the answer') are plaque buttons too", allPlaque(fb, "#dd-actions button") && plaques(fb, "#dd-actions button").some((b) => /^Play /.test(b.textContent))
       && /function btn\(text, cls, fn\) \{ var b = el\("button", "dd-btn mg-btn "/.test(R("play/daily/page.js")));
     const css = R("play/daily/daily.css"), html = R("play/daily/index.html");
-    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d4, page.js d6, mini.css g2 — on both mini games)",
+    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d5, page.js d7, mini.css g2 — on both mini games)",
       !/\.dd-btn \{/.test(css) && !/\.dd-btn\.dd-go/.test(css) && /body\.daily \{[^}]*overflow-x: hidden/.test(css) && /body\.dd-framing \.mg-stage \{ opacity: \.35; \}/.test(css)
-        && /daily\.css\?v=d4/.test(html) && /page\.js\?v=d6/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
+        && /daily\.css\?v=d5/.test(html) && /page\.js\?v=d7/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
   });
 
   await section('THE RULES, DIRECTLY', async () => {

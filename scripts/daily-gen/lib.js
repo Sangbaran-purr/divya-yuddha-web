@@ -101,6 +101,13 @@ function removalCause(events, uid) {
   const d = events.find((e) => (e.type === "destroy" || e.type === "passive") && (e.targetUids || []).some((t) => t === +uid));
   return d ? (d.abilityName || null) : null;
 }
+// (owner ruling 2026-10-23) a cause is told by the CARD'S FULL NAME: the engine names some abilities short ("Sudarshana" for
+// Sudarshana Chakra) — when a cause is the start of a card in play's name, the card's own name is used
+function fullName(name, cards) {
+  if (!name) return name;
+  const hit = cards.filter((n) => n && n !== name && n.indexOf(name + " ") === 0);
+  return hit.length === 1 ? hit[0] : name;
+}
 const whose = (side) => (side ? "the opponent's " : "your ");
 // RULE A (owner ruling 2026-10-16): every card on each side's field belongs to that side's own faction — no stolen cards
 function factionsTrue(g, P) {
@@ -183,6 +190,8 @@ function narrate(P, play, opts) {
   }
   if (!factionsTrue(g, P)) return null;
   const T1 = totals(g), b1 = board(g), evPlay = (g.events || []).slice(ev0), ev1 = (g.events || []).length;
+  const inPlay = [played && played.n].concat(Object.values(b0).map((x) => x.n), Object.values(b1).map((x) => x.n));
+  evPlay.forEach((e) => { if (e.abilityName) e.abilityName = fullName(e.abilityName, inPlay); });   // this throwaway game's record, named in full
   const changes = [];
   const leapText = (c) => { const m = /copies (.+)$/.exec(c.texts.find((t) => /^copies /.test(t)) || ""); return m ? m[1] : null; };
   for (const uid of Object.keys(b1)) {
@@ -245,7 +254,7 @@ function narrate(P, play, opts) {
   const endSum = [0, 1].map((s) => endChanges.filter((c) => c.side === s).reduce((t, c) => t + c.amount, 0));
   if (T1[0] + endSum[0] !== T2[0] || T1[1] + endSum[1] !== T2[1]) return null;
   const names = changes.map((c) => c.text).join(" | ") + " | " + endChanges.map((c) => c.name).join(" | ");
-  return { T0, T1, T2, changes, endChanges, leaps, noPower, win: h.winner === 0, names };
+  return { T0, T1, T2, changes, endChanges, leaps, noPower, win: h.winner === 0, names, after: b1 };
 }
 
 // ── 3. THE EXPLANATION — one fixed plain pattern ──
@@ -259,6 +268,23 @@ function sentenceOf(n) {
   const mid = n.changes.filter((c) => !used.has(c)).map((c) => (c.leap ? whose(c.side) + c.leap.who + " makes a free Leap onto " + c.leap.onto + " and gains " + c.d + c.text.slice(c.text.lastIndexOf(" (")) : c.text));
   if (n.noPower) mid.push(n.noPower);
   return before.concat(mid, after);
+}
+// (owner ruling 2026-10-23) A ROUND-END EFFECT THAT DOES NOT HAPPEN must say why. Every told play is compared with simply
+// passing: if a Venom drain that passing would bring does not fire — and the side it drains still has Units — the line names
+// the reason. The one the engine has: a card whose printed text moves the drain to the moment a player first passes, when the
+// opponent has already passed (Karkotaka). Any other missing effect has no reason the writer can name: the puzzle is refused.
+function missingEnd(P, base, n, playName) {
+  if (!base) return "";
+  const has = (x, side) => x.endChanges.some((c) => c.side === side && c.name === "the Naga Venom drain");
+  const out = [];
+  for (const side of [0, 1]) {
+    if (!has(base, side) || has(n, side)) continue;
+    if (!Object.values(n.after || {}).some((u) => u.side === side)) continue;   // nothing left there to drain
+    const def = playName ? (defOf(P.you.faction, playName) || {}) : {};
+    if (/first passes/i.test(def.txt || "") && side === 1) { out.push(playName + " moves your Venom drain to the moment either player first passes; the opponent has already passed, so your drain does not fire this round"); continue; }
+    return null;
+  }
+  return out.join("; ");
 }
 const endText = (n) => n.endChanges.map((c) => whose(c.side) + c.n + " " + (c.amount > 0 ? "+" + c.amount : "−" + Math.abs(c.amount)) + " from " + c.name).join("; ");
 // a realm's hand in it: the same play in Mrityulok. A realm that changes any number must name itself in the engine's own
@@ -279,9 +305,11 @@ function explain(P, res) {
   const nw = narrate(P, w);
   if (!nw || !nw.win) return null;
   const rw = realmCheck(P, w, nw, w.line); if (!rw.ok) return null;
+  let base = null; try { base = narrate(P, { play: null }); } catch (e) { base = null; }
+  const wMiss = missingEnd(P, base, nw, w.play); if (wMiss === null) return null;
   const realm = P.realm !== "mrityulok" ? " in " + REALM_NAME[P.realm] : "";
   let s = "Before your play the round stands " + nw.T0[0] + "–" + nw.T0[1] + realm + ". ";
-  s += "Play " + (w.play ? w.play + (w.target ? " on " + clean(w.target) : "") : "nothing") + ": " + sentenceOf(nw).join("; ") + " — " + nw.T1[0] + "–" + nw.T1[1] + ". ";
+  s += "Play " + (w.play ? w.play + (w.target ? " on " + clean(w.target) : "") : "nothing") + ": " + sentenceOf(nw).concat(wMiss ? [wMiss] : []).join("; ") + " — " + nw.T1[0] + "–" + nw.T1[1] + ". ";
   if (nw.endChanges.length) s += "At the round's end " + endText(nw) + ". ";
   s += "You win " + nw.T2[0] + "–" + nw.T2[1] + ".";
   if (rw.matters) s += " " + rw.name + " decides it: " + (rw.without ? "in Mrityulok the same play ends " + rw.without[0] + "–" + rw.without[1] + "." : "without it this play is not the answer.");
@@ -302,9 +330,10 @@ function explain(P, res) {
     const L = lineFor(P, p); if (!L) return null;
     const nl = narrate(P, p, { line: L }); if (!nl || nl.T2[0] !== p.you || nl.T2[1] !== p.them) return null;
     if (!realmCheck(P, p, nl, L).ok) return null;
+    const miss = missingEnd(P, base, nl, p.play); if (miss === null) return null;
     if (!must && wrong.length >= 2 && !nl.noPower) continue;   // an extra entry only for an Astra that is cancelled
     const gap = p.them - p.you;
-    wrong.push(clean(p.key) + " falls short: " + sentenceOf(nl).join("; ") + (nl.endChanges.length ? "; at the round's end " + endText(nl) : "")
+    wrong.push(clean(p.key) + " falls short: " + sentenceOf(nl).concat(miss ? [miss] : []).join("; ") + (nl.endChanges.length ? "; at the round's end " + endText(nl) : "")
       + "; the round ends " + p.you + "–" + p.them + (gap === 0 ? ", a draw, and a draw is not a win" : ", " + gap + " short"));
     if (!must && wrong.length >= 3) break;
   }
@@ -404,8 +433,9 @@ function ruleC(P, res, nw, realm) {
   const g0 = PZ.load(P, E, PZ.SEEDS[0]), hand = g0.players[0].hand, w = res.winners[0];
   const printed = (c) => (c.t === "unit" || c.t === "hero" ? c.base : 0);
   const wc = hand.find((c) => c.n === w.play) || { t: "pass", base: 0 }, wp = printed(wc);
-  const removed = nw.changes.filter((c) => c.side === 1 && / is removed by /.test(c.text)).map((c) => -c.d);
-  if (removed.some((x) => x * 2 >= nw.T0[1])) return "OBVIOUS_REMOVAL";
+  // (owner ruling 2026-10-23) SWEEPS too: everything the answer removes from the opponent, added up across any number of Units
+  const removed = nw.changes.filter((c) => c.side === 1 && / is removed by /.test(c.text)).reduce((t, c) => t - c.d, 0);
+  if (removed > 0 && removed * 2 >= nw.T0[1]) return "OBVIOUS_REMOVAL";
   const single = wp > 0 && hand.every((c) => c === wc || printed(c) < wp);
   const needsEnd = nw.T1[0] <= nw.T1[1] || (realm && realm.matters);   // it would not win before the round end, or the realm decides it
   if (single && !needsEnd) return "STRONGEST_CARD";
@@ -680,7 +710,7 @@ function choose(slots, pools, fixed, existing, opts) {
       if (cards.has(c.play) || leaks(leakLines, [c.play, c.target && clean(c.target)])) continue;
       const sig = signature(c.puzzle); if (sigs.some((x) => similarity(x, sig) >= NEAR_DUP)) continue;
       const P = JSON.parse(JSON.stringify(c.puzzle));
-      const t = titleFor(c.mechanic, titles, [c.play].concat(c.target ? [clean(c.target)] : [])); if (!t) continue;
+      const t = c.keptTitle && !titles.has(c.keptTitle) ? c.keptTitle : titleFor(c.mechanic, titles, [c.play].concat(c.target ? [clean(c.target)] : [])); if (!t) continue;
       P.title = t;
       if (!ok(list.concat([P]))) continue;
       pick[s.date] = P;
@@ -705,5 +735,5 @@ function describe(P) {
     + "Your side: " + side(0) + ". Their side: " + side(1) + ". Your hand: " + g.players[0].hand.map((c) => c.n).join(", ") + ".";
 }
 
-module.exports = { heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
+module.exports = { missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
   judge, planSlots, datesFrom, generate, describe, clean, defOf };

@@ -5,6 +5,8 @@
  *  - Unlimited tries. Solving TODAY's puzzle on its own date counts; the streak is consecutive days solved.
  *  - "Show me the answer" on today's puzzle: that day is NOT solved and the streak ENDS (same as missing a day).
  *  - Earlier puzzles of the batch may be played for fun; they never touch the streak. Future puzzles are never reachable.
+ *  - (2026-10-16) A day with NO puzzle shows one from the ARCHIVE — the same earlier puzzle for every player that day — and
+ *    such a day neither breaks nor extends the streak (it is skipped); a day that HAD a puzzle and was missed still ends it.
  *  - Streak and best streak live in this browser only; every storage read/write is wrapped, and the page works with
  *    storage blocked (progress simply isn't kept).
  */
@@ -28,13 +30,24 @@
     var past = list.filter(function (p) { return p.date < today; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
     return { today: today, puzzle: list.filter(function (p) { return p.date === today; })[0] || null, past: past };
   }
-  // the puzzle a request asks for (?d=YYYY-MM-DD): today's, or an EARLIER one of the batch; anything else → today's
+  // the ARCHIVE puzzle for a day with no puzzle of its own: one of the earlier puzzles, chosen from the date alone, so every
+  // player sees the same one that day (null before the first puzzle exists)
+  function archiveFor(list, today) {
+    var past = list.filter(function (p) { return p.date < today; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    if (!past.length) return null;
+    var h = 2166136261;
+    for (var i = 0; i < today.length; i++) { h ^= today.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return past[h % past.length];
+  }
+  // the puzzle a request asks for (?d=YYYY-MM-DD): today's, or an EARLIER one of the batch; anything else → today's —
+  // and on a day with no puzzle of its own, the archive's puzzle for that day
   function pick(list, ms, wanted) {
     var v = visible(list, ms);
     if (wanted && /^\d{4}-\d{2}-\d{2}$/.test(wanted) && wanted < v.today) {
       var p = list.filter(function (x) { return x.date === wanted; })[0];
       if (p) return { puzzle: p, isToday: false, today: v.today };
     }
+    if (!v.puzzle) { var a = archiveFor(list, v.today); if (a) return { puzzle: a, isToday: false, archive: true, today: v.today }; }
     return { puzzle: v.puzzle, isToday: !!v.puzzle, today: v.today };
   }
 
@@ -57,19 +70,26 @@
   }
 
   // ── the streak: consecutive UTC days solved on their own date, counted back from today (or from yesterday while
-  //    today is still open). A revealed day or a missed day ends it. ──
-  function streak(s, today) {
+  //    today is still open). A revealed day or a missed day ends it. Given the puzzle list, a day that had NO puzzle (an
+  //    archive day, after the first puzzle) is skipped: it neither breaks nor adds to the streak. ──
+  function streak(s, today, list) {
+    var had = null, first = null;
+    if (list) { had = {}; list.forEach(function (p) { had[p.date] = true; if (!first || p.date < first) first = p.date; }); }
     var d = s.solved[today] && !s.revealed[today] ? today : addDays(today, -1);
     if (s.revealed[today]) return 0;
     var n = 0;
-    while (s.solved[d] && !s.revealed[d]) { n++; d = addDays(d, -1); }
+    for (var guard = 0; guard < 4000; guard++) {
+      if (had && !had[d] && first && d > first) { d = addDays(d, -1); continue; }   // an archive day: skipped
+      if (!(s.solved[d] && !s.revealed[d])) break;
+      n++; d = addDays(d, -1);
+    }
     return n;
   }
   // a winning play — only today's puzzle on today's date counts, and never once revealed
-  function markSolved(s, date, today) {
+  function markSolved(s, date, today, list) {
     if (date !== today || s.revealed[today]) return false;
     s.solved[today] = true;
-    s.best = Math.max(s.best || 0, streak(s, today));
+    s.best = Math.max(s.best || 0, streak(s, today, list));
     return true;
   }
   // "Show me the answer" — today's puzzle: the day is not solved and the streak ends; an earlier puzzle: no effect
@@ -125,7 +145,7 @@
     return h + "h " + (m < 10 ? "0" : "") + m + "m";
   }
 
-  return { STORE_KEY: STORE_KEY, utcDate: utcDate, addDays: addDays, nextUtcMidnight: nextUtcMidnight, visible: visible, pick: pick,
+  return { STORE_KEY: STORE_KEY, utcDate: utcDate, addDays: addDays, nextUtcMidnight: nextUtcMidnight, visible: visible, pick: pick, archiveFor: archiveFor,
     load: load, save: save, blank: blank, streak: streak, markSolved: markSolved, markRevealed: markRevealed,
     encodeNote: encodeNote, decodeNote: decodeNote, countdown: countdown };
 });
