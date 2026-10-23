@@ -17,6 +17,7 @@ const B1 = PUZZLES.slice(0, 14), B2 = PUZZLES.filter((p) => p.date >= "2026-10-2
 // owner ruling 2026-10-19: seven batch-2 puzzles KEPT exactly as they were (two predate Rule C); the other seven are new.
 // (ruling 2026-10-23: 7 Nov was vetoed after a leak and regenerated, so six of the seven remain as kept)
 const KEPT = ["2026-10-29", "2026-10-31", "2026-11-02", "2026-11-03", "2026-11-06", "2026-11-11"];
+const REWORDED = ["2026-11-11"];   // ruling 2026-10-23: the split Leap gain re-words this kept day (position and title unchanged)
 const NEW = B2.filter((p) => KEPT.indexOf(p.date) < 0);
 
 let pass = 0, fail = 0;
@@ -37,13 +38,14 @@ function readChanges(list, start) {
     const ARR = / (?:enters|joins (?:your|the opponent's) side through .+?) at (\d+)/;
     if ((x = / and (gains|loses) (\d+) from ([^(]+) \(\d+\)$/.exec(it)) && ARR.test(it)) { sum[side] += +ARR.exec(it)[1] + (x[1] === "gains" ? 1 : -1) * +x[2]; named.push(true); }
     else if ((x = new RegExp(ARR.source + "$").exec(it))) sum[side] += +x[1];
+    else if ((x = / (?:Leaps onto|makes a free Leap onto) .+?, copies .+?'s (\d+) \((\d+)→(\d+)\), and gains (\d+) from its own ability, .+ \((\d+)→(\d+)\)$/.exec(it))) { sum[side] += +x[6] - +x[2]; named.push(+x[3] === +x[1] && +x[5] === +x[3] && +x[6] - +x[5] === +x[4]); }
     else if ((x = / (?:Leaps onto|makes a free Leap onto) .+ and gains (\d+) \((\d+)→(\d+)\)$/.exec(it))) { sum[side] += +x[1]; named.push(+x[3] - +x[2] === +x[1]); }
     else if (/^(first|then) .* Leaps onto [^;]+$/.test(it)) { /* a Leap that changes nothing */ }
     else if ((x = / (gains|loses) (\d+) from ([^(]+) \((\d+)→(\d+)\)$/.exec(it))) { const d = (x[1] === "gains" ? 1 : -1) * +x[2]; sum[side] += d; named.push(+x[5] - +x[4] === d && x[3].trim() !== "Leap"); }
     else if ((x = / is removed by (.+) \(−(\d+)\)$/.exec(it))) { sum[side] -= +x[2]; named.push(true); }
     else if (/ puts a Venom Token on /.test(it) || / adds no power$/.test(it) || / is an Artifact: it adds no power$/.test(it) || / cancels /.test(it)) { /* no power moves */ }
     else if (/ moves your Venom drain to the moment either player first passes$/.test(it) || /^the opponent has already passed, so your drain does not fire this round$/.test(it)) { /* a missing round-end effect, told */ }
-    else if (/ negates Venom on (their|your) Vanara Units, so the Venom Token on .+ does not drain it$/.test(it)) { /* a token that never drains, told (Rama's Signet) */ }
+    else if (/ stops the Venom Token on [^(]+?( \(it doesn't stop the Naga drain\))?$/.test(it)) { /* a token that never drains, told (Rama's Signet) */ }
     else return { ok: false, why: "unread change: " + it };
   }
   return { ok: true, sum, named };
@@ -91,8 +93,11 @@ function arithmetic(text) {
   try { const then = JSON.parse(execFileSync("git", ["show", "9a1f798:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" }));
     const thenNotes = execFileSync("git", ["show", "9a1f798:play/daily/notes.js"], { cwd: SITE, encoding: "utf8" });
     keptSame = KEPT.every((d) => { const a = then.find((p) => p.date === d), b = B2.find((p) => p.date === d); const m = new RegExp('"' + b.id + '": "([^"]+)"').exec(thenNotes);
-      return a && b && J(a) === J(b) && m && D.decodeNote(b.id, m[1]) === decoded[B2.indexOf(b)]; }); } catch (e) { keptSame = false; }
-  ok("G2b · the six still-KEPT puzzles are exactly as the owner kept them — position, title and explanation unchanged since 9a1f798", keptSame);
+      // (ruling 2026-10-23) the owner's GENERAL wording fixes re-word a kept day: its position and title stay as kept, and its
+      // explanation is then exactly the one the writer gives today
+      const reworded = REWORDED.indexOf(d) >= 0 && decoded[B2.indexOf(b)] === fresh[B2.indexOf(b)];
+      return a && b && J(a) === J(b) && m && (D.decodeNote(b.id, m[1]) === decoded[B2.indexOf(b)] || reworded); }); } catch (e) { keptSame = false; }
+  ok("G2b · the six still-KEPT puzzles are exactly as the owner kept them — position and title unchanged since 9a1f798, explanation too (but for the owner's general re-wording of 11 Nov)", keptSame);
   const ar = decoded.map(arithmetic);
   ok("G3 · THE ARITHMETIC (Rule B), read back from each explanation's own words — for the winning play AND every tempting wrong play: the position + every named change = after the play; + every named round-end change = the final score (the winner's is the solver's)",
     ar.every((a, i) => a.ok && a.final[0] === solved[B2[i].id].winners[0].you && a.final[1] === solved[B2[i].id].winners[0].them),
@@ -190,7 +195,7 @@ function arithmetic(text) {
   if (LIB_SRC.indexOf(STRICT) < 0 || LIB_SRC.indexOf(GUARD) < 0) throw new Error("mutant anchor gone: the wrong-play guard");
   const m7 = libFrom(LIB_SRC.split(STRICT).join(VAGUE).split(GUARD).join(""));
   ok("M7 · breakage 'a vague wrong-play line' is caught (K6 goes red)", !rejects(m7, vague, "EXPLANATION"));
-  const m8 = mutant('  const mid = n.changes.filter((c) => !used.has(c)).map((c) => (c.leap ? whose(c.side) + c.leap.who + " makes a free Leap onto " + c.leap.onto + " and gains " + c.d + c.text.slice(c.text.lastIndexOf(" (")) : c.text));',
+  const m8 = mutant('  const mid = n.changes.filter((c) => !used.has(c)).map((c) => (c.leap ? whose(c.side) + c.leap.who + " makes a free Leap onto " + c.leap.onto + leapGain(c) : c.text));',
     '  const mid = n.changes.filter((c) => !used.has(c)).map((c) => c.text);');
   // the batch's free-Leap day was vetoed (2026-10-23); its position, as pushed in 7ce3e2a, stays the example
   const leapy = JSON.parse(execFileSync("git", ["show", "7ce3e2a:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).filter((p) => p.date === "2026-11-07");
@@ -290,13 +295,30 @@ function arithmetic(text) {
   ok("K21 · A NAGA DRAIN ALREADY SPENT BEFORE YOUR PLAY (a Karkotaka on your board) cannot be explained, so the position is REFUSED", rejects(G, spent, "EXPLANATION"));
   const m21 = mutant("    if (units.length) return null;", "    if (false) return null;");
   ok("M21 · breakage 'ignore a drain that is absent before any play' is caught (K21 goes red)", !rejects(m21, spent, "EXPLANATION"));
-  const SIGNET = /Signet negates Venom on (their|your) Vanara Units, so the Venom Token on [A-Z][A-Za-z ]+ does not drain it/;
+  const SIGNET = /Signet stops the Venom Token on [A-Z][A-Za-z ]+/;
   const gi = decoded.findIndex((t) => SIGNET.test(t)), sig = B2[gi];
   ok("K22 · A VENOM TOKEN THAT NEVER DRAINS IS TOLD: a batch-2 day under Rama's Signet says the Signet negates the token", gi >= 0);
   const m22 = mutant('    if (facOf(u.side) === "vanaras" && art && art.id === "ramasignet") {', '    if (false) {');
   ok("K22b · …and without that reason the same day is REFUSED (a silent token is a missing cause)", !!sig && rejects(m22, sig, "EXPLANATION"));
   const m22b = mutant("  let g0 = null;\n  for (const u of Object.values(n.after || {})) {", "  let g0 = null;\n  for (const u of []) {");
   ok("M22 · breakage 'do not look for silent tokens' is caught (the reason vanishes from that day)", !!sig && !SIGNET.test(((m22b.judge(sig) || {}).ex || {}).text || ""));
+
+  // ── owner ruling 2026-10-23: the Signet stops TOKENS, and says the Naga drain still applies ──
+  const DRAINNOTE = /Signet stops the Venom Token on [A-Z][A-Za-z ]+ \(it doesn't stop the Naga drain\)/;
+  ok("K24 · RAMA'S SIGNET IS TOLD AS STOPPING THE TOKEN, and where the Naga drain still lands the line says so", !!sig && DRAINNOTE.test(decoded[gi]) && !/negates Venom/.test(decoded.join(" ")));
+  const m24 = mutant('      const drained = n.endChanges.some((c) => c.side === u.side && c.n === u.n && c.name === "the Naga Venom drain");', '      const drained = false;');
+  ok("M24 · breakage 'leave out that the drain still applies' is caught (K24 goes red)", !!sig && !DRAINNOTE.test(((m24.judge(sig) || {}).ex || {}).text || ""));
+  // ── owner ruling 2026-10-23: a Leap gain with more than one source is split by cause ──
+  // every Leap in the batch whose leaper ends above the power it copied is told split — checked against the engine, per day
+  const splitOk = (L, P, text) => { const r = solved[P.id] || PZ.solve(P, E, null), w = r.winners[0]; const nw = L.narrate(P, w, { line: w.line });
+    return !!nw && nw.changes.filter((c) => c.leap && c.leap.own).every((c) => text.indexOf(", copies " + c.leap.onto + "'s " + c.leap.copied + " (") >= 0 && text.indexOf("and gains " + c.leap.own + " from its own ability, ") >= 0); };
+  const splitDays = B2.filter((P) => { const r = solved[P.id] || PZ.solve(P, E, null), w = r.winners[0], nw = G.narrate(P, w, { line: w.line }); return nw && nw.changes.some((c) => c.leap && c.leap.own); });
+  ok("K23 · A LEAP GAIN WITH MORE THAN ONE SOURCE IS SPLIT: copies the target's power, then its own ability — on every batch-2 day with one (" + splitDays.length + ")",
+    splitDays.length >= 1 && splitDays.every((P) => splitOk(G, P, decoded[B2.indexOf(P)])));
+  const m23 = mutant("  const leapGain = (c) => (c.leap.own ?", "  const leapGain = (c) => (false ?");
+  ok("M23 · breakage 'tell the whole Leap gain as one' is caught (K23 goes red)", splitDays.length >= 1 && splitDays.some((P) => !splitOk(G, P, ((m23.judge(P) || {}).ex || {}).text || "")));
+  const m23b = mutant('  const plain = E.effPower(g, side, Object.assign({}, u, { id: "__plain__" })), own = to - plain;', "  const plain = to, own = 0;");
+  ok("K23b · …and a Leap gain whose rest is NOT the leaper's own ability cannot be named, so the position is REFUSED (Rule B)", splitDays.length >= 1 && splitDays.every((P) => rejects(m23b, P, "EXPLANATION")));
 
   // a duplicate: the generator, offered the very puzzle it would make, must not make it again
   const d1 = G.generate(["2027-01-04"], B1, { maxTries: 20000 })[0];

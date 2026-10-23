@@ -78,7 +78,7 @@ function board(g) {
   const m = {};
   for (const pi of [0, 1]) {
     const pl = g.players[pi];
-    pl.units.filter((u) => !u.ghost).forEach((u) => { m[u.uid] = { n: u.n, side: pi, p: u.bound ? 0 : E.effPower(g, pi, u), base: u.base, venom: u.venom || 0 }; });
+    pl.units.filter((u) => !u.ghost).forEach((u) => { m[u.uid] = { n: u.n, side: pi, p: u.bound ? 0 : E.effPower(g, pi, u), raw: u.power, base: u.base, venom: u.venom || 0 }; });
     pl.heroes.forEach((h) => { m[h.uid] = { n: h.n, side: pi, p: h.bound ? 0 : E.effPower(g, pi, h), base: h.base, venom: 0 }; });
   }
   return m;
@@ -167,6 +167,20 @@ function lineFor(P, p) {
 
 // play a candidate (its line: card, target, slot, Leaps) and describe it from the engine. → null when ANY change has no
 // single named cause, any number does not add up, or a stolen card appears (Rules A and B, owner ruling 2026-10-16).
+// (owner ruling 2026-10-23) A LEAP GAIN IS SPLIT BY CAUSE: a Leap copies the target's power into the leaper (its raw
+// power right after); anything the leaper shows above that comes from read-time abilities. The leaper's OWN printed passive
+// is named with its printed reason; any other source left over has no writer, so the draft is refused (→ null)
+function leapSplit(g, side, uid, from, to) {
+  const u = g.players[side].units.find((x) => x.uid === +uid); if (!u) return null;
+  const copied = u.power, rest = to - copied;
+  if (rest === 0) return { copied, own: 0, from, to };
+  const plain = E.effPower(g, side, Object.assign({}, u, { id: "__plain__" })), own = to - plain;
+  if (plain !== copied || own !== rest) return null;   // some of it is not the leaper's own ability
+  const def = defOf(FAC_OF_SIDE(g, side), u.n) || {}, m = /^PASSIVE: (.+?)\.?$/.exec((def.txt || "").split(/\. (?=[A-Z])/)[0] || "");
+  if (!m) return null;
+  return { copied, own, from, to, why: m[1].replace(/\s*\([^)]*\)/g, "") };
+}
+const FAC_OF_SIDE = (g, side) => g.players[side].faction;
 function narrate(P, play, opts) {
   opts = opts || {};
   const g = PZ.load(P, E, PZ.SEEDS[0]);
@@ -207,8 +221,9 @@ function narrate(P, play, opts) {
       if (cs.length !== 1 || (!cs[0].unknown && cs[0].amount !== extra)) return null;
       if (cs[0].name === "Leap") {
         const onto = leapText(cs[0]); if (!onto) return null;
+        const sp = leapSplit(g, b.side, uid, b.base, b.p); if (!sp) return null;
         changes.push({ side: b.side, d: b.base, text: arrives + b.base });
-        changes.push({ side: b.side, d: extra, leap: { who: b.n, onto }, text: whose(b.side) + b.n + " gains " + extra + " from Leap (" + b.base + "→" + b.p + ")" });
+        changes.push({ side: b.side, d: extra, leap: Object.assign({ who: b.n, onto }, sp), text: whose(b.side) + b.n + " gains " + extra + " from Leap (" + b.base + "→" + b.p + ")" });
         continue;
       }
       changes.push({ side: b.side, d: b.p, text: arrives + b.base + " and " + (extra > 0 ? "gains " + extra : "loses " + (-extra)) + " from " + (cs[0].name === b.n ? "its own ability" : cs[0].name) + " (" + b.p + ")" });
@@ -218,7 +233,8 @@ function narrate(P, play, opts) {
     const d = b.p - a.p;
     if (cs.length !== 1 || (!cs[0].unknown && cs[0].amount !== d)) return null;   // ONE named cause per change, or the draft is refused
     if (cs[0].name === "Leap") { const onto = leapText(cs[0]); if (!onto) return null;
-      changes.push({ side: b.side, d, leap: { who: b.n, onto }, text: whose(b.side) + b.n + " gains " + d + " from Leap (" + a.p + "→" + b.p + ")" }); continue; }
+      const sp = leapSplit(g, b.side, uid, a.p, b.p); if (!sp) return null;
+      changes.push({ side: b.side, d, leap: Object.assign({ who: b.n, onto }, sp), text: whose(b.side) + b.n + " gains " + d + " from Leap (" + a.p + "→" + b.p + ")" }); continue; }
     changes.push({ side: b.side, d, text: whose(b.side) + b.n + " " + (d > 0 ? "gains " + d : "loses " + (-d)) + " from " + cs[0].name + " (" + a.p + "→" + b.p + ")" });
   }
   for (const uid of Object.keys(b0)) if (!b1[uid]) {
@@ -262,10 +278,14 @@ function narrate(P, play, opts) {
 // names what it copies: "<Leaper> makes a free Leap onto <Unit> and gains <n> (<a>→<b>)"
 function sentenceOf(n) {
   const used = new Set();
-  const gainOf = (name) => { const c = n.changes.find((x) => !used.has(x) && x.leap && x.leap.who === name); if (!c) return ""; used.add(c); return " and gains " + c.d + c.text.slice(c.text.lastIndexOf(" (")); };
+  // one source: "and gains <n> (<a>→<b>)"; more than one (ruling 2026-10-23): ", copies <Target>'s <c> (<a>→<c>), and gains
+  // <k> from its own ability, <its printed passive> (<c>→<b>)"
+  const leapGain = (c) => (c.leap.own ? ", copies " + c.leap.onto + "'s " + c.leap.copied + " (" + c.leap.from + "→" + c.leap.copied + "), and gains " + c.leap.own + " from its own ability, " + c.leap.why + " (" + c.leap.copied + "→" + c.leap.to + ")"
+    : " and gains " + c.d + c.text.slice(c.text.lastIndexOf(" (")));
+  const gainOf = (name) => { const c = n.changes.find((x) => !used.has(x) && x.leap && x.leap.who === name); if (!c) return ""; used.add(c); return leapGain(c); };
   const before = n.leaps.filter((l) => l.when === "before").map((l) => "first " + l.names[0] + " Leaps onto " + l.names[1] + gainOf(l.names[0]));
   const after = n.leaps.filter((l) => l.when === "after").map((l) => "then " + l.names[0] + " Leaps onto " + l.names[1] + gainOf(l.names[0]));
-  const mid = n.changes.filter((c) => !used.has(c)).map((c) => (c.leap ? whose(c.side) + c.leap.who + " makes a free Leap onto " + c.leap.onto + " and gains " + c.d + c.text.slice(c.text.lastIndexOf(" (")) : c.text));
+  const mid = n.changes.filter((c) => !used.has(c)).map((c) => (c.leap ? whose(c.side) + c.leap.who + " makes a free Leap onto " + c.leap.onto + leapGain(c) : c.text));
   if (n.noPower) mid.push(n.noPower);
   return before.concat(mid, after);
 }
@@ -303,7 +323,9 @@ function missingEnd(P, base, n, playName) {
     g0 = g0 || PZ.load(P, E, PZ.SEEDS[0]);
     const pl = g0.players[u.side], art = pl.artifact;
     if (facOf(u.side) === "vanaras" && art && art.id === "ramasignet") {
-      const said = (u.side === 1 ? "the opponent's " : "your ") + art.n + " negates Venom on " + (u.side === 1 ? "their" : "your") + " Vanara Units, so the Venom Token on " + u.n + " does not drain it";
+      // (ruling 2026-10-23) the Signet stops Venom TOKENS; the Naga drain still applies, and is said to when it does
+      const drained = n.endChanges.some((c) => c.side === u.side && c.n === u.n && c.name === "the Naga Venom drain");
+      const said = (u.side === 1 ? "the opponent's " : "your ") + art.n + " stops the Venom Token on " + u.n + (drained ? " (it doesn't stop the Naga drain)" : "");
       if (out.indexOf(said) < 0) out.push(said);
       continue;
     }
