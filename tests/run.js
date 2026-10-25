@@ -83,12 +83,12 @@ const SUITES = [
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R1: the generator (scripts/daily-gen) and the batch it wrote — exactly one winner
   // on 8 seeds, explanations from the engine with a named cause per change and arithmetic read back from the words, the
   // content rules, no near-duplicates, launch cards only, no answer in a run's log; five owner-named breakages, each caught.
-  { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 77 },   // +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24) · +1 bounded chooser (K25) · +2 the title rule (K26, M26)
+  { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 78 },   // +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24) · +1 bounded chooser (K25) · +2 the title rule (K26, M26) · +1 tests read only this branch (K27)
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4: the weekly job, watchdog and veto (scripts/daily-gen/job.js + the three
   // workflows), run for real in throwaway clones pushing to a throwaway bare repo: 28 days ready, the digest-commit clash
   // retried (never forced), exactly the vetoed day replaced, the watchdog's gap email, every rule in the job path, a log of
   // dates/counts/ids only; four owner-named breakages, each caught.
-  { name: "dailyjob",      file: path.join(__dirname, "suites", "dailyjob.js"), chain: false, expect: 23 },
+  { name: "dailyjob",      file: path.join(__dirname, "suites", "dailyjob.js"), chain: false, expect: 24 },
 ];
 
 function freePort() {

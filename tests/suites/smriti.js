@@ -401,7 +401,7 @@ function checkBest(Sx) {
     }
     ok("BF1 · for all 21 animations at 360, 390 and 430 wide and a short phone, the large figure stays inside the board, is never taller than " + Math.round(PL.BIG_FRACTION * 100) + "% of it nor than the field, and plays at least 1.5× its in-card size (at 390×844: " + Math.min(...fr) + "–" + Math.max(...fr) + "% of the board's height)", bad.length === 0 && fr.length === 21, J(bad.slice(0, 5)));
     // the same clock for an old and a new player: the desktop draw (no `big`) is byte-for-byte the R2 build
-    let old = null; try { old = execFileSync("git", ["-C", SITE, "show", "e779900:play/smriti/player.js"], { encoding: "utf8" }); } catch (e) { old = null; }
+    let old = null; try { old = execFileSync("git", ["-C", SITE, "show", "6feaaec:play/smriti/player.js"], { encoding: "utf8" }); } catch (e) { old = null; }
     async function trace(src, big) {
       const P2 = loadUMD(src); P2.ANIMATION_SPEED = 1; let t = 0; const f = makeFetch(), im = makeImage();
       const p = P2.create({ AM, fetch: f.fetch, Image: im.Img, raf: (fn) => { t += 16; setImmediate(fn); }, now: () => t, pageUrl: "https://divyayuddha.games/play/smriti/" });
@@ -411,7 +411,7 @@ function checkBest(Sx) {
       return calls;
     }
     const tNew = await trace(SRC.player), tOld = old ? await trace(old) : null;
-    ok("BF2 · DESKTOP UNCHANGED: with no large placement every frame the player draws is identical to the R2 build (e779900) — " + tNew.length + " draws", !!tOld && tNew.length > 20 && J(tNew) === J(tOld));
+    ok("BF2 · DESKTOP UNCHANGED: with no large placement every frame the player draws is identical to the R2 build (6feaaec) — " + tNew.length + " draws", !!tOld && tNew.length > 20 && J(tNew) === J(tOld));
     const big = { x: 10, y: 60, w: 310, h: 500, maxH: 430, bound: { x: 0, y: 0, w: 378, h: 672 } };
     const tBig = await trace(SRC.player, big), dr = tBig.filter((c) => c[0] !== "fill"), fills = tBig.filter((c) => c[0] === "fill");
     const maxW = Math.max(...dr.map((c) => c[6])), firstW = dr[0][6];

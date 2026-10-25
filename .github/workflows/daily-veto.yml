@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: 20
       - name: Install the test dependencies
-        run: npm ci --prefix tests --no-audit --no-fund --loglevel=error
+        run: npm install --no-save --prefix tests --no-audit --no-fund --loglevel=error   # tests/package-lock.json is git-ignored (S-HALL-SUITE-1): no lockfile on a fresh checkout, so no clean-from-lockfile install
       - name: Replace the day
         env:
           DY_JOB_DATE: ${{ inputs.date }}   # passed as data, never pasted into the command; the job checks its form

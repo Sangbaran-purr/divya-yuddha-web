@@ -90,14 +90,14 @@ function arithmetic(text) {
   ok("G2 · every NEW explanation is the one the engine writes today (the encoded note equals a fresh write-up from the engine's own numbers and events)",
     NEW.every((P) => decoded[B2.indexOf(P)] && decoded[B2.indexOf(P)] === fresh[B2.indexOf(P)]), NEW.filter((P) => decoded[B2.indexOf(P)] !== fresh[B2.indexOf(P)]).map((P) => P.date).join(", "));
   let keptSame = false;
-  try { const then = JSON.parse(execFileSync("git", ["show", "9a1f798:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" }));
-    const thenNotes = execFileSync("git", ["show", "9a1f798:play/daily/notes.js"], { cwd: SITE, encoding: "utf8" });
+  try { const then = JSON.parse(execFileSync("git", ["show", "8a566b0:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" }));
+    const thenNotes = execFileSync("git", ["show", "8a566b0:play/daily/notes.js"], { cwd: SITE, encoding: "utf8" });
     keptSame = KEPT.every((d) => { const a = then.find((p) => p.date === d), b = B2.find((p) => p.date === d); const m = new RegExp('"' + b.id + '": "([^"]+)"').exec(thenNotes);
       // (ruling 2026-10-23) the owner's GENERAL wording fixes re-word a kept day: its position and title stay as kept, and its
       // explanation is then exactly the one the writer gives today
       const reworded = REWORDED.indexOf(d) >= 0 && decoded[B2.indexOf(b)] === fresh[B2.indexOf(b)];
       return a && b && J(a) === J(b) && m && (D.decodeNote(b.id, m[1]) === decoded[B2.indexOf(b)] || reworded); }); } catch (e) { keptSame = false; }
-  ok("G2b · the six still-KEPT puzzles are exactly as the owner kept them — position and title unchanged since 9a1f798, explanation too (but for the owner's general re-wording of 11 Nov)", keptSame);
+  ok("G2b · the six still-KEPT puzzles are exactly as the owner kept them — position and title unchanged since 8a566b0, explanation too (but for the owner's general re-wording of 11 Nov)", keptSame);
   const ar = decoded.map(arithmetic);
   ok("G3 · THE ARITHMETIC (Rule B), read back from each explanation's own words — for the winning play AND every tempting wrong play: the position + every named change = after the play; + every named round-end change = the final score (the winner's is the solver's)",
     ar.every((a, i) => a.ok && a.final[0] === solved[B2[i].id].winners[0].you && a.final[1] === solved[B2[i].id].winners[0].them),
@@ -179,7 +179,7 @@ function arithmetic(text) {
   const bad = B2.map((P) => { const e = m4.explain(P, solved[P.id]); return e ? arithmetic(e.text) : { ok: true }; });
   ok("M4 · breakage 'an explanation that doesn't add up' is caught (G3 goes red)", bad.some((a) => !a.ok));
   // R2 (owner rulings 2026-10-16): Rule A, Rule B and the realm rule — each on a real position, each with its breakage
-  const R2P = JSON.parse(execFileSync("git", ["show", "b9bff27:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" }));
+  const R2P = JSON.parse(execFileSync("git", ["show", "18e5658:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" }));
   const old = (d) => clone(R2P.find((p) => p.date === d));
   let stolen = null; { const r = G.mulberry32(11); for (let i = 0; i < 20000 && !stolen; i++) { const P = G.candidate(r, { date: "2026-10-29", you: "asuras", realm: "mrityulok" }); if (P && G.judge(P).reason === "STOLEN_CARD") stolen = P; } }
   ok("K5 · RULE A: a position with a stolen card on the board is REFUSED (STOLEN_CARD)", !!stolen && rejects(G, stolen, "STOLEN_CARD"));
@@ -220,7 +220,7 @@ function arithmetic(text) {
   ok("K10 · a position with a card in your hand the engine forbids (Kesari, locked by Narada) is REFUSED (UNPLAYABLE_CARD)", rejects(G, locked, "UNPLAYABLE_CARD"));
 
   // ── R2 round 2 (owner rulings 2026-10-19): Rule C looks-as-strong, Hero traps, the Venom limit, opponent balance ──
-  const was = (d) => clone(JSON.parse(execFileSync("git", ["show", "9a1f798:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).find((p) => p.date === d));
+  const was = (d) => clone(JSON.parse(execFileSync("git", ["show", "8a566b0:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).find((p) => p.date === d));
   const strongest = was("2026-10-30"), removal = was("2026-11-01");   // the vetoed 30 Oct (Bali, your strongest card) and 1 Nov (Vajra on a 21)
   const cOf = (L, P) => { const j = L.judge(P); return j.reason === "RULE_C" ? j.detail : (j.ok ? "PASSES" : j.reason); };
   ok("K11 · RULE C: the strongest card in your hand as the answer, winning without any round-end or realm effect, is REFUSED (the vetoed 30 Oct)", cOf(G, strongest) === "STRONGEST_CARD", cOf(G, strongest));
@@ -248,14 +248,14 @@ function arithmetic(text) {
   ok("K15 · a run with 6 Venom puzzles is REFUSED (the limit is 5)", G.checkSpread(six, { heroTraps: ht }).some((e) => /mechanics/.test(e)));
   const m15 = mutant('const MECH_CAP = (k) => (k === "venom" ? 5 : 3);', 'const MECH_CAP = (k) => (k === "venom" ? 6 : 3);');
   ok("M15 · breakage 'allow 6 Venom' is caught (K15 goes red)", !m15.checkSpread(six, { heroTraps: ht }).some((e) => /mechanics/.test(e)));
-  const seven = JSON.parse(execFileSync("git", ["show", "9a1f798:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).filter((p) => p.date >= "2026-10-29" && p.date <= "2026-11-11");
+  const seven = JSON.parse(execFileSync("git", ["show", "8a566b0:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).filter((p) => p.date >= "2026-10-29" && p.date <= "2026-11-11");
   const sevenOpp = seven.filter((p) => p.them.faction === "asuras").length;
   ok("K16 · a run with " + sevenOpp + " of one opponent is REFUSED (the R2 preview's batch: Asuras faced " + sevenOpp + " times)", sevenOpp === 7 && G.checkSpread(seven).some((e) => /opponents/.test(e)));
   const m16 = mutant('  if (!FACTIONS.every((f) => (them[f] || 0) >= quarter && (them[f] || 0) <= cap)) errs.push("opponents " + JSON.stringify(them));', '');
   ok("M16 · breakage 'ignore the opponent balance' is caught (K16 goes red)", !m16.checkSpread(seven).some((e) => /opponents/.test(e)));
 
   // ── owner rulings 2026-10-23: sweeps, a missing round-end effect must be told, full card names ──
-  const sweep = clone(JSON.parse(execFileSync("git", ["show", "b6881d9:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).find((p) => p.date === "2026-11-05"));
+  const sweep = clone(JSON.parse(execFileSync("git", ["show", "08e4cb9:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).find((p) => p.date === "2026-11-05"));
   ok("K17 · OBVIOUS REMOVAL INCLUDES SWEEPS: an answer whose removals add up to half the opponent's total across several Units is REFUSED (the vetoed 5 Nov: a Brahmastra taking 17 of 24)", cOf(G, sweep) === "OBVIOUS_REMOVAL", cOf(G, sweep));
   const m17 = mutant('  const removed = nw.changes.filter((c) => c.side === 1 && / is removed by /.test(c.text)).reduce((t, c) => t - c.d, 0);\n  if (removed > 0 && removed * 2 >= nw.T0[1]) return "OBVIOUS_REMOVAL";',
     '  const removed = nw.changes.filter((c) => c.side === 1 && / is removed by /.test(c.text)).map((c) => -c.d);\n  if (removed.some((x) => x * 2 >= nw.T0[1])) return "OBVIOUS_REMOVAL";');
@@ -339,6 +339,14 @@ function arithmetic(text) {
   const m26 = mutant("const TITLE_GAP = 90;", "const TITLE_GAP = 30;"), sim26 = simTitles(m26);
   ok("M26 · breakage 'a title may return after 30 days' is caught (K26 goes red: closest repeat " + sim26.minGap + " days)", sim26.minGap < 90);
 
+  // R4 (the first CI run, 2026-10-23): EVERY COMMIT A TEST READS IS IN THIS BRANCH'S HISTORY. A hash that exists only in one
+  // machine's object store (e.g. rewritten by a rebase) makes the suite pass here and fail on a fresh GitHub checkout
+  {
+    const suites = fs.readdirSync(path.join(SITE, "tests", "suites")).filter((f) => /\.js$/.test(f));
+    const hashes = [...new Set(suites.flatMap((f) => (fs.readFileSync(path.join(SITE, "tests", "suites", f), "utf8").match(/"[0-9a-f]{7,40}:[^"]+"|show", "[0-9a-f]{7,40}/g) || []).map((m) => /[0-9a-f]{7,40}/.exec(m)[0])))];
+    const lost = hashes.filter((h) => { try { execFileSync("git", ["merge-base", "--is-ancestor", h, "HEAD"], { cwd: SITE, stdio: "ignore" }); return false; } catch (e) { return true; } });
+    ok("K27 · every commit a test reads (" + hashes.length + ") is an ancestor of HEAD — none exists only on this machine", hashes.length >= 5 && lost.length === 0, "not in this branch's history: " + lost.join(", "));
+  }
   // R4: THE CHOOSER IS BOUNDED — a run that can never be completed (here: no Hero trap anywhere, so the 3-per-14 rule fails
   // at every leaf) gives up within its budget instead of trying all 14! orders (a weekly job then fails in minutes)
   {

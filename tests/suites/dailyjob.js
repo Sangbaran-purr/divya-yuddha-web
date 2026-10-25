@@ -186,6 +186,15 @@ const window28 = (t) => G.datesFrom(t, JOB.addDays(t, JOB.AHEAD - 1));
       && !/run:.*inputs\.date/.test(wf[2]) && wf.every((w) => /secrets\.RESEND_API_KEY/.test(w) && /secrets\.PREVIEW_EMAIL/.test(w) && /if: failure\(\)[\s\S]*job\.js alert/.test(w))
       && /contents: write/.test(wf[0]) && /contents: read/.test(wf[1]) && /contents: write/.test(wf[2]));
 
+  // ═══ THE FIRST CI RUN (2026-10-23) failed on `npm ci`: tests/package-lock.json is git-ignored (S-HALL-SUITE-1), so a fresh
+  // checkout has none. No workflow may use `npm ci` while that lockfile is ignored; the install is `npm install --no-save` ═══
+  const lockIgnored = spawnSync("git", ["check-ignore", "-q", "tests/package-lock.json"], { cwd: SITE }).status === 0;
+  const wfAll = fs.readdirSync(path.join(SITE, ".github", "workflows")).filter((f) => /\.ya?ml$/.test(f)).map((f) => [f, fs.readFileSync(path.join(SITE, ".github", "workflows", f), "utf8")]);
+  const usesCi = wfAll.filter(([, t]) => /\bnpm ci\b|\bnpm clean-install\b|\bnpm install-clean\b/.test(t)).map(([f]) => f);
+  ok("J18 · NO `npm ci` WHILE THE LOCKFILE IS IGNORED: no workflow (" + wfAll.length + ") runs npm ci; the weekly and veto install with `npm install --no-save` in tests/",
+    !(lockIgnored && usesCi.length) && ["daily-weekly.yml", "daily-veto.yml"].every((f) => /npm install --no-save --prefix tests/.test((wfAll.find((w) => w[0] === f) || ["", ""])[1])),
+    "lockfile ignored: " + lockIgnored + " · npm ci in: " + usesCi.join(", "));
+
   // ═══ SECRETS FIRST (owner ruling 2026-10-23): a missing secret stops the weekly or veto job before anything is generated ═══
   const S1 = fresh(), noMail = run(S1, ["weekly", "--today", T0], { PREVIEW_EMAIL: "" }), noKey = run(S1, ["veto", "--date", "2026-11-05", "--today", "2026-10-23"], { RESEND_API_KEY: " " });
   ok("J17 · SECRETS FIRST: with PREVIEW_EMAIL or RESEND_API_KEY missing, the weekly and veto jobs stop at once — no generation, no commit, no push, no email; the log names only the missing secret",

@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: 20
       - name: Install the test dependencies
-        run: npm ci --prefix tests --no-audit --no-fund --loglevel=error
+        run: npm install --no-save --prefix tests --no-audit --no-fund --loglevel=error   # tests/package-lock.json is git-ignored (S-HALL-SUITE-1): no lockfile on a fresh checkout, so no clean-from-lockfile install
       - name: Fill the next 28 days
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
