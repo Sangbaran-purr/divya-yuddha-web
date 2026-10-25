@@ -161,3 +161,40 @@ window.DY_CONFIG = {
   // this to true without a real minter wired would be dishonest — leave false.
   claimOpen: false,
 };
+
+/* ── STORE-LOAD-1 · THE FORK MODE (a LOCAL test bench, never the live site) ─────────────────────────────────────────
+   For the load test the real pages run against a local Polygon FORK: a local read proxy (dy-rpc), the fork itself for
+   the keyless log scans, and a local approval bot. Rather than editing every road, the requests are re-pointed at the
+   one place they all leave the page — window.fetch — so the hardcoded fallbacks (the dashboard's /allowlist and scan
+   roads, the report's, the admin's) are covered too.
+   IT CANNOT SWITCH ON FOR THE LIVE SITE. Both must hold: the page itself is served from this machine (hostname exactly
+   127.0.0.1 or localhost), AND fork mode was asked for (?fork=1 in the URL, or localStorage "dy::fork" = "1"). On
+   divyayuddha.games — or any other host — the block returns before touching anything. Ports: localStorage
+   dy::forkChain / dy::forkRpc / dy::forkBot, else the bench's defaults. Proven by tests/suites/forkmode.js. */
+(function () {
+  var h = (window.location && window.location.hostname) || "";
+  if (h !== "127.0.0.1" && h !== "localhost") return;
+  var ls = function (k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } };
+  var asked = false; try { asked = new URLSearchParams(window.location.search).get("fork") === "1" || ls("dy::fork") === "1"; } catch (e) { asked = false; }
+  if (!asked) return;
+  var CHAIN = ls("dy::forkChain") || "http://127.0.0.1:8560", RPC = ls("dy::forkRpc") || "http://127.0.0.1:8561", BOT = ls("dy::forkBot") || "http://127.0.0.1:8563";
+  var MAP = {
+    "rpc.divyayuddha.games": RPC,                                  // the read proxy → the local dy-rpc
+    "polygon-bor-rpc.publicnode.com": CHAIN, "polygon.drpc.org": CHAIN,   // the keyless roads (scans, fallbacks) → the fork
+    "polygon.gateway.tenderly.co": CHAIN, "gateway.tenderly.co": CHAIN,
+    "approval-bot-cxa2.onrender.com": BOT,                         // the approval bot → the local bot
+  };
+  function repoint(u) {
+    try { var x = new URL(String(u), window.location.href), to = MAP[x.hostname]; if (!to) return null; return to.replace(/\/$/, "") + x.pathname.replace(/^\/$/, "") + x.search; }
+    catch (e) { return null; }
+  }
+  var real = window.fetch;
+  if (typeof real === "function") {
+    window.fetch = function (input, init) {
+      var u = typeof input === "string" ? input : (input && input.url);
+      var to = repoint(u);
+      return real.call(this, to || input, init);
+    };
+  }
+  window.DY_FORK = { on: true, chain: CHAIN, rpc: RPC, bot: BOT, repoint: repoint };
+})();
