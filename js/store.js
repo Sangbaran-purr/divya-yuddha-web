@@ -1103,7 +1103,7 @@ window.DYStore = (function () {
         var ws = new ethers.Contract(saleAddr(), SALE_ABI, p);
         return Promise.all([ws.salesOpen(), ws.remainingOf(a.cardId)]).then(function (r) {
           if (!r[0]) return "The Store is not open.";
-          if (r[1] === 0n) return "This edition is sold out.";
+          if (r[1] === 0n) return "This card is sold out.";
           return null;
         });
       }
@@ -1129,7 +1129,7 @@ window.DYStore = (function () {
         SalesClosed: "The Store is not open.",
         Unpriced: "This card has no price set yet.",
         Uncapped: "This card has no supply cap set yet.",
-        SoldOut: "This edition is sold out.",
+        SoldOut: "This card is sold out.",
         MarketsClosed: "Trading is paused.",
         NotListed: "That listing is no longer active.",
         NotLister: "Only the lister can delist this.",

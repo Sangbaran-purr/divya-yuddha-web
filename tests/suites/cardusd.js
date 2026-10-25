@@ -548,14 +548,14 @@ async function main() {
     }
     const q2 = await dycVsUsd();
     const dycLost = q2.got.dyc === 0n;
-    ok("X3 · the LAST unit, the DYC road and the USD road at once: ONE card; the loser is told the real reason ('" + (dycLost ? "This edition is sold out." : P23) + "')",
-       q2.got.dyc + q2.got.usd === 1n && (dycLost ? q2.said.dyc === "This edition is sold out." : q2.said.usd === P23), J(q2));
+    ok("X3 · the LAST unit, the DYC road and the USD road at once: ONE card; the loser is told the real reason ('" + P23 + "')",
+       q2.got.dyc + q2.got.usd === 1n && (dycLost ? q2.said.dyc === P23 : q2.said.usd === P23), J(q2));
     const q4 = await dycVsUsd(null, true);
-    ok("X4 · the same race with the DYC road LOSING: ONE card (the USD buyer's); the DYC road's loser is told 'This edition is sold out.'",
-       q4.got.usd === 1n && q4.got.dyc === 0n && q4.said.dyc === "This edition is sold out.", J(q4));
+    ok("X4 · the same race with the DYC road LOSING: ONE card (the USD buyer's); the DYC road's loser is told '" + P23 + "'",
+       q4.got.usd === 1n && q4.got.dyc === 0n && q4.said.dyc === P23, J(q4));
     const q3 = await dycVsUsd(mut('      sayReason(msg, revertMsg(e, "Purchase failed or was rejected."), "Purchase failed or was rejected.", "card-dyc", { cardId: row.card.cardId });   // STORE-LOAD-1'), true);
-    ok("X5 · breakage 'the DYC road loses the re-read' is caught (with the DYC road losing, its buyer would not hear 'This edition is sold out.')",
-       q3.got.dyc === 0n && q3.said.dyc !== "This edition is sold out.", J(q3));
+    ok("X5 · breakage 'the DYC road loses the re-read' is caught (with the DYC road losing, its buyer would not hear '" + P23 + "')",
+       q3.got.dyc === 0n && q3.said.dyc !== P23, J(q3));
   }
   {
     h = await fresh(c, P);
