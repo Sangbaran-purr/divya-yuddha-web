@@ -277,6 +277,45 @@ async function run() {
     ok("BP20 · a wallet with enough POL never asks the bot, and buys as before", r.asked.length === 0 && r.landed && r.sends === 2 && !r.L.has(G_WAIT), JSON.stringify({ asked: r.asked, sends: r.sends }));
   }
 
+  // ═══ BP21–BP22 — STORE-LOAD-1: a failed buy is explained from the chain, never in raw library words ═══
+  const JUST = "A purchase from this wallet has just gone through — check your balances above before buying again.";
+  const NOT_TAKEN = "Your purchase didn't go through, and nothing was taken from your wallet. Please try again.";
+  const RAW = /could not coalesce|missing revert data|transaction already imported|CALL_EXCEPTION|execution reverted/i;
+  async function twoTabs(opts) {
+    const c = await H.chainPresale();
+    const a = await page(c, opts || {}), b = await page(c, opts || {});
+    await connected(a.w); await connected(b.w);
+    for (const t of [a, b]) { t.w.document.getElementById("buy-amt").value = "100"; t.w.document.getElementById("buy-amt").dispatchEvent(new t.w.Event("input")); }
+    H.click(a.w, "#buy-go"); H.click(b.w, "#buy-go");
+    await H.until(() => [a, b].every((t) => t.w.document.getElementById("buy-done") || t.w.document.getElementById("ov-fail").classList.contains("show")), 60000, "both tabs settle").catch(() => {});
+    await H.sleep(1500);   // the after-failure re-read
+    const said = [a, b].map((t) => t.w.document.getElementById("buy-done") ? "bought" : txt(t.w, "#ov-fail-msg"));
+    const granted = await c.vault.grantedTo(c.player.address);
+    done(a.w, b.w);
+    return { said, granted };
+  }
+  {
+    const r = await twoTabs();
+    ok("BP21 · one wallet, two tabs, both Buy 100 at once: ONE purchase; the other tab says '" + JUST + "' (never a raw library text)",
+       r.granted === dycOut(100n * DEC6) - dycOut(100n * DEC6) * 15n / 100n && r.said.filter((x) => x === "bought").length === 1 && r.said.some((x) => x === JUST) && !r.said.some((x) => RAW.test(x)), JSON.stringify(r.said));
+  }
+  {
+    const c = await H.chainPresale();
+    const p = await page(c, {});
+    await connected(p.w);
+    // the wallet answers the buy with an error no page can parse (the shape the two-tab race produced on the fork bench)
+    const orig = p.eth.request.bind(p.eth);
+    p.eth.request = async (a) => { if (a.method === "eth_sendTransaction" && String(a.params[0].to).toLowerCase() === c.addrs.sale.toLowerCase()) { p.eth.__calls.push(a.method); throw Object.assign(new Error("could not coalesce error"), { code: -32603 }); } return orig(a); };
+    const before = await c.usdt.balanceOf(c.player.address);
+    await buy(p.w, "100");
+    await H.until(() => p.w.document.getElementById("ov-fail").classList.contains("show") && txt(p.w, "#ov-fail-msg"), 30000, "the failure").catch(() => {});
+    await H.sleep(1500);
+    ok("BP22 · a buy that fails with a raw library error ('could not coalesce error'): the plain line '" + NOT_TAKEN + "' — the coin really was not taken",
+       txt(p.w, "#ov-fail-msg") === NOT_TAKEN && (await c.usdt.balanceOf(c.player.address)) === before, txt(p.w, "#ov-fail-msg"));
+    p.eth.request = orig;
+    done(p.w);
+  }
+
   // ═══ M — breakages applied to the page's own source ═══
   const mutate = (a, b) => { if (src.indexOf(a) < 0) throw new Error("breakage anchor gone: " + a.slice(0, 60)); return src.split(a).join(b); };
   {
@@ -336,6 +375,24 @@ async function run() {
     if (wsrc.indexOf(anchor) < 0) throw new Error("breakage anchor gone: M7");
     const r = await gasCase("slow", { waitMs: 10000, page: { walletSrc: wsrc.split(anchor).join("          return { state: \"ok\" };\n" + anchor) } });
     ok("M7 · breakage 'do not wait for the POL to arrive' is caught (BP18 goes red: the purchase does not land)", !r.landed, JSON.stringify({ landed: r.landed, sends: r.sends, fail: r.fail }));
+  }
+
+  {
+    const r = await twoTabs({ dashSrc: mutate("      if (r[0] != null && r[0] > snap.granted) { failBox(BUY_COPY.justBought); return; }\n", "") });
+    ok("M8 · breakage 'no chain check after a failed buy' is caught (BP21 goes red: the losing tab does not say a purchase just went through)", !r.said.some((x) => x === JUST), JSON.stringify(r.said));
+  }
+  {
+    const c = await H.chainPresale();
+    const p = await page(c, { dashSrc: mutate("    if (ctx === \"buy\") return null;   // STORE-LOAD-1: the buy road never shows a raw library text — buyFailed() asks the chain instead\n", "") });
+    await connected(p.w);
+    const orig = p.eth.request.bind(p.eth);
+    p.eth.request = async (a) => { if (a.method === "eth_sendTransaction" && String(a.params[0].to).toLowerCase() === c.addrs.sale.toLowerCase()) { p.eth.__calls.push(a.method); throw Object.assign(new Error("could not coalesce error"), { code: -32603 }); } return orig(a); };
+    await buy(p.w, "100");
+    await H.until(() => p.w.document.getElementById("ov-fail").classList.contains("show") && txt(p.w, "#ov-fail-msg"), 30000, "the failure").catch(() => {});
+    await H.sleep(1500);
+    ok("M9 · breakage 'the raw-text fallback' is caught (BP22 goes red: the buyer would read raw library words)", RAW.test(txt(p.w, "#ov-fail-msg")) || txt(p.w, "#ov-fail-msg") !== NOT_TAKEN, txt(p.w, "#ov-fail-msg"));
+    p.eth.request = orig;
+    done(p.w);
   }
 
   console.log("──\n" + (fail === 0 ? "ALL GREEN — " + pass + "/" + (pass + fail) : "FAILURES — " + fail + " of " + (pass + fail)));

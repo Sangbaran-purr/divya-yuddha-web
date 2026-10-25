@@ -520,7 +520,8 @@ window.DYStore = (function () {
       btn.textContent = "Bought"; buyAllowance = 0n;
       if (refresh) setTimeout(refresh, 1200);
     }).catch(function (e) {
-      btn.disabled = false; btn.textContent = "Buy"; msg.className = "st-msg bad"; msg.textContent = revertMsg(e, "Purchase failed or was rejected.");
+      btn.disabled = false; btn.textContent = "Buy"; msg.className = "st-msg bad";
+      sayReason(msg, revertMsg(e, "Purchase failed or was rejected."), "Purchase failed or was rejected.", "card-dyc", { cardId: row.card.cardId });   // STORE-LOAD-1
     });
   }
 
@@ -688,7 +689,13 @@ window.DYStore = (function () {
     var F = null, ctx = { sym: sym, sum: null };
     btn.disabled = true; btn.setAttribute("data-busy", "1"); msg.className = "st-msg"; msg.textContent = "Checking this wallet…";
     var label = btn.textContent;
-    function fail(e) { btn.removeAttribute("data-busy"); btn.disabled = false; btn.textContent = label; usdCoinRepaint(); msg.className = "st-msg bad"; msg.textContent = usdErr(e, ctx); }
+    function fail(e) {
+      btn.removeAttribute("data-busy"); btn.disabled = false; btn.textContent = label; usdCoinRepaint(); msg.className = "st-msg bad";
+      var said = usdErr(e, ctx);
+      msg.textContent = said;
+      // STORE-LOAD-1: a generic (or POL-after-a-shortfall) failure that the chain explains → the chain's reason (sold out / closed)
+      if (said === B_P8 || (said === U_POL && ctx.polShort)) raceReason("card-usd", { cardId: cardId }).then(function (why) { if (why) msg.textContent = why; });
+    }
     if (w.connected && !w.chainOk) { fail(usdStop("net")); return; }
     if (!me || !coinAddr) { fail(usdStop("precast")); return; }
     usdFresh(me, coinAddr, cardId)
@@ -890,7 +897,8 @@ window.DYStore = (function () {
         btn.textContent = "Bought";
         if (refresh) setTimeout(refresh, 1200);
       }).catch(function (e) {
-        btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = revertMsg(e, "Purchase failed or was rejected.");
+        btn.disabled = false; msg.className = "st-msg bad";
+        sayReason(msg, revertMsg(e, "Purchase failed or was rejected."), "Purchase failed or was rejected.", "market", { tokenId: tokenId });   // STORE-LOAD-1
       });
     };
   }
@@ -1054,6 +1062,63 @@ window.DYStore = (function () {
   }
 
   // ------------------------------------------------------------ revert -> message
+  // STORE-LOAD-1 (race fixes) — AFTER A FAILED PURCHASE, ASK THE CHAIN WHY. Two buyers racing for the last bundle or the
+  // last card, or one wallet buying in two tabs, fail on chain with no reason a page can parse — and the road then said
+  // its generic line. Used ONLY where the road's own answer would be that generic line (a named reason, a cancellation,
+  // a short balance stay as they were): it re-reads the store's state and names the real reason, or answers null.
+  //   kind: "bundle" | "topup" (a.packs) | "card-usd" (a.cardId) | "card-dyc" (a.cardId) | "market" (a.tokenId); a.me
+  var B_HELD = "This wallet already holds a Torana — a purchase from it has just gone through. Refresh to see it.";
+  //   WHICH VIEW: the read road can trail the chain by a few seconds (it pins "latest" to a block number it learned a moment
+  //   ago — measured on the bench: the wallet's own simulation saw SoldOut while the read road still said 1 left). So the
+  //   WALLET's connection is asked first (the view that just failed); if that names nothing, the read road once more,
+  //   2.5 s later.
+  function raceReason(kind, a) {
+    var viaWallet = window.ethereum ? loadE().then(function (ethers) { return raceReasonOn(kind, a, ethers, new ethers.BrowserProvider(window.ethereum)); }) : Promise.resolve(null);
+    return viaWallet.catch(function () { return null; }).then(function (why) {
+      if (why) return why;
+      return new Promise(function (res) { setTimeout(res, 2500); }).then(function () { return loadE(); }).then(function (ethers) { return raceReasonOn(kind, a, ethers, readProvider()); });
+    }).catch(function () { return null; });   // a failed re-read changes nothing: the road's own line stands
+  }
+  function raceReasonOn(kind, a, ethers, p) {
+    return Promise.resolve().then(function () {
+      if (kind === "bundle" || kind === "topup") {
+        var ps = new ethers.Contract(psAddr(), PS_ABI, p);
+        return Promise.all([ps.saleOpen(), ps.inventory(), kind === "bundle" ? ps.dycPerBundle() : ps.packSize(),
+                            kind === "bundle" ? new ethers.Contract(accessAddr(), BNFT_ABI, p).balanceOf(a.me) : Promise.resolve(0n)]).then(function (r) {
+          if (!r[0]) return B_P6;
+          if (r[1] < (kind === "bundle" ? r[2] : r[2] * BigInt(a.packs || 1))) return B_P6B;
+          if (kind === "bundle" && r[3] > 0n) return B_HELD;
+          return null;
+        });
+      }
+      if (kind === "card-usd") {
+        var cs = new ethers.Contract(cusAddr(), CUS_ABI, p), sale = new ethers.Contract(saleAddr(), SALE_ABI, p);
+        return Promise.all([cs.open(), sale.salesOpen(), cs.remainingOf(a.cardId)]).then(function (r) {
+          if (!r[0] || !r[1]) return U_CLOSED;
+          if (r[2] === 0n) return U_SOLD;
+          return null;
+        });
+      }
+      if (kind === "card-dyc") {
+        var ws = new ethers.Contract(saleAddr(), SALE_ABI, p);
+        return Promise.all([ws.salesOpen(), ws.remainingOf(a.cardId)]).then(function (r) {
+          if (!r[0]) return "The Store is not open.";
+          if (r[1] === 0n) return "This edition is sold out.";
+          return null;
+        });
+      }
+      if (kind === "market") {
+        return new ethers.Contract(marketAddr(), MARKET_ABI, p).listingOf(a.tokenId).then(function (l) { return l && l.active === false ? "That listing is no longer active." : null; });
+      }
+      return null;
+    });
+  }
+  // the road's line, unless it is the generic one and the chain names the real reason
+  function sayReason(msg, said, generic, kind, a) {
+    msg.textContent = said;
+    if (said !== generic) return;
+    raceReason(kind, a).then(function (why) { if (why) msg.textContent = why; });
+  }
   function revertMsg(e, fallback) {
     var s = (e && (e.shortMessage || e.reason || e.message)) || "";
     if (/user rejected|denied|ACTION_REJECTED/i.test(s)) return "Cancelled in your wallet.";
@@ -1745,7 +1810,11 @@ window.DYStore = (function () {
       if (e && e.__p7) { preCastStop(host, bP7(sym, sum)); return; }
       // GAS-HELP-1 R3: the wallet was short of POL and the send failed without a named reason → the POL line
       var said = bundleErr(e, { sym: sym, sum: sum });
-      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = (polShort && said === B_P8) ? U_POL : said;
+      btn.disabled = false; msg.className = "st-msg bad";
+      // STORE-LOAD-1: a generic failure → the chain's reason (sold out / closed / already holds one); else the POL line if short
+      if (said !== B_P8) { msg.textContent = said; return; }
+      msg.textContent = polShort ? U_POL : B_P8;
+      raceReason("bundle", { me: me }).then(function (why) { if (why) msg.textContent = why; });
     });
   }
 
@@ -1805,6 +1874,8 @@ window.DYStore = (function () {
       windowFreesOn(bState).then(function (when) {
         bFlash = { kind: "bad", text: bundleErr(e, { sym: sym, sum: sum, when: when }) };   // `when` already carries its preposition via bWhen
         msg.textContent = bFlash.text;
+        // STORE-LOAD-1: a generic failure → the chain's reason (sold out / closed)
+        if (bFlash.text === B_P8) raceReason("topup", { me: window.DYWallet.state.address, packs: packs }).then(function (why) { if (why) { bFlash.text = why; msg.textContent = why; } });
       });
     });
   }

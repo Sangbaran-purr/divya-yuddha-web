@@ -492,6 +492,71 @@ async function main() {
     r = await gasCase("slow");
     ok("W4 · the POL arrives slowly (3 s): the road waits for it, then buys", r.has(G_WAIT) && r.has(G_OK) && r.m === DONE && r.bought === 1n, JSON.stringify({ m: r.m }));
   }
+  // ══════════════ X · STORE-LOAD-1: the LAST unit of a card, two buyers at once ══════════════
+  // On 1-second blocks both pass their simulation and send; the loser's buy reverts ON CHAIN with no parseable reason. The
+  // road re-reads the card's stock and says the real reason. Card 101's cap is set to minted + 1 for each case.
+  console.log("\n── X · the last unit of a card ──");
+  const J = (o) => JSON.stringify(o, (k, v) => (typeof v === "bigint" ? String(v) : v));
+  {
+    const src = fs.readFileSync(STORE_JS, "utf8");
+    const mut = (a1) => { if (src.indexOf(a1) < 0) throw new Error("breakage anchor gone: " + a1.slice(0, 50)); const f = path.join(os.tmpdir(), "store-x-" + Math.random().toString(36).slice(2) + ".js"); fs.writeFileSync(f, src.replace(a1, "")); return f; };
+    const intervals = async (on) => { if (on) { await c.provider.send("evm_setAutomine", [false]); await c.provider.send("evm_setIntervalMining", [1]); } else { await c.provider.send("evm_setIntervalMining", [0]); await c.provider.send("evm_setAutomine", [true]); } };
+    const settledMsg = (w) => { const t = tileOf(w, "Deva Sainika"), e = t && t.querySelector(".st-msg:not(.b-invite-note)"); return e && /\b(ok|bad)\b/.test(e.className) ? e.textContent.replace(/\s+/g, " ").trim() : null; };
+    async function usdVsUsd(storeSrc) {
+      const A1 = await newBuyer(), A2 = await newBuyer();
+      const p1 = await fresh(c, P, Object.assign({ player: A1 }, storeSrc ? { storeSrc } : {})), p2 = await fresh(c, P, Object.assign({ player: A2 }, storeSrc ? { storeSrc } : {}));
+      await (await c.saleM.setSupplyCap(101, Number(await c.nft.mintedOfCard(101)) + 1)).wait();
+      await intervals(true);
+      usdBtn(p1.w, "Deva Sainika").click(); usdBtn(p2.w, "Deva Sainika").click();
+      await waitFor("both settle", () => settledMsg(p1.w) && settledMsg(p2.w), 90000).catch(() => {});
+      await H.sleep(6000);
+      await intervals(false);
+      const r = { said: [msgOf(p1.w, "Deva Sainika"), msgOf(p2.w, "Deva Sainika")], got: [await c.nft.balanceOf(A1.address), await c.nft.balanceOf(A2.address)] };
+      H.teardown(p1); H.teardown(p2);
+      await (await c.saleM.setSupplyCap(101, 200)).wait();
+      return r;
+    }
+    // the winner's tile repaints after its purchase (its message clears), so winner and loser are told apart by the card
+    let r = await usdVsUsd();
+    let loser = r.got[0] === 0n ? 0 : 1;
+    ok("X1 · two USD buyers for the LAST unit: ONE card; the other is told '" + P23 + "' (the real reason, not the generic line)",
+       r.got[0] + r.got[1] === 1n && r.said[loser] === P23, J(r));
+    r = await usdVsUsd(mut('      if (said === B_P8 || (said === U_POL && ctx.polShort)) raceReason("card-usd", { cardId: cardId }).then(function (why) { if (why) msg.textContent = why; });'));
+    loser = r.got[0] === 0n ? 0 : 1;
+    ok("X2 · breakage 'no re-read after a failed USD card buy' is caught (the loser would read the generic line)", r.said[loser] !== P23, J(r.said));
+    async function dycVsUsd(storeSrc, usdFirst) {
+      const D = await newBuyer(), U = await newBuyer();
+      await (await c.dyc.mint(D.address, 10000n * DEC)).wait();
+      // usdFirst: the USD buyer approved earlier (no approve step at the tap) and taps first, so the DYC road loses
+      if (usdFirst) await (await c.usdcT.connect(await c.provider.getSigner(U.address)).approve(c.wave.store, 100n * DEC6)).wait();
+      const pd = await fresh(c, P, Object.assign({ player: D }, storeSrc ? { storeSrc } : {})), pu = await fresh(c, P, Object.assign({ player: U }, storeSrc ? { storeSrc } : {}));
+      const dycBtn = () => tileOf(pd.w, "Deva Sainika").querySelector(".st-btn:not(.st-usd)");
+      await waitFor("the DYC button", () => dycBtn() && !dycBtn().disabled);
+      dycBtn().click();   // Approve DYC
+      await waitFor("the DYC approve", () => /Approved/.test(msgOf(pd.w, "Deva Sainika")), 60000);
+      await (await c.saleM.setSupplyCap(101, Number(await c.nft.mintedOfCard(101)) + 1)).wait();
+      await intervals(true);
+      if (usdFirst) { usdBtn(pu.w, "Deva Sainika").click(); await H.sleep(400); dycBtn().click(); }
+      else { dycBtn().click(); usdBtn(pu.w, "Deva Sainika").click(); }   // the DYC road's Buy and the USD road's Buy, the same moment
+      await waitFor("both settle", () => settledMsg(pd.w) && settledMsg(pu.w), 90000).catch(() => {});
+      await H.sleep(6000);   // the re-read (wallet view, then the read road 2.5 s later)
+      await intervals(false);
+      const res = { said: { dyc: msgOf(pd.w, "Deva Sainika"), usd: msgOf(pu.w, "Deva Sainika") }, got: { dyc: await c.nft.balanceOf(D.address), usd: await c.nft.balanceOf(U.address) } };
+      H.teardown(pd); H.teardown(pu);
+      await (await c.saleM.setSupplyCap(101, 200)).wait();
+      return res;
+    }
+    const q2 = await dycVsUsd();
+    const dycLost = q2.got.dyc === 0n;
+    ok("X3 · the LAST unit, the DYC road and the USD road at once: ONE card; the loser is told the real reason ('" + (dycLost ? "This edition is sold out." : P23) + "')",
+       q2.got.dyc + q2.got.usd === 1n && (dycLost ? q2.said.dyc === "This edition is sold out." : q2.said.usd === P23), J(q2));
+    const q4 = await dycVsUsd(null, true);
+    ok("X4 · the same race with the DYC road LOSING: ONE card (the USD buyer's); the DYC road's loser is told 'This edition is sold out.'",
+       q4.got.usd === 1n && q4.got.dyc === 0n && q4.said.dyc === "This edition is sold out.", J(q4));
+    const q3 = await dycVsUsd(mut('      sayReason(msg, revertMsg(e, "Purchase failed or was rejected."), "Purchase failed or was rejected.", "card-dyc", { cardId: row.card.cardId });   // STORE-LOAD-1'), true);
+    ok("X5 · breakage 'the DYC road loses the re-read' is caught (with the DYC road losing, its buyer would not hear 'This edition is sold out.')",
+       q3.got.dyc === 0n && q3.said.dyc !== "This edition is sold out.", J(q3));
+  }
   {
     h = await fresh(c, P);
     await (await c.saleM.setSupplyCap(102, Number(await c.nft.mintedOfCard(102)))).wait();   // sold out AFTER the tile painted

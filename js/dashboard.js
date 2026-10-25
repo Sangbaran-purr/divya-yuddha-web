@@ -76,6 +76,8 @@ window.DYDash = (function () {
     "function presalePriceE18() view returns (uint256)",
     "function publicPriceE18() view returns (uint256)",
     "function quoteDyc(uint256) view returns (uint256)",
+    "function presaleSold() view returns (uint256)",   // STORE-LOAD-1: the after-failure re-read (sold out?)
+    "function presaleCap() view returns (uint256)",
     "function presaleMinUsdE18() view returns (uint256)",
     "function publicMinUsdE18() view returns (uint256)",
     "function allowlistSigner() view returns (address)",
@@ -345,6 +347,10 @@ window.DYDash = (function () {
     preparing: "Preparing your presale pass…",
     unreachable: "We couldn't reach the presale service — please try again in a moment.",
     refused: "This wallet can't buy in the presale. If you think this is a mistake, contact us.",
+    // STORE-LOAD-1 — after a failed buy, what the chain says happened (never a raw library text)
+    justBought: "A purchase from this wallet has just gone through — check your balances above before buying again.",
+    notTaken: "Your purchase didn't go through, and nothing was taken from your wallet. Please try again.",
+    checkFirst: "Your purchase didn't go through. Refresh this page and check your balances before trying again.",
   };
   var BUY_COINS = [{ key: "usdt", label: "USDT" }, { key: "usdc", label: "USDC" }];   // the store's order: USDT first
   // S-COLLECT-NOTICE: the published awaiting-collection list (Bucket 2 of the debit runbook) — wallets already paid out
@@ -901,6 +907,7 @@ window.DYDash = (function () {
     // 4) a raw selector we couldn't map — still name it, never say "unknown"
     var d2 = revertData(e);
     if (d2 && d2.length >= 10) return "The contract rejected this transaction (code " + d2.slice(0, 10) + "). Please check the amount or contact support.";
+    if (ctx === "buy") return null;   // STORE-LOAD-1: the buy road never shows a raw library text — buyFailed() asks the chain instead
     return s ? String(s).slice(0, 140) : "The transaction could not be completed. Please try again.";
   }
 
@@ -2077,6 +2084,7 @@ window.DYDash = (function () {
     // (GAS-HELP-1 R3: no POL refusal here any more — beforeApprove() tops a short wallet up, or lets the wallet try)
     var isPresale = buyState.round === 1;
     var sig = isPresale && buyState.voucher ? buyState.voucher.sig : "0x";
+    var snap = null;
     withEthers().then(function () {
       var provider = new ethersRef.BrowserProvider(window.ethereum);
       return provider.getSigner().then(function (signer) {
@@ -2085,7 +2093,10 @@ window.DYDash = (function () {
         var me = W.state.address;
         return tok.balanceOf(me).then(function (bal) {
           if (bal < amt) { failBox("You need " + fmt(amt, 6) + " " + coin.label + " but have " + fmt(bal, 6) + ". Add " + coin.label + " and try again."); throw "stop"; }
-          return tok.allowance(me, c.dycoinSale);
+          // STORE-LOAD-1 — the snapshot a failure is judged against: the coin held, and the vesting already granted
+          snap = { me: me, coin: coin, bal: bal, granted: null };
+          return (c.vestingVault ? new ethersRef.Contract(c.vestingVault, VEST_ABI, readProvider()).grantedTo(me).then(function (g) { snap.granted = g; }, function () {}) : Promise.resolve())
+            .then(function () { return tok.allowance(me, c.dycoinSale); });
         }).then(function (allow) {
           var needApprove = allow < amt;
           return feeOverrides(provider).then(function (fo) {
@@ -2123,7 +2134,34 @@ window.DYDash = (function () {
           });
         });
       });
-    }).catch(function (e) { if (e === "stop") return; pending(false); failBox(decodeErr(e)); });
+    }).catch(function (e) { if (e === "stop") return; buyFailed(e, snap); });   // STORE-LOAD-1: the chain says why
+  }
+
+  // STORE-LOAD-1 — A FAILED BUY, EXPLAINED FROM THE CHAIN. Two tabs buying from one wallet at once, or a buy that lost a
+  // race, fail with errors no page can parse ("could not coalesce error"). So: a declined signature says so; then the
+  // chain is asked — did this wallet's vesting grow (a purchase from it just went through)? is the round sold out? — and
+  // only then the decoder's plain words; if even that has nothing, a plain line (whether the coin was taken decides which).
+  function buyFailed(e, snap, again) {
+    pending(false);
+    if (e && e.code === "ACTION_REJECTED") { failBox(decodeErr(e)); return; }
+    // the wallet's own connection first (the view that just failed — the read road can trail by a few seconds), then
+    // (the "again" pass, 2.5 s later) the read road
+    var c = cfg(), p = (!again && window.ethereum) ? new ethersRef.BrowserProvider(window.ethereum) : readProvider();
+    var reads = [
+      snap && snap.granted != null && c.vestingVault ? new ethersRef.Contract(c.vestingVault, VEST_ABI, p).grantedTo(snap.me).catch(function () { return null; }) : Promise.resolve(null),
+      new ethersRef.Contract(c.dycoinSale, SALE_ABI, p).currentRound().catch(function () { return null; }),
+      new ethersRef.Contract(c.dycoinSale, SALE_ABI, p).presaleSold().catch(function () { return null; }),
+      new ethersRef.Contract(c.dycoinSale, SALE_ABI, p).presaleCap().catch(function () { return null; }),
+      snap ? new ethersRef.Contract(snap.coin.addr, ERC20_ABI, p).balanceOf(snap.me).catch(function () { return null; }) : Promise.resolve(null),
+    ];
+    Promise.all(reads).then(function (r) {
+      if (r[0] != null && r[0] > snap.granted) { failBox(BUY_COPY.justBought); return; }
+      if (r[1] != null && Number(r[1]) === 1 && r[2] != null && r[3] != null && r[2] >= r[3]) { failBox(ERR_PLAIN.PresaleSoldOut); return; }
+      if (!again) { setTimeout(function () { buyFailed(e, snap, true); }, 2500); return; }   // nothing yet: once more, later
+      var d = decodeErr(e, "buy");
+      if (d) { failBox(d); return; }
+      failBox(r[4] != null && snap && r[4] === snap.bal ? BUY_COPY.notTaken : BUY_COPY.checkFirst);
+    });
   }
 
   // after a purchase: staking is offered as its own, optional step (activate the first time, sync after that)

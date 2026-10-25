@@ -9,6 +9,8 @@
 // The roads: the tile's four faces; the non-holder buy on BOTH assets; the holder top-up ×1..×4; the cap edge to the
 // wei; the six ruled refusals from FORCED contract state; and — the one that matters most — THE PRE-FLIGHT STOPPING
 // BEFORE ANY APPROVE on a wallet that cannot receive an ERC-721 (GATES 12e), with the allowance proven never to move.
+const fs = require("fs");
+const path = require("path");
 const { ethers } = require("ethers");
 const H = require("../lib.js");
 const DEC = 1000000000000000000n, DEC6 = 1000000n;
@@ -428,6 +430,50 @@ async function main() {
       const r = await gasCase("slow");
       ok("GAS4 · the POL arrives slowly (3 s): the road waits for it, then buys", has(r, G_WAIT) && has(r, G_OK) && r.done && r.torana === 1n, JSON.stringify({ said: r.said }));
     }
+  }
+
+  // ══════════════════════════ RACE · STORE-LOAD-1: the last bundle, two buyers ══════════════════════════
+  // On 1-second blocks both buyers pass their own simulation and send; the loser's buy reverts ON CHAIN with no reason a
+  // page can parse. The road must re-read the store and say the real reason — sold out — not the generic P8.
+  console.log("\n── RACE · the last bundle in stock ──");
+  async function lastBundle(storeSrc) {
+    const c = await H.chainStore();
+    const per = await c.ps.dycPerBundle(), stock = await c.dyc.balanceOf(c.addrs.ps);
+    await c.provider.send("anvil_impersonateAccount", [c.addrs.ps]);
+    await c.provider.send("anvil_setBalance", [c.addrs.ps, "0x" + (10n ** 18n).toString(16)]);
+    await (await c.dyc.connect(await c.provider.getSigner(c.addrs.ps)).transfer(c.addrs.owner, stock - per)).wait();   // one bundle's DYC left
+    const b2 = ethers.Wallet.createRandom().connect(c.provider);
+    await c.provider.send("anvil_impersonateAccount", [b2.address]);
+    await c.provider.send("anvil_setBalance", [b2.address, "0x" + (10n * 10n ** 18n).toString(16)]);
+    await deal(c, "usdc", c.player.address, 25n * DEC6); await deal(c, "usdc", b2.address, 25n * DEC6);
+    const h1 = await H.storePage(c, c.player, storeSrc ? { storeSrc } : {}), h2 = await H.storePage(c, b2, storeSrc ? { storeSrc } : {});
+    await connect(h1.w); await connect(h2.w);
+    await c.provider.send("evm_setAutomine", [false]); await c.provider.send("evm_setIntervalMining", [1]);
+    H.click(h1.w, ".b-buy"); H.click(h2.w, ".b-buy");
+    const settled = (w) => /is yours/.test(tile(w)) || (q(w, "#b-msg") && /\bbad\b/.test(q(w, "#b-msg").className));
+    await waitFor("both settle", () => settled(h1.w) && settled(h2.w)).catch(() => {});
+    await H.sleep(2000);   // the re-read
+    await c.provider.send("evm_setIntervalMining", [0]); await c.provider.send("evm_setAutomine", [true]);
+    const r = { won: [/is yours/.test(tile(h1.w)), /is yours/.test(tile(h2.w))], said: [msg(h1.w), msg(h2.w)],
+                usdc: [await c.usdc.balanceOf(c.player.address), await c.usdc.balanceOf(b2.address)] };
+    H.teardown(h1); H.teardown(h2);
+    for (const a of [c.addrs.owner, c.player.address]) await c.provider.send("anvil_setBalance", [a, "0x" + (10000n * 10n ** 18n).toString(16)]);
+    return r;
+  }
+  {
+    const r = await lastBundle();
+    const loser = r.won[0] ? 1 : 0;
+    ok("RACE · two buyers, one bundle's DYC left: ONE Torana; the other is told the real reason — '" + P6B + "' — and keeps their USDC",
+       r.won.filter(Boolean).length === 1 && r.said[loser] === P6B && r.usdc[loser] === 25n * DEC6, JSON.stringify(r.said));
+  }
+  {
+    const src = fs.readFileSync(path.join(H.SITE, "js/store.js"), "utf8");
+    const a = '      raceReason("bundle", { me: me }).then(function (why) { if (why) msg.textContent = why; });';
+    if (src.indexOf(a) < 0) throw new Error("breakage anchor gone: race");
+    const f = path.join(require("os").tmpdir(), "store-race-mut.js"); fs.writeFileSync(f, src.replace(a, ""));
+    const r = await lastBundle(f);
+    const loser = r.won[0] ? 1 : 0;
+    ok("RACE · breakage 'no re-read after a failed bundle buy' is caught (the loser would read the generic '" + P8 + "')", r.said[loser] !== P6B, JSON.stringify(r.said));
   }
 
   // ══════════════════════════ P6 · THE BUSY SENTINEL ══════════════════════════

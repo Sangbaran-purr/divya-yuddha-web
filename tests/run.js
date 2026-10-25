@@ -36,7 +36,7 @@ const SUITES = [
   // shapes are FIXTURES (docs/ARCHIVE_ROAD_2026-09-23.md); a suite that dials out measures the weather.
   { name: "consoleroad",   file: path.join(__dirname, "suites", "consoleroad.js"), chain: false, expect: 102 },
   { name: "stakedframe",   file: path.join(__dirname, "suites", "stakedframe.js"), chain: true, expect: 29 },
-  { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 100 },
+  { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 102 },
   { name: "winnings",      file: path.join(__dirname, "suites", "winnings.js"), chain: true, expect: 41 },
   // AFFILIATE-1 rung 3 — Torana Invites (store + dashboard) and the ONE Withdraw card, against the REAL desk with
   // coupons signed by the bot's own signer and every invite signature checked by the bot's own verifier.
@@ -56,7 +56,7 @@ const SUITES = [
   // LIMIT-DISPLAY-1 — the stored daily limit reaches the screen after a reload, however slow the sign-in
   { name: "readproxy",     file: path.join(__dirname, "suites", "readproxy.js"), chain: true, expect: 17 },
   // CARD-STORE-1 C3 — the USD card button against the REAL WaveCardUsdSale (tokens planted at their Polygon addresses)
-  { name: "cardusd",       file: path.join(__dirname, "suites", "cardusd.js"), chain: true, expect: 58, capMs: 600000 },
+  { name: "cardusd",       file: path.join(__dirname, "suites", "cardusd.js"), chain: true, expect: 63, capMs: 600000 },
   // MY-INVITES-1 — the affiliate's own page against the REAL bot over a REAL chain (a 7-deep tree, both schemes)
   { name: "myinvites",     file: path.join(__dirname, "suites", "myinvites.js"), chain: true, expect: 58, capMs: 900000 },
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
@@ -87,7 +87,7 @@ const SUITES = [
   // on anvil, an instant voucher from the (stubbed) approval-bot door, Buy DYC in USDT or USDC, staking after; four
   // breakages applied to the page's own source, each caught.
   { name: "forkmode",      file: path.join(__dirname, "suites", "forkmode.js"), chain: false, expect: 12 },   // STORE-LOAD-1: the local-only fork mode
-  { name: "buypanel",      file: path.join(__dirname, "suites", "buypanel.js"), chain: true, expect: 31, capMs: 600000 },   // GAS-HELP-1 R3: its cases wait out real timeouts
+  { name: "buypanel",      file: path.join(__dirname, "suites", "buypanel.js"), chain: true, expect: 35, capMs: 600000 },   // GAS-HELP-1 R3: its cases wait out real timeouts
   { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 91 },   // +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24) · +1 bounded chooser (K25) · +2 the title rule (K26, M26) · +1 tests read only this branch (K27) · +13 the first batch review (K28–K32b, M28–M32)
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4: the weekly job, watchdog and veto (scripts/daily-gen/job.js + the three
   // workflows), run for real in throwaway clones pushing to a throwaway bare repo: 28 days ready, the digest-commit clash
