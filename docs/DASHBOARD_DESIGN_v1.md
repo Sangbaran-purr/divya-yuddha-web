@@ -93,7 +93,12 @@ Every line below is asserted verbatim against the source.
 
 **The gas sentence** (MP-FIX-3A shape — a gas-short wallet hears about POL, never about DYC)
 
-- You need a small amount of POL for network fees. Add a little POL to your wallet and try again.
+- You need a small amount of POL for network fees. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge — look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.
+
+> AMENDMENT 2026-10-25 (GAS-HELP-1 R0, owner rulings): the gas sentence now says WHERE the POL comes from — the bridges
+> that can add POL on arrival (Polygon Portal, Jumper, Relay; each verified from its own docs) and the exchange's Polygon
+> network. It replaces "Add a little POL to your wallet and try again." The fee banner's second line carries the same
+> guidance (it said "Buy a little POL on an exchange that supports Polygon, or swap for it in your wallet.").
 
 ## 12. AFFILIATE-1 rung 3 (2026-10-09) - ONE WITHDRAW CARD, AND THE TORANA INVITES CARD
 

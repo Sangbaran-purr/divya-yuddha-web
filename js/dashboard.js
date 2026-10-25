@@ -310,6 +310,9 @@ window.DYDash = (function () {
 
   var DAY = 4n; var DAY_DEN = 1000n; // 0.4%/day (RATE is an internal constant; UI-stated per ratified flag)
   var POL_MIN = 20000000000000000n; // 0.02 POL — below this, show the fee banner
+  // GAS-HELP-1 R0 (owner rulings 2026-10-25) — the one POL line on every dashboard action: what is missing, then where it
+  // comes from (the bridges that can add POL on arrival, verified from their own docs; or the exchange's Polygon network)
+  var POL_HELP = "You need a small amount of POL for network fees. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge — look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.";
   var MIN_BUY_USDT = 100000000n; // M-F4 defect 1: page-side minimum purchase = 100 USDT (6-dec). Ruled 2026-08-06.
   // GAS floors (house law: explicit gas limit for every state-touching call). redeem cold-state floor: measured max
   // 140,296 (cold nonce SSTORE + cold recipient + funding reconcile) → 160,000 with margin.
@@ -326,7 +329,7 @@ window.DYDash = (function () {
     "function nonceCancelled(uint256) view returns (bool)",
     "function dropSigner() view returns (address)",
   ];
-  var buyState = {}; // { round, price, voucher }
+  var buyState = {}; // { round, price, voucher, coin, amt } — coin and amt are the buyer's own choices: every re-draw keeps them (GAS-HELP-1 R0)
   var allowlist = null; // cached [{wallet, sig}]
   // S-ALLOWLIST-LIVE: the robot's no-store live mirror (approval surfaces within one poll). CROSS-ORIGIN on Render
   // (owner-confirmed 2026-08-19 — no /approval proxy exists); the robot answers with Access-Control-Allow-Origin:
@@ -871,7 +874,7 @@ window.DYDash = (function () {
   function polGuard() {
     // repeat the fee guidance in plain words when POL is low
     if (data.pol != null && data.pol < POL_MIN) {
-      return "You need a small amount of POL for network fees. Add a little POL to your wallet and try again.";
+      return POL_HELP;
     }
     return null;
   }
@@ -894,7 +897,7 @@ window.DYDash = (function () {
     if (e && e.revert && e.revert.name && PLAIN[e.revert.name]) return PLAIN[e.revert.name];
     // 3) gas / funds
     var s = (e && (e.shortMessage || e.reason || e.message)) || "";
-    if (/insufficient funds|gas required|out of gas/i.test(s)) return "You need a small amount of POL for network fees. Add a little POL and try again.";
+    if (/insufficient funds|gas required|out of gas/i.test(s)) return POL_HELP;
     // 4) a raw selector we couldn't map — still name it, never say "unknown"
     var d2 = revertData(e);
     if (d2 && d2.length >= 10) return "The contract rejected this transaction (code " + d2.slice(0, 10) + "). Please check the amount or contact support.";
@@ -1938,6 +1941,10 @@ window.DYDash = (function () {
   function renderBuy() {
     var b = $("buy-body"), chip = $("buy-round-chip");
     if (!b) return;
+    // GAS-HELP-1 R0 — note a buyer mid-typing BEFORE anything below replaces the panel, so the calculator can hand the
+    // focus and the caret back (the amount itself is already in buyState.amt)
+    var old = $("buy-amt");
+    if (old) buyState.focus = document.activeElement === old ? [old.selectionStart, old.selectionEnd] : null;
     chip.innerHTML = "";
     if (!isConnected()) { b.innerHTML = "<div class='notlive'>Connect your wallet to buy DYC.</div>"; return; }
     var c = cfg();
@@ -1961,7 +1968,8 @@ window.DYDash = (function () {
           buyState.price = isPresale ? r[1] : r[2];
           chip.innerHTML = "<span class='buy-round " + (isPresale ? "presale" : "public") + "'>" + (isPresale ? "PRESALE @ $0.008" : "PUBLIC @ $0.010") + "</span>";
           if (!isPresale) { renderCalculator(b, false); return; }   // the public round needs no voucher
-          b.innerHTML = "<div class='notlive' id='buy-preparing'>" + BUY_COPY.preparing + "</div>";
+          // a wallet whose pass is already held goes straight back to the calculator — no "Preparing" flash on a re-draw
+          if (!cachedVoucher(me)) b.innerHTML = "<div class='notlive' id='buy-preparing'>" + BUY_COPY.preparing + "</div>";
           return loadVoucher(me).then(function (v) {
             if (!isConnected() || W.state.address !== me) return;   // the wallet changed meanwhile: its own render follows
             if (v.state === "ok") { buyState.voucher = v.v; renderCalculator(b, true); return; }
@@ -1987,6 +1995,12 @@ window.DYDash = (function () {
   }
   function renderCalculator(b, isPresale) {
     var coin = buyCoin();
+    // GAS-HELP-1 R0 — the panel is re-drawn on connect, on a wallet change, after a transaction and on every failed-read
+    // retry. The amount the buyer typed (and the coin, in buyState.coin) must survive every one of them: it lives in
+    // buyState.amt, written on each keystroke, and is put back here; a buyer who was typing keeps the focus and the caret.
+    var old = $("buy-amt"), caret = (old && document.activeElement === old) ? [old.selectionStart, old.selectionEnd] : (buyState.focus || null);
+    var typing = !!caret;
+    buyState.focus = null;
     b.innerHTML =
       coinSwitch() +
       "<label class='fld'>Amount in (" + coin.label + ")</label>" +
@@ -1998,13 +2012,14 @@ window.DYDash = (function () {
       "<div class='buy-min' id='buy-min'></div>" +
       "<button class='btn-g btn-p btn-block' id='buy-go'>Buy DYC</button>" +
       "<div class='buy-narrate'>Your wallet will ask you to approve " + coin.label + " (only if needed), then to buy — 15% lands in your wallet, 85% into vesting.</div>";
-    var keep = $("buy-amt") ? $("buy-amt").value : "";
     Array.prototype.forEach.call(b.querySelectorAll(".buy-coin-chip"), function (chipEl) {
-      chipEl.onclick = function () { var amt = $("buy-amt").value; buyState.coin = chipEl.getAttribute("data-coin"); renderCalculator(b, isPresale); $("buy-amt").value = amt; updateCalc(); };
+      chipEl.onclick = function () { buyState.coin = chipEl.getAttribute("data-coin"); renderCalculator(b, isPresale); };
     });
-    $("buy-amt").oninput = updateCalc;
+    var inp = $("buy-amt");
+    inp.oninput = function () { buyState.amt = inp.value; updateCalc(); };
     $("buy-go").onclick = buyFlow;
-    if (keep) $("buy-amt").value = keep;
+    if (buyState.amt) inp.value = buyState.amt;
+    if (typing) { try { inp.focus(); if (caret[0] != null) inp.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
     updateCalc();
   }
   function updateCalc() {

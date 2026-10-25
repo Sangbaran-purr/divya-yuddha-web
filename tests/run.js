@@ -19,7 +19,7 @@ const PICK = ARGS.filter(function (a) { return a.indexOf("--") !== 0; });
 
 // name → file. copyproof is already committed under mp/ and needs no chain; it runs first and fastest.
 const SUITES = [
-  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 401 },
+  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 403 },
   { name: "p4",            file: path.join(__dirname, "suites", "p4.js"), chain: true, expect: 7 },
   { name: "p8rig",         file: path.join(__dirname, "suites", "p8rig.js"), chain: true, expect: 7 },
   { name: "p7dom",         file: path.join(__dirname, "suites", "p7dom.js"), chain: true, expect: 4 },
@@ -36,7 +36,7 @@ const SUITES = [
   // shapes are FIXTURES (docs/ARCHIVE_ROAD_2026-09-23.md); a suite that dials out measures the weather.
   { name: "consoleroad",   file: path.join(__dirname, "suites", "consoleroad.js"), chain: false, expect: 102 },
   { name: "stakedframe",   file: path.join(__dirname, "suites", "stakedframe.js"), chain: true, expect: 29 },
-  { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 95 },
+  { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 96 },
   { name: "winnings",      file: path.join(__dirname, "suites", "winnings.js"), chain: true, expect: 41 },
   // AFFILIATE-1 rung 3 — Torana Invites (store + dashboard) and the ONE Withdraw card, against the REAL desk with
   // coupons signed by the bot's own signer and every invite signature checked by the bot's own verifier.
@@ -86,7 +86,7 @@ const SUITES = [
   // ICO-SIMPLE-1 (owner rulings 2026-10-25) — the dashboard's buy panel without a form: the REAL DYCoinSale + VestingVault
   // on anvil, an instant voucher from the (stubbed) approval-bot door, Buy DYC in USDT or USDC, staking after; four
   // breakages applied to the page's own source, each caught.
-  { name: "buypanel",      file: path.join(__dirname, "suites", "buypanel.js"), chain: true, expect: 16 },
+  { name: "buypanel",      file: path.join(__dirname, "suites", "buypanel.js"), chain: true, expect: 23 },
   { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 91 },   // +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24) · +1 bounded chooser (K25) · +2 the title rule (K26, M26) · +1 tests read only this branch (K27) · +13 the first batch review (K28–K32b, M28–M32)
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4: the weekly job, watchdog and veto (scripts/daily-gen/job.js + the three
   // workflows), run for real in throwaway clones pushing to a throwaway bare repo: 28 days ready, the digest-commit clash

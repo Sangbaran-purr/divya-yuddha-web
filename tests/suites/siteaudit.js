@@ -201,8 +201,8 @@ async function run() {
   const vis = (f) => R(f).replace(/<!--[\s\S]*?-->/g, "");
   {
     const d = vis("dashboard.html"), dj = R("js/dashboard.js");
-    ok("TX1 · dashboard: no faucet link — a plain POL line instead", d.indexOf("faucet.polygon") < 0 &&
-       d.indexOf("Buy a little POL on an exchange that supports Polygon, or swap for it in your wallet.") >= 0);
+    ok("TX1 · dashboard: no faucet link — a plain POL line instead (GAS-HELP-1 R0: it names where POL comes from)", d.indexOf("faucet.polygon") < 0 &&
+       d.indexOf("Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge — look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.") >= 0 && d.indexOf("swap for it in your wallet") < 0);
     ok("TX2 · dashboard: the drop says POL pays the fee; no 'affiliate' cash-out lines; the two rates are explained",
        dj.indexOf("no approval needed, just a little POL for the network fee.") >= 0 && dj.indexOf("for this region") < 0 &&
        dj.indexOf("Cash payouts are made through the affiliate platform") < 0 &&

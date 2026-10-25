@@ -539,7 +539,9 @@ window.DYStore = (function () {
   var U_BTN = function (sum, sym) { return "Buy for " + sum + " · " + sym; };
   var U_PAYWITH = "Pay with";
   var U_SHORT = function (sym, sum) { return "Not enough " + sym + " in this wallet - " + sum + " buys this card."; };
-  var U_POL = "Not enough POL in this wallet for the network fee - add a little POL and try again.";
+  // GAS-HELP-1 R0 (owner rulings 2026-10-25) — what is missing, then where it comes from. One line for BOTH roads: the
+  // card store's POL check and the bundle's (a wallet with no POL fails the approve with "insufficient funds").
+  var U_POL = "Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.";
   var U_SOLD = "This card is sold out.";
   var U_CLOSED = "The card store is closed for now.";
   var U_NET = "Switch your wallet to Polygon to buy.";
@@ -1542,6 +1544,7 @@ window.DYStore = (function () {
     if (/CapExceeded/.test(s)) return bP4(fmtCap(), bWhen(ctx && ctx.when));
     if (/AlreadyHoldsTorana/.test(s)) return "This wallet already holds a Torana - the top-up is yours instead.";
     if (/NotToranaHolder/.test(s)) return "The top-up is for Torana holders - buy the bundle first.";
+    if (/insufficient funds|INSUFFICIENT_FUNDS/i.test(s)) return U_POL;   // GAS-HELP-1 R0: no POL for the fee (was the generic line)
     if (/ERC20InsufficientBalance|transfer amount exceeds balance/.test(s)) return bP7((ctx && ctx.sym) || "USDC", (ctx && ctx.sum) || "USD 20");
     if (/AssetNotAllowed|PriceUnset|ZeroPacks|BadParams/.test(s)) return B_P8;
     return B_P8;
@@ -1660,7 +1663,13 @@ window.DYStore = (function () {
         if (!sameWallet(me)) { var sw = new Error("precast"); sw.__precast = true; throw sw; }
         // P7 lands here, from the FRESH read, before any approval is offered
         if (F.balance < F.bundlePrice) { var p7 = new Error("P7"); p7.__p7 = true; throw p7; }
-        return signerRoad();
+        // GAS-HELP-1 R0 — the card road's POL check, on the bundle road too: the POL balance against the sends' fee cap
+        // (MetaMask needs gasLimit × maxFee up front), before anything is signed. Budgets: approve 70k, buy 300k
+        // (measured on a Polygon fork 2026-10-25: 51.7k / 55.4k and 183k / 201k). A failed read is not a refusal.
+        return Promise.all([window.DYWallet.readProvider().getBalance(me), window.DYWallet.feeOverrides()]).then(function (x) {
+          var gas = (F.allowance >= F.bundlePrice ? 0n : USD_APPROVE_GAS) + USD_BUY_GAS;
+          if (x[0] < gas * BigInt(x[1].maxFeePerGas)) { var ep = new Error("POL"); ep.__pol = true; throw ep; }
+        }, function () { return null; }).then(function () { return signerRoad(); });
       })
       .then(function (r) {
       var ps = new r.ethers.Contract(psAddr(), PS_ABI, r.signer);
@@ -1711,7 +1720,7 @@ window.DYStore = (function () {
       // STORE-READ-2 — the two ruled stops that are NOT chain errors, and must never be worded as one
       if (e && e.__precast) { preCastStop(host, B_P12); return; }
       if (e && e.__p7) { preCastStop(host, bP7(sym, sum)); return; }
-      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = bundleErr(e, { sym: sym, sum: sum });
+      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = (e && e.__pol) ? U_POL : bundleErr(e, { sym: sym, sum: sum });
     });
   }
 

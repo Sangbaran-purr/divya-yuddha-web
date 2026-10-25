@@ -169,7 +169,9 @@ const STORE_LAW = [
   ["P19 usd button",     "Buy for [USD 20] · [USDT]"],
   ["P20 usd coin switch", "Pay with"],
   ["P21 usd short",      "Not enough [USDT] in this wallet - [USD 20] buys this card."],
-  ["P22 usd pol",        "Not enough POL in this wallet for the network fee - add a little POL and try again."],
+  ["P22 usd pol",        "Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network."],
+  // GAS-HELP-1 R0 — the bundle road names the missing POL too (it said the generic line before)
+  ["P27 bundle pol",     "Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network."],
   ["P23 usd sold out",   "This card is sold out."],
   ["P24 usd closed",     "The card store is closed for now."],
   ["P25 usd network",    "Switch your wallet to Polygon to buy."],
@@ -449,7 +451,7 @@ const DASH_LAW = [
   ["S5 geo",             "Withdrawals aren't available from your location."],
   ["S6 kyc",             "Withdrawals need identity verification first."],
   ["S7 not served",      "This wallet can't be served."],
-  ["G1 gas",             "You need a small amount of POL for network fees. Add a little POL to your wallet and try again."],
+  ["G1 gas",             "You need a small amount of POL for network fees. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge — look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network."],
   // AFFILIATE-1 rung 3 — the combined Withdraw card
   ["V1 lead",            "Withdraw your winnings and your Torana Invites rewards here, as USDT."],
   ["V2 invite note",     "Invite rewards are paid in USDT - no DYC leaves your wallet for them."],

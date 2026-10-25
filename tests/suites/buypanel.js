@@ -45,12 +45,51 @@ async function page(c, opts) {
 }
 // each page polls the chain on its own timers; a block STOPS its pages' timers when done, so the next block's page is not
 // starved. Deliberately NOT window.close() — a late callback on a closed window crashes the process (lib.js teardown).
+const sends = (eth) => eth.__calls.filter((m) => m === "eth_sendTransaction").length;
 const done = (...ws) => ws.forEach((w) => { for (let id = 1; id < 5000; id++) { try { w.clearInterval(id); w.clearTimeout(id); } catch (e) {} } });
 async function connected(w) { await w.DYWallet.connect(); await H.until(() => !/Connect your wallet|^$/.test(body(w)) && body(w) !== PREP, 20000, "the buy panel"); }
 async function buy(w, amount) {
   w.document.getElementById("buy-amt").value = amount;
   w.document.getElementById("buy-amt").dispatchEvent(new w.Event("input"));
   H.click(w, "#buy-go");
+}
+// GAS-HELP-1 R0 — the typed amount and coin must survive EVERY re-draw of the panel. Each trigger is the page's own:
+//   wallet change (accountsChanged → refresh), a second connect, a failed read and the page's own retry (every RPC
+//   refused for a moment through ethers' one HTTP hook), and after a purchase ("Buy more").
+const POL_HELP = "You need a small amount of POL for network fees. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge — look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.";
+async function typingSurvives(c, p) {
+  const w = p.w, eth = p.eth, out = {};
+  const amt = () => (w.document.getElementById("buy-amt") || {}).value;
+  const usdcOn = () => { const e = w.document.querySelector(".buy-coin-chip[data-coin='usdc']"); return !!e && e.getAttribute("aria-pressed") === "true"; };
+  const calc = () => H.until(() => !!w.document.getElementById("buy-go"), 20000, "the calculator");
+  await connected(w);
+  H.click(w, ".buy-coin-chip[data-coin='usdc']"); await H.sleep(150);
+  const inp = w.document.getElementById("buy-amt");
+  inp.focus(); inp.value = "250"; inp.setSelectionRange(3, 3); inp.dispatchEvent(new w.Event("input"));
+  // a wallet change and back
+  const other = ethers.Wallet.createRandom().connect(c.provider);
+  eth.__switchTo(other); await H.sleep(600); eth.__switchTo(c.player); await H.sleep(300); await calc();
+  out.walletChange = amt() === "250" && usdcOn();
+  // a second connect (the panel re-draws while the buyer is typing): the focus and the caret come back too
+  const i2 = w.document.getElementById("buy-amt"); i2.focus(); i2.setSelectionRange(2, 2);
+  await w.DYWallet.connect(); await H.sleep(600); await calc();
+  const a = w.document.activeElement;
+  out.connect = amt() === "250" && usdcOn() && a && a.id === "buy-amt" && a.selectionStart === 2;
+  // a failed read: every RPC refused → the page's own "Network connection trouble" → its retry recovers the calculator
+  const realGet = ethers.FetchRequest.createGetUrlFunc();
+  ethers.FetchRequest.registerGetUrl(async () => { throw new Error("connect ECONNREFUSED (proof: the line is down)"); });
+  eth.__switchTo(c.player);
+  let sawTrouble = false;
+  try { await H.until(() => /Network connection trouble/.test(body(w)), 15000, "the network message"); sawTrouble = true; } catch (e) {}
+  ethers.FetchRequest.registerGetUrl(realGet);
+  await H.until(() => !!w.document.getElementById("buy-go"), 30000, "the retry").catch(() => {});
+  out.failedRead = sawTrouble && amt() === "250" && usdcOn();
+  // after a purchase: "Buy more" brings the calculator back with the same amount and coin
+  H.click(w, "#buy-go");
+  await H.until(() => !!w.document.getElementById("buy-again"), 40000, "the after-purchase panel").catch(() => {});
+  if (w.document.getElementById("buy-again")) { H.click(w, "#buy-again"); await calc(); }
+  out.afterBuy = amt() === "250" && usdcOn();
+  return out;
 }
 const dycOut = (usd6) => (usd6 * 10n ** 12n * DEC) / (8n * 10n ** 15n);   // the presale price: $0.008
 
@@ -141,6 +180,36 @@ async function run() {
   ok("BP12 · the old registration road is gone from the page code (no form link, no approval poll, no combined buy-and-stake)",
      !/forms\.gle|renderRegister|startBuyApprovalPoll|Activate Staking|buy-noact/.test(src));
 
+  // ═══ BP13 — the typing fix (GAS-HELP-1 R0) ═══
+  {
+    const c = await H.chainPresale();
+    const p = await page(c, {});
+    const r = await typingSurvives(c, p);
+    ok("BP13a · a wallet change (and back) keeps the typed amount (250) and the coin (USDC)", r.walletChange, JSON.stringify(r));
+    ok("BP13b · a second connect re-draws the panel and keeps the amount, the coin, the focus and the caret", r.connect, JSON.stringify(r));
+    ok("BP13c · a failed read shows the page's network message, and its retry brings the calculator back with the amount and the coin", r.failedRead, JSON.stringify(r));
+    ok("BP13d · after a purchase, 'Buy more' brings the calculator back with the same amount and coin", r.afterBuy, JSON.stringify(r));
+    done(p.w);
+  }
+
+  // ═══ BP14 — the POL line names where POL comes from (GAS-HELP-1 R0) ═══
+  {
+    const c = await H.chainPresale();
+    const p = await page(c, {});
+    await c.provider.send("anvil_setBalance", [c.player.address, "0x" + (10n ** 15n).toString(16)]);   // 0.001 POL: below the 0.02 line
+    await connected(p.w);
+    await H.until(() => p.w.document.getElementById("pol-banner").classList.contains("show"), 15000, "the fee banner").catch(() => {});
+    const banner = (p.w.document.getElementById("pol-banner").textContent || "").replace(/\s+/g, " ");
+    ok("BP14a · a wallet short of POL sees the fee banner naming the bridges (Polygon Portal, Jumper, Relay) and the exchange's Polygon network",
+       p.w.document.getElementById("pol-banner").classList.contains("show") && banner.indexOf("Polygon Portal, Jumper and Relay can add a little POL to your bridge") >= 0 &&
+       banner.indexOf("Withdrawing from an exchange? Add a little POL on the Polygon network.") >= 0, banner);
+    await buy(p.w, "100");
+    await H.until(() => p.w.document.getElementById("ov-fail").classList.contains("show"), 10000, "the POL refusal").catch(() => {});
+    ok("BP14b · Buy with too little POL says the POL line, word for word, and sends nothing", txt(p.w, "#ov-fail-msg") === POL_HELP && sends(p.eth) === 0, txt(p.w, "#ov-fail-msg"));
+    done(p.w);
+    await c.provider.send("anvil_setBalance", [c.player.address, "0x" + (10000n * DEC).toString(16)]);   // the shared test account, restored
+  }
+
   // ═══ M — breakages applied to the page's own source ═══
   const mutate = (a, b) => { if (src.indexOf(a) < 0) throw new Error("breakage anchor gone: " + a.slice(0, 60)); return src.split(a).join(b); };
   {
@@ -178,6 +247,14 @@ async function run() {
     await p.w.DYWallet.connect(); await H.until(() => body(p.w) !== PREP && !/Connect your wallet/.test(body(p.w)), 20000, "the panel");
     ok("M4 · breakage 'treat a refusal like an outage' is caught (BP7 goes red: the allowlist is read and the refusal is not told)",
        txt(p.w, "#buy-refused") !== NO && p.w.__fetches.some((u) => /allowlist/.test(u)));
+  }
+
+  {
+    const c = await H.chainPresale();
+    const p = await page(c, { dashSrc: mutate("    if (buyState.amt) inp.value = buyState.amt;\n", "") });
+    const r = await typingSurvives(c, p);
+    ok("M5 · breakage 'the re-draw clears the amount' (the old behaviour) is caught (BP13 goes red)", !r.walletChange && !r.connect, JSON.stringify(r));
+    done(p.w);
   }
 
   console.log("──\n" + (fail === 0 ? "ALL GREEN — " + pass + "/" + (pass + fail) : "FAILURES — " + fail + " of " + (pass + fail)));

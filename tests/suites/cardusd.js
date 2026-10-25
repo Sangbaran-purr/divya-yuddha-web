@@ -29,7 +29,7 @@ const P17 = "The invite signature is free and moves no money - please sign it to
 const P19 = (sum, sym) => "Buy for " + sum + " · " + sym;     // the button names the coin it will charge (review fix 1)
 const P20 = "Pay with";
 const P21 = (sym, sum) => "Not enough " + sym + " in this wallet - " + sum + " buys this card.";
-const P22 = "Not enough POL in this wallet for the network fee - add a little POL and try again.";
+const P22 = "Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.";   // GAS-HELP-1 R0: now says where POL comes from
 const P23 = "This card is sold out.";
 const P24 = "The card store is closed for now.";
 const P25 = "Switch your wallet to Polygon to buy.";

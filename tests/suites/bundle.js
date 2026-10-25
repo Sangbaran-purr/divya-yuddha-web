@@ -42,6 +42,7 @@ const P5 = "This wallet is a smart account and cannot receive the Torana yet. Sw
 const P6 = "The store is closed for now.";
 const P6B = "The store is sold out for now.";
 const P8 = "The store could not take this order - refresh and try again.";
+const P_POL = "Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.";
 const P7 = (sym, sum) => "Not enough " + sym + " in this wallet - " + sum + " buys the bundle.";
 const P9 = "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours.";
 const P4 = (cap, when) => "You have topped up " + cap + " DYC this week - the window frees " + when + ".";
@@ -370,6 +371,20 @@ async function main() {
     // the generic refusal is reachable and is RENDERED, never a bare revert
     ok("GENERIC · P8 is the decode map's floor, and the bare revert never reaches the player",
        /return B_P8;\s*\n\s*}/.test(require("fs").readFileSync(require("path").join(H.SITE, "js/store.js"), "utf8")));
+
+    // GAS-HELP-1 R0 — a wallet with the coin but no POL for the fee: the wallet answers "insufficient funds" at the
+    // approve, and the bundle road now says the POL line (it said the generic P8 before). Nothing moves.
+    const c6 = await H.chainStore();
+    await deal(c6, "usdc", c6.player.address, 25n * DEC6);
+    const h6 = await H.storePage(c6, c6.player);
+    await connect(h6.w);
+    await c6.provider.send("anvil_setBalance", [c6.player.address, "0x3e8"]);   // 1000 wei: far below any fee
+    H.click(h6.w, ".b-buy");
+    await waitFor("the POL line", () => msg(h6.w).indexOf("POL") >= 0 || msg(h6.w) === P8);
+    ok("NO POL · the bundle road says the POL line word for word (the bridges and the exchange's Polygon network), not the generic P8; nothing bought",
+       msg(h6.w) === P_POL && (await c6.usdc.balanceOf(c6.player.address)) === 25n * DEC6, msg(h6.w));
+    H.teardown(h6);
+    await c6.provider.send("anvil_setBalance", [c6.player.address, "0x" + (10000n * 10n ** 18n).toString(16)]);   // the shared account, restored
   }
 
   // ══════════════════════════ P6 · THE BUSY SENTINEL ══════════════════════════

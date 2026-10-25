@@ -324,7 +324,14 @@ P21 not enough of the coin (from the fresh read, before any approval)
 Not enough [USDT] in this wallet - [USD 20] buys this card.
 
 P22 not enough POL for the network fee (fresh POL balance vs the fee cap of the sends)
-Not enough POL in this wallet for the network fee - add a little POL and try again.
+Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.
+
+P27 the bundle road with no POL for the fee (fresh POL balance vs the fee cap of the sends, as P22; it said the generic line before)
+Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.
+
+> AMENDMENT 2026-10-25 (GAS-HELP-1 R0, owner rulings): P22 now says WHERE the POL comes from — the bridges that can add POL
+> on arrival (Polygon Portal, Jumper, Relay; each verified from its own docs) and the exchange's Polygon network. It
+> replaces "- add a little POL and try again." P27 is new: the bundle road now names the missing POL too.
 
 P23 sold out
 This card is sold out.
