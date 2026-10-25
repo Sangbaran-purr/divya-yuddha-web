@@ -441,12 +441,56 @@ async function main() {
   }
   const dry = ethers.Wallet.createRandom().connect(c.provider);
   await c.provider.send("anvil_setBalance", [dry.address, "0x" + (1000000000000000n).toString(16)]);   // 0.001 POL
+  await c.provider.send("anvil_impersonateAccount", [dry.address]);   // GAS-HELP-1 R3: the wallet is now asked — its failure must be the chain's real one
   await fund(dry.address, 100n * DEC6);
   {
     h = await fresh(c, P, { player: dry });
     const m = await tapAndSettle(h.w, "Deva Sainika", [P22, DONE, "Couldn't", "Not enough USDC"]);
-    ok("R2 · not enough POL for the fee cap: '" + P22 + "' and nothing sent", m === P22 && sends(h.eth) === 0, m);
+    // GAS-HELP-1 R3: no top-up service here → the fallback line, and the wallet is STILL asked (never hard-blocked)
+    ok("R2 · not enough POL for the fee cap, no top-up service: the wallet is still asked (GAS-HELP-1 R3) and its failure says '" + P22 + "'", m === P22 && sends(h.eth) >= 1, m);
     H.teardown(h);
+  }
+  // ══════════════ W · GAS-HELP-1 R3 — POL for the network fee (stub bot), after the invite step, before the approve ══════════════
+  console.log("\n── W · POL for the network fee ──");
+  {
+    const G_WAIT = "Getting you a little POL for the network fee — free…";
+    const G_OK = "POL received — your wallet will now ask you to approve, then to buy.";
+    const G_FALL = "We couldn't send POL just now — you can still go ahead: MetaMask can pay the network fee in USDT or USDC if you hold a little extra.";
+    const gasDoor = (mode, asked) => ({ "/gas/topup": async (init) => {
+      const b = JSON.parse(init.body); asked.push(b);
+      if (mode === "down") return { __throw: true };
+      if (mode === "refuse") return { __status: 422, body: { refused: "NOT_HOLDING" } };
+      // the real bot sizes the top-up from live gas; this suite's chain runs a far higher fee than Polygon's (its earlier
+      // sends push anvil's base fee up), so the stand-in sends a size that covers THIS chain: 10 POL
+      const amount = 10n * DEC;
+      const send = async () => { const cur = await c.provider.getBalance(b.wallet); await c.provider.send("anvil_setBalance", [b.wallet, "0x" + (cur + amount).toString(16)]); };
+      if (mode === "ok") await send(); else setTimeout(send, 3000);
+      return { txHash: "0x" + "ab".repeat(32), amountWei: amount.toString(), confirmed: mode === "ok" };
+    } });
+    async function gasCase(mode) {
+      const buyer = ethers.Wallet.createRandom().connect(c.provider);
+      await c.provider.send("anvil_impersonateAccount", [buyer.address]);   // the stand-in wallet sends through anvil, which signs only for unlocked accounts
+      await c.provider.send("anvil_setBalance", [buyer.address, "0x" + (1000000000000000n).toString(16)]);   // 0.001 POL
+      await fund(buyer.address, 100n * DEC6);
+      const asked = [];
+      const hh = await fresh(c, P, { player: buyer, svc: gasDoor(mode, asked), gasTopUpUrl: "https://bot.test/gas/topup" });
+      const got = new Set(); new hh.w.MutationObserver(() => got.add((hh.w.document.body.textContent || "").replace(/\s+/g, " "))).observe(hh.w.document.body, { childList: true, subtree: true, characterData: true });
+      const before = await c.nft.balanceOf(buyer.address);
+      const m = await tapAndSettle(hh.w, "Deva Sainika", [DONE, P22]);
+      const r = { m, asked, has: (t) => [...got].some((x) => x.indexOf(t) >= 0), sends: sends(hh.eth), bought: (await c.nft.balanceOf(buyer.address)) - before };
+      H.teardown(hh);
+      return r;
+    }
+    let r = await gasCase("ok");
+    ok("W1 · short of POL: the waiting line, the bot asked once for the card (product, coin, cardId), the received line, then approve + buy — '" + DONE + "'",
+       r.has(G_WAIT) && r.has(G_OK) && r.asked.length === 1 && r.asked[0].product === "card" && /^(usdc|usdt)$/.test(r.asked[0].coin) && !!r.asked[0].cardId && r.m === DONE && r.bought === 1n,
+       JSON.stringify({ asked: r.asked, m: r.m }));
+    r = await gasCase("refuse");
+    ok("W2 · the bot refuses: the fallback line, the wallet is still asked; its failure says '" + P22 + "'", r.has(G_FALL) && r.sends >= 1 && r.m === P22 && r.bought === 0n, JSON.stringify({ sends: r.sends, m: r.m }));
+    r = await gasCase("down");
+    ok("W3 · the bot is unreachable: the fallback line, the wallet is still asked", r.has(G_FALL) && r.sends >= 1 && r.bought === 0n, JSON.stringify({ sends: r.sends, m: r.m }));
+    r = await gasCase("slow");
+    ok("W4 · the POL arrives slowly (3 s): the road waits for it, then buys", r.has(G_WAIT) && r.has(G_OK) && r.m === DONE && r.bought === 1n, JSON.stringify({ m: r.m }));
   }
   {
     h = await fresh(c, P);
@@ -530,8 +574,9 @@ const MUTANTS = [
   ["no pen check (sameWallet after the read AND the signer's address)", [
     ["if (!sameWallet(me)) throw usdStop(\"precast\");          // the pen moved under the read", ""],
     ["if (!eqAddr(x[1], me) || !sameWallet(me)) throw usdStop(\"precast\");", ""]]],
-  ["no FEE-1 on the buy", "return window.DYWallet.feeOverrides().then(function (fee) { return store.buy(cardId, coinAddr, fee); });", "return store.buy(cardId, coinAddr);"],
-  ["no POL check", "if (F.pol < gas * BigInt(fee.maxFeePerGas)) throw usdStop(\"pol\");", ""],
+  ["no FEE-1 on the buy", "return window.DYWallet.feeOverrides().then(fallbackGas(ctx.gasFallback, USD_BUY_GAS)).then(function (fee) { return store.buy(cardId, coinAddr, fee); });", "return store.buy(cardId, coinAddr);"],
+  // GAS-HELP-1 R3: the POL check now leads to the top-up (it no longer refuses) — removing it skips the top-up
+  ["no POL check", "if (F.pol < gas * BigInt(fee.maxFeePerGas)) ctx.polShort = true;", ""],
   ["no balance check", "if (F.balance < F.usd) throw usdStop(\"short\");", ""],
   ["no closed check at the tap", "if (!F.open || !F.salesOpen) throw usdStop(\"closed\");", ""],
   ["no sold-out check at the tap", "if (F.remaining === 0n) throw usdStop(\"sold\");", ""],

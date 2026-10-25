@@ -559,6 +559,58 @@ window.DYWallet = (function () {
     return refreshChain();
   }
 
+  // --- GAS-HELP-1 R3 (owner rulings 2026-10-25) — POL FOR THE NETWORK FEE, the ONE client for every purchase road ---
+  //   A road that sees its buyer holds the coin but too little POL calls gasTopUp() just before its approve. The approval
+  //   bot (POST /gas/topup) re-checks everything from the chain itself and sends the POL from its gas wallet; this then
+  //   WAITS for the POL to arrive in the wallet (the balance rising by what was sent), so the approve that follows can
+  //   pay its fee. It NEVER hard-blocks: a refusal, an unreachable bot, no bot configured, or POL that has not arrived
+  //   in time all answer { state: "fallback" } — the road shows the fallback line and lets the wallet try anyway.
+  //   opts: { wallet, product: "presale"|"bundle"|"card", coin: "usdt"|"usdc", amount?: "<6-dec units>", cardId? }
+  //   → { state: "ok" | "enough" | "fallback", why? }
+  var GAS_WAIT_MS = 60000, GAS_ASK_MS = 75000;   // the bot itself waits up to 60 s for its send to confirm
+  function gasTopUpUrl() {
+    var o = null; try { o = window.localStorage.getItem("dy::gasTopUpUrl"); } catch (e) { o = null; }
+    return o || (window.DY_MF_CONFIG && window.DY_MF_CONFIG.gasTopUpUrl) || null;
+  }
+  function gasWaitMs() { var o = null; try { o = Number(window.localStorage.getItem("dy::gasWaitMs")); } catch (e) { o = null; } return o > 0 ? o : GAS_WAIT_MS; }
+  function gasTopUp(opts) {
+    var url = gasTopUpUrl();
+    if (!url) return Promise.resolve({ state: "fallback", why: "not configured" });
+    var body = { wallet: opts.wallet, product: opts.product, coin: opts.coin };
+    if (opts.amount != null) body.amount = String(opts.amount);
+    if (opts.cardId != null) body.cardId = String(opts.cardId);
+    var road = readProvider();
+    return road.getBalance(opts.wallet).catch(function () { return null; }).then(function (before) {
+      var ask = new Promise(function (res, rej) {
+        var t = setTimeout(function () { rej(new Error("timeout")); }, GAS_ASK_MS);
+        fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+          .then(function (r) { clearTimeout(t); res(r); }, function (e) { clearTimeout(t); rej(e); });
+      });
+      return ask.then(function (r) {
+        return r.json().catch(function () { return null; }).then(function (j) {
+          if (r.status === 422 && j && j.refused === "ALREADY_ENOUGH") return { state: "enough" };
+          if (!r.ok || !j || !j.amountWei) return { state: "fallback", why: (j && j.refused) || ("status " + r.status) };
+          // wait for the POL to land: the balance must rise by what the bot sent (a read that fails just tries again)
+          var sent = BigInt(j.amountWei), deadline = Date.now() + gasWaitMs();
+          return new Promise(function (res) {
+            (function poll() {
+              road.getBalance(opts.wallet).then(function (b) {
+                if (before == null ? b >= sent : b - before >= sent) return res({ state: "ok" });
+                if (Date.now() > deadline) return res({ state: "fallback", why: "slow" });
+                setTimeout(poll, 1500);
+              }, function () { if (Date.now() > deadline) return res({ state: "fallback", why: "slow" }); setTimeout(poll, 1500); });
+            })();
+          });
+        });
+      }, function () { return { state: "fallback", why: "unreachable" }; });
+    });
+  }
+  var GAS_COPY = {
+    waiting: "Getting you a little POL for the network fee — free…",
+    ok: "POL received — your wallet will now ask you to approve, then to buy.",
+    fallback: "We couldn't send POL just now — you can still go ahead: MetaMask can pay the network fee in USDT or USDC if you hold a little extra.",
+  };
+
   return {
     state: state,
     onChange: onChange,
@@ -574,6 +626,8 @@ window.DYWallet = (function () {
     _resetReadRoad: _resetReadRoad, // tests only
     feeOverrides: feeOverrides, // FEE-1 — the ONE player-send fee rule (tip = max(suggested, 30), maxFee = max(2×base + tip, 45)); gasLimit stays wallet
     feeEstimate: feeEstimate,   // FEE-1 — expected cost per gas (base + tip) for estimates, or null when unread
+    gasTopUp: gasTopUp,         // GAS-HELP-1 R3 — POL for the network fee from the approval bot; never hard-blocks
+    GAS_COPY: GAS_COPY,         // GAS-HELP-1 R3 — the three owner-approved lines (waiting / received / fallback)
     _feeFromNetwork: feeFromNetwork, // tests: the pure rule
     scanLogsResumable: scanLogsResumable, // RUNG4-FIX-7B — resumable checkpointed getLogs scan (treasury discover + store scanMyListings)
     shortAddr: shortAddr,

@@ -34,11 +34,29 @@ function door(c, mode, seen) {
     return { wallet, sig: await makeSigner(c.signer.privateKey, chainId, c.addrs.sale).sign(wallet) };
   } };
 }
+// GAS-HELP-1 R3 — the bot's /gas/topup, as it answers (mode: ok | slow | never | refuse | down). On "ok" it does what the
+// bot does: sends POL to the wallet (here anvil_setBalance adds 1 POL) and answers { txHash, amountWei }.
+function gasDoor(c, mode, seen) {
+  return { "/gas/topup": async (init) => {
+    const b = JSON.parse(init.body); seen.gas.push(b);
+    if (mode === "down") return { __throw: true };
+    if (mode === "refuse") return { __status: 422, body: { refused: "NOT_HOLDING" } };
+    const amount = DEC;   // 1 POL
+    const send = async () => { const cur = await c.provider.getBalance(b.wallet); await c.provider.send("anvil_setBalance", [b.wallet, "0x" + (cur + amount).toString(16)]); };
+    if (mode === "ok") await send();
+    if (mode === "slow") setTimeout(send, 3000);
+    return { txHash: "0x" + "ab".repeat(32), amountWei: amount.toString(), confirmed: mode === "ok" };
+  } };
+}
+const GAS = "https://bot.test/gas/topup";
+const G_WAIT = "Getting you a little POL for the network fee — free…";
+const G_OK = "POL received — your wallet will now ask you to approve, then to buy.";
+const G_FALL = "We couldn't send POL just now — you can still go ahead: MetaMask can pay the network fee in USDT or USDC if you hold a little extra.";
 async function page(c, opts) {
-  const seen = { calls: 0 };
-  const svc = Object.assign({}, door(c, opts.mode || "ok", seen), opts.allowlist ? { "allowlist": () => opts.allowlist } : {});
+  const seen = { calls: 0, gas: [] };
+  const svc = Object.assign({}, door(c, opts.mode || "ok", seen), opts.allowlist ? { "allowlist": () => opts.allowlist } : {}, opts.gas ? gasDoor(c, opts.gas, seen) : {});
   const h = await H.dashboardPage(c, c.player, {
-    svc, presaleVoucherUrl: opts.noDoor ? null : DOOR, ls: opts.ls, dashSrc: opts.dashSrc,
+    svc, presaleVoucherUrl: opts.noDoor ? null : DOOR, ls: opts.ls, dashSrc: opts.dashSrc, walletSrc: opts.walletSrc, gasTopUpUrl: opts.gas ? GAS : null,
     contracts: { dycoinSale: c.addrs.sale, vestingVault: c.addrs.vault, usdt: c.addrs.usdt, usdc: c.addrs.usdc, holderStaking: opts.staking || null },
   });
   return { w: h.w, eth: h.eth, seen };
@@ -175,8 +193,8 @@ async function run() {
   // ═══ BP11 — the GAS-HELP-1 slot ═══
   const src = fs.readFileSync(path.join(SITE, "js", "dashboard.js"), "utf8");
   const flow = src.slice(src.indexOf("function buyFlow("), src.indexOf("function renderAfterBuy("));
-  ok("BP11 · a clean slot for GAS-HELP-1: buyFlow starts its chain at beforeApprove(), ahead of the approve (not built: it resolves at once)",
-     /function beforeApprove\(\) \{ return Promise\.resolve\(\); \}/.test(src) && flow.indexOf("var chain = beforeApprove();") >= 0 && flow.indexOf("var chain = beforeApprove();") < flow.indexOf("tok.approve("));
+  ok("BP11 · the GAS-HELP-1 step runs in the slot: buyFlow starts its chain at beforeApprove(…), ahead of the approve, and the buy no longer hard-stops on POL",
+     /function beforeApprove\(ctx\)/.test(src) && flow.indexOf("var chain = beforeApprove({") >= 0 && flow.indexOf("var chain = beforeApprove({") < flow.indexOf("tok.approve(") && flow.indexOf("polGuard()") < 0);
   ok("BP12 · the old registration road is gone from the page code (no form link, no approval poll, no combined buy-and-stake)",
      !/forms\.gle|renderRegister|startBuyApprovalPoll|Activate Staking|buy-noact/.test(src));
 
@@ -205,9 +223,58 @@ async function run() {
        banner.indexOf("Withdrawing from an exchange? Add a little POL on the Polygon network.") >= 0, banner);
     await buy(p.w, "100");
     await H.until(() => p.w.document.getElementById("ov-fail").classList.contains("show"), 10000, "the POL refusal").catch(() => {});
-    ok("BP14b · Buy with too little POL says the POL line, word for word, and sends nothing", txt(p.w, "#ov-fail-msg") === POL_HELP && sends(p.eth) === 0, txt(p.w, "#ov-fail-msg"));
+    ok("BP14b · Buy with too little POL and no top-up service: the wallet is still asked (GAS-HELP-1 R3), and its failure says the POL line word for word",
+       txt(p.w, "#ov-fail-msg") === POL_HELP && sends(p.eth) >= 1 && (await c.vault.grantedTo(c.player.address)) === 0n, txt(p.w, "#ov-fail-msg"));
     done(p.w);
     await c.provider.send("anvil_setBalance", [c.player.address, "0x" + (10000n * DEC).toString(16)]);   // the shared test account, restored
+  }
+
+  // ═══ BP15–BP20 — GAS-HELP-1 R3: POL for the network fee, before the approve (stub bot) ═══
+  // every text the page shows (the pending overlay, the toasts) is recorded, so a line that came and went is still seen
+  function lines(w) { const got = new Set(); new w.MutationObserver(() => { got.add((w.document.body.textContent || "").replace(/\s+/g, " ")); })
+    .observe(w.document.body, { childList: true, subtree: true, characterData: true }); return { has: (t) => [...got].some((x) => x.indexOf(t) >= 0) }; }
+  async function gasCase(mode, opts) {
+    opts = opts || {};
+    const c = await H.chainPresale();
+    await c.provider.send("anvil_setBalance", [c.player.address, "0x" + (opts.pol != null ? opts.pol : 10n ** 15n).toString(16)]);   // 0.001 POL: short
+    const p = await page(c, Object.assign({ gas: mode }, opts.page || {}));
+    const L = lines(p.w);
+    await connected(p.w);
+    await buy(p.w, "100");
+    const landed = await H.until(async () => (await c.vault.grantedTo(c.player.address)) > 0n, opts.waitMs || 30000, "the purchase").then(() => true, () => false);
+    await H.until(() => p.w.document.getElementById("ov-fail").classList.contains("show") || !!p.w.document.getElementById("buy-done"), 8000, "the end").catch(() => {});
+    const r = { p, L, landed, sends: sends(p.eth), fail: txt(p.w, "#ov-fail-msg"), asked: p.seen.gas };
+    done(p.w);
+    await c.provider.send("anvil_setBalance", [c.player.address, "0x" + (10000n * DEC).toString(16)]);   // the shared test account, restored
+    return r;
+  }
+  {
+    const r = await gasCase("ok");
+    ok("BP15 · short of POL: the waiting line, the bot asked ONCE with the presale, the coin and the amount; the received line; then approve + buy (2 prompts) — the purchase lands",
+       r.L.has(G_WAIT) && r.L.has(G_OK) && r.asked.length === 1 && r.asked[0].product === "presale" && r.asked[0].coin === "usdt" && r.asked[0].amount === "100000000" && r.landed && r.sends === 2,
+       JSON.stringify({ asked: r.asked, landed: r.landed, sends: r.sends, fail: r.fail }));
+  }
+  {
+    const r = await gasCase("refuse", { waitMs: 10000 });
+    ok("BP16 · the bot refuses: the fallback line, and the wallet is STILL asked (never hard-blocked); its failure says the POL line",
+       r.L.has(G_FALL) && r.sends >= 1 && !r.landed && r.fail === POL_HELP, JSON.stringify({ sends: r.sends, fail: r.fail }));
+  }
+  {
+    const r = await gasCase("down", { waitMs: 10000 });
+    ok("BP17 · the bot is unreachable: the fallback line, and the wallet is still asked", r.L.has(G_FALL) && r.sends >= 1 && !r.landed, JSON.stringify({ sends: r.sends, fail: r.fail }));
+  }
+  {
+    const r = await gasCase("slow");
+    ok("BP18 · the POL arrives slowly (3 s): the road WAITS for it, then approves and buys — no early approve", r.L.has(G_WAIT) && r.L.has(G_OK) && r.landed && r.sends === 2,
+       JSON.stringify({ landed: r.landed, sends: r.sends, fail: r.fail }));
+  }
+  {
+    const r = await gasCase("never", { page: { ls: { "dy::gasWaitMs": "2500" } }, waitMs: 10000 });
+    ok("BP19 · the POL never arrives: after the wait, the fallback line and the wallet is asked anyway", r.L.has(G_FALL) && r.sends >= 1 && !r.landed, JSON.stringify({ sends: r.sends, fail: r.fail }));
+  }
+  {
+    const r = await gasCase("ok", { pol: 10n * DEC });
+    ok("BP20 · a wallet with enough POL never asks the bot, and buys as before", r.asked.length === 0 && r.landed && r.sends === 2 && !r.L.has(G_WAIT), JSON.stringify({ asked: r.asked, sends: r.sends }));
   }
 
   // ═══ M — breakages applied to the page's own source ═══
@@ -255,6 +322,20 @@ async function run() {
     const r = await typingSurvives(c, p);
     ok("M5 · breakage 'the re-draw clears the amount' (the old behaviour) is caught (BP13 goes red)", !r.walletChange && !r.connect, JSON.stringify(r));
     done(p.w);
+  }
+
+  {
+    // M6 · hard-block on a refusal (the thing the owner ruled out): the wallet would never be asked
+    const r = await gasCase("refuse", { waitMs: 10000, page: { dashSrc: mutate("        else if (r.state === \"fallback\") toast(W.GAS_COPY.fallback);", "        else if (r.state === \"fallback\") { toast(W.GAS_COPY.fallback); pending(false); throw \"stop\"; }") } });
+    ok("M6 · breakage 'hard-block when the bot refuses' is caught (BP16 goes red: the wallet is never asked)", r.sends === 0, JSON.stringify({ sends: r.sends }));
+  }
+  {
+    // M7 · do not wait for the POL to land: the approve is sent before it arrives and fails
+    const wsrc = fs.readFileSync(path.join(SITE, "js", "wallet.js"), "utf8");
+    const anchor = "          var sent = BigInt(j.amountWei), deadline = Date.now() + gasWaitMs();";
+    if (wsrc.indexOf(anchor) < 0) throw new Error("breakage anchor gone: M7");
+    const r = await gasCase("slow", { waitMs: 10000, page: { walletSrc: wsrc.split(anchor).join("          return { state: \"ok\" };\n" + anchor) } });
+    ok("M7 · breakage 'do not wait for the POL to arrive' is caught (BP18 goes red: the purchase does not land)", !r.landed, JSON.stringify({ landed: r.landed, sends: r.sends, fail: r.fail }));
   }
 
   console.log("──\n" + (fail === 0 ? "ALL GREEN — " + pass + "/" + (pass + fail) : "FAILURES — " + fail + " of " + (pass + fail)));

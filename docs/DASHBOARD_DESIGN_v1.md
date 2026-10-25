@@ -100,6 +100,19 @@ Every line below is asserted verbatim against the source.
 > network. It replaces "Add a little POL to your wallet and try again." The fee banner's second line carries the same
 > guidance (it said "Buy a little POL on an exchange that supports Polygon, or swap for it in your wallet.").
 
+> AMENDMENT 2026-10-25b (GAS-HELP-1 R3, owner rulings): POL FOR THE NETWORK FEE. A buyer who holds the coin but whose
+> POL cannot cover the sends' fee cap is topped up by the approval bot (POST /gas/topup) just before the approve —
+> on the dashboard's presale buy and on both store roads (after the invite step). The three owner-approved lines live
+> ONCE, in js/wallet.js (DYWallet.GAS_COPY), shared by every road:
+>
+> - waiting: Getting you a little POL for the network fee — free…
+> - received: POL received — your wallet will now ask you to approve, then to buy.
+> - fallback: We couldn't send POL just now — you can still go ahead: MetaMask can pay the network fee in USDT or USDC if you hold a little extra.
+>
+> It never hard-blocks: a refusal, an unreachable bot or POL slow to arrive shows the fallback line and the wallet is
+> asked anyway (the store roads then pass their own gas budget as the gas limit, so the wallet opens instead of the
+> page's estimate failing first). The presale buy no longer stops on the gas sentence; the other dashboard actions do.
+
 ## 12. AFFILIATE-1 rung 3 (2026-10-09) - ONE WITHDRAW CARD, AND THE TORANA INVITES CARD
 
 The desk is web3 `fc5d117`: one `DeskCoupon(wallet, cumulativeWinningsWei, cumulativeInviteWei, deadline)` carries two

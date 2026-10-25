@@ -252,8 +252,9 @@ async function dashboardPage(c, player, opts) {
   // ICO-SIMPLE-1 — hermetic presale road: the voucher door is OFF unless a test points it somewhere (never the real bot),
   // and a test may name its own sale/coins (opts.contracts) and swap in a mutated dashboard.js (opts.dashSrc)
   w.DY_MF_CONFIG.presaleVoucherUrl = opts.presaleVoucherUrl || null;
+  w.DY_MF_CONFIG.gasTopUpUrl = opts.gasTopUpUrl || null;            // GAS-HELP-1 R3: hermetic — never the real bot unless a test points it
   Object.assign(w.DY_MF_CONFIG.contracts, opts.contracts || {});
-  run(path.join(SITE, "js/wallet.js"));
+  if (opts.walletSrc) w.eval(opts.walletSrc); else run(path.join(SITE, "js/wallet.js"));   // GAS-HELP-1 R3: a breakage may swap it
   run(path.join(SITE, "js/invite.js"));
   if (opts.dashSrc) w.eval(opts.dashSrc); else run(path.join(SITE, "js/dashboard.js"));
   w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
@@ -284,7 +285,12 @@ async function storePage(c, player, opts) {
     if (opts.svcDown && /bot\.test/.test(String(u))) return Promise.reject(new TypeError("Failed to fetch"));
     const svc = opts.svc || {};
     for (const key of Object.keys(svc)) {
-      if (String(u).indexOf(key) >= 0) return Promise.resolve(svc[key](init)).then((b) => ({ ok: true, status: 200, json: () => Promise.resolve(b) }));
+      // GAS-HELP-1 R3: as on the dashboard, a handler may answer { __status, body } (a refusal) or { __throw: true } (unreachable)
+      if (String(u).indexOf(key) >= 0) return Promise.resolve(svc[key](init)).then((b) => {
+        if (b && b.__throw) throw new TypeError("Failed to fetch");
+        if (b && b.__status) return { ok: b.__status < 400, status: b.__status, json: () => Promise.resolve(b.body || null) };
+        return { ok: true, status: 200, json: () => Promise.resolve(b) };
+      });
     }
     return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
   };
@@ -312,6 +318,7 @@ async function storePage(c, player, opts) {
   run(path.join(SITE, "config.js"));
   run(path.join(SITE, "mf-config.js"));                // store.html's order: config, mf-config (AFFILIATE-1)
   w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null; // set EXPLICITLY: the shipped config is live (WINNINGS-5); absent => the dormant store face
+  w.DY_MF_CONFIG.gasTopUpUrl = opts.gasTopUpUrl || null; // GAS-HELP-1 R3: hermetic — never the real bot unless a test points it
   w.DY_CONFIG.chain.id = chainId;                       // the harness's chain, declared not faked
   w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
   w.DY_CONFIG.contracts.dycoin = c.addrs.dyc;           // the inventory coin under test
@@ -358,7 +365,12 @@ async function myInvitesPage(c, player, opts) {
     if (opts.svcDown && /bot\.test/.test(String(u))) return Promise.reject(new TypeError("Failed to fetch"));
     const svc = opts.svc || {};
     for (const key of Object.keys(svc)) {
-      if (String(u).indexOf(key) >= 0) return Promise.resolve(svc[key](init)).then((b) => ({ ok: true, status: 200, json: () => Promise.resolve(b) }));
+      // GAS-HELP-1 R3: as on the dashboard, a handler may answer { __status, body } (a refusal) or { __throw: true } (unreachable)
+      if (String(u).indexOf(key) >= 0) return Promise.resolve(svc[key](init)).then((b) => {
+        if (b && b.__throw) throw new TypeError("Failed to fetch");
+        if (b && b.__status) return { ok: b.__status < 400, status: b.__status, json: () => Promise.resolve(b.body || null) };
+        return { ok: true, status: 200, json: () => Promise.resolve(b) };
+      });
     }
     return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
   };

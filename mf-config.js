@@ -47,6 +47,7 @@ window.DY_MF_CONFIG = {
   // panel asks it when a wallet connects in the presale round; on any failure it falls back to the published allowlist.
   // NULL => only the allowlist is read (the old behaviour, minus the form).
   presaleVoucherUrl: "https://approval-bot-cxa2.onrender.com/presale/voucher",
+  gasTopUpUrl: "https://approval-bot-cxa2.onrender.com/gas/topup",  // GAS-HELP-1 R3: POL for the network fee (dormant until the bot's GAS_TOPUP=on — until then it answers 503 and the roads show the fallback line)
 
   // ── Polygon mainnet read endpoints (W3-MAINNET-1) ──
   // The verified primary is publicnode (CORS-clean, full node, reliable eth_call), drpc a redundant fallback; the

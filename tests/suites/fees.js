@@ -214,9 +214,12 @@ async function run() {
     const badStore = storeWrites.filter((m) => !/,\s*fee$/.test(m[3].trim()));
     ok("S3 · STORE + TREASURY: all " + storeWrites.length + " write calls (card buy, approve, list, delist, market buy, bundle approve+buy, top-up) end in `fee`",
        storeWrites.length >= 11 && badStore.length === 0, badStore.map((m) => m[0]).join(" | "));
+    // (GAS-HELP-1 R3: a store send may pass the fee through fallbackGas(…) first — it only ADDS a gasLimit on the top-up's
+    //  fallback; the fee fields are still DYWallet.feeOverrides()'s, untouched)
+    const FEE_ROAD = /window\.DYWallet\.feeOverrides\(\)(?:\.then\(fallbackGas\([^()]*\)\))?\.then\(function \(fee\)/g;
     ok("S4 · and every `fee` there comes from DYWallet.feeOverrides()",
-       (store.match(/window\.DYWallet\.feeOverrides\(\)\.then\(function \(fee\)/g) || []).length === storeWrites.length,
-       (store.match(/window\.DYWallet\.feeOverrides\(\)\.then\(function \(fee\)/g) || []).length + " vs " + storeWrites.length);
+       (store.match(FEE_ROAD) || []).length === storeWrites.length && /function fallbackGas\(on, gas\) \{ return function \(fee\) \{ return on \? Object\.assign\(\{\}, fee, \{ gasLimit: gas \}\) : fee; \}; \}/.test(store),
+       (store.match(FEE_ROAD) || []).length + " vs " + storeWrites.length);
     const hallWrites = [...hall.matchAll(/\b(esc|dyc)\.(approve|openMatch|joinMatch|cancelMatch|settle)\(([^;]*?)\)(?=[;)\s.])/g)]
       .filter((m) => !/staticCall/.test(m[0]));
     const badHall = hallWrites.filter((m) => !/,\s*fee\)?$/.test(m[3].trim()));
@@ -244,10 +247,10 @@ async function run() {
     // (ICO-SIMPLE-1: register.html is now a redirect to the dashboard's buy panel and loads no script)
     const pages = ["index.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html"];
     const carrying = pages.filter((p) => fs.readFileSync(path.join(SITE, p), "utf8").indexOf("wallet.js?v=") >= 0);
-    ok("X1 · wallet.js is stamped s1r on every page that loads it (" + carrying.length + ")",
-       carrying.length === 8 && carrying.every((p) => /wallet\.js\?v=s1r/.test(fs.readFileSync(path.join(SITE, p), "utf8"))));
-    ok("X2 · dashboard.js mf41 and hall.js h35",
-       /js\/dashboard\.js\?v=mf41/.test(fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8")) && /hall\.js\?v=h35/.test(fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8")));
+    ok("X1 · wallet.js is stamped s1s on every page that loads it (" + carrying.length + ")",
+       carrying.length === 8 && carrying.every((p) => /wallet\.js\?v=s1s/.test(fs.readFileSync(path.join(SITE, p), "utf8"))));
+    ok("X2 · dashboard.js mf42 and hall.js h35",
+       /js\/dashboard\.js\?v=mf42/.test(fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8")) && /hall\.js\?v=h35/.test(fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8")));
   }
 
   console.log("──\n" + (fail === 0 ? "ALL GREEN — " + pass + "/" + (pass + fail) : "FAILURES — " + fail + " of " + (pass + fail)));

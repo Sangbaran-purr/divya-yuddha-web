@@ -333,6 +333,19 @@ Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon 
 > on arrival (Polygon Portal, Jumper, Relay; each verified from its own docs) and the exchange's Polygon network. It
 > replaces "- add a little POL and try again." P27 is new: the bundle road now names the missing POL too.
 
+> AMENDMENT 2026-10-25b (GAS-HELP-1 R3, owner rulings): POL FOR THE NETWORK FEE. A buyer who holds the coin but whose
+> POL cannot cover the sends' fee cap is topped up by the approval bot (POST /gas/topup) just before the approve —
+> on the dashboard's presale buy and on both store roads (after the invite step). The three owner-approved lines live
+> ONCE, in js/wallet.js (DYWallet.GAS_COPY), shared by every road:
+>
+> - waiting: Getting you a little POL for the network fee — free…
+> - received: POL received — your wallet will now ask you to approve, then to buy.
+> - fallback: We couldn't send POL just now — you can still go ahead: MetaMask can pay the network fee in USDT or USDC if you hold a little extra.
+>
+> It never hard-blocks: a refusal, an unreachable bot or POL slow to arrive shows the fallback line and the wallet is
+> asked anyway (the store roads then pass their own gas budget as the gas limit, so the wallet opens instead of the
+> page's estimate failing first). The presale buy no longer stops on the gas sentence; the other dashboard actions do.
+
 P23 sold out
 This card is sold out.
 

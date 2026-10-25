@@ -42,6 +42,9 @@ const P5 = "This wallet is a smart account and cannot receive the Torana yet. Sw
 const P6 = "The store is closed for now.";
 const P6B = "The store is sold out for now.";
 const P8 = "The store could not take this order - refresh and try again.";
+const G_WAIT = "Getting you a little POL for the network fee — free…";   // GAS-HELP-1 R3, owner-approved
+const G_OK = "POL received — your wallet will now ask you to approve, then to buy.";
+const G_FALL = "We couldn't send POL just now — you can still go ahead: MetaMask can pay the network fee in USDT or USDC if you hold a little extra.";
 const P_POL = "Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.";
 const P7 = (sym, sum) => "Not enough " + sym + " in this wallet - " + sum + " buys the bundle.";
 const P9 = "The bundle - a Torana and 500 DYC - is USD 20. You already hold yours.";
@@ -372,19 +375,59 @@ async function main() {
     ok("GENERIC · P8 is the decode map's floor, and the bare revert never reaches the player",
        /return B_P8;\s*\n\s*}/.test(require("fs").readFileSync(require("path").join(H.SITE, "js/store.js"), "utf8")));
 
-    // GAS-HELP-1 R0 — a wallet with the coin but no POL for the fee: the wallet answers "insufficient funds" at the
-    // approve, and the bundle road now says the POL line (it said the generic P8 before). Nothing moves.
-    const c6 = await H.chainStore();
-    await deal(c6, "usdc", c6.player.address, 25n * DEC6);
-    const h6 = await H.storePage(c6, c6.player);
-    await connect(h6.w);
-    await c6.provider.send("anvil_setBalance", [c6.player.address, "0x3e8"]);   // 1000 wei: far below any fee
-    H.click(h6.w, ".b-buy");
-    await waitFor("the POL line", () => msg(h6.w).indexOf("POL") >= 0 || msg(h6.w) === P8);
-    ok("NO POL · the bundle road says the POL line word for word (the bridges and the exchange's Polygon network), not the generic P8; nothing bought",
-       msg(h6.w) === P_POL && (await c6.usdc.balanceOf(c6.player.address)) === 25n * DEC6, msg(h6.w));
-    H.teardown(h6);
-    await c6.provider.send("anvil_setBalance", [c6.player.address, "0x" + (10000n * 10n ** 18n).toString(16)]);   // the shared account, restored
+    // GAS-HELP-1 R0 + R3 — a wallet with the coin but too little POL for the fee. R3: the road asks the approval bot for
+    // POL (after the invite step, before the approve) and waits for it to land; it never hard-blocks — a refusal, an
+    // unreachable bot or no bot configured shows the fallback line and the wallet is asked anyway.
+    const gasDoor = (c, mode, asked) => ({ "/gas/topup": async (init) => {
+      const b = JSON.parse(init.body); asked.push(b);
+      if (mode === "down") return { __throw: true };
+      if (mode === "refuse") return { __status: 422, body: { refused: "NOT_HOLDING" } };
+      const send = async () => { const cur = await c.provider.getBalance(b.wallet); await c.provider.send("anvil_setBalance", [b.wallet, "0x" + (cur + 10n ** 18n).toString(16)]); };
+      if (mode === "ok") await send(); else setTimeout(send, 3000);
+      return { txHash: "0x" + "ab".repeat(32), amountWei: (10n ** 18n).toString(), confirmed: mode === "ok" };
+    } });
+    const seenLines = (w) => { const got = new Set(); new w.MutationObserver(() => got.add(msg(w))).observe(w.document.body, { childList: true, subtree: true, characterData: true }); return got; };
+    async function gasCase(mode) {
+      const c = await H.chainStore();
+      await deal(c, "usdc", c.player.address, 25n * DEC6);
+      const asked = [];
+      const h = await H.storePage(c, c.player, mode ? { svc: gasDoor(c, mode, asked), gasTopUpUrl: "https://bot.test/gas/topup" } : {});
+      const seen = seenLines(h.w);
+      await connect(h.w);
+      await c.provider.send("anvil_setBalance", [c.player.address, "0x" + (10n ** 15n).toString(16)]);   // 0.001 POL: short of the fee cap
+      H.click(h.w, ".b-buy");
+      await waitFor("the road settled", () => /is yours/.test(tile(h.w)) || (msg(h.w) && q(h.w, "#b-msg").className.indexOf("bad") >= 0));
+      const r = { asked, seen, done: /is yours/.test(tile(h.w)), said: msg(h.w), sends: h.eth.__calls.filter((m) => m === "eth_sendTransaction").length,
+                  torana: await c.nft.balanceOf(c.player.address) };
+      H.teardown(h);
+      await c.provider.send("anvil_setBalance", [c.player.address, "0x" + (10000n * 10n ** 18n).toString(16)]);   // the shared account, restored
+      return r;
+    }
+    const has = (r, t) => [...r.seen].some((x) => x.indexOf(t) >= 0);
+    {
+      const r = await gasCase(null);
+      ok("NO POL · no top-up service: the fallback line, the wallet is STILL asked, and its failure says the POL line word for word; nothing bought",
+         has(r, G_FALL) && r.sends >= 1 && r.said === P_POL && r.torana === 0n, JSON.stringify({ sends: r.sends, said: r.said }));
+    }
+    {
+      const r = await gasCase("ok");
+      ok("GAS1 · short of POL: the waiting line, the bot asked once for the bundle in USDC, the received line, then approve + buy — the Torana is bought",
+         has(r, G_WAIT) && has(r, G_OK) && r.asked.length === 1 && r.asked[0].product === "bundle" && r.asked[0].coin === "usdc" && r.done && r.torana === 1n,
+         JSON.stringify({ asked: r.asked, said: r.said }));
+    }
+    {
+      const r = await gasCase("refuse");
+      ok("GAS2 · the bot refuses: the fallback line, the wallet is still asked; its failure says the POL line", has(r, G_FALL) && r.sends >= 1 && r.said === P_POL && r.torana === 0n,
+         JSON.stringify({ sends: r.sends, said: r.said }));
+    }
+    {
+      const r = await gasCase("down");
+      ok("GAS3 · the bot is unreachable: the fallback line, the wallet is still asked", has(r, G_FALL) && r.sends >= 1 && r.torana === 0n, JSON.stringify({ sends: r.sends, said: r.said }));
+    }
+    {
+      const r = await gasCase("slow");
+      ok("GAS4 · the POL arrives slowly (3 s): the road waits for it, then buys", has(r, G_WAIT) && has(r, G_OK) && r.done && r.torana === 1n, JSON.stringify({ said: r.said }));
+    }
   }
 
   // ══════════════════════════ P6 · THE BUSY SENTINEL ══════════════════════════

@@ -550,6 +550,25 @@ window.DYStore = (function () {
   // gas budgeted per send for the POL check (MetaMask needs gasLimit × maxFee up front). Measured (tests/suites/cardusd.js, the REAL
   // WaveCardUsdSale): approve 46,331, buy 190,661 incl. the mint; the budget sits above both so a wallet that passes the check is never refused.
   var USD_APPROVE_GAS = 70000n, USD_BUY_GAS = 300000n;
+  // GAS-HELP-1 R3 (owner rulings 2026-10-25) — POL FOR THE NETWORK FEE on both store roads, after the invite step and
+  // before the approve: the approval bot tops the wallet up (DYWallet.gasTopUp) and the road waits for it to land, the
+  // owner-approved lines in the road's own message. It NEVER hard-blocks — a refusal, an unreachable bot or a slow
+  // arrival shows the fallback line and the wallet is asked anyway. Each line holds long enough to be read.
+  var GAS_HOLD_OK_MS = 1500, GAS_HOLD_FALLBACK_MS = 3500;
+  // → resolves the top-up's state ("ok" | "enough" | "fallback"). On "fallback" the road's two sends carry its own gas
+  // budget as the gasLimit (fallbackGas below): left to estimate, a wallet with no POL fails the ESTIMATE in the page,
+  // before the wallet ever opens — and then MetaMask never gets the chance to offer paying the fee in the coin.
+  function gasStep(msg, opts) {
+    var G = window.DYWallet.GAS_COPY;
+    msg.className = "st-msg"; msg.textContent = G.waiting;
+    return window.DYWallet.gasTopUp(opts).then(function (r) {
+      if (r.state === "enough") return r.state;
+      var ok = r.state === "ok";
+      msg.textContent = ok ? G.ok : G.fallback;
+      return new Promise(function (res) { setTimeout(function () { res(r.state); }, ok ? GAS_HOLD_OK_MS : GAS_HOLD_FALLBACK_MS); });
+    });
+  }
+  function fallbackGas(on, gas) { return function (fee) { return on ? Object.assign({}, fee, { gasLimit: gas }) : fee; }; }
   var DYC_WEI_PER_USD = 100000000000000n;   // 1e14 — the contract's DYC_WEI_PER_USD_UNIT
   var bShown = null;
   var bHost = null;                         // the bundle tile, so a card's coin switch can repaint its chips                        // the chip the bundle tile last showed (assetPicker's auto choice)
@@ -654,6 +673,7 @@ window.DYStore = (function () {
     if (/SoldOut/.test(s)) return U_SOLD;
     if (/ERC20InsufficientBalance|transfer amount exceeds balance/.test(s)) return U_SHORT(ctx.sym, ctx.sum || "this price");
     if (/network changed|NETWORK_ERROR.*chain|underlying network/i.test(s)) return U_NET;
+    if (ctx && ctx.polShort && !(e && e.__usd)) return U_POL;   // GAS-HELP-1 R3: the wallet was short of POL and the send failed unnamed
     return B_P8;
   }
 
@@ -688,7 +708,9 @@ window.DYStore = (function () {
         F.fee = fee;
         F.needApprove = F.allowance < F.usd;                    // FRESH — never a kept allowance
         var gas = (F.needApprove ? USD_APPROVE_GAS : 0n) + USD_BUY_GAS;
-        if (F.pol < gas * BigInt(fee.maxFeePerGas)) throw usdStop("pol");
+        // GAS-HELP-1 R3: short of POL → the top-up (it never refuses; the wallet is asked either way)
+        if (F.pol < gas * BigInt(fee.maxFeePerGas)) ctx.polShort = true;
+        if (ctx.polShort) return gasStep(msg, { wallet: me, product: "card", coin: coin.key, cardId: cardId.toString() }).then(function (st) { ctx.gasFallback = st === "fallback"; return signerRoad(); });
         return signerRoad();
       })
       .then(function (r) {
@@ -705,7 +727,7 @@ window.DYStore = (function () {
         if (F.needApprove) {
           step = stable.approve.staticCall(cusAddr(), F.usd).then(function () {
             msg.textContent = "Approve exactly " + ctx.sum + " in your wallet…";
-            return window.DYWallet.feeOverrides().then(function (fee) { return stable.approve(cusAddr(), F.usd, fee); });   // FEE-1, fresh at the send
+            return window.DYWallet.feeOverrides().then(fallbackGas(ctx.gasFallback, USD_APPROVE_GAS)).then(function (fee) { return stable.approve(cusAddr(), F.usd, fee); });   // FEE-1, fresh at the send
           }).then(function (tx) { msg.textContent = "Approving… waiting for confirmation."; return boundedWait(tx); })
             .then(function (o) { if (o.slow) throw usdStop("slow"); });
         }
@@ -714,7 +736,7 @@ window.DYStore = (function () {
           return store.buy.staticCall(cardId, coinAddr);
         }).then(function () {
           msg.textContent = "Confirm the purchase in your wallet…";
-          return window.DYWallet.feeOverrides().then(function (fee) { return store.buy(cardId, coinAddr, fee); });
+          return window.DYWallet.feeOverrides().then(fallbackGas(ctx.gasFallback, USD_BUY_GAS)).then(function (fee) { return store.buy(cardId, coinAddr, fee); });
         }).then(function (tx) { msg.textContent = "Buying… waiting for confirmation."; return boundedWait(tx); });
       })
       .then(function (o) {
@@ -1652,7 +1674,7 @@ window.DYStore = (function () {
     bFlash = null;
     btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet can be served…";
     var me = (window.DYWallet.state && window.DYWallet.state.address) || null;
-    var dycBefore = null, F = null;
+    var dycBefore = null, F = null, polShort = false, gasFallback = false;
     // STORE-READ-2 — the pre-cast read comes FIRST. Every decision below reads F, never `a` (the kept tile values).
     (me ? preCastRead(a, me, false) : Promise.reject(new Error("no wallet")))
       .then(function (f) { return f; }, function () { var e = new Error("precast"); e.__precast = true; throw e; })
@@ -1663,12 +1685,13 @@ window.DYStore = (function () {
         if (!sameWallet(me)) { var sw = new Error("precast"); sw.__precast = true; throw sw; }
         // P7 lands here, from the FRESH read, before any approval is offered
         if (F.balance < F.bundlePrice) { var p7 = new Error("P7"); p7.__p7 = true; throw p7; }
-        // GAS-HELP-1 R0 — the card road's POL check, on the bundle road too: the POL balance against the sends' fee cap
-        // (MetaMask needs gasLimit × maxFee up front), before anything is signed. Budgets: approve 70k, buy 300k
+        // GAS-HELP-1 R0/R3 — the card road's POL check, on the bundle road too: the POL balance against the sends' fee cap
+        // (MetaMask needs gasLimit × maxFee up front), before anything is signed; short → the top-up (R3). Budgets: approve 70k, buy 300k
         // (measured on a Polygon fork 2026-10-25: 51.7k / 55.4k and 183k / 201k). A failed read is not a refusal.
         return Promise.all([window.DYWallet.readProvider().getBalance(me), window.DYWallet.feeOverrides()]).then(function (x) {
           var gas = (F.allowance >= F.bundlePrice ? 0n : USD_APPROVE_GAS) + USD_BUY_GAS;
-          if (x[0] < gas * BigInt(x[1].maxFeePerGas)) { var ep = new Error("POL"); ep.__pol = true; throw ep; }
+          // GAS-HELP-1 R3: short of POL → the top-up (it never refuses; the wallet is asked either way)
+          if (x[0] < gas * BigInt(x[1].maxFeePerGas)) { polShort = true; return gasStep(msg, { wallet: me, product: "bundle", coin: assetKey }).then(function (st) { gasFallback = st === "fallback"; }); }
         }, function () { return null; }).then(function () { return signerRoad(); });
       })
       .then(function (r) {
@@ -1694,7 +1717,7 @@ window.DYStore = (function () {
         var need = F.allowance >= F.bundlePrice;   // FRESH — never a kept allowance, so approve is never wrongly skipped
         if (need) return null;
         msg.textContent = "Approve exactly " + sum + " in your wallet…";
-        return window.DYWallet.feeOverrides().then(function (fee) { return stable.approve(psAddr(), F.bundlePrice, fee); })
+        return window.DYWallet.feeOverrides().then(fallbackGas(gasFallback, USD_APPROVE_GAS)).then(function (fee) { return stable.approve(psAddr(), F.bundlePrice, fee); })
           .then(function (tx) { msg.textContent = "Approving… waiting for confirmation."; return boundedWait(tx); });
       }).then(function () {
         msg.textContent = "Simulating the purchase…";
@@ -1704,7 +1727,7 @@ window.DYStore = (function () {
         return dyc.balanceOf(me).catch(function () { return null; }).then(function (b) {
           dycBefore = b;
           msg.textContent = "Confirm the purchase in your wallet…";
-          return window.DYWallet.feeOverrides().then(function (fee) { return ps.buyBundle(a.addr, fee); });
+          return window.DYWallet.feeOverrides().then(fallbackGas(gasFallback, USD_BUY_GAS)).then(function (fee) { return ps.buyBundle(a.addr, fee); });
         });
       }).then(function (tx) {
         msg.textContent = "Buying… waiting for confirmation.";
@@ -1720,7 +1743,9 @@ window.DYStore = (function () {
       // STORE-READ-2 — the two ruled stops that are NOT chain errors, and must never be worded as one
       if (e && e.__precast) { preCastStop(host, B_P12); return; }
       if (e && e.__p7) { preCastStop(host, bP7(sym, sum)); return; }
-      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = (e && e.__pol) ? U_POL : bundleErr(e, { sym: sym, sum: sum });
+      // GAS-HELP-1 R3: the wallet was short of POL and the send failed without a named reason → the POL line
+      var said = bundleErr(e, { sym: sym, sum: sum });
+      btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = (polShort && said === B_P8) ? U_POL : said;
     });
   }
 

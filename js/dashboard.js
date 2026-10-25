@@ -2049,9 +2049,24 @@ window.DYDash = (function () {
     return ov;
   }
 
-  // GAS-HELP-1 slots in HERE (planned separately, not built): a "getting gas for you" step for a buyer with no POL runs
-  // before the approve. Until it exists this resolves at once, and polGuard() keeps refusing a wallet without POL for fees.
-  function beforeApprove() { return Promise.resolve(); }
+  // GAS-HELP-1 R3 (owner rulings 2026-10-25) — POL FOR THE NETWORK FEE, just before the approve. A buyer who holds the
+  // coin (checked above) but whose POL cannot cover the sends' fee cap (MetaMask needs gasLimit × maxFee up front, by
+  // FEE-1: the approve if needed + the buy, at this page's own gas limits) is topped up by the approval bot, and the
+  // road waits for the POL to land. It NEVER hard-blocks: a refusal, an unreachable bot or POL that is slow to arrive
+  // shows the fallback line and the wallet is asked anyway (MetaMask can pay the fee in the coin). A failed POL read
+  // is not a refusal either: the road goes on exactly as before.
+  function beforeApprove(ctx) {
+    var need = (BigInt(ctx.needApprove ? GAS.approve : 0) + BigInt(GAS.buy)) * BigInt((ctx.fo && ctx.fo.maxFeePerGas) || 0);
+    return W.readProvider().getBalance(ctx.me).then(function (pol) {
+      if (pol >= need) return;
+      pending(true, "Network fee");
+      $("ov-pending-msg").textContent = W.GAS_COPY.waiting;
+      return W.gasTopUp({ wallet: ctx.me, product: "presale", coin: ctx.coin.key, amount: ctx.amt.toString() }).then(function (r) {
+        if (r.state === "ok") toast(W.GAS_COPY.ok);
+        else if (r.state === "fallback") toast(W.GAS_COPY.fallback);
+      });
+    }, function () { return null; });
+  }
 
   // ICO-SIMPLE-1 — plain "Buy DYC": approve (only if needed) → buy. Staking is offered AFTER, as its own optional step.
   function buyFlow() {
@@ -2059,7 +2074,7 @@ window.DYDash = (function () {
     try { amt = ethersRef.parseUnits(($("buy-amt").value || "").trim().replace(/,/g, ""), 6); if (amt <= 0n) throw 0; }
     catch (e) { failBox("Enter a positive " + coin.label + " amount."); return; }
     if (amt < MIN_BUY_USDT) { failBox("Minimum purchase is 100 " + coin.label + "."); return; } // M-F4 defect 1 (defense-in-depth)
-    var pg = polGuard(); if (pg) { failBox(pg); return; }
+    // (GAS-HELP-1 R3: no POL refusal here any more — beforeApprove() tops a short wallet up, or lets the wallet try)
     var isPresale = buyState.round === 1;
     var sig = isPresale && buyState.voucher ? buyState.voucher.sig : "0x";
     withEthers().then(function () {
@@ -2076,7 +2091,7 @@ window.DYDash = (function () {
           return feeOverrides(provider).then(function (fo) {
             var nSteps = (needApprove ? 1 : 0) + 1;
             var step = 0;
-            var chain = beforeApprove();
+            var chain = beforeApprove({ me: me, coin: coin, amt: amt, needApprove: needApprove, fo: fo });
             if (needApprove) {
               chain = chain.then(function () {
                 step++; pending(true, "Step " + step + " of " + nSteps + " — Approve " + coin.label);
