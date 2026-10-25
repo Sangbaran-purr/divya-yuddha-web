@@ -17,7 +17,7 @@ const B1 = PUZZLES.slice(0, 14), B2 = PUZZLES.filter((p) => p.date >= "2026-10-2
 // owner ruling 2026-10-19: seven batch-2 puzzles KEPT exactly as they were (two predate Rule C); the other seven are new.
 // (ruling 2026-10-23: 7 Nov was vetoed after a leak and regenerated, so six of the seven remain as kept)
 const KEPT = ["2026-10-29", "2026-10-31", "2026-11-02", "2026-11-03", "2026-11-06", "2026-11-11"];
-const REWORDED = ["2026-11-11"];   // ruling 2026-10-23: the split Leap gain re-words this kept day (position and title unchanged)
+const REWORDED = ["2026-11-11", "2026-11-02", "2026-11-03"];   // the owner's GENERAL wording rulings re-word kept days (positions and titles unchanged): 11 Nov (2026-10-23, the split Leap gain); 2 and 3 Nov (2026-10-25, a Hero's exemption told)
 const NEW = B2.filter((p) => KEPT.indexOf(p.date) < 0);
 
 let pass = 0, fail = 0;
@@ -34,8 +34,8 @@ function readChanges(list, start) {
   const sum = [0, 0], named = [];
   for (const it of list) {
     let x;
-    const side = /^the opponent's /.test(it) || / joins the opponent's side/.test(it) ? 1 : 0;
-    const ARR = / (?:enters|joins (?:your|the opponent's) side through .+?) at (\d+)/;
+    const side = /^the opponent's /.test(it) || / joins the opponent's side/.test(it) || / to the opponent's side through /.test(it) || (/ returns from the opponent's discard pile through /.test(it)) ? 1 : 0;
+    const ARR = / (?:enters|joins (?:your|the opponent's) side through .+?|returns from (?:your|the opponent's) discard pile (?:to (?:your|the opponent's) side )?through .+?) at (\d+)/;
     if ((x = / and (gains|loses) (\d+) from ([^(]+) \(\d+\)$/.exec(it)) && ARR.test(it)) { sum[side] += +ARR.exec(it)[1] + (x[1] === "gains" ? 1 : -1) * +x[2]; named.push(true); }
     else if ((x = new RegExp(ARR.source + "$").exec(it))) sum[side] += +x[1];
     else if ((x = / (?:Leaps onto|makes a free Leap onto) .+?, copies .+?'s (\d+) \((\d+)→(\d+)\), and gains (\d+) from its own ability, .+ \((\d+)→(\d+)\)$/.exec(it))) { sum[side] += +x[6] - +x[2]; named.push(+x[3] === +x[1] && +x[5] === +x[3] && +x[6] - +x[5] === +x[4]); }
@@ -43,7 +43,8 @@ function readChanges(list, start) {
     else if (/^(first|then) .* Leaps onto [^;]+$/.test(it)) { /* a Leap that changes nothing */ }
     else if ((x = / (gains|loses) (\d+) from ([^(]+) \((\d+)→(\d+)\)$/.exec(it))) { const d = (x[1] === "gains" ? 1 : -1) * +x[2]; sum[side] += d; named.push(+x[5] - +x[4] === d && x[3].trim() !== "Leap"); }
     else if ((x = / is removed by (.+) \(−(\d+)\)$/.exec(it))) { sum[side] -= +x[2]; named.push(true); }
-    else if (/ puts a Venom Token on /.test(it) || / adds no power$/.test(it) || / is an Artifact: it adds no power$/.test(it) || / cancels /.test(it)) { /* no power moves */ }
+    else if (/ is a Hero, so .+ doesn't touch it$/.test(it)) { /* a Hero's exemption, told (ruling 2026-10-25) */ }
+    else if (/ puts (?:a Venom Token|\d+ Venom Tokens) on /.test(it) || / adds no power$/.test(it) || / is an Artifact: it adds no power$/.test(it) || / cancels /.test(it)) { /* no power moves */ }
     else if (/ moves your Venom drain to the moment either player first passes$/.test(it) || /^the opponent has already passed, so your drain does not fire this round$/.test(it)) { /* a missing round-end effect, told */ }
     else if (/ stops the Venom Token on [^(]+?( \(it doesn't stop the Naga drain\))?$/.test(it)) { /* a token that never drains, told (Rama's Signet) */ }
     else return { ok: false, why: "unread change: " + it };
@@ -52,7 +53,8 @@ function readChanges(list, start) {
 }
 function readEnd(text) {
   const end = [0, 0], named = [];
-  if (text) for (const it of text.split("; ")) { const x = /^(your|the opponent's) .+ ([+−])(\d+) from (.+)$/.exec(it); if (!x) return { ok: false, why: "unread end change: " + it };
+  if (text) for (const it of text.split("; ")) { if (/ is a Hero, so the drain doesn't touch it$/.test(it)) continue;   // a Hero's exemption, told
+    const x = /^(your|the opponent's) .+ ([+−])(\d+) from (.+)$/.exec(it); if (!x) return { ok: false, why: "unread end change: " + it };
     end[x[1] === "your" ? 0 : 1] += (x[2] === "+" ? 1 : -1) * +x[3]; named.push(!/^(Venom)$/.test(x[4])); }
   return { ok: true, end, named };
 }
@@ -97,7 +99,7 @@ function arithmetic(text) {
       // explanation is then exactly the one the writer gives today
       const reworded = REWORDED.indexOf(d) >= 0 && decoded[B2.indexOf(b)] === fresh[B2.indexOf(b)];
       return a && b && J(a) === J(b) && m && (D.decodeNote(b.id, m[1]) === decoded[B2.indexOf(b)] || reworded); }); } catch (e) { keptSame = false; }
-  ok("G2b · the six still-KEPT puzzles are exactly as the owner kept them — position and title unchanged since 8a566b0, explanation too (but for the owner's general re-wording of 11 Nov)", keptSame);
+  ok("G2b · the six still-KEPT puzzles are exactly as the owner kept them — position and title unchanged since 8a566b0, explanation too (but for the owner's general re-wordings of 11 Nov, 2 Nov and 3 Nov)", keptSame);
   const ar = decoded.map(arithmetic);
   ok("G3 · THE ARITHMETIC (Rule B), read back from each explanation's own words — for the winning play AND every tempting wrong play: the position + every named change = after the play; + every named round-end change = the final score (the winner's is the solver's)",
     ar.every((a, i) => a.ok && a.final[0] === solved[B2[i].id].winners[0].you && a.final[1] === solved[B2[i].id].winners[0].them),
@@ -175,7 +177,7 @@ function arithmetic(text) {
   ok("M2 · breakage 'skip the luck check' is caught (K2 goes red)", (() => { try { return !rejects(m2, luck, "LUCK"); } catch (e) { return true; } })());
   const m3 = mutant('const launch = (f) => E.DECKS[f].filter((d) => !d.wave);', 'const launch = (f) => E.DECKS[f];');
   ok("M3 · breakage 'deal Wave-1 cards' is caught (K3 goes red)", (() => { const r = m3.mulberry32(9); for (let i = 0; i < 2000; i++) { const P = m3.candidate(r, { date: "2027-01-04", you: G.FACTIONS[i % 4] }); if (P && P.you.hand.some((n) => E.DECKS[P.you.faction].find((d) => d.n === n).wave)) return true; } return false; })());
-  const m4 = mutant('(d > 0 ? "gains " + d : "loses " + (-d)) + " from " + cs[0].name + " (" + a.p + "→" + b.p + ")"', '(d > 0 ? "gains " + (d + 1) : "loses " + (-d + 1)) + " from " + cs[0].name + " (" + a.p + "→" + b.p + ")"');
+  const m4 = mutant('(d > 0 ? "gains " + d : "loses " + (-d)) + " from " + cn + " (" + a.p + "→" + b.p + ")"', '(d > 0 ? "gains " + (d + 1) : "loses " + (-d + 1)) + " from " + cn + " (" + a.p + "→" + b.p + ")"');
   const bad = B2.map((P) => { const e = m4.explain(P, solved[P.id]); return e ? arithmetic(e.text) : { ok: true }; });
   ok("M4 · breakage 'an explanation that doesn't add up' is caught (G3 goes red)", bad.some((a) => !a.ok));
   // R2 (owner rulings 2026-10-16): Rule A, Rule B and the realm rule — each on a real position, each with its breakage
@@ -233,7 +235,8 @@ function arithmetic(text) {
   ok("K13 · a run with fewer than 3 Hero traps is REFUSED", G.checkSpread(B2, { heroTraps: zero }).some((e) => /Hero traps/.test(e)));
   const m13 = mutant('  if (opts2 && opts2.heroTraps && traps < 3) errs.push("Hero traps " + traps);', '');
   ok("M13 · breakage 'allow fewer than 3 Hero traps' is caught (K13 goes red)", !m13.checkSpread(B2, { heroTraps: zero }).some((e) => /Hero traps/.test(e)));
-  const trapDay = NEW.find((P) => trapsOf(P).length);
+  // (a trap day with no Hero exemption to tell — dropping such a line would trip the exemption check first, ruling 2026-10-25)
+  const trapDay = NEW.find((P) => trapsOf(P).length && !/ is a Hero, so /.test(decoded[B2.indexOf(P)]));
   // the writer made to leave a losing Hero out of the finished text (its line dropped)
   const TELL = '  s += " Tempting but wrong: " + wrong.join(". ") + ".";';
   const SKIP = '  s += " Tempting but wrong: " + wrong.filter((t) => !heroes.some((h) => t.indexOf(clean(h.key) + " falls short") === 0)).join(". ") + ".";';
@@ -347,6 +350,60 @@ function arithmetic(text) {
     const lost = hashes.filter((h) => { try { execFileSync("git", ["merge-base", "--is-ancestor", h, "HEAD"], { cwd: SITE, stdio: "ignore" }); return false; } catch (e) { return true; } });
     ok("K27 · every commit a test reads (" + hashes.length + ") is an ancestor of HEAD — none exists only on this machine", hashes.length >= 5 && lost.length === 0, "not in this branch's history: " + lost.join(", "));
   }
+  // ═══ OWNER RULINGS 2026-10-25 (the first automatic batch) — found by searching the scheduled days; no explanation text here ═══
+  const SCHED = PUZZLES.filter((p) => p.date >= "2026-10-29"), dS = SCHED.map((P) => D.decodeNote(P.id, NOTES[P.id] || ""));
+  const solveS = (P) => solved[P.id] || (solved[P.id] = PZ.solve(P, E, null));
+  const dayWith = (re) => { const i = dS.findIndex((t) => re.test(t)); return i >= 0 ? SCHED[i] : null; };
+  // 1 — a realm puzzle ONLY if, in Mrityulok, the winning play does not win
+  const old14 = clone(JSON.parse(execFileSync("git", ["show", "eb4b6c6:play/daily/puzzles.json"], { cwd: SITE, encoding: "utf8" })).find((p) => p.date === "2026-11-14"));
+  const j14 = G.judge(old14), realmDay = SCHED.find((P) => /^realm/.test(P.mechanic) && G.judge(P).ok), jr = realmDay && G.judge(realmDay);
+  const endsM = realmDay && /decides it: in Mrityulok the same play ends (\d+)–(\d+)\./.exec(dS[SCHED.indexOf(realmDay)]);
+  ok("K28 · A REALM DECIDES IT ONLY IF THE PLAY FAILS WITHOUT IT: the first batch's 14 Nov (still a win in Mrityulok) is no realm puzzle and says no 'decides it'; a true realm day keeps the label (it loses in Mrityulok)",
+    j14.ok && !/^realm/.test(j14.mechanic) && j14.ex.text.indexOf("decides it") < 0 && !!jr && jr.ok && /^realm/.test(jr.mechanic) && !!endsM && +endsM[1] <= +endsM[2], (j14.mechanic || j14.reason) + " / " + (jr && jr.mechanic));
+  const m28 = mutant("  const decides = !!nm && !(nm.T2[0] > nm.T2[1]);", "  const decides = true;");
+  ok("M28 · breakage 'any realm change decides it' is caught (K28 goes red: the old 14 Nov is labelled a realm puzzle again)", /^realm/.test(m28.judge(old14).mechanic || ""));
+  // 2 — a Hero's exemption is told; Rule B refuses an explanation that leaves one out
+  const drainEx = dayWith(/ is a Hero, so the drain doesn't touch it/), astraEx = dayWith(/ is a Hero, so [A-Z][A-Za-z ]+ doesn't touch it/);
+  ok("K29 · A HERO'S EXEMPTION IS TOLD: scheduled days say a Hero is passed over by the drain and by an Astra (e.g. 'X is a Hero, so the drain doesn't touch it')", !!drainEx && !!astraEx);
+  const QUIET = [["  return before.concat(mid, (n.exempt || { play: [] }).play, after);", "  return before.concat(mid, after);"], ['.concat((n.exempt || { end: [] }).end).join("; ");', '.join("; ");']];
+  const mQuiet = libFrom(QUIET.reduce((src, [a, b]) => { if (src.indexOf(a) < 0) throw new Error("mutant anchor gone: " + a.slice(0, 50)); return src.split(a).join(b); }, LIB_SRC));
+  ok("K29b · …and RULE B REFUSES an explanation that leaves a Hero's exemption out (the writer made silent: the drain day is refused)", !!drainEx && rejects(mQuiet, drainEx, "EXPLANATION"));
+  const GUARD2 = "  if (mustTell.some((t) => s.indexOf(t) < 0)) return null;";
+  const m29 = libFrom(QUIET.reduce((src, [a, b]) => src.split(a).join(b), LIB_SRC).split(GUARD2).join(""));
+  ok("M29 · breakage 'drop the exemption check' is caught (K29b goes red: the silent explanation is accepted)", LIB_SRC.indexOf(GUARD2) >= 0 && !!drainEx && !rejects(m29, drainEx, "EXPLANATION"));
+  // 3 — an amplified effect names every source
+  const ampDay = dayWith(/gains \d+ from Chaos Surge, doubled by Chandrahas \(/);
+  ok("K30 · AN AMPLIFIED EFFECT NAMES ITS SOURCE: a doubled Chaos Surge reads 'from Chaos Surge, doubled by Chandrahas'; no scheduled day shows a repeated effect without its source",
+    !!ampDay && SCHED.every((P) => !!G.explain(P, solveS(P))));
+  const blindAmp = mutant('  if (c.name === "Chaos Surge" && art(side) === "chandrahas") return "Chaos Surge, doubled by Chandrahas";', '');
+  ok("K30b · …and RULE B REFUSES a change bigger than its base effect whose extra source it cannot name (Chandrahas unrecognised: that day is refused)", !!ampDay && rejects(blindAmp, ampDay, "EXPLANATION"));
+  const m30 = mutant("  if (!c.count || c.count === 1) return c.name;", "  return c.name;");
+  ok("M30 · breakage 'ignore a repeated effect' is caught (K30 goes red: the doubled surge is told without Chandrahas)", !!ampDay && !/doubled by Chandrahas/.test((m30.explain(ampDay, solveS(ampDay)) || {}).text || ""));
+  // 4 — a returning card says where it comes from
+  const revDay = dayWith(/ returns from (your|the opponent's) discard pile (to (your|the opponent's) side )?through [A-Z]/);
+  ok("K31 · A RETURNING CARD SAYS WHERE FROM: a revived Unit 'returns from your discard pile through …'; no scheduled day says only 'joins your side through' for a card that was in a discard pile",
+    !!revDay && !dS.some((t) => /joins your side through Mrityunjaya|joins your side through Gayatri/.test(t)));
+  const m31 = mutant("      const from = disc0[uid];", "      const from = undefined;");
+  ok("M31 · breakage 'forget the discard pile' is caught (K31 goes red)", !!revDay && /joins (your|the opponent's) side through /.test((m31.explain(revDay, solveS(revDay)) || {}).text || ""));
+  // 5 — the variety rule: the same winning card (or the same tempting-wrong card) at most once in 14 days — never a failure
+  {
+    const slots = G.planSlots(G.datesFrom("2099-06-01", "2099-06-14")), pools = {};
+    const base = B2.map((P) => ({ puzzle: clone(P), mechanic: P.mechanic, play: solveS(P).winners[0].play, target: null, traps: 1, keptTitle: P.title, wrong: [] }));   // (batch 2 predates the rule: its own wrong cards would clash among themselves)
+    slots.forEach((s, i) => { pools[s.date] = [Object.assign({}, base[i], { puzzle: Object.assign(clone(base[i].puzzle), { date: s.date }) })]; });
+    // (the clashing card's name is held in CLASH: written beside a win word, the generator's own leak guard would refuse it first)
+    const CLASH = ["Clash", "Card"].join(" "), day5 = slots[4].date, clashC = Object.assign({}, pools[day5][0], { play: CLASH });
+    pools[day5] = [clashC].concat(pools[day5]);   // the clashing candidate first: without the rule it is picked
+    const hist = [{ date: "2099-05-28", win: CLASH, wrong: [] }];
+    const r1 = G.choose(slots, pools, [], [], { history: hist });
+    ok("K32 · THE VARIETY RULE: a winning card used 7 days earlier is passed over for another candidate (relaxed: " + (r1 && r1.relaxed) + ")", !!r1 && r1.relaxed === 0 && r1.pickC[day5].play !== CLASH);
+    const histAll = hist.concat([{ date: "2099-05-30", win: pools[day5][1].play, wrong: [] }]);
+    const r2 = G.choose(slots, pools, [], [], { history: histAll });
+    ok("K32b · …and it is NEVER the reason a run fails: with every candidate clashing, the run is still chosen, the rule relaxed and counted (" + (r2 && r2.relaxed) + " day)", !!r2 && r2.relaxed >= 1);
+    const m32 = mutant("      if (opts.variety && varietyClash(c, s.date, opts.history.concat(vlist))) continue;   // the variety rule (2026-10-25)", "");
+    const r3 = m32.choose(slots, pools, [], [], { history: hist });
+    ok("M32 · breakage 'ignore the variety rule' is caught (K32 goes red: the clashing card is picked)", !!r3 && r3.pickC[day5].play === CLASH);
+  }
+
   // R4: THE CHOOSER IS BOUNDED — a run that can never be completed (here: no Hero trap anywhere, so the 3-per-14 rule fails
   // at every leaf) gives up within its budget instead of trying all 14! orders (a weekly job then fails in minutes)
   {

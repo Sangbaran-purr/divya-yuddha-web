@@ -52,7 +52,7 @@ async function parallel() {
   const pools = {};
   slots.filter((s) => !pinned[s.date] && keep[s.date]).forEach((s) => {
     const P = keep[s.date], j = G.judge(P); if (!j.ok || j.gr.difficulty !== s.difficulty) return;
-    pools[s.date] = [{ puzzle: Object.assign(JSON.parse(JSON.stringify(P)), { mechanic: j.mechanic }), mechanic: j.mechanic, play: j.winner.play, target: j.winner.target || null, isHero: false, traps: j.heroTraps.length, keptTitle: P.title }];
+    pools[s.date] = [{ puzzle: Object.assign(JSON.parse(JSON.stringify(P)), { mechanic: j.mechanic }), mechanic: j.mechanic, play: j.winner.play, target: j.winner.target || null, isHero: false, traps: j.heroTraps.length, keptTitle: P.title, wrong: G.wrongCards(j.ex.text) }];
   });
   const open = slots.filter((s) => !pinned[s.date] && !pools[s.date]).map((s) => Object.assign(s, { you: null, them: null, realms: s.hero ? ["mrityulok", "kalki"] : ALL }));   // free pairs: the chooser balances
   const maxTries = +arg("--tries", "60000"), poolSize = +arg("--pool", "16"), limit = +arg("--workers", String(Math.min(8, require("os").cpus().length - 1)));
@@ -77,8 +77,14 @@ async function parallel() {
   if (avoidCards.length) open.forEach((s) => { pools[s.date] = (pools[s.date] || []).filter((c) => !yourSide(c.puzzle).some((h) => avoidCards.indexOf(h.n) >= 0)); console.log(s.date + "  " + pools[s.date].length + " candidates after avoiding"); });
   // a kept puzzle's Hero traps: a Hero in its hand that loses AND its stored explanation tells why
   const fixedTraps = {}; Object.values(pinned).forEach((p) => { const res = G.PZ.solve(p, G.E, null); fixedTraps[p.date] = G.heroTraps(p, res).filter((h) => (pinnedText[p.date] || "").indexOf(h + " falls short: ") >= 0).length; });
-  const c = G.choose(slots, pools, Object.values(pinned), existing, Object.assign({ fixedTraps }, genOpts));
+  // the variety rule's history (ruling 2026-10-25): every past and scheduled puzzle within 14 days of this run, with its winning
+  // card and the cards its explanation tells as tempting-but-wrong
+  const near = (d) => { const t = Date.parse(d), a = Date.parse(dates[0]), b = Date.parse(dates[dates.length - 1]); return t >= a - 14 * 864e5 && t <= b + 14 * 864e5; };
+  const history = existing.concat(Object.values(pinned)).filter((p) => near(p.date)).map((p) => { let win = null; try { win = G.PZ.solve(p, G.E, null).winners[0].play; } catch (e) {}
+    return { date: p.date, win, wrong: G.wrongCards(pinnedText[p.date] || decodeNote(p.id, notes0[p.id] || "")) }; });
+  const c = G.choose(slots, pools, Object.values(pinned), existing, Object.assign({ fixedTraps, history }, genOpts));
   if (!c) throw new Error("no combination of the pools keeps every run rule — widen the search (--tries)");
+  if (c.relaxed) console.log("variety rule relaxed for " + c.relaxed + " day(s)");   // a count only (the log may be public)
   return slots.map((s) => {
     if (pinned[s.date]) { const P = pinned[s.date], res = G.PZ.solve(P, G.E, null); return { puzzle: P, res, winner: res.winners[0], gr: G.grade(P, res), ex: { text: pinnedText[s.date] }, mechanic: P.mechanic, pinned: true }; }
     const P = c.pick[s.date], j = G.judge(P);

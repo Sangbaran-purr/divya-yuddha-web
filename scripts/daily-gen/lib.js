@@ -79,7 +79,7 @@ function board(g) {
   for (const pi of [0, 1]) {
     const pl = g.players[pi];
     pl.units.filter((u) => !u.ghost).forEach((u) => { m[u.uid] = { n: u.n, side: pi, p: u.bound ? 0 : E.effPower(g, pi, u), raw: u.power, base: u.base, venom: u.venom || 0 }; });
-    pl.heroes.forEach((h) => { m[h.uid] = { n: h.n, side: pi, p: h.bound ? 0 : E.effPower(g, pi, h), base: h.base, venom: 0 }; });
+    pl.heroes.forEach((h) => { m[h.uid] = { n: h.n, side: pi, p: h.bound ? 0 : E.effPower(g, pi, h), base: h.base, venom: 0, hero: true }; });
   }
   return m;
 }
@@ -91,7 +91,8 @@ function causesFor(events, uid) {
   events.forEach((e) => {
     if (!POWER_EVENTS[e.type] || !(e.targetUids || []).some((t) => t === +uid)) return;
     const k = e.abilityName || "?";
-    if (!by[k]) by[k] = { name: k, amount: 0, unknown: false, texts: [] };
+    if (!by[k]) by[k] = { name: k, amount: 0, unknown: false, texts: [], count: 0 };
+    by[k].count++;
     if (typeof e.amount === "number") by[k].amount += e.amount; else by[k].unknown = true;
     by[k].texts.push(e.text || "");
   });
@@ -181,11 +182,24 @@ function leapSplit(g, side, uid, from, to) {
   return { copied, own, from, to, why: m[1].replace(/\s*\([^)]*\)/g, "") };
 }
 const FAC_OF_SIDE = (g, side) => g.players[side].faction;
+// (owner ruling 2026-10-25) AN AMPLIFIED EFFECT NAMES EVERY SOURCE: when one ability strikes one Unit more than once in a
+// play (a Chaos Surge fired twice, an Astra resolved twice), the change is bigger than the base effect — what made it so is
+// named ("from Chaos Surge, doubled by Chandrahas"), or the draft is refused
+function causeName(g, c, side, played) {
+  if (!c.count || c.count === 1) return c.name;
+  if (c.count !== 2) return null;
+  const art = (pi) => g.players[pi].artifact && g.players[pi].artifact.id;
+  if (c.name === "Chaos Surge" && art(side) === "chandrahas") return "Chaos Surge, doubled by Chandrahas";
+  if (played && played.t === "astra" && c.name === played.n && art(0) === "chandrahas") return played.n + ", doubled by Chandrahas";
+  return null;
+}
 function narrate(P, play, opts) {
   opts = opts || {};
   const g = PZ.load(P, E, PZ.SEEDS[0]);
   if (!factionsTrue(g, P)) return null;
   const T0 = totals(g), b0 = board(g), ev0 = (g.events || []).length, log0 = (g.log || []).length;
+  // (owner ruling 2026-10-25) where a card that joins a side comes FROM: each discard pile, before the play
+  const disc0 = {}; [0, 1].forEach((pi) => (g.players[pi].discard || []).forEach((c) => { disc0[c.uid] = pi; }));
   const line = opts.line || play.line || { before: [], after: [], pos: null };
   const leapNames = (pr) => [g.players[0].units[pr[0]].n, g.players[0].units[pr[1]].n];
   const leaps = [];
@@ -215,7 +229,11 @@ function narrate(P, play, opts) {
       const via = evPlay.find((e) => !POWER_EVENTS[e.type] && e.type !== "play" && (e.targetUids || []).some((t) => t === +uid) && e.abilityName);
       const isPlayed = played && +uid === played.uid;
       if (!isPlayed && !via) return null;
-      const arrives = isPlayed ? b.n + " enters at " : b.n + " joins " + whose(b.side) + "side through " + via.abilityName + " at ";
+      // (ruling 2026-10-25) a card brought back says where from: the discard pile it was in before the play
+      const from = disc0[uid];
+      const arrives = isPlayed ? b.n + " enters at " : from != null
+        ? b.n + " returns from " + (from === 0 ? "your" : "the opponent's") + " discard pile " + (from === b.side ? "" : "to " + whose(b.side) + "side ") + "through " + via.abilityName + " at "
+        : b.n + " joins " + whose(b.side) + "side through " + via.abilityName + " at ";
       const extra = b.p - b.base;
       if (extra === 0 && !cs.length) { changes.push({ side: b.side, d: b.p, text: arrives + b.p }); continue; }
       if (cs.length !== 1 || (!cs[0].unknown && cs[0].amount !== extra)) return null;
@@ -226,7 +244,8 @@ function narrate(P, play, opts) {
         changes.push({ side: b.side, d: extra, leap: Object.assign({ who: b.n, onto }, sp), text: whose(b.side) + b.n + " gains " + extra + " from Leap (" + b.base + "→" + b.p + ")" });
         continue;
       }
-      changes.push({ side: b.side, d: b.p, text: arrives + b.base + " and " + (extra > 0 ? "gains " + extra : "loses " + (-extra)) + " from " + (cs[0].name === b.n ? "its own ability" : cs[0].name) + " (" + b.p + ")" });
+      const cn = causeName(g, cs[0], b.side, played); if (!cn) return null;
+      changes.push({ side: b.side, d: b.p, text: arrives + b.base + " and " + (extra > 0 ? "gains " + extra : "loses " + (-extra)) + " from " + (cs[0].name === b.n ? "its own ability" : cn) + " (" + b.p + ")" });
       continue;
     }
     if (a.p === b.p) continue;
@@ -235,7 +254,8 @@ function narrate(P, play, opts) {
     if (cs[0].name === "Leap") { const onto = leapText(cs[0]); if (!onto) return null;
       const sp = leapSplit(g, b.side, uid, a.p, b.p); if (!sp) return null;
       changes.push({ side: b.side, d, leap: Object.assign({ who: b.n, onto }, sp), text: whose(b.side) + b.n + " gains " + d + " from Leap (" + a.p + "→" + b.p + ")" }); continue; }
-    changes.push({ side: b.side, d, text: whose(b.side) + b.n + " " + (d > 0 ? "gains " + d : "loses " + (-d)) + " from " + cs[0].name + " (" + a.p + "→" + b.p + ")" });
+    const cn = causeName(g, cs[0], b.side, played); if (!cn) return null;
+    changes.push({ side: b.side, d, text: whose(b.side) + b.n + " " + (d > 0 ? "gains " + d : "loses " + (-d)) + " from " + cn + " (" + a.p + "→" + b.p + ")" });
   }
   for (const uid of Object.keys(b0)) if (!b1[uid]) {
     const why = removalCause(evPlay, uid); if (!why) return null;
@@ -244,14 +264,32 @@ function narrate(P, play, opts) {
   const sum = [0, 1].map((s) => changes.filter((c) => c.side === s).reduce((t, c) => t + c.d, 0));
   if (T0[0] + sum[0] !== T1[0] || T0[1] + sum[1] !== T1[1]) return null;
   // Venom Tokens a play puts on Units (they drain at the round's end) are told, named by the ability that placed them
-  evPlay.filter((e) => e.type === "token" && e.abilityName && (e.targetUids || []).length).forEach((e) => {
-    const hit = e.targetUids.map((t) => b1[t]).filter(Boolean); if (!hit.length) return;
-    const sides = [...new Set(hit.map((x) => x.side))];
-    changes.push({ side: sides[0], d: 0, token: true, text: e.abilityName + " puts a Venom Token on " + sides.map((sd) => whose(sd) + hit.filter((x) => x.side === sd).map((x) => x.n).join(" and ")).join(" and ") });
+  // (ruling 2026-10-25, the amplifier rule for Tokens) one ability placing Tokens more than once in a play (an Astra resolved
+  // twice) is told once, with the count and what doubled it — or the draft is refused
+  const tokenBy = {};
+  evPlay.filter((e) => e.type === "token" && e.abilityName && (e.targetUids || []).length).forEach((e) => { (tokenBy[e.abilityName] = tokenBy[e.abilityName] || []).push(e); });
+  for (const name of Object.keys(tokenBy)) {
+    const per = {}, uids = []; tokenBy[name].forEach((e) => e.targetUids.forEach((t) => { if (b1[t]) { if (!per[t]) uids.push(t); per[t] = (per[t] || 0) + 1; } }));   // the engine's own order
+    if (!uids.length) continue;
+    const k = per[uids[0]]; if (uids.some((u) => per[u] !== k) || k > 2) return null;
+    let why = "";
+    if (k === 2) { const cn = causeName(g, { name, count: 2 }, 1, played); if (!cn) return null; why = ", " + cn.slice(cn.indexOf("doubled by")); }
+    const hit = uids.map((t) => b1[t]), sides = [...new Set(hit.map((x) => x.side))];
+    changes.push({ side: sides[0], d: 0, token: true, text: name + " puts " + (k === 1 ? "a Venom Token on " : k + " Venom Tokens on each of ") + sides.map((sd) => whose(sd) + hit.filter((x) => x.side === sd).map((x) => x.n).join(" and ")).join(" and ") + why });
+  }
+  // (owner ruling 2026-10-25) A HERO'S EXEMPTION IS TOLD: an effect that hits a side's Units (your Astra; Venom put on all
+  // enemy Units) passes over that side's Heroes — each is named ("<whose> <Hero> is a Hero, so <Astra> doesn't
+  // touch it"); the drain at the round's end is told the same way below
+  const exempt = { play: [], end: [] };
+  const heroesOn = (side, bset) => Object.values(bset).filter((x) => x.hero && x.side === side);
+  const sideHit = (name) => [...new Set(changes.filter((c) => c.d < 0 && (c.text.indexOf(" by " + name + " (") >= 0 || c.text.indexOf(" from " + name + " (") >= 0 || c.text.indexOf(" from " + name + ", ") >= 0)).map((c) => c.side))];
+  if (played && played.t === "astra") sideHit(played.n).forEach((sd) => heroesOn(sd, b1).forEach((h) => exempt.play.push(whose(sd) + h.n + " is a Hero, so " + played.n + " doesn't touch it")));
+  evPlay.filter((e) => e.type === "token" && e.abilityName && (e.targetUids || []).length > 1).forEach((e) => {
+    [...new Set(e.targetUids.map((t) => b1[t]).filter(Boolean).map((x) => x.side))].forEach((sd) => heroesOn(sd, b1).forEach((h) => { const t = whose(sd) + h.n + " is a Hero, so " + e.abilityName + "'s Venom doesn't touch it"; if (exempt.play.indexOf(t) < 0) exempt.play.push(t); }));
   });
   // the card you played must account for itself: it enters, or a change names it, or the engine's record says why it did
   // nothing (an Astra a card cancels) — else, verified by the absence of any change it caused, "<card> adds no power"
-  const itself = played && changes.some((c) => c.text.indexOf(played.n + " enters at") === 0 || c.text.indexOf("from " + played.n + " ") >= 0 || c.text.indexOf("by " + played.n + " ") >= 0 || c.text.indexOf(played.n + " puts a Venom Token") === 0 || c.text.indexOf(" through " + played.n + " at ") >= 0);
+  const itself = played && changes.some((c) => c.text.indexOf(played.n + " enters at") === 0 || c.text.indexOf("from " + played.n + " ") >= 0 || c.text.indexOf("by " + played.n + " ") >= 0 || /^.+ puts (a Venom Token|\d+ Venom Tokens) on /.test(c.text) && c.text.indexOf(played.n + " puts ") === 0 || c.text.indexOf(" through " + played.n + " at ") >= 0);
   const noPower = played && !itself ? (noPowerReason(g, log0, played) || played.n + " adds no power") : null;
   // the round end: Venom split by source, every other change one named event
   const round = g.round;
@@ -267,10 +305,11 @@ function narrate(P, play, opts) {
   }
   if (others.some((c) => !c.name)) return null;
   const endChanges = others.concat(venom);
+  [0, 1].forEach((sd) => { if (venom.some((c) => c.side === sd && c.name === "the Naga Venom drain")) heroesOn(sd, b1).forEach((h) => exempt.end.push(whose(sd) + h.n + " is a Hero, so the drain doesn't touch it")); });
   const endSum = [0, 1].map((s) => endChanges.filter((c) => c.side === s).reduce((t, c) => t + c.amount, 0));
   if (T1[0] + endSum[0] !== T2[0] || T1[1] + endSum[1] !== T2[1]) return null;
   const names = changes.map((c) => c.text).join(" | ") + " | " + endChanges.map((c) => c.name).join(" | ");
-  return { T0, T1, T2, changes, endChanges, leaps, noPower, win: h.winner === 0, names, after: b1 };
+  return { T0, T1, T2, changes, endChanges, leaps, noPower, win: h.winner === 0, names, after: b1, exempt };
 }
 
 // ── 3. THE EXPLANATION — one fixed plain pattern ──
@@ -287,7 +326,7 @@ function sentenceOf(n) {
   const after = n.leaps.filter((l) => l.when === "after").map((l) => "then " + l.names[0] + " Leaps onto " + l.names[1] + gainOf(l.names[0]));
   const mid = n.changes.filter((c) => !used.has(c)).map((c) => (c.leap ? whose(c.side) + c.leap.who + " makes a free Leap onto " + c.leap.onto + leapGain(c) : c.text));
   if (n.noPower) mid.push(n.noPower);
-  return before.concat(mid, after);
+  return before.concat(mid, (n.exempt || { play: [] }).play, after);
 }
 // (owner ruling 2026-10-23) A ROUND-END EFFECT THAT DOES NOT HAPPEN must say why. Every told play is compared with simply
 // passing: if a Venom drain that passing would bring does not fire — and the side it drains still has Units — the line names
@@ -333,7 +372,7 @@ function missingEnd(P, base, n, playName) {
   }
   return out.join("; ");
 }
-const endText = (n) => n.endChanges.map((c) => whose(c.side) + c.n + " " + (c.amount > 0 ? "+" + c.amount : "−" + Math.abs(c.amount)) + " from " + c.name).join("; ");
+const endText = (n) => n.endChanges.map((c) => whose(c.side) + c.n + " " + (c.amount > 0 ? "+" + c.amount : "−" + Math.abs(c.amount)) + " from " + c.name).concat((n.exempt || { end: [] }).end).join("; ");
 // a realm's hand in it: the same play in Mrityulok. A realm that changes any number must name itself in the engine's own
 // events (Kalki Kshetra, Rishi Mandala do); a realm that changes numbers silently is a hidden cause — refused.
 function realmCheck(P, play, n, line) {
@@ -343,8 +382,11 @@ function realmCheck(P, play, n, line) {
   const same = nm && J(nm.T0) === J(n.T0) && J(nm.T1) === J(n.T1) && J(nm.T2) === J(n.T2) && J(nm.changes.map((c) => c.text)) === J(n.changes.map((c) => c.text));
   if (same) return { ok: true, matters: false };
   const name = REALM_NAME[P.realm];
-  if (n.names.indexOf(name) < 0) return { ok: false };
-  return { ok: true, matters: true, without: nm ? nm.T2 : null, name };
+  if (n.names.indexOf(name) < 0) return { ok: false };   // a realm that changes any number must name itself
+  // (owner ruling 2026-10-25) the realm DECIDES it — a realm puzzle, "X decides it" — ONLY if in Mrityulok the same play does
+  // NOT win. A realm that only moves the margin (9–7 instead of 11–7) is a named change, not the lesson
+  const decides = !!nm && !(nm.T2[0] > nm.T2[1]);
+  return { ok: true, matters: decides, changes: true, without: nm ? nm.T2 : null, name };
 }
 const J = (x) => JSON.stringify(x);
 function explain(P, res) {
@@ -355,6 +397,7 @@ function explain(P, res) {
   let base = null; try { base = narrate(P, { play: null }); } catch (e) { base = null; }
   const wMiss = missingEnd(P, base, nw, w.play); if (wMiss === null) return null;
   const realm = P.realm !== "mrityulok" ? " in " + REALM_NAME[P.realm] : "";
+  const mustTell = [].concat(nw.exempt.play, nw.exempt.end);   // every Hero exemption the engine shows (ruling 2026-10-25)
   let s = "Before your play the round stands " + nw.T0[0] + "–" + nw.T0[1] + realm + ". ";
   s += "Play " + (w.play ? w.play + (w.target ? " on " + clean(w.target) : "") : "nothing") + ": " + sentenceOf(nw).concat(wMiss ? [wMiss] : []).join("; ") + " — " + nw.T1[0] + "–" + nw.T1[1] + ". ";
   if (nw.endChanges.length) s += "At the round's end " + endText(nw) + ". ";
@@ -378,6 +421,7 @@ function explain(P, res) {
     const nl = narrate(P, p, { line: L }); if (!nl || nl.T2[0] !== p.you || nl.T2[1] !== p.them) return null;
     if (!realmCheck(P, p, nl, L).ok) return null;
     const miss = missingEnd(P, base, nl, p.play); if (miss === null) return null;
+    nl.exempt.play.concat(nl.exempt.end).forEach((t) => mustTell.push(t));
     if (!must && wrong.length >= 2 && !nl.noPower) continue;   // an extra entry only for an Astra that is cancelled
     const gap = p.them - p.you;
     wrong.push(clean(p.key) + " falls short: " + sentenceOf(nl).concat(miss ? [miss] : []).join("; ") + (nl.endChanges.length ? "; at the round's end " + endText(nl) : "")
@@ -386,6 +430,8 @@ function explain(P, res) {
   }
   if (!wrong.length || pick.some((p) => wrong.every((t) => t.indexOf(clean(p.key) + " falls short") !== 0))) return null;
   s += " Tempting but wrong: " + wrong.join(". ") + ".";
+  // RULE B (ruling 2026-10-25): a Hero's exemption the engine shows must be in the words — or the explanation is refused
+  if (mustTell.some((t) => s.indexOf(t) < 0)) return null;
   return { text: s, narration: nw, realm: rw };
 }
 
@@ -732,7 +778,7 @@ function poolFor(slot, opts) {
     for (const { P, j } of construct(P0, s2, r, opts)) {
       const key = J(signature(P)); if (seen.has(key)) continue; seen.add(key);
       P.mechanic = j.mechanic; P.difficulty = slot.difficulty;
-      out.push({ puzzle: P, mechanic: j.mechanic, play: j.winner.play, target: j.winner.target || null, isHero: (defOf(P.you.faction, j.winner.play) || {}).t === "hero", traps: j.heroTraps.length, tries });
+      out.push({ puzzle: P, mechanic: j.mechanic, play: j.winner.play, target: j.winner.target || null, isHero: (defOf(P.you.faction, j.winner.play) || {}).t === "hero", traps: j.heroTraps.length, tries, wrong: wrongCards(j.ex.text) });
     }
   }
   return out;
@@ -782,6 +828,17 @@ function construct(P0, slot, r, opts) {
 // choose one entry per open day so the whole run keeps its rules (backtracking over the pools)
 function choose(slots, pools, fixed, existing, opts) {
   opts = opts || {};
+  if (opts.history && opts.variety === undefined) {   // the outer call: strict first, then relaxed (each inner call sets variety)
+    const strict = choose(slots, pools, fixed, existing, Object.assign({}, opts, { variety: true }));
+    if (strict) return Object.assign(strict, { relaxed: 0 });
+    const loose = choose(slots, pools, fixed, existing, Object.assign({}, opts, { variety: false }));
+    if (!loose) return null;
+    // how many chosen days break the preference (counted, never named — a log may be public)
+    const hist = opts.history.slice(), out = [];
+    slots.forEach((s) => { const c = (loose.pickC || {})[s.date]; if (!c) return;
+      if (varietyClash(c, s.date, hist.concat(out))) loose.relaxedDays = (loose.relaxedDays || 0) + 1; out.push({ date: s.date, win: c.play, wrong: c.wrong || [] }); });
+    return Object.assign(loose, { relaxed: loose.relaxedDays || 0 });
+  }
   const leakLines = opts.leakLines || leakyLines();
   const sigs0 = existing.map(signature).concat((opts.avoid || []).map(signature)).concat(fixed.map(signature));
   const titles0 = existing.concat(fixed).map((p) => [p.title, p.date]);   // the 90-day rule (2026-10-23)
@@ -799,6 +856,8 @@ function choose(slots, pools, fixed, existing, opts) {
   }
   // R4: a BOUNDED search. With no combination left (e.g. the titles run out) the backtracking would otherwise run for hours;
   // past the budget it gives up (→ null), so a weekly job fails in minutes and the owner is emailed
+  const pickC = {};
+  const vlist = [];   // the variety rule's picks so far (date, winning card, told-wrong cards)
   let steps = 0; const maxSteps = opts.maxSteps || 300000, deadline = Date.now() + (opts.maxMs || 5 * 60000);
   function go(i, list, sigs, titles, cards, traps) {
     if (++steps > maxSteps || (steps % 1000 === 0 && Date.now() > deadline)) return false;
@@ -808,14 +867,17 @@ function choose(slots, pools, fixed, existing, opts) {
     const pool = pools[s.date].slice().sort((a, b) => ((b.traps > 0) - (a.traps > 0)));   // Hero traps first
     for (const c of pool) {
       if (cards.has(c.play) || leaks(leakLines, [c.play, c.target && clean(c.target)])) continue;
+      if (opts.variety && varietyClash(c, s.date, opts.history.concat(vlist))) continue;   // the variety rule (2026-10-25)
       const sig = c.sig || (c.sig = signature(c.puzzle)); if (sigs.some((x) => similarity(x, sig) >= NEAR_DUP)) continue;   // worked out once per candidate
       const P = JSON.parse(JSON.stringify(c.puzzle));
       const clash = (x) => titleClash(titles, x, s.date);
       const t = c.keptTitle && !clash(c.keptTitle) ? c.keptTitle : titleFor(c.mechanic, clash, [c.play].concat(c.target ? [clean(c.target)] : []), Object.assign({}, c.puzzle, { date: s.date })); if (!t) continue;
       P.title = t;
       if (!ok(list.concat([P]))) continue;
-      pick[s.date] = P;
+      pick[s.date] = P; pickC[s.date] = c;
+      vlist.push({ date: s.date, win: c.play, wrong: c.wrong || [] });
       if (go(i + 1, list.concat([P]), sigs.concat([sig]), titles.concat([[t, s.date]]), new Set([...cards, c.play]), traps + (c.traps > 0 ? 1 : 0))) return true;
+      vlist.pop();
       delete pick[s.date];
     }
     return false;
@@ -823,7 +885,16 @@ function choose(slots, pools, fixed, existing, opts) {
   const fixedTraps = fixed.filter((p) => (opts.fixedTraps || {})[p.date] > 0).length;
   const fixedCards = new Set(fixed.map((p) => PZ.solve(p, E, null).winners[0].play));
   const found = go(0, [], sigs0, titles0, fixedCards, fixedTraps);
-  return found ? { pick, steps } : null;
+  return found ? { pick, steps, pickC } : null;
+}
+
+// (owner ruling 2026-10-25) THE VARIETY RULE: the same winning card at most once in any 14 days, and the same tempting-wrong
+// card (a card an explanation tells as "falls short") at most once in any 14 days — against past and already-scheduled
+// puzzles. A preference, never a failure: choose() relaxes it before it would fail, and says how many days it relaxed.
+const VARIETY_DAYS = 14;
+const wrongCards = (text) => [...new Set(((text || "").match(/(?:^|[.:] )([A-Z][A-Za-z' ]*?)(?: → [^:]+?)? falls short:/g) || []).map((m) => m.replace(/^[.:] /, "").replace(/ → .*$/, "").replace(/ falls short:$/, "")))];
+function varietyClash(c, date, hist) {
+  return hist.some((h) => dayGap(h.date, date) < VARIETY_DAYS && (h.win === c.play || (c.wrong || []).some((w) => (h.wrong || []).indexOf(w) >= 0)));
 }
 
 // the position in plain words (for the owner's private preview — never written into the repo)
@@ -837,5 +908,5 @@ function describe(P) {
     + "Your side: " + side(0) + ". Their side: " + side(1) + ". Your hand: " + g.players[0].hand.map((c) => c.n).join(", ") + ".";
 }
 
-module.exports = { TITLE_GAP, titleClash, titleFor, builtTitles, TITLES, leaks, looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
+module.exports = { VARIETY_DAYS, wrongCards, varietyClash, causeName, TITLE_GAP, titleClash, titleFor, builtTitles, TITLES, leaks, looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
   judge, planSlots, datesFrom, generate, describe, clean, defOf };
