@@ -305,7 +305,7 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - game/ in-repo size: ${GAME_BYTES} KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty-two site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2, my-invites.html x2) are stamped game/index.html?v=$SRC_SHORT — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 22.
+- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2) are stamped game/index.html?v=$SRC_SHORT — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
 
 ## STAMP (S-HALL-WIRE-1 R4)
 - game/STAMP holds the source short sha ($SRC_SHORT), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
@@ -334,9 +334,9 @@ if [ "$(grep -c 'S-HALL-WIRE-1 (R5): never inside the Hall' "$DEST/index.html")"
   exit 1
 fi
 
-# STAMP THE SITE-TO-GAME ENTRY LINKS (S8 flag-1): bind the twenty-two game/index.html links to the synced HEAD short sha,
+# STAMP THE SITE-TO-GAME ENTRY LINKS (S8 flag-1): bind the twenty game/index.html links to the synced HEAD short sha,
 # so browsers refetch the gated entry exactly when the copy changes (stamps bind to bytes). Guarded: assert exactly
-# twenty-two links, fail loudly on drift. Handles re-runs — an existing ?v=<oldsha> is rewritten to the new sha.
+# twenty links, fail loudly on drift. Handles re-runs — an existing ?v=<oldsha> is rewritten to the new sha.
 # (S-DEMO-1: treasury.html's bare link + the new unlisted demo/index.html joined the managed set — 5 -> 7. S-PLAY-2
 #  (owner ruling A): store.html + explore.html + mint.html header-nav Game links joined — 7 -> 10. The perl match
 #  starts at 'game/index.html', so demo's '../' prefix is preserved.)
@@ -347,18 +347,20 @@ fi
 #  after the ledger was set and had been left behind. Managed set now 10 pages / 22 links. tests/suites/siteaudit.js
 #  SY1 fails if any site page that links the game is missing from ENTRY_FILES — mp/ excepted: the Hall reads
 #  game/STAMP and carries no stamped link of its own.)
-ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html $SITE_REPO/store.html $SITE_REPO/explore.html $SITE_REPO/mint.html $SITE_REPO/dashboard.html $SITE_REPO/register.html $SITE_REPO/my-invites.html"
+# (ICO-SIMPLE-1, owner rulings 2026-10-25: register.html became a bare redirect to the dashboard's buy panel and links
+#  the game nowhere — it LEFT the ledger [-2]. Managed set now 9 pages / 20 links.)
+ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html $SITE_REPO/store.html $SITE_REPO/explore.html $SITE_REPO/mint.html $SITE_REPO/dashboard.html $SITE_REPO/my-invites.html"
 LINKS_BEFORE="$(grep -oF 'game/index.html' $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_BEFORE" != "22" ]; then
-  echo "error: expected exactly 22 site->game entry links (rite.html x4 + index.html x3 + treasury.html x2 + demo/index.html x1 + store.html x2 + explore.html x2 + mint.html x2 + dashboard.html x2 + register.html x2 + my-invites.html x2), found $LINKS_BEFORE (site nav changed)" >&2
+if [ "$LINKS_BEFORE" != "20" ]; then
+  echo "error: expected exactly 20 site->game entry links (rite.html x4 + index.html x3 + treasury.html x2 + demo/index.html x1 + store.html x2 + explore.html x2 + mint.html x2 + dashboard.html x2 + my-invites.html x2), found $LINKS_BEFORE (site nav changed)" >&2
   exit 1
 fi
 SHA="$SRC_SHORT" perl -i -pe 's{game/index\.html(\?v=[0-9a-f]+)?}{game/index.html?v=$ENV{SHA}}g' $ENTRY_FILES
 LINKS_STAMPED="$(grep -oF "game/index.html?v=$SRC_SHORT" $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_STAMPED" != "22" ]; then
-  echo "error: entry-link stamping did not produce 22 stamped links (got $LINKS_STAMPED)" >&2
+if [ "$LINKS_STAMPED" != "20" ]; then
+  echo "error: entry-link stamping did not produce 20 stamped links (got $LINKS_STAMPED)" >&2
   exit 1
 fi
-echo "sync_game: stamped 22 entry links -> game/index.html?v=$SRC_SHORT"
+echo "sync_game: stamped 20 entry links -> game/index.html?v=$SRC_SHORT"
 
 echo "sync_game: done. game/ = ${GAME_BYTES} KB (video + vfx + heavy dirs + manifest cross-linked, not copied)."

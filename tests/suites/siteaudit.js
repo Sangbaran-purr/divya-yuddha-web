@@ -167,10 +167,10 @@ async function run() {
     // every tracked page/script OUTSIDE the game copy, the tests and mp/ (the Hall reads game/STAMP — no stamped link of its own)
     const tracked = require("child_process").execFileSync("git", ["ls-files"], { cwd: SITE, encoding: "utf8" }).split("\n")
       .filter((f) => /\.(html|js)$/.test(f) && !/^(game|tests|mp|tmp)\/|node_modules/.test(f) && f !== "play/daily/page.js");   // the Daily Puzzle frames the copy reading game/STAMP, as the Hall does — no stamped link of its own
-    const linking = tracked.filter((f) => R(f).indexOf("game/index.html") >= 0).sort();
+    const linking = tracked.filter((f) => R(f).indexOf("game/index.html") >= 0).sort();   // 9 since ICO-SIMPLE-1: register.html is a redirect now
     const missing = linking.filter((f) => listed.indexOf(f) < 0), stale = listed.filter((f) => linking.indexOf(f) < 0);
     ok("SY1 · every site page that links the game (" + linking.length + ") is in sync_game.sh's ENTRY_FILES, and the list names no page that doesn't — a new page can't be left behind",
-       linking.length >= 10 && missing.length === 0 && stale.length === 0, "missing: " + missing.join(",") + " stale: " + stale.join(","));
+       linking.length >= 9 && missing.length === 0 && stale.length === 0, "missing: " + missing.join(",") + " stale: " + stale.join(","));
     const count = listed.reduce((n, f) => n + (R(f).match(/game\/index\.html/g) || []).length, 0);
     const guard = Number((sh.match(/if \[ "\$LINKS_BEFORE" != "(\d+)" \]/) || [])[1]);
     ok("SY2 · the sync's guarded link count (" + guard + ") equals the links those pages really carry, all stamped to the current copy (" + R("game/STAMP").trim() + ")",
@@ -219,9 +219,10 @@ async function run() {
     ok("TX5 · report: redeemed DYC 'returned to the pool'; a failed read says refresh, not 'the contract address may be wrong'",
        rj.indexOf("Total redeemed — DYC returned to the pool") >= 0 && rj.indexOf("Could not read the sale right now — refresh to retry.") >= 0);
     const g = R("register.html");
-    ok("TX6 · register: name/email/wallet required (the live form's three); 'your presale approval shows on The Rite'; presale buyers get a Torana",
-       g.indexOf("(your <b>name</b>, <b>email</b> and <b>wallet address</b> are required)") >= 0 &&
-       g.indexOf("your presale approval shows on <a href=\"rite.html\">The Rite →</a>") >= 0 && g.indexOf("Presale buyers also receive a Torana.") >= 0);
+    // ICO-SIMPLE-1 (owner rulings 2026-10-25): the presale form is retired; register.html only forwards to the buy panel
+    ok("TX6 · register: a redirect to the dashboard's buy panel — no form, no email step, none of the old registration copy",
+       /url=dashboard\.html#buy-panel/.test(g) && g.indexOf("Buy DYC in your dashboard →") >= 0 &&
+       !/are required|confirmation email|presale approval shows|forms\.gle|<iframe/.test(g));
     const ix = vis("index.html");
     ok("TX7 · index: 'Get a Torana' → the store bundle; the Rite card and meta no longer call it free; staking and cards are told true",
        /<h2 class="doorway-title">Get a Torana<\/h2>/.test(ix) && /href="store\.html#bundle"[^>]*>Get a Torana/.test(ix) &&

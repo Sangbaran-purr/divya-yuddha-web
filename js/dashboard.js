@@ -143,12 +143,12 @@ window.DYDash = (function () {
     SaleEnded: "The sale has ended.",
     PresaleSoldOut: "The presale is sold out.", PublicSoldOut: "The public sale is sold out.",
     RoundCapExceeded: "This purchase would exceed the amount left in this round. Try a smaller amount.",
-    UnknownAsset: "That payment token isn't accepted — use USDT.",
+    UnknownAsset: "That payment token isn't accepted — use USDT or USDC.",
     ZeroPayment: "Enter a purchase amount above zero.",
     BelowMin: "That's below the minimum purchase.",
     AboveMax: "That's above the per-wallet maximum for this round.",
-    NotAllowlisted: "This wallet isn't approved for the presale yet. Register, then the owner approves you.",
-    PolDisabled: "Paying with POL isn't enabled — use USDT.",
+    NotAllowlisted: "This wallet can't buy in the presale. If you think this is a mistake, contact us.",
+    PolDisabled: "Paying with POL isn't enabled — use USDT or USDC.",
     NotRegistrationEligible: "This wallet can't register a referral code.",
     CodeTaken: "That referral code is already taken.", WalletHasCode: "This wallet already has a referral code.",
     SelfReferral: "You can't refer yourself.", BadCodeLength: "That referral code is the wrong length.",
@@ -333,7 +333,17 @@ window.DYDash = (function () {
   // https://divyayuddha.games. A down/misconfigured endpoint simply fails the fetch and falls back to the published
   // Pages file (today's behavior) — never a regression.
   var ALLOWLIST_LIVE_URL = "https://approval-bot-cxa2.onrender.com/allowlist";
-  var allowlistLive = false; // did the last load ride the live endpoint? (softens the waiting copy)
+  // ICO-SIMPLE-1 (owner rulings 2026-10-25): the presale needs no form. When a wallet connects in the presale round the
+  // panel asks the approval bot for an INSTANT voucher (POST /presale/voucher — OFAC-screened, the same voucher the form
+  // pipeline signed), falling back to the published allowlist for wallets that already hold one. A voucher is permanent
+  // for its wallet, so it is kept per wallet in this browser and a later visit makes no call.
+  var V_LS = "dy::presaleVoucher:";
+  var BUY_COPY = {
+    preparing: "Preparing your presale pass…",
+    unreachable: "We couldn't reach the presale service — please try again in a moment.",
+    refused: "This wallet can't buy in the presale. If you think this is a mistake, contact us.",
+  };
+  var BUY_COINS = [{ key: "usdt", label: "USDT" }, { key: "usdc", label: "USDC" }];   // the store's order: USDT first
   // S-COLLECT-NOTICE: the published awaiting-collection list (Bucket 2 of the debit runbook) — wallets already paid out
   // through the affiliate program whose on-chain roi column is still empty (never collected). NOTICE ONLY: it renders a
   // banner telling the user to tap Collect Rewards; it NEVER substitutes or adjusts a reward figure (those stay pure
@@ -376,6 +386,9 @@ window.DYDash = (function () {
       cardStore: oc.cardStore || fc.cardStore || pc.cardUsdStore || null,
       accessNFT: oc.accessNFT || fc.accessNFT || (PLAYER && PLAYER.contracts && PLAYER.contracts.accessNFT) || null,
       usdt: oc.usdt || fc.usdt || null,
+      usdc: oc.usdc || fc.usdc || null,                  // ICO-SIMPLE-1: the Sale takes USDC as well as USDT
+      // ICO-SIMPLE-1 — the approval bot's instant voucher door. NULL => only the published allowlist is read.
+      presaleVoucherUrl: ("presaleVoucherUrl" in o) ? o.presaleVoucherUrl : (FILE.presaleVoucherUrl || null),
       readRpcUrl: o.readRpcUrl || FILE.readRpcUrl || null,
       readRpcUrlFallbacks: (o.readRpcUrlFallbacks || FILE.readRpcUrlFallbacks || []),
       logChunk: o.logChunk || FILE.logChunk || 3000,
@@ -1374,10 +1387,10 @@ window.DYDash = (function () {
   }
 
   // =========================================================================
-  //  BUY DYC (M-F2) — round display, USDT→DYC calculator, 15/85 split, and a
-  //  single "Buy DYC & Activate Staking" button orchestrating up to three
-  //  narrated confirmations (approve USDT → buy → activate/sync). Every step
-  //  is pre-simulated (staticCall) before it is sent.
+  //  BUY DYC (M-F2; ICO-SIMPLE-1) — round display, USDT/USDC→DYC calculator,
+  //  15/85 split, and a plain "Buy DYC" button: approve (only if needed) →
+  //  buy, each step pre-simulated (staticCall) before it is sent. Staking is
+  //  offered AFTER the purchase as its own optional step (renderAfterBuy).
   // =========================================================================
   // ── DROP DESK (M-F6): the public coupon file (zero PII: [{wallet, amount, deadline, nonce, sig}]) ──
   function loadCoupons() {
@@ -1840,9 +1853,8 @@ window.DYDash = (function () {
     // the permanent record + safety net, so a down/misconfigured endpoint is a silent no-op, never a regression.
     return fetch(ALLOWLIST_LIVE_URL, { cache: "no-store", mode: "cors" })
       .then(function (r) { if (!r.ok) throw new Error("live " + r.status); return r.json(); })
-      .then(function (a) { if (!Array.isArray(a)) throw new Error("live shape"); allowlist = a; allowlistLive = true; return allowlist; })
+      .then(function (a) { if (!Array.isArray(a)) throw new Error("live shape"); allowlist = a; return allowlist; })
       .catch(function () {
-        allowlistLive = false;
         return fetch("allowlist.json?cb=" + Date.now(), { cache: "no-store" })
           .then(function (r) { return r.json(); })
           .then(function (a) { allowlist = Array.isArray(a) ? a : []; return allowlist; })
@@ -1882,16 +1894,57 @@ window.DYDash = (function () {
     try { return fmt(BigInt(String(s).trim()) * (10n ** 18n)); } catch (e) { return String(s); }
   }
 
-  var buyPoll = null; // S-LIVE-FIX-1 (C2): auto re-check while registered-but-unapproved
-  function stopBuyPoll() { if (buyPoll) { clearInterval(buyPoll); buyPoll = null; } }
+  // ICO-SIMPLE-1 — the voucher for a wallet: { state: "ok", v } | { state: "refused" } (an OFAC match: no fallback) |
+  // { state: "unavailable" } (the door is unreachable AND the published allowlist has no voucher for this wallet)
+  function cachedVoucher(addr) {
+    try { var v = JSON.parse(localStorage.getItem(V_LS + addr.toLowerCase()) || "null");
+      return v && v.wallet && v.sig && String(v.wallet).toLowerCase() === addr.toLowerCase() ? v : null; } catch (e) { return null; }
+  }
+  var vInflight = {};   // single-flight per wallet: the page renders the panel more than once on connect — one ask serves all
+  function loadVoucher(addr) {
+    var hit = cachedVoucher(addr);
+    if (hit) return Promise.resolve({ state: "ok", v: hit });
+    var key = addr.toLowerCase();
+    if (vInflight[key]) return vInflight[key];
+    vInflight[key] = askVoucher(addr).then(function (r) { delete vInflight[key]; return r; }, function (e) { delete vInflight[key]; throw e; });
+    return vInflight[key];
+  }
+  function askVoucher(addr) {
+    var url = cfg().presaleVoucherUrl;
+    var ask = !url ? Promise.reject(new Error("no voucher door")) :
+      fetch(url, { method: "POST", mode: "cors", cache: "no-store", headers: { "content-type": "application/json" }, body: JSON.stringify({ wallet: addr }) })
+        .then(function (r) {
+          if (r.status === 403) return { state: "refused" };
+          if (!r.ok) throw new Error("voucher " + r.status);
+          return r.json().then(function (j) {
+            if (!j || !j.sig || String(j.wallet || "").toLowerCase() !== addr.toLowerCase()) throw new Error("voucher shape");
+            return { state: "ok", v: { wallet: j.wallet, sig: j.sig } };
+          });
+        });
+    return ask.catch(function () {
+      // the door is down or switched off: a wallet that already holds a published voucher still buys
+      return loadAllowlist().then(function () { var v = voucherFor(addr); return v ? { state: "ok", v: v } : { state: "unavailable" }; });
+    }).then(function (r) {
+      if (r.state === "ok") { try { localStorage.setItem(V_LS + addr.toLowerCase(), JSON.stringify(r.v)); } catch (e) {} }
+      return r;
+    });
+  }
+  function buyCoin() {
+    var c = cfg(), k = buyState.coin || "usdt";
+    var coin = BUY_COINS.filter(function (x) { return x.key === k && c[x.key]; })[0] || BUY_COINS.filter(function (x) { return c[x.key]; })[0];
+    return coin ? { key: coin.key, label: coin.label, addr: c[coin.key] } : null;
+  }
+
   function renderBuy() {
     var b = $("buy-body"), chip = $("buy-round-chip");
     if (!b) return;
-    stopBuyPoll(); // cleared each render; only the register branch below restarts it
     chip.innerHTML = "";
     if (!isConnected()) { b.innerHTML = "<div class='notlive'>Connect your wallet to buy DYC.</div>"; return; }
     var c = cfg();
     if (!c.dycoinSale || !c.usdt) { b.innerHTML = notLive(" Buying DYC"); return; }
+    var me = W.state.address;
+    // just bought: the page's own refresh re-renders this panel — keep the after-purchase step until "Buy more"
+    if (buyState.done && buyState.done === me) { renderAfterBuy(); return; }
     withEthers().then(function () {
       var p = readProvider();
       var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, p);
@@ -1899,79 +1952,59 @@ window.DYDash = (function () {
         .then(function (r) {
           var round = Number(r[0]);
           buyState.round = round;
-          return loadAllowlist().then(function () {
-            var v = voucherFor(W.state.address);
-            buyState.voucher = v;
-            if (round === 0) {
-              b.innerHTML = "<div class='notlive'><b>Sale not open</b>The sale is not open right now — it opens at the presale window and pauses between rounds.</div>";
-              return;
-            }
-            var isPresale = round === 1;
-            buyState.price = isPresale ? r[1] : r[2];
-            chip.innerHTML = "<span class='buy-round " + (isPresale ? "presale" : "public") + "'>" + (isPresale ? "PRESALE @ $0.008" : "PUBLIC @ $0.010") + "</span>";
-            if (isPresale && !v) { renderRegister(b); startBuyApprovalPoll(); return; } // C2 auto re-check (visible countdown)
-            renderCalculator(b, isPresale);
+          buyState.voucher = null;
+          if (round === 0) {
+            b.innerHTML = "<div class='notlive'><b>Sale not open</b>The sale is not open right now — it opens at the presale window and pauses between rounds.</div>";
+            return;
+          }
+          var isPresale = round === 1;
+          buyState.price = isPresale ? r[1] : r[2];
+          chip.innerHTML = "<span class='buy-round " + (isPresale ? "presale" : "public") + "'>" + (isPresale ? "PRESALE @ $0.008" : "PUBLIC @ $0.010") + "</span>";
+          if (!isPresale) { renderCalculator(b, false); return; }   // the public round needs no voucher
+          b.innerHTML = "<div class='notlive' id='buy-preparing'>" + BUY_COPY.preparing + "</div>";
+          return loadVoucher(me).then(function (v) {
+            if (!isConnected() || W.state.address !== me) return;   // the wallet changed meanwhile: its own render follows
+            if (v.state === "ok") { buyState.voucher = v.v; renderCalculator(b, true); return; }
+            if (v.state === "refused") { b.innerHTML = "<div class='notlive' id='buy-refused'>" + BUY_COPY.refused + "</div>"; return; }
+            b.innerHTML = "<div class='notlive' id='buy-unreachable'>" + BUY_COPY.unreachable + "</div><button class='btn-g' id='buy-retry'>Try again</button>";
+            $("buy-retry").onclick = function () { renderBuy(); };
           });
         });
     }).catch(function () { scheduleReadRetry(); b.innerHTML = "<div class='notlive'>" + netMsg() + "</div>"; wireReadRetry(); });
   }
 
-  function renderRegister(b) {
-    b.innerHTML =
-      "<div class='buy-reg'>" +
-      "<div class='buy-reg-title'>Register to buy</div>" +
-      "<p>Presale is allowlist-gated. Register once with the form below — then the owner approves your wallet <b>manually</b>. You do not need to do anything else after registering.</p>" +
-      "<a class='btn-g btn-p' href='https://forms.gle/37pgo2ebYrDpME2w7' target='_blank' rel='noopener'>Open the registration form →</a>" +
-      "<button class='btn-g' id='buy-recheck'>Check my status now</button>" +
-      // S-FEED-5 (LANE B): make the auto-poll FELT — a live countdown, a visible re-check, the honest ~10-min line
-      // prominent, and the explicit "no need to refresh" reassurance. Inline-styled (no CSS-stamp change).
-      "<div style='margin-top:14px;padding:12px 14px;border:1px solid var(--gold-hairline);border-radius:10px;background:rgba(20,16,8,.5)'>" +
-        "<div style='display:flex;align-items:center;gap:8px;font-size:.92rem'>" +
-          "<span style='width:8px;height:8px;border-radius:50%;background:var(--gold-burnished);display:inline-block;flex:none'></span>" +
-          "<b>Checking for your approval…</b>" +
-          "<span id='buy-countdown' style='margin-left:auto;color:var(--gold-aged);font-variant-numeric:tabular-nums;white-space:nowrap'>next check in 45s</span>" +
-        "</div>" +
-        // S-ALLOWLIST-LIVE: soften ONLY when this load rode the live endpoint; the Pages-fallback path keeps the honest ~10-min line.
-        "<div style='margin-top:8px;font-size:.9rem'>Approval usually appears " + (allowlistLive ? "<b>within a minute</b>" : "within <b>~10 minutes</b>") + " of the owner approving your wallet.</div>" +
-        "<div style='margin-top:4px;font-size:.84rem;color:var(--gold-aged)'>No need to refresh — this page checks for you.</div>" +
-      "</div>" +
-      "</div>";
-    // S-LIVE-FIX-1 (C1): drop the stale ?nb counter — loadAllowlist now cache-busts per fetch; recheck just re-reads.
-    $("buy-recheck").onclick = function () { allowlist = null; renderBuy(); };
+  // the coin switch — the store's pattern: "Pay with" and one chip per coin; the chip pressed is the coin the tap charges
+  function coinSwitch() {
+    var c = cfg(), cur = buyCoin();
+    var coins = BUY_COINS.filter(function (x) { return c[x.key]; });
+    if (coins.length < 2) return "";
+    return "<div class='buy-coin' style='display:flex;align-items:center;gap:8px;margin:2px 0 10px;font-size:.88rem'><span style='color:var(--gold-aged)'>Pay with</span>" +
+      coins.map(function (x) {
+        var on = cur && cur.key === x.key;
+        return "<button type='button' class='buy-coin-chip" + (on ? " on" : "") + "' data-coin='" + x.key + "' aria-pressed='" + (on ? "true" : "false") + "' style='padding:4px 12px;border-radius:999px;cursor:pointer;" +
+          "border:1px solid " + (on ? "var(--gold-burnished)" : "var(--gold-hairline)") + ";background:" + (on ? "rgba(232,200,116,.14)" : "transparent") + ";color:inherit'>" + x.label + "</button>";
+      }).join("") + "</div>";
   }
-  // S-FEED-5 (LANE B): a 1s ticker drives the visible countdown; every 45s it fires the real allowlist re-check.
-  // renderBuy() re-runs the whole flow — still-unapproved re-renders this panel and restarts the poll (fresh 45s);
-  // approved flips to the calculator and stopBuyPoll (called at renderBuy's top) ends the ticker. Same 45s cadence.
-  function startBuyApprovalPoll() {
-    stopBuyPoll();
-    var secs = 45;
-    buyPoll = setInterval(function () {
-      var cd = $("buy-countdown");
-      if (!cd || !isConnected()) { stopBuyPoll(); return; } // panel gone / disconnected → stop
-      secs--;
-      if (secs <= 0) { cd.textContent = "checking now…"; allowlist = null; renderBuy(); return; }
-      cd.textContent = "next check in " + secs + "s";
-    }, 1000);
-  }
-
   function renderCalculator(b, isPresale) {
+    var coin = buyCoin();
     b.innerHTML =
-      (isPresale ? "<div class='buy-ok'>✓ Your wallet is approved to buy in the presale.</div>" : "") +
-      "<label class='fld'>Amount in (USDT)</label>" +
+      coinSwitch() +
+      "<label class='fld'>Amount in (" + coin.label + ")</label>" +
       "<div class='buy-calc'><input class='txt' id='buy-amt' inputmode='decimal' placeholder='100' /><span class='buy-out'>You receive <b id='buy-dyc'>—</b> DYC</span></div>" +
       "<div class='split-preview'>" +
       "<div class='split liq'><div class='sl'>15% Liquid</div><div class='sv' id='split-liq'>—</div><div class='su'>DYC to your wallet now</div></div>" +
       "<div class='split ves'><div class='sl'>85% Vesting</div><div class='sv' id='split-ves'>—</div><div class='su'>DYC into vesting</div></div>" +
       "</div>" +
       "<div class='buy-min' id='buy-min'></div>" +
-      "<button class='btn-g btn-p btn-block' id='buy-go'>⚡ Buy DYC &amp; Activate Staking</button>" +
-      "<div class='buy-narrate'>One tap runs the whole flow with clear wallet prompts: approve USDT (only if needed) → buy (15% lands in your wallet, 85% into vesting) → activate that vesting so it starts earning 0.40%/day.</div>" +
-      // S-BUY-CHOICE — quiet secondary path (link-weight, not a rival CTA): the same buy chain MINUS the activate leg.
-      // The standalone Activate button (below) is the road in afterwards. Only shown when staking is configured.
-      (cfg().holderStaking ? "<a href='#' id='buy-noact' style='display:block;text-align:center;margin-top:12px;font-size:.82rem;color:var(--gold-aged);text-decoration:underline;cursor:pointer'>Buy without activating staking</a>" : "");
+      "<button class='btn-g btn-p btn-block' id='buy-go'>Buy DYC</button>" +
+      "<div class='buy-narrate'>Your wallet will ask you to approve " + coin.label + " (only if needed), then to buy — 15% lands in your wallet, 85% into vesting.</div>";
+    var keep = $("buy-amt") ? $("buy-amt").value : "";
+    Array.prototype.forEach.call(b.querySelectorAll(".buy-coin-chip"), function (chipEl) {
+      chipEl.onclick = function () { var amt = $("buy-amt").value; buyState.coin = chipEl.getAttribute("data-coin"); renderCalculator(b, isPresale); $("buy-amt").value = amt; updateCalc(); };
+    });
     $("buy-amt").oninput = updateCalc;
     $("buy-go").onclick = buyFlow;
-    if ($("buy-noact")) $("buy-noact").onclick = function (e) { e.preventDefault(); buyFlow(true); };
+    if (keep) $("buy-amt").value = keep;
     updateCalc();
   }
   function updateCalc() {
@@ -1984,7 +2017,7 @@ window.DYDash = (function () {
       dyc = fmt(d); liq = fmt((d * 1500n) / 10000n); ves = fmt(d - (d * 1500n) / 10000n); ok = true;
     } catch (e) {}
     if ($("buy-dyc")) { $("buy-dyc").textContent = dyc; $("split-liq").textContent = liq; $("split-ves").textContent = ves; }
-    // M-F4 defect 1: page-side minimum-purchase floor (100 USDT). The calculator still shows the math.
+    // M-F4 defect 1: page-side minimum-purchase floor (100, in the coin chosen — both are 6-decimal dollars)
     var go = $("buy-go"), min = $("buy-min");
     if (go && min) {
       var below = !ok || usdt < MIN_BUY_USDT;
@@ -1992,7 +2025,7 @@ window.DYDash = (function () {
       go.disabled = below;
       go.style.opacity = below ? "0.5" : "1";
       go.style.cursor = below ? "not-allowed" : "pointer";
-      min.textContent = (below && !empty) ? "Minimum purchase is 100 USDT." : "";
+      min.textContent = (below && !empty) ? "Minimum purchase is 100 " + buyCoin().label + "." : "";
     }
   }
   function gasOv(fo, gas) {
@@ -2001,48 +2034,48 @@ window.DYDash = (function () {
     return ov;
   }
 
-  function buyFlow(skipActivate) {
-    // S-BUY-CHOICE — the secondary "buy without activating" path passes an explicit true; the main button's onclick
-    // passes a click Event (which is NOT === true), so the default flow stays byte-identical.
-    var skip = skipActivate === true;
-    var c = cfg(), amt;
+  // GAS-HELP-1 slots in HERE (planned separately, not built): a "getting gas for you" step for a buyer with no POL runs
+  // before the approve. Until it exists this resolves at once, and polGuard() keeps refusing a wallet without POL for fees.
+  function beforeApprove() { return Promise.resolve(); }
+
+  // ICO-SIMPLE-1 — plain "Buy DYC": approve (only if needed) → buy. Staking is offered AFTER, as its own optional step.
+  function buyFlow() {
+    var c = cfg(), amt, coin = buyCoin();
     try { amt = ethersRef.parseUnits(($("buy-amt").value || "").trim().replace(/,/g, ""), 6); if (amt <= 0n) throw 0; }
-    catch (e) { failBox("Enter a positive USDT amount."); return; }
-    if (amt < MIN_BUY_USDT) { failBox("Minimum purchase is 100 USDT."); return; } // M-F4 defect 1 (defense-in-depth)
+    catch (e) { failBox("Enter a positive " + coin.label + " amount."); return; }
+    if (amt < MIN_BUY_USDT) { failBox("Minimum purchase is 100 " + coin.label + "."); return; } // M-F4 defect 1 (defense-in-depth)
     var pg = polGuard(); if (pg) { failBox(pg); return; }
     var isPresale = buyState.round === 1;
     var sig = isPresale && buyState.voucher ? buyState.voucher.sig : "0x";
     withEthers().then(function () {
       var provider = new ethersRef.BrowserProvider(window.ethereum);
       return provider.getSigner().then(function (signer) {
-        var usdt = new ethersRef.Contract(c.usdt, ERC20_ABI, signer);
+        var tok = new ethersRef.Contract(coin.addr, ERC20_ABI, signer);
         var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, signer);
-        var hs = c.holderStaking ? new ethersRef.Contract(c.holderStaking, STAKE_ABI, signer) : null;
         var me = W.state.address;
-        return usdt.balanceOf(me).then(function (bal) {
-          if (bal < amt) { failBox("You need " + fmt(amt, 6) + " USDT but have " + fmt(bal, 6) + ". Add USDT and try again."); throw "stop"; }
-          return usdt.allowance(me, c.dycoinSale);
+        return tok.balanceOf(me).then(function (bal) {
+          if (bal < amt) { failBox("You need " + fmt(amt, 6) + " " + coin.label + " but have " + fmt(bal, 6) + ". Add " + coin.label + " and try again."); throw "stop"; }
+          return tok.allowance(me, c.dycoinSale);
         }).then(function (allow) {
           var needApprove = allow < amt;
-          return Promise.all([feeOverrides(provider), hs ? hs.vestedRegistered(me) : Promise.resolve(true)]).then(function (pre) {
-            var fo = pre[0], alreadyReg = pre[1];
-            var nSteps = (needApprove ? 1 : 0) + 1 + (hs && !skip ? 1 : 0);
+          return feeOverrides(provider).then(function (fo) {
+            var nSteps = (needApprove ? 1 : 0) + 1;
             var step = 0;
-            var chain = Promise.resolve();
+            var chain = beforeApprove();
             if (needApprove) {
               chain = chain.then(function () {
-                step++; pending(true, "Step " + step + " of " + nSteps + " — Approve USDT");
-                $("ov-pending-msg").textContent = "Your wallet will ask to approve " + fmt(amt, 6) + " USDT so the sale can take your payment. No DYC moves yet.";
-                return usdt.approve.staticCall(c.dycoinSale, amt).then(function () {
-                  return usdt.approve(c.dycoinSale, amt, gasOv(fo, GAS.approve)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
+                step++; pending(true, "Step " + step + " of " + nSteps + " — Approve " + coin.label);
+                $("ov-pending-msg").textContent = "Your wallet will ask to approve " + fmt(amt, 6) + " " + coin.label + " so the sale can take your payment. No DYC moves yet.";
+                return tok.approve.staticCall(c.dycoinSale, amt).then(function () {
+                  return tok.approve(c.dycoinSale, amt, gasOv(fo, GAS.approve)).then(function (tx) { return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); });
                 });
               });
             }
             chain = chain.then(function () {
               step++; pending(true, "Step " + step + " of " + nSteps + " — Buy DYC");
-              $("ov-pending-msg").textContent = "Your wallet will ask to buy. You pay " + fmt(amt, 6) + " USDT and receive DYC — 15% to your wallet now, 85% into vesting.";
-              return sale.buyWithStable.staticCall(c.usdt, amt, sig, "").then(function () {
-                return sale.buyWithStable(c.usdt, amt, sig, "", gasOv(fo, GAS.buy)).then(function (tx) {
+              $("ov-pending-msg").textContent = "Your wallet will ask to buy. You pay " + fmt(amt, 6) + " " + coin.label + " and receive DYC — 15% to your wallet now, 85% into vesting.";
+              return sale.buyWithStable.staticCall(coin.addr, amt, sig, "").then(function () {
+                return sale.buyWithStable(coin.addr, amt, sig, "", gasOv(fo, GAS.buy)).then(function (tx) {
                   persistPending(tx.hash, "Purchase", W.state.address); // S-BUY-RESUME: durable BEFORE .wait()
                   return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
                     buyState.lastTx = tx.hash; // A1: surfaced in the success toast
@@ -2056,32 +2089,43 @@ window.DYDash = (function () {
                 });
               });
             });
-            if (hs && !skip) {
-              chain = chain.then(function () {
-                step++;
-                var fn = alreadyReg ? "syncVested" : "registerVested";
-                var label = alreadyReg ? "Sync new vesting into earning" : "Activate vesting to start earning";
-                pending(true, "Step " + step + " of " + nSteps + " — " + label);
-                $("ov-pending-msg").textContent = alreadyReg
-                  ? "Your wallet will ask to sync — it adds the DYC you just bought to your earning balance (0.40%/day)."
-                  : "Your wallet will ask to activate — it starts your vested DYC earning 0.40%/day toward the 2X cap.";
-                return hs[fn].staticCall().then(function () {
-                  return hs[fn](gasOv(fo, GAS.activate)).then(function (tx) {
-                    persistPending(tx.hash, "Activated", W.state.address); // S-BUY-RESUME: durable BEFORE .wait()
-                    return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
-                      pushOptimistic({ block: rc ? Number(rc.blockNumber) : 0, type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: "—", hash: tx.hash });
-                      clearPending(tx.hash); // S-BUY-RESUME: resolved in-session
-                      return rc;
-                    });
-                  });
-                }).catch(function () { return null; }); // the BUY already succeeded — never fail the flow on a benign activate revert
-              });
-            }
-            return chain.then(function () { pending(false); refresh(); toast("Purchase complete — DYC bought" + (hs && !skip ? " and activated" : "") + ".", buyState.lastTx); });
+            return chain.then(function () { pending(false); buyState.done = me; renderAfterBuy(); refresh(); toast("Purchase complete — DYC bought.", buyState.lastTx); });
           });
         });
       });
     }).catch(function (e) { if (e === "stop") return; pending(false); failBox(decodeErr(e)); });
+  }
+
+  // after a purchase: staking is offered as its own, optional step (activate the first time, sync after that)
+  function renderAfterBuy() {
+    var b = $("buy-body"), c = cfg();
+    if (!b) return;
+    b.innerHTML = "<div class='buy-ok' id='buy-done'>Purchase complete — DYC bought.</div>" +
+      (c.holderStaking
+        ? "<div class='buy-narrate' style='margin-top:10px'>Optional: activate staking — your vesting DYC starts earning 0.40%/day.</div>" +
+          "<button class='btn-g btn-p btn-block' id='buy-stake' style='margin-top:8px'>Activate staking</button>"
+        : "") +
+      "<button class='btn-g btn-block' id='buy-again' style='margin-top:8px'>Buy more</button>";
+    $("buy-again").onclick = function () { buyState.done = null; renderBuy(); };
+    if ($("buy-stake")) $("buy-stake").onclick = actStakeAfterBuy;
+  }
+  function actStakeAfterBuy() {
+    var c = cfg(), me = W.state.address;
+    withEthers().then(function () {
+      return new ethersRef.Contract(c.holderStaking, STAKE_ABI, readProvider()).vestedRegistered(me);
+    }).then(function (registered) {
+      if (!registered) return actActivate();
+      return runAction({
+        contractAddr: c.holderStaking, abi: STAKE_ABI, gas: GAS.activate,
+        simFn: function (k) { return k.syncVested.staticCall(); },
+        sendFn: function (k, o) { return k.syncVested(o); },
+        title: "Sync new vesting into earning",
+        body: "Add the DYC you just bought to your earning balance (0.40%/day).",
+        successMsg: "Synced — your new vesting is earning.",
+        feedRow: function () { return { type: "Activated", ic: "staked", details: "Vesting synced to staked", amt: "—" }; },
+        pendingType: "Activated",
+      });
+    }).catch(function (e) { failBox(decodeErr(e)); });
   }
 
   // S-WALLET-DETECT: an honest no-wallet note (+ optional Retry) rendered into the wallet bar's state slot.

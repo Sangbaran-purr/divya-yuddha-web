@@ -83,6 +83,10 @@ const SUITES = [
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R1: the generator (scripts/daily-gen) and the batch it wrote — exactly one winner
   // on 8 seeds, explanations from the engine with a named cause per change and arithmetic read back from the words, the
   // content rules, no near-duplicates, launch cards only, no answer in a run's log; five owner-named breakages, each caught.
+  // ICO-SIMPLE-1 (owner rulings 2026-10-25) — the dashboard's buy panel without a form: the REAL DYCoinSale + VestingVault
+  // on anvil, an instant voucher from the (stubbed) approval-bot door, Buy DYC in USDT or USDC, staking after; four
+  // breakages applied to the page's own source, each caught.
+  { name: "buypanel",      file: path.join(__dirname, "suites", "buypanel.js"), chain: true, expect: 16 },
   { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 91 },   // +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24) · +1 bounded chooser (K25) · +2 the title rule (K26, M26) · +1 tests read only this branch (K27) · +13 the first batch review (K28–K32b, M28–M32)
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4: the weekly job, watchdog and veto (scripts/daily-gen/job.js + the three
   // workflows), run for real in throwaway clones pushing to a throwaway bare repo: 28 days ready, the digest-commit clash

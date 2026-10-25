@@ -241,12 +241,13 @@ async function run() {
 
   // ═══════════ X · STAMPS ═══════════
   {
-    const pages = ["index.html", "admin.html", "register.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html"];
+    // (ICO-SIMPLE-1: register.html is now a redirect to the dashboard's buy panel and loads no script)
+    const pages = ["index.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html"];
     const carrying = pages.filter((p) => fs.readFileSync(path.join(SITE, p), "utf8").indexOf("wallet.js?v=") >= 0);
     ok("X1 · wallet.js is stamped s1r on every page that loads it (" + carrying.length + ")",
-       carrying.length === 9 && carrying.every((p) => /wallet\.js\?v=s1r/.test(fs.readFileSync(path.join(SITE, p), "utf8"))));
-    ok("X2 · dashboard.js mf39 and hall.js h35",
-       /js\/dashboard\.js\?v=mf39/.test(fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8")) && /hall\.js\?v=h35/.test(fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8")));
+       carrying.length === 8 && carrying.every((p) => /wallet\.js\?v=s1r/.test(fs.readFileSync(path.join(SITE, p), "utf8"))));
+    ok("X2 · dashboard.js mf40 and hall.js h35",
+       /js\/dashboard\.js\?v=mf40/.test(fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8")) && /hall\.js\?v=h35/.test(fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8")));
   }
 
   console.log("──\n" + (fail === 0 ? "ALL GREEN — " + pass + "/" + (pass + fail) : "FAILURES — " + fail + " of " + (pass + fail)));

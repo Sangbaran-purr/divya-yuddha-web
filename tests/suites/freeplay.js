@@ -105,19 +105,21 @@ async function run() {
     const r = await H.ritePage(c, c.player, { url: "https://divyayuddha.games/rite.html?utm_source=ig" });
     const w = r.w;
     await settle(w, () => /the hall of war/.test(btnText(w)), 15000, "the holder's Enter");
-    ok("RT13 · a HOLDER is unchanged: 'You bear the mark. The door is yours.' + Enter 'the hall of war', no solo line, no second door, no presale link",
+    ok("RT13 · a HOLDER is unchanged: 'You bear the mark. The door is yours.' + Enter 'the hall of war', no solo line, no second door, no presale buy door",
        txt($(w, "rite-msg")) === "You bear the mark. The door is yours." && btnText(w) === "Enterthe hall of war" && !shown($(w, "rite-doorline")) && !shown($(w, "rite-buyline")) &&
-       !shown($(w, "rite-presale")));
+       !shown($(w, "rite-buy")));
     H.click(w, "#rite-action");
     ok("RT14 · …the holder's Enter sets the pass and fires NO solo_start", w.sessionStorage.getItem("dyw_pass") === "1" && plausibleCalls(w).length === 0, JSON.stringify(plausibleCalls(w)));
   }
   {
-    // a non-holder whose presale voucher is live keeps Enter beside BUY YOUR COIN
+    // ICO-SIMPLE-1 — the presale needs no form and no approval: EVERY non-holder keeps Enter beside BUY DYC
     const c = await H.chainStore();
-    const r = await H.ritePage(c, c.player, { allowlist: [{ wallet: c.player.address }] });
+    const r = await H.ritePage(c, c.player, {});
     const w = r.w;
     await settle(w, () => shown($(w, "rite-buy")), 15000, "the buy door");
-    ok("RT15 · a live voucher shows BUY YOUR COIN and KEEPS the solo Enter", shown($(w, "rite-buy")) && shown($(w, "rite-action")) && /play solo/.test(btnText(w)));
+    ok("RT15 · a non-holder (no voucher, never registered) sees BUY DYC → the dashboard's buy panel, and KEEPS the solo Enter",
+       shown($(w, "rite-buy")) && txt($(w, "rite-buy")) === "BUY DYC" && $(w, "rite-buy").getAttribute("href") === "dashboard.html#buy-panel" &&
+       shown($(w, "rite-action")) && /play solo/.test(btnText(w)));
   }
 
   // ── ruling 1: the seal cannot be READ (busy) — solo stands anyway ──
@@ -167,48 +169,40 @@ async function run() {
     ok("RT21 · claimOpen on + a HOLDER: the holder's Enter only, no claim button", !shown($(r.w, "rite-claim")));
   }
 
-  // ── SITE-AUDIT-1 part 3: the approval copy is for REGISTERED wallets only ──
-  const APPROVAL = /Checking for your approval|Approval usually appears|No mark on this wallet|begin at the register/;
+  // ── ICO-SIMPLE-1 (owner rulings 2026-10-25): no form, no approval — the old register road is gone for everyone ──
+  const APPROVAL = /Checking for your approval|Approval usually appears|No mark on this wallet|begin at the register|presale approval is live|Register for the presale|REGISTER FOR THE PRESALE/;
+  const OPEN = "The presale is open to every wallet — buy DYC in your dashboard.";
   {
     const c = await H.chainStore();
     const r = await H.ritePage(c, c.player, {});
     const w = r.w;
-    await settle(w, () => /play solo/.test(btnText(w)), 15000, "the solo Enter");
-    await H.sleep(2500);                                    // the allowlist read lands and two would-be countdown ticks pass
+    await settle(w, () => shown($(w, "rite-buy")), 15000, "the buy door");
+    await H.sleep(2500);                                    // any would-be read or countdown tick would land in this time
     const page = txt($(w, "rite-msg")) + " | " + txt($(w, "rite-line"));
-    ok("RT22 · an UNREGISTERED non-holder sees the solo line and Enter — no approval copy, no register door, no countdown",
-       !APPROVAL.test(page) && txt($(w, "rite-msg")) === "" && !shown($(w, "rite-register")) && !$(w, "rite-countdown") &&
-       ![...w.__timers.values()].includes(1000) &&            // and NO approval-countdown ticker is running at all
-       shown($(w, "rite-presale")) && $(w, "rite-presale").getAttribute("href") === "register.html" &&
-       $(w, "rite-presale").tagName === "A" && !$(w, "rite-presale").classList.contains("rite-btn") &&   // the quiet presale road
-       /Register for the presale/.test(txt($(w, "rite-presale"))) && shown($(w, "rite-action")) &&
-       shown($(w, "rite-doorline")) && /play solo/.test(btnText(w)), page);
+    ok("RT22 · a non-holder sees '" + OPEN + "' with BUY DYC — no approval copy, no register door, no countdown, no allowlist read",
+       txt($(w, "rite-msg")) === OPEN && txt($(w, "rite-line")) === "" && !APPROVAL.test(page) && !$(w, "rite-register") && !$(w, "rite-presale") &&
+       !$(w, "rite-countdown") && ![...w.__timers.values()].includes(1000) && !w.__fetches.some((u) => /allowlist/.test(u)) &&
+       shown($(w, "rite-buy")) && shown($(w, "rite-doorline")) && /play solo/.test(btnText(w)), page);
   }
   {
     const c = await H.chainStore();
     const r = await H.ritePage(c, c.player, { ls: { ["dy::presaleRegistered:" + c.player.address.toLowerCase()]: String(Date.now()) } });
     const w = r.w;
-    await settle(w, () => /Checking for your approval/.test(txt($(w, "rite-line"))), 15000, "the approval countdown");
-    await H.sleep(2200);
-    ok("RT23 · a REGISTERED non-holder still sees the approval countdown (and the solo Enter beside it)",
-       /Checking for your approval/.test(txt($(w, "rite-line"))) && /next check in 4[0-4]s/.test(txt($(w, "rite-line"))) && /play solo/.test(btnText(w)) &&
-       [...w.__timers.values()].includes(1000) && !shown($(w, "rite-presale")),
-       txt($(w, "rite-line")));
-  }
-  {
-    const c = await H.chainStore();
-    const r = await H.ritePage(c, c.player, { allowlist: [{ wallet: c.player.address }] });
-    const w = r.w;
     await settle(w, () => shown($(w, "rite-buy")), 15000, "the buy door");
-    ok("RT24 · an APPROVED wallet: 'Your presale approval is live — buy DYC in your dashboard.' and no free-claim line",
-       txt($(w, "rite-msg")) === "Your presale approval is live — buy DYC in your dashboard." && txt($(w, "rite-line")) === "" && shown($(w, "rite-buy")) &&
-       !shown($(w, "rite-presale")),
+    await H.sleep(2200);
+    ok("RT23 · a wallet that registered under the OLD form is treated like everyone: the same buy door and line, no countdown",
+       txt($(w, "rite-msg")) === OPEN && !APPROVAL.test(txt($(w, "rite-line"))) && ![...w.__timers.values()].includes(1000) && shown($(w, "rite-buy")),
        txt($(w, "rite-msg")) + " | " + txt($(w, "rite-line")));
   }
+  const riteSrc = fs.readFileSync(path.join(SITE, "rite.html"), "utf8");
+  ok("RT24 · none of the old registration/approval sentences survive anywhere in rite.html (and it never reads the allowlist)",
+     !APPROVAL.test(riteSrc) && riteSrc.indexOf("BUY YOUR COIN") < 0 && riteSrc.indexOf("register.html") < 0 && !/allowlist\.json|\/allowlist"/.test(riteSrc));
   ok("RT25 · the rite's no-script default line is 'Connect a Polygon wallet to play free.'",
-     /<p id="rite-msg" class="rite-state-msg">Connect a Polygon wallet to play free\.<\/p>/.test(fs.readFileSync(path.join(SITE, "rite.html"), "utf8")));
-  ok("RT26 · register.html records the wallet it puts into the form (the rite's registered signal)",
-     /function markFilled\(addr\) \{[\s\S]{0,600}localStorage\.setItem\("dy::presaleRegistered:" \+ String\(addr\)\.toLowerCase\(\)/.test(fs.readFileSync(path.join(SITE, "register.html"), "utf8")));
+     /<p id="rite-msg" class="rite-state-msg">Connect a Polygon wallet to play free\.<\/p>/.test(riteSrc));
+  const regSrc = fs.readFileSync(path.join(SITE, "register.html"), "utf8");
+  ok("RT26 · register.html is a REDIRECT to the dashboard's buy panel (meta refresh + location.replace), with no form and no Google Form link",
+     /http-equiv="refresh" content="0; url=dashboard\.html#buy-panel"/.test(regSrc) && /location\.replace\("dashboard\.html#buy-panel"\)/.test(regSrc) &&
+     !/forms\.gle|docs\.google\.com\/forms|<iframe|<form/.test(regSrc));
 
   // ═══════════════ HT · THE HALL ═══════════════
   console.log("\n── HT · the Hall: the Torana still opens it ──");

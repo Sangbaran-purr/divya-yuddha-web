@@ -24,6 +24,7 @@ window.DY_MF_CONFIG = {
     dycoinSale: "0x088233d79BD0Df395E364C180F790C2E655F648B",
     dropDesk: "0x28813f882E3DaefC6329Adf85005Fbfd31CaB8fa", // Drop Desk (coupon redemption; owner=timelock, signer=PROD_OWNER)
     usdt: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", // Tether USD on Polygon PoS (6-dec; on-chain symbol reads "USDT0")
+    usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // ICO-SIMPLE-1: USDC (native, 6-dec) — the Sale takes it as well as USDT
 
     // WINNINGS-5 (2026-10-10) — THE LIVE WinningsDesk: won-liquid DYC + Torana Invite rewards -> USDT0 at a fixed 0.008.
     // Deployed by the master at block 95,283,175 (tx 0x8373f100…), Polygonscan-verified, owned by the master, funded
@@ -41,6 +42,11 @@ window.DY_MF_CONFIG = {
   // card INVISIBLE, and makes ZERO calls. (The store still strips a ?invite= code from the address bar either way,
   // so a code can never reach the analytics tag.) Loaded by store.html AND dashboard.html.
   inviteServiceUrl: "https://approval-bot-cxa2.onrender.com",     // WINNINGS-5: Torana Invites live (/invites/code, /invites/bind)
+
+  // ICO-SIMPLE-1 (owner rulings 2026-10-25) — the approval bot's INSTANT presale voucher door (POST, OFAC-screened). The buy
+  // panel asks it when a wallet connects in the presale round; on any failure it falls back to the published allowlist.
+  // NULL => only the allowlist is read (the old behaviour, minus the form).
+  presaleVoucherUrl: "https://approval-bot-cxa2.onrender.com/presale/voucher",
 
   // ── Polygon mainnet read endpoints (W3-MAINNET-1) ──
   // The verified primary is publicnode (CORS-clean, full node, reliable eth_call), drpc a redundant fallback; the

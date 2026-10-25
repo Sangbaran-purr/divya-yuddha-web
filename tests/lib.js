@@ -41,6 +41,9 @@ function preflight() {
     [path.join(OUT, "ERC1967Proxy.sol", "ERC1967Proxy.json"), "the ERC1967Proxy artifact (same `forge build`)"],
     [path.join(OUT, "AccessNFT.sol", "AccessNFT.json"), "the AccessNFT artifact (same `forge build`)"],
     [path.join(OUT, "MockStable.sol", "MockStable.json"), "the MockStable artifact (same `forge build`)"],
+    // ICO-SIMPLE-1 — the buy-panel suite deploys the REAL DYCoinSale + VestingVault (the presale stack)
+    [path.join(OUT, "DYCoinSale.sol", "DYCoinSale.json"), "the DYCoinSale artifact (same `forge build`)"],
+    [path.join(OUT, "VestingVault.sol", "VestingVault.json"), "the VestingVault artifact (same `forge build`)"],
   ];
   need.forEach(function (n) { if (!fs.existsSync(n[0])) miss.push("  MISSING: " + n[1] + "\n           expected at " + n[0]); });
   let anvil = false;
@@ -133,6 +136,39 @@ async function chainStore(opts) {
   };
 }
 
+// ── ICO-SIMPLE-1 — THE PRESALE'S CHAIN. The REAL DYCoinSale + VestingVault (the mainnet stack's own contracts) against
+//    MockDYC and two 6-dec MockStables, configured as on mainnet ($0.008 presale, $0.010 public, $1 min / $25k max per
+//    wallet), wired (vault.setSale), funded, and opened to the PRESALE round by its round controller. `signer` is the
+//    voucher key the sale trusts — the test signs instant vouchers with it exactly as the approval bot would.
+async function chainPresale() {
+  const provider = new ethers.JsonRpcProvider(RPC);
+  const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
+  const player = new ethers.Wallet(K.p1, provider);
+  const ownerAddr = await owner.getAddress();
+  const signer = ethers.Wallet.createRandom();
+  const F = (n) => { const a = art(n); return new ethers.ContractFactory(a.abi, a.bytecode, owner); };
+  const dyc = await (F("MockDYC")).deploy(); await dyc.waitForDeployment();
+  const usdt = await (F("MockStable")).deploy("Tether USD", "USDT", 6); await usdt.waitForDeployment();
+  const usdc = await (F("MockStable")).deploy("USD Coin", "USDC", 6); await usdc.waitForDeployment();
+  const vault = await (F("VestingVault")).deploy(await dyc.getAddress(), ownerAddr); await vault.waitForDeployment();
+  const E18 = DEC;
+  const sale = await (F("DYCoinSale")).deploy({
+    dyc: await dyc.getAddress(), vault: await vault.getAddress(), treasury: ownerAddr, usdt: await usdt.getAddress(), usdc: await usdc.getAddress(),
+    oracle: ethers.ZeroAddress, minPolUsdE18: 0n, maxPolUsdE18: 0n, allowlistSigner: signer.address,
+    presalePriceE18: 8n * 10n ** 15n, publicPriceE18: 10n ** 16n, presaleCap: 120000000n * E18, publicCap: 180000000n * E18,
+    presaleMinUsdE18: E18, presaleMaxUsdE18: 25000n * E18, publicMinUsdE18: E18, publicMaxUsdE18: 25000n * E18,
+    roundController: ownerAddr, owner: ownerAddr });
+  await sale.waitForDeployment();
+  const saleAddr = await sale.getAddress();
+  await (await vault.setSale(saleAddr)).wait();
+  await (await dyc.mint(saleAddr, 300000000n * E18)).wait();
+  await (await sale.advanceRound()).wait();                       // NOT_STARTED -> PRESALE
+  await (await usdt.mint(player.address, 1000n * DEC6)).wait();
+  await (await usdc.mint(player.address, 1000n * DEC6)).wait();
+  return { provider, owner, player, signer, sale, vault, dyc, usdt, usdc,
+           addrs: { sale: saleAddr, vault: await vault.getAddress(), dyc: await dyc.getAddress(), usdt: await usdt.getAddress(), usdc: await usdc.getAddress(), owner: ownerAddr } };
+}
+
 // ── WINNINGS-4 — THE DASHBOARD'S CHAIN. The REAL WinningsDesk (web3 2b1f106) against MockDYC + a 6-dec MockStable
 //    standing in for USDT, funded and unpaused so the ceremony has somewhere real to land. Nothing is mocked that
 //    a wallet would actually touch: the desk under test is the deployed bytecode, not a stub of it.
@@ -184,7 +220,14 @@ async function dashboardPage(c, player, opts) {
     w.__fetches.push(String(u));
     const svc = opts.svc || {};
     for (const key of Object.keys(svc)) {
-      if (String(u).indexOf(key) >= 0) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(svc[key](init)) });   // (a promise from the handler is awaited by json())
+      if (String(u).indexOf(key) >= 0) {
+        // ICO-SIMPLE-1: a handler may answer { __status, body } (a refusal) or { __throw: true } (the service unreachable)
+        return Promise.resolve(svc[key](init)).then((r) => {
+          if (r && r.__throw) throw new TypeError("Failed to fetch");
+          if (r && r.__status) return { ok: r.__status < 400, status: r.__status, json: () => Promise.resolve(r.body || null) };
+          return { ok: true, status: 200, json: () => Promise.resolve(r) };
+        });
+      }
     }
     return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
   };
@@ -206,9 +249,13 @@ async function dashboardPage(c, player, opts) {
   w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null;            // set EXPLICITLY: the shipped config is live (WINNINGS-5); absent => the dormant face, and no test ever reaches the real bot
   if (c.addrs && c.addrs.nft) w.DY_CONFIG.contracts.accessNFT = c.addrs.nft;
   w.DY_CONFIG.contracts.cardUsdStore = opts.cardUsdStore || null;   // hermetic: never the mainnet card store unless a test asks
+  // ICO-SIMPLE-1 — hermetic presale road: the voucher door is OFF unless a test points it somewhere (never the real bot),
+  // and a test may name its own sale/coins (opts.contracts) and swap in a mutated dashboard.js (opts.dashSrc)
+  w.DY_MF_CONFIG.presaleVoucherUrl = opts.presaleVoucherUrl || null;
+  Object.assign(w.DY_MF_CONFIG.contracts, opts.contracts || {});
   run(path.join(SITE, "js/wallet.js"));
   run(path.join(SITE, "js/invite.js"));
-  run(path.join(SITE, "js/dashboard.js"));
+  if (opts.dashSrc) w.eval(opts.dashSrc); else run(path.join(SITE, "js/dashboard.js"));
   w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
   w.DYDash.mount();            // dashboard.html's inline boot, which jsdom (runScripts: outside-only) will not run
   return { dom, w, eth };
@@ -513,4 +560,4 @@ function teardown(h) {
   // deliberately NOT window.close() — closing is the race itself. The window dies with the process.
 }
 
-module.exports = { chain, chainStore, chainWinnings, server, hall, storePage, dashboardPage, myInvitesPage, makeEthereum, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };
+module.exports = { chain, chainStore, chainWinnings, chainPresale, server, hall, storePage, dashboardPage, myInvitesPage, makeEthereum, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };

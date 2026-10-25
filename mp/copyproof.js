@@ -368,11 +368,12 @@ console.log("\n── SITE-AUDIT-1 · the false statements stay gone (every play
     const hits = ALL.filter(([, t]) => t.indexOf(b) >= 0).map(([f]) => f);
     ok("SA3 · no page or page script says \"" + b + "\"", hits.length === 0, hits.join(", "));
   }
-  // owner decision 1 (2026-10-11) — the rite's quiet presale road: a plain LINK (never a .rite-btn) to register.html
+  // ICO-SIMPLE-1 (owner rulings 2026-10-25) — the presale needs no registration: the rite's road is a plain BUY DYC to the
+  // dashboard's buy panel, and the retired 'Register for the presale →' link (owner decision 1, 2026-10-11) is gone
   const RITE_V = visible("rite.html");
-  ok("SA5 · the rite carries 'Register for the presale →' as a quiet text link to register.html (not a button)",
-     /<a id="rite-presale" class="rite-presale" href="register\.html" hidden>Register for the presale →<\/a>/.test(RITE_V) &&
-     !/class="[^"]*rite-btn[^"]*"[^>]*>Register for the presale/.test(RITE_V) && !/<button[^>]*>Register for the presale/.test(RITE_V));
+  ok("SA5 · the rite's presale road is 'BUY DYC' to the dashboard's buy panel; 'Register for the presale' and register.html are gone",
+     /<a[^>]*id="rite-buy"[^>]*href="dashboard\.html#buy-panel"[^>]*>BUY DYC<\/a>/.test(RITE_V) &&
+     RITE_V.indexOf("Register for the presale") < 0 && RITE_V.indexOf("register.html") < 0);
   // owner ruling A (2026-10-11) — the wording follows the CONTRACT: VestingVault VEST_DURATION = 730 days (two years)
   ok("SA6 · the Mint's vesting line states the contract's two years, exactly",
      visible("mint.html").indexOf("15% of each purchase arrives liquid; 85% vests linearly across the two years after exchange listing.") >= 0);

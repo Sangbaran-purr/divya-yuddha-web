@@ -307,9 +307,6 @@
       #rite-claim[hidden] { display: none; }
       /* SITE-AUDIT-1 (owner decision 1) — the presale road for an unregistered solo player: a QUIET text link under
          Enter, never a button (Enter stays the one primary action). */
-      .rite-presale { display: block; margin-top: 0.75rem; font-size: 0.85rem; letter-spacing: 0.04em; color: var(--gold-aged); text-decoration: underline; text-underline-offset: 3px; }
-      .rite-presale:hover, .rite-presale:focus-visible { color: var(--gold-burnished); }
-      .rite-presale[hidden] { display: none; }
       .rite-register:hover,
       .rite-register:focus-visible {
         color: var(--gold-burnished);
@@ -386,12 +383,9 @@
           <!-- FREE-PLAY-1 (ruling 2, 2026-10-11) — when config.claimOpen is on, the free claim stands BESIDE the solo Enter
                for a non-holder on Polygon; the claim never replaces Enter. Hidden in every other state. -->
           <button id="rite-claim" class="rite-btn" type="button" hidden></button>
-          <!-- SITE-AUDIT-1 (owner decision 1, 2026-10-11) — shown ONLY to a connected, unregistered non-holder, under Enter. -->
-          <a id="rite-presale" class="rite-presale" href="register.html" hidden>Register for the presale →</a>
-          <!-- S-DECL-2 — the register door made prominent; revealed only in the connected-no-mark sorting state. -->
-          <a id="rite-register" class="rite-btn rite-register" href="register.html" hidden>REGISTER FOR THE PRESALE</a>
-          <!-- S-RITE-3 (Option A) — the buy door; revealed only when a LIVE voucher (allowlist.json) is found for this wallet. Same lit-gold CTA chrome. -->
-          <a id="rite-buy" class="rite-btn rite-register" href="dashboard.html" hidden>BUY YOUR COIN</a>
+          <!-- ICO-SIMPLE-1 (owner rulings 2026-10-25) — the buy door: the presale needs no form and no approval, so every
+               connected wallet without a Torana sees it, beside the free solo Enter. Same lit-gold CTA chrome. -->
+          <a id="rite-buy" class="rite-btn rite-register" href="dashboard.html#buy-panel" hidden>BUY DYC</a>
           <div id="rite-line" class="state-line" aria-live="polite"></div>
           <!-- FREE-PLAY-1 (RULINGS_2026-08-27 amendment 2026-10-11) — the solo line; shown ONLY to a connected non-holder
                (isHolder === false), above the Enter that plays solo. Ruled words, reworded never. (Rule 3's sentence,
@@ -495,9 +489,7 @@
         var msg = document.getElementById("rite-msg");
         var btn = document.getElementById("rite-action");
         var claimBtn = document.getElementById("rite-claim"); // FREE-PLAY-1 (ruling 2) — the claim, beside Enter
-        var presaleLink = document.getElementById("rite-presale"); // SITE-AUDIT-1 (decision 1) — the quiet presale road
         var line = document.getElementById("rite-line");
-        var reg = document.getElementById("rite-register");
         var buy = document.getElementById("rite-buy");
         var door = document.getElementById("rite-doorline"); // S-GATE-1 — the ruled door line (non-holder only)
         var buyline = document.getElementById("rite-buyline"); // S-BUNDLE-1 — the second door FOLLOWS it, in visibility too:
@@ -544,95 +536,12 @@
           btn.setAttribute("aria-disabled", opts.sleeping ? "true" : "false");
         }
 
-        // S-RITE-3 (Option A) — the rite sorts the connected-no-mark wallet on the LIVE voucher. Mirror dashboard.js
-        // EXACTLY: fetch allowlist.json, match by lowercased wallet — one truth, two doors. A FAILED fetch resolves to
-        // [] (busy-sentinel law: the register road stands as the safe default; never the buy door on a guess, never an
-        // error to the buyer).
-        // S-ALLOWLIST-LIVE: the robot's no-store live mirror (approval surfaces within one poll). CROSS-ORIGIN on Render
-        // (owner-confirmed 2026-08-19 — no /approval proxy exists); the robot answers Access-Control-Allow-Origin:
-        // https://divyayuddha.games. A down/misconfigured endpoint simply fails the fetch and falls back to the Pages
-        // file — never a regression.
-        var ALLOWLIST_LIVE_URL = "https://approval-bot-cxa2.onrender.com/allowlist";
-        var allowlistLive = false; // did the last fetch ride the live endpoint? (softens the waiting copy)
-        function fetchAllowlist() {
-          // S-ALLOWLIST-LIVE: live endpoint FIRST (no-store); on ANY failure fall back to the published Pages file
-          // EXACTLY as before (S-LIVE-FIX-1 C1: unique buster + no-store defeats the browser cache). The Pages file
-          // stays the permanent record + safety net, so a down/misconfigured endpoint is a silent no-op.
-          return fetch(ALLOWLIST_LIVE_URL, { cache: "no-store", mode: "cors" })
-            .then(function (r) { if (!r.ok) throw new Error("live " + r.status); return r.json(); })
-            .then(function (a) { if (!Array.isArray(a)) throw new Error("live shape"); allowlistLive = true; return a; })
-            .catch(function () {
-              allowlistLive = false;
-              return fetch("allowlist.json?cb=" + Date.now(), { cache: "no-store" })
-                .then(function (r) { return r.json(); })
-                .then(function (a) { return Array.isArray(a) ? a : []; })
-                .catch(function () { return []; });
-            });
-        }
-        // S-ALLOWLIST-LIVE: reflect the live/fallback timeframe in the waiting copy (updated after each fetch resolves).
-        function setRiteTimeframe() {
-          var tf = document.getElementById("rite-timeframe");
-          if (tf) tf.innerHTML = allowlistLive ? "<b>within a minute</b>" : "within <b>~10 minutes</b>";
-        }
-        function voucherFound(list, addr) {
-          if (!list || !addr) return false;
-          var a = addr.toLowerCase();
-          for (var i = 0; i < list.length; i++) {
-            if ((list[i].wallet || "").toLowerCase() === a) return true;
-          }
-          return false;
-        }
-        // the safe default (and the failed-fetch fallback): the register road, verbatim + untouched.
-        function showRegisterRoad() {
-          if (buy) buy.hidden = true;
-          if (reg) reg.hidden = false; // S-DECL-2 — the prominent register door
-          msg.innerHTML =
-            'No mark on this wallet yet. If you haven\'t declared, <a href="register.html">begin at the register</a>.';
-          // S-LIVE-FIX-1 (C3): honest expectation — approval publishes to the allowlist and can take a few minutes to
-          // reach this page. The C2 poll makes the buy door appear on its own once it lands.
-          // S-FEED-5 (LANE B): make the wait FELT — a live countdown to the next auto-check, the honest ~10-min line
-          // prominent, and the explicit "no need to refresh" reassurance. The 45s re-check underneath is unchanged.
-          line.innerHTML =
-            "<span style='display:inline-flex;align-items:center;gap:7px'>" +
-              "<span style='width:7px;height:7px;border-radius:50%;background:var(--gold-burnished,#caa14a);display:inline-block'></span>" +
-              "<b>Checking for your approval…</b> " +
-              "<span id='rite-countdown' style='color:var(--gold-aged,#9a8a5a);font-variant-numeric:tabular-nums'>next check in 45s</span>" +
-            "</span>" +
-            "<br>Approval usually appears <span id='rite-timeframe'>within <b>~10 minutes</b></span>." +
-            "<br><span style='opacity:.75'>No need to refresh — this page checks for you.</span>";
-          setRiteTimeframe(); // S-ALLOWLIST-LIVE: honor a live status already known from a prior fetch
-        }
-        // the voucher is live: route to the buy surface. The dominant read must be "Your pass is live → BUY YOUR COIN",
-        // so (S-RITE-4) the sleeping "Rite Opens Soon" box is HIDDEN here and the free-claim note drops to one quiet
-        // line BELOW the buy door. The register door + its inbox line stay hidden (their words are false now).
+        // ICO-SIMPLE-1 (owner rulings 2026-10-25) — the presale needs no form and no approval: a connected wallet without a
+        // Torana is shown the buy door (to the dashboard's buy panel) beside the free solo Enter. No allowlist read, no poll.
         function showBuyRoad() {
-          // FREE-PLAY-1 — the action box now carries Enter (play solo, free), which a voucher holder keeps: the buy
-          // door rides BESIDE it. Only the old sleeping "Rite Opens Soon" box was ever meant to hide here.
-          if (btn && !soloEnterShown) btn.hidden = true;
-          if (reg) reg.hidden = true;
-          if (presaleLink) presaleLink.hidden = true;   // SITE-AUDIT-1 — already approved: no "Register for the presale"
           if (buy) buy.hidden = false;
-          msg.textContent = "Your presale approval is live — buy DYC in your dashboard.";
+          msg.textContent = "The presale is open to every wallet — buy DYC in your dashboard.";
           line.textContent = "";
-        }
-        // S-LIVE-FIX-1 (C2): while connected-and-unapproved, re-check the allowlist every 45s so the buy door appears
-        // on its own once approval lands (bounded by the Fastly edge's ~10-min TTL). Stops on voucher found / state change.
-        var voucherPoll = null;
-        function stopVoucherPoll() { if (voucherPoll) { clearInterval(voucherPoll); voucherPoll = null; } }
-        // SITE-AUDIT-1 — did THIS wallet register for the presale? register.html records the wallet it put into the
-        // form (browser-local); an approved wallet is also on the allowlist. Only such a wallet sees the approval
-        // countdown — a solo player who never registered sees the solo line and Enter, nothing about approval.
-        function registeredHere(who) {
-          try { return !!localStorage.getItem("dy::presaleRegistered:" + String(who || "").toLowerCase()); } catch (e) { return false; }
-        }
-        function sortNoMark(who) {
-          fetchAllowlist().then(function (list) {
-            var cur = window.DYWallet.state;
-            if (!cur.connected || cur.isHolder === true || (cur.address || "").toLowerCase() !== (who || "").toLowerCase()) { stopVoucherPoll(); return; }
-            if (voucherFound(list, who)) { stopVoucherPoll(); showBuyRoad(); return; }
-            setRiteTimeframe(); // S-ALLOWLIST-LIVE: voucher absent → reflect live/fallback in the waiting copy
-            // voucher absent → the register road already stands; the poll keeps checking.
-          });
         }
 
         // S2 — the door opens: a holder's ENTER carries the session pass into the
@@ -730,15 +639,12 @@
           // S-CONSOLE-DYC-1: the DYC balance lives INSIDE the bearer state only — hide + reset the read guard whenever
           // this is not a confirmed bearer, so a fresh bearer session re-reads and non-holders see nothing new.
           if (dycEl && s.isHolder !== true) { dycEl.hidden = true; dycRead = false; }
-          if (reg) reg.hidden = true; // S-DECL-2 — register door defaults hidden; only the no-mark state reveals it
-          if (buy) buy.hidden = true; // S-RITE-3 — buy door defaults hidden; only a live-voucher no-mark state reveals it
+          if (buy) buy.hidden = true; // ICO-SIMPLE-1 — the buy door defaults hidden; only the connected non-holder state reveals it
           if (door) door.hidden = true; // S-GATE-1 — door line defaults hidden; only the connected non-holder state reveals it
           if (buyline) buyline.hidden = true;
           if (btn) btn.hidden = false; // S-RITE-4 — the action box is visible in EVERY state except the voucher branch (which hides it)
-          stopVoucherPoll(); // S-LIVE-FIX-1 (C2) — every state change stops the poll; the no-mark branch restarts it if still unapproved
           soloEnterShown = false; // FREE-PLAY-1 — only the connected-on-Polygon non-holder state sets it
           if (claimBtn) { claimBtn.hidden = true; claimBtn.onclick = null; } // FREE-PLAY-1 (ruling 2) — the claim shows only beside a solo Enter
-          if (presaleLink) presaleLink.hidden = true; // SITE-AUDIT-1 (decision 1) — only the unregistered non-holder state reveals it
 
           if (!s.hasProvider) {
             if (!s.absenceConcluded) {
@@ -813,7 +719,7 @@
           }
           // not a bearer yet — a connected wallet ON POLYGON with no Torana. FREE-PLAY-1 (owner ruling 2026-10-11):
           // solo play is free, so this wallet gets Enter (the holder's own pass and door); the solo line names what
-          // the Torana still unlocks, the second door offers it, and the presale/register road stands beside.
+          // the Torana still unlocks, the second door offers it, and the presale buy door stands beside.
           if (door) door.hidden = false;
           if (buyline) buyline.hidden = false;
           if (CFG.claimOpen) {
@@ -829,31 +735,10 @@
             }
             msg.textContent = "The rite is open. Claim your Access token — free, one per hand.";
           } else {
-            // S-DECL-1 (R1) / S-RITE-3 (Option A) — connected-no-mark: the rite sorts on the LIVE voucher.
-            // The register road renders FIRST (the safe default, and the failed-fetch fallback); then a voucher match
-            // in allowlist.json — the same match dashboard.js ships — swaps in the buy door.
+            // ICO-SIMPLE-1 — connected, on Polygon, no Torana: Enter (play solo, free) and the buy door beside it.
             soloEnterShown = true;
             setBtn("Enter", "play solo — free", { onClick: enterSolo });
-            var who = s.address;
-            // SITE-AUDIT-1 — the register road (its "No mark…" message and the approval countdown) is ONLY for a wallet
-            // that registered. Anyone else sees the ruled solo line and Enter; an approved voucher still surfaces.
-            if (registeredHere(who)) showRegisterRoad();
-            else { msg.textContent = ""; if (presaleLink) presaleLink.hidden = false; }   // the quiet presale road, under Enter
-            sortNoMark(who); // immediate check (race/staleness-guarded inside)
-            // C2 / S-FEED-5 (LANE B): a 1s ticker shows a live countdown; every 45s it fires the real allowlist
-            // re-check (same cadence). Stops on state change (guarded here + inside sortNoMark).
-            stopVoucherPoll();
-            if (registeredHere(who)) {   // SITE-AUDIT-1 — the countdown runs only for a wallet that registered
-            var reSecs = 45;
-            voucherPoll = setInterval(function () {
-              var cur = window.DYWallet.state;
-              if (!cur.connected || cur.isHolder === true || (cur.address || "").toLowerCase() !== (who || "").toLowerCase()) { stopVoucherPoll(); return; }
-              var cd = document.getElementById("rite-countdown");
-              reSecs--;
-              if (reSecs <= 0) { if (cd) cd.textContent = "checking now…"; reSecs = 45; sortNoMark(who); return; }
-              if (cd) cd.textContent = "next check in " + reSecs + "s";
-            }, 1000);
-            }
+            showBuyRoad();
           }
         });
 
