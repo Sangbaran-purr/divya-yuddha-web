@@ -495,7 +495,7 @@ async function hall(url, escAddr, dycAddr, player, provider, opts) {
   if (opts.accessNFT) w.DY_CONFIG.contracts.accessNFT = opts.accessNFT;   // FREE-PLAY-1 — the harness's own Torana contract
   if (!opts.noWallet) run(path.join(SITE, "js/wallet.js"));   // control: boot with DYWallet absent (init cannot run)
   run(path.join(SRC, "mp/matchclient.js"));
-  run(path.join(SRC, "mp/hall.js"));
+  if (opts.hallSrc) w.eval(opts.hallSrc); else run(path.join(SRC, "mp/hall.js"));   // GUEST-PLAY-1: a breakage may swap it
   w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
   w.__net = net;   // so a suite holding only `w` can still tear down safely (see teardown)
   return { dom, w, eth, sockets, net, sent };

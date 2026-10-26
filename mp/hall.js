@@ -1836,20 +1836,20 @@
     //   (web3 services/match-server FP1), so the page and the server can never disagree. Ruled words.
     return '<div class="hall-gate">' +
       '<p class="hall-gate-line">Tables against other players need a Torana - solo play stays free.</p>' +
-      // SITE-AUDIT-1 batch 2 — the free road, from here: on Polygon straight into the game (the rite's own pass), on
-      //   any other network to the rite (which switches it first). No analytics here.
-      '<p class="hall-gate-line hall-gate-solo"><a id="hall-solo" href="../rite.html">Play solo (free) →</a></p>' +
+      // GUEST-PLAY-1 (owner rulings 2026-10-26) — the free road goes straight into the game: free play needs no wallet
+      //   and no pass. (SITE-AUDIT-1 batch 2 sent a wallet on another network to the rite first.) No analytics here.
+      '<p class="hall-gate-line hall-gate-solo"><a id="hall-solo" href="../game/index.html">Play solo (free) →</a></p>' +
       // S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 — THE SECOND DOOR, unchanged: the Torana can be BOUGHT.
       '<p class="hall-gate-line hall-gate-buy"><a href="../store.html#bundle">Or buy it now: a Torana and 500 DYC for USD 20.</a></p></div>';
   }
 
   function wireGateSolo() {
     var a = document.getElementById("hall-solo"); if (!a) return;
+    // GUEST-PLAY-1 — any visitor, any wallet state: to the game, bound to the synced bytes by game/STAMP (as the battle
+    //   frame is). The demo mark is cleared so the game's Multiplayer stays a live door to the Hall.
     a.onclick = function (e) {
-      var st = window.DYWallet && window.DYWallet.state;
-      if (!(st && st.connected && st.chainOk)) return;                          // the link itself goes to the rite
       e.preventDefault();
-      try { window.sessionStorage.setItem("dyw_pass", "1"); window.sessionStorage.removeItem("dyw_demo"); } catch (x) {}
+      try { window.sessionStorage.removeItem("dyw_demo"); } catch (x) {}
       return readStamp().then(function (v) { window.location.href = "../game/index.html" + (v ? "?v=" + v : ""); });
     };
   }

@@ -48,10 +48,12 @@ async function run() {
     H.click(w, "#rite-action");                             // a second tap (the door is still swinging)
     const calls = plausibleCalls(w);
     const blob = JSON.stringify(calls).toLowerCase();
-    ok("RT5 · solo_start fires ONCE, on Enter", calls.length === 1 && calls[0][0] === "solo_start", JSON.stringify(calls));
-    ok("RT6 · …carrying the utm tags ONLY — no address, no holder flag, nothing else",
-       calls.length === 1 && JSON.stringify(calls[0][1]) === JSON.stringify({ props: { utm_source: "ig", utm_medium: "bio", utm_campaign: "free" } }) &&
-       blob.indexOf(c.player.address.toLowerCase()) < 0 && blob.indexOf(c.player.address.toLowerCase().slice(2, 10)) < 0 && !/holder|torana|0x[0-9a-f]{8}/.test(blob), JSON.stringify(calls));
+    // GUEST-PLAY-1 (owner ruling 2026-10-26): solo_start moved to the player's FIRST BATTLE (the game copy's injected block,
+    //   tests/suites/guestplay.js) — the rite's Enter fires nothing now, so it can never count twice
+    ok("RT5 · Enter fires NO solo_start any more (it moved to the first battle, in the game copy)", calls.length === 0, JSON.stringify(calls));
+    ok("RT6 · …the tags the game's tag will read are the utm values ONLY — no address, no holder flag, nothing else",
+       JSON.stringify(w.DYSoloTrack._tags()) === JSON.stringify({ utm_source: "ig", utm_medium: "bio", utm_campaign: "free" }) &&
+       blob.indexOf(c.player.address.toLowerCase()) < 0 && !/holder|torana|0x[0-9a-f]{8}/.test(JSON.stringify(w.DYSoloTrack._tags())), JSON.stringify(w.DYSoloTrack._tags()));
     ok("RT7 · the tags rode the store's own sessionStorage key (a visit tagged on either page carries through)",
        JSON.parse(w.sessionStorage.getItem("dystore::utm")).utm_source === "ig");
   }
@@ -61,9 +63,8 @@ async function run() {
     const r = await H.ritePage(c, c.player, { url: "https://divyayuddha.games/rite.html?utm_source=0x" + "ab".repeat(20) + "&utm_medium=x" });
     await settle(r.w, () => /play solo/.test(btnText(r.w)), 15000, "the solo Enter");
     H.click(r.w, "#rite-action");
-    const calls = plausibleCalls(r.w);
-    ok("RT8 · an address smuggled into a utm tag is dropped (only utm_medium travels)",
-       calls.length === 1 && JSON.stringify(calls[0][1].props) === JSON.stringify({ utm_medium: "x" }), JSON.stringify(calls));
+    ok("RT8 · an address smuggled into a utm tag is dropped (only utm_medium would travel)",
+       JSON.stringify(r.w.DYSoloTrack._tags()) === JSON.stringify({ utm_medium: "x" }) && plausibleCalls(r.w).length === 0, JSON.stringify(r.w.DYSoloTrack._tags()));
   }
   {
     const c = await H.chainStore();
@@ -86,18 +87,18 @@ async function run() {
     const r = await H.ritePage(c, c.player, { notConnected: true });
     const w = r.w;
     await settle(w, () => /Declare Yourself/.test(btnText(w)), 15000, "the connect button");
-    ok("RT11 · NOT CONNECTED: 'Connect a Polygon wallet to play free.' and the connect button — no Enter, no pass",
-       txt($(w, "rite-msg")) === "Connect a Polygon wallet to play free." && /Declare Yourself/.test(btnText(w)) && !/Enter/.test(btnText(w)) &&
-       w.sessionStorage.getItem("dyw_pass") === null, txt($(w, "rite-msg")));
+    ok("RT11 · NOT CONNECTED (GUEST-PLAY-1): '" + "Play free — no wallet needed. Connect a Polygon wallet only to sit at the Hall's tables." + "', the connect button AND 'Play free / no wallet needed' to the game — no Enter",
+       txt($(w, "rite-msg")) === "Play free — no wallet needed. Connect a Polygon wallet only to sit at the Hall's tables." && /Declare Yourself/.test(btnText(w)) && !/Enter/.test(btnText(w)) &&
+       shown($(w, "rite-play")) && txt($(w, "rite-play")) === "Play freeno wallet needed" && /^game\/index\.html\?v=[0-9a-f]{7}$/.test($(w, "rite-play").getAttribute("href")), txt($(w, "rite-msg")));
   }
   {
     const c = await H.chainStore();
     const r = await H.ritePage(c, c.player, { noEthereum: true });
     const w = r.w;
     await settle(w, () => /Retry/.test(btnText(w)), 15000, "absence concluded");
-    ok("RT12 · NO WALLET: the connect prompt, the install guidance and Retry — no Enter",
-       txt($(w, "rite-msg")) === "Connect a Polygon wallet to play free." && /You carry no key\. Forge one — install a wallet, then Retry\./.test(txt($(w, "rite-line"))) &&
-       /Retry/.test(btnText(w)) && w.sessionStorage.getItem("dyw_pass") === null, txt($(w, "rite-msg")) + " | " + txt($(w, "rite-line")));
+    ok("RT12 · NO WALLET (GUEST-PLAY-1): the new line, the install guidance and Retry — AND 'Play free' to the game; no Enter",
+       txt($(w, "rite-msg")) === "Play free — no wallet needed. Connect a Polygon wallet only to sit at the Hall's tables." && /You carry no key\. Forge one — install a wallet, then Retry\./.test(txt($(w, "rite-line"))) &&
+       /Retry/.test(btnText(w)) && shown($(w, "rite-play")), txt($(w, "rite-msg")) + " | " + txt($(w, "rite-line")));
   }
   {
     const c = await H.chainStore();
@@ -133,9 +134,8 @@ async function run() {
        /Read the seal again/.test(txt($(w, "rite-line"))) && !shown($(w, "rite-doorline")), btnText(w) + " | " + txt($(w, "rite-line")));
     H.click(w, "#rite-action"); H.click(w, "#rite-action");
     const calls = plausibleCalls(w);
-    ok("RT17 · …Enter sets the pass and solo_start fires ONCE, tags only",
-       w.sessionStorage.getItem("dyw_pass") === "1" && calls.length === 1 && calls[0][0] === "solo_start" &&
-       JSON.stringify(calls[0][1]) === JSON.stringify({ props: { utm_source: "ig" } }), JSON.stringify(calls));
+    ok("RT17 · …Enter takes the player in and fires NO solo_start (GUEST-PLAY-1: the first battle fires it); the visit's tags stay in the session",
+       calls.length === 0 && JSON.stringify(w.DYSoloTrack._tags()) === JSON.stringify({ utm_source: "ig" }), JSON.stringify(calls));
   }
   // ── ruling 2: the free claim switched on — it stands BESIDE Enter ──
   {
@@ -197,8 +197,8 @@ async function run() {
   const riteSrc = fs.readFileSync(path.join(SITE, "rite.html"), "utf8");
   ok("RT24 · none of the old registration/approval sentences survive anywhere in rite.html (and it never reads the allowlist)",
      !APPROVAL.test(riteSrc) && riteSrc.indexOf("BUY YOUR COIN") < 0 && riteSrc.indexOf("register.html") < 0 && !/allowlist\.json|\/allowlist"/.test(riteSrc));
-  ok("RT25 · the rite's no-script default line is 'Connect a Polygon wallet to play free.'",
-     /<p id="rite-msg" class="rite-state-msg">Connect a Polygon wallet to play free\.<\/p>/.test(riteSrc));
+  ok("RT25 · the rite's no-script default line is the GUEST-PLAY-1 line ('Play free — no wallet needed. …')",
+     /<p id="rite-msg" class="rite-state-msg">Play free — no wallet needed\. Connect a Polygon wallet only to sit at the Hall's tables\.<\/p>/.test(riteSrc));
   const regSrc = fs.readFileSync(path.join(SITE, "register.html"), "utf8");
   ok("RT26 · register.html is a REDIRECT to the dashboard's buy panel (meta refresh + location.replace), with no form and no Google Form link",
      /http-equiv="refresh" content="0; url=dashboard\.html#buy-panel"/.test(regSrc) && /location\.replace\("dashboard\.html#buy-panel"\)/.test(regSrc) &&
@@ -250,6 +250,13 @@ async function run() {
   const head = (f) => execFileSync("git", ["show", ref + ":" + f], { cwd: SITE, maxBuffer: 64 * 1024 * 1024 }).toString();
   // SITE-AUDIT-1 re-applied the injected S3 block (the Store roundel relink), so the copy is compared OUTSIDE that
   // block: the game itself, the gate preamble and the stamp are unchanged since before FREE-PLAY-1.
+  // GUEST-PLAY-1 (owner ruling 2026-10-26) removed the courtesy redirect and added the solo_start tag to the injected
+  // preamble. Both are undone here EXACTLY (any other drift in the preamble still turns red).
+  const withoutGuestPlay = (t) => t
+    .replace('  /* GUEST-PLAY-1 (owner ruling 2026-10-26): free play needs no wallet and no pass - the courtesy redirect to the rite is\n     GONE. The Hall keeps its own gate (wallet + Torana) and the match server its own check; neither lives here. */\n',
+      '  try {\n    if (!dailyFrame && !sessionStorage.getItem("dyw_pass")) { location.replace("../rite.html"); return; }\n  } catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }\n')
+    .replace(/\n  \/\* GUEST-PLAY-1 — THE solo_start TAG[\s\S]*?  else wrapStarts\(\);/, "");
+  const copyId = () => require("crypto").createHash("sha256").update(fs.readFileSync(path.join(SITE, "game/index.html"))).digest("hex").slice(0, 7);
   const outsideS3 = (t) => t.replace(/<!-- DYW-S3-SUPPRESS-START[\s\S]*?<!-- DYW-S3-SUPPRESS-END -->/, "<S3/>");
   // MINI-GAMES-1 (owner ruling 2026-10-14) re-synced the copy from game 49555c0: its ONLY change is the main-menu Daily
   // Puzzle plaque + its door, and the stamp 07c3530 -> 49555c0. Those exact pieces are taken out before comparing, so
@@ -285,22 +292,22 @@ async function run() {
     .replace('if (!dailyFrame && !sessionStorage.getItem("dyw_pass")) {', 'if (!sessionStorage.getItem("dyw_pass")) {')
     .replace('} catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }', '} catch (e) { location.replace("../rite.html"); return; }')
     .replace(/\n    if \(dailyFrame\) return; \/\* MINI-GAMES-1: nor inside the Daily Puzzle's frame[^\n]*/, "");
-  const nowCopy = withoutDailyFrame(withoutPuzzleMode(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")));
-  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle and Smriti doors (MINI-GAMES-1/-2), the Daily Puzzle's battle mode (?puzzle=1) and its gate road (MINI-GAMES-1), and the stamp",
+  const nowCopy = withoutDailyFrame(withoutPuzzleMode(withoutGuestPlay(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8"))));
+  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle and Smriti doors (MINI-GAMES-1/-2), the Daily Puzzle's battle mode (?puzzle=1) and its gate road (MINI-GAMES-1), GUEST-PLAY-1's preamble (no redirect, the solo tag), and the stamp (now the copy id)",
      outsideS3(head("game/index.html")) === outsideS3(withoutDoor(nowCopy)) && withoutDoor(nowCopy) !== nowCopy &&
      withoutPuzzleMode(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")).indexOf("PUZZLE_MODE") < 0 &&
-     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === "ad978f0");
+     head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === copyId());
   // SITE-AUDIT-1 grew the sync script (GAME_REF + the Store relink); the GATE it injects must not have moved
   const gateBlock = (t) => (t.match(/<!-- DYW-GATE-START[\s\S]*?<!-- DYW-S3-SUPPRESS-START/) || [""])[0];
   const shNow = fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8"), copyNow = fs.readFileSync(path.join(SITE, "game/index.html"), "utf8");
-  ok("DG2 · the sync script's gate preamble is unchanged since before FREE-PLAY-1 except ONE ruled road (the Daily Puzzle's own frame skips the pass and the gem); a passless visit still goes to the rite",
-     gateBlock(head("scripts/sync_game.sh")) === withoutDailyFrame(gateBlock(shNow)) && gateBlock(shNow) !== withoutDailyFrame(gateBlock(shNow)) && gateBlock(head("scripts/sync_game.sh")).length > 200 &&
-     /if \(!dailyFrame && !sessionStorage\.getItem\("dyw_pass"\)\) \{ location\.replace\("\.\.\/rite\.html"\); return; \}/.test(copyNow) &&
+  ok("DG2 · the sync script's gate preamble is unchanged since before FREE-PLAY-1 except the ruled roads (the Daily Puzzle's own frame; GUEST-PLAY-1: no redirect for anyone, the solo tag); a passless visit is NOT sent to the rite",
+     gateBlock(head("scripts/sync_game.sh")) === withoutDailyFrame(withoutGuestPlay(gateBlock(shNow))) && gateBlock(shNow) !== withoutGuestPlay(gateBlock(shNow)) && gateBlock(head("scripts/sync_game.sh")).length > 200 &&
+     copyNow.indexOf('location.replace("../rite.html")') < 0 && copyNow.indexOf('sessionStorage.getItem("dyw_pass")') < 0 &&
      /dailyFrame = window\.top !== window && \/\[\?&\]puzzle=1\(&\|\$\)\/\.test\(location\.search\) && window\.parent\.location\.origin === location\.origin && \/\^\\\/play\\\/daily\\\/\/\.test\(window\.parent\.location\.pathname\)/.test(copyNow));
   const demo = fs.readFileSync(path.join(SITE, "demo/index.html"), "utf8"), demoHead = head("demo/index.html");
-  ok("DG3 · the demo still seeds the pass and its mark the same way; ONLY its button changed ('Play free' → the rite)",
-     demo.replace('<a class="demo-cta" href="../rite.html">Play free</a>', '<a class="demo-cta" href="../index.html">Get Access</a>')
-       .replace("../game/index.html?v=ad978f0", "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows the MINI-GAMES-1/-2 re-syncs
+  ok("DG3 · the demo still seeds the pass and its mark the same way; ONLY its button changed ('Play free' → the game since GUEST-PLAY-1; it went to the rite)",
+     demo.replace(/<a class="demo-cta" href="\.\.\/game\/index\.html\?v=[0-9a-f]{7}">Play free<\/a>/, '<a class="demo-cta" href="../index.html">Get Access</a>')
+       .replace(/\.\.\/game\/index\.html\?v=[0-9a-f]{7}/, "../game/index.html?v=07c3530") === demoHead &&   // the stamp follows every re-sync
      /sessionStorage\.setItem\("dyw_pass", "1"\)/.test(demo) && /sessionStorage\.setItem\("dyw_demo", "1"\)/.test(demo));
 
   // ═══════════════ ST · THE STAMPS ═══════════════
@@ -308,7 +315,7 @@ async function run() {
   const rite = fs.readFileSync(path.join(SITE, "rite.html"), "utf8"), hallHtml = fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8");
   ok("ST1 · rite.html loads js/solotrack.js?v=t1 (after wallet.js, before the page's own script)",
      /<script src="js\/wallet\.js\?v=s1s"><\/script>\s*<script src="js\/solotrack\.js\?v=t1"><\/script>\s*<script>/.test(rite));
-  ok("ST2 · mp/hall.html loads hall.js?v=h35 (the gate screen moved, then the stake parse)", /<script src="hall\.js\?v=h35"><\/script>/.test(hallHtml));
+  ok("ST2 · mp/hall.html loads hall.js?v=h36 (the gate screen moved, then the stake parse)", /<script src="hall\.js\?v=h36"><\/script>/.test(hallHtml));
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));   // the runner's own format
   process.exit(fail ? 1 : 0);

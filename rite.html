@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Divya Yuddha — The Rite</title>
-    <meta name="description" content="Connect a Polygon wallet to play Divya Yuddha free. The Torana opens the Hall's tables — a Torana and 500 DYC for USD 20." />
+    <meta name="description" content="Play Divya Yuddha free in your browser — no wallet needed. Connect a Polygon wallet to sit at the Hall's tables." />
     <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" sizes="512x512" href="assets/brand/icon-512.png" />
     <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
@@ -305,6 +305,21 @@
       #rite-action[hidden] { display: none; }
       /* FREE-PLAY-1 (ruling 2) — the free-claim button stands BESIDE Enter when the claim opens; the same guard. */
       #rite-claim[hidden] { display: none; }
+      /* GUEST-PLAY-1 — "Play free" is a bare .rite-btn too: the same [hidden] guard, or it would show to a connected wallet.
+         On a phone the doorway is short, so while Play free stands beside the action the pair sits side by side, compact,
+         instead of stacking up past the top of the door. */
+      #rite-play[hidden] { display: none; }
+      @media (max-width: 719px) {
+        .rite-threshold.rite-pair .rite-state-msg { margin-bottom: 0.7rem; }
+        .rite-threshold.rite-pair #rite-action,
+        .rite-threshold.rite-pair #rite-play {
+          width: calc(50% - 0.3rem);
+          padding: 0.6rem 0.5rem;
+          vertical-align: top;
+          letter-spacing: 0.12em;
+        }
+        .rite-threshold.rite-pair .rite-btn .sub { letter-spacing: 0.06em; font-size: 0.56rem; }
+      }
       /* SITE-AUDIT-1 (owner decision 1) — the presale road for an unregistered solo player: a QUIET text link under
          Enter, never a button (Enter stays the one primary action). */
       .rite-register:hover,
@@ -332,7 +347,7 @@
             <a href="mint.html">The Mint</a>
             <a href="store.html">The Store</a>
             <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html?v=ad978f0">The Game</a>
+            <a href="game/index.html?v=2b77c41">The Game</a>
           </div>
           <div id="nav-decl">
             <a id="nameplate-top" class="nameplate hidden" href="dashboard.html"><span class="flame-dot"></span><span id="addr-top"></span></a>
@@ -347,7 +362,7 @@
             <a href="mint.html">The Mint</a>
             <a href="store.html">The Store</a>
             <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html?v=ad978f0">The Game</a>
+            <a href="game/index.html?v=2b77c41">The Game</a>
           </nav>
         </div>
       </nav>
@@ -376,10 +391,14 @@
 
         <!-- the threshold stone: state message + the one action -->
         <div class="rite-threshold">
-          <p id="rite-msg" class="rite-state-msg">Connect a Polygon wallet to play free.</p>
+          <p id="rite-msg" class="rite-state-msg">Play free — no wallet needed. Connect a Polygon wallet only to sit at the Hall's tables.</p>
           <button id="rite-action" class="rite-btn" type="button">
             Declare Yourself<span class="sub">connect wallet</span>
           </button>
+          <!-- GUEST-PLAY-1 (owner rulings 2026-10-26) — free play needs no wallet: while NO wallet is connected, the game is
+               one tap away beside the connect button. A plain link (the game opens for anyone); shown only in the
+               not-connected states — a connected wallet has its own Enter. -->
+          <a id="rite-play" class="rite-btn" href="game/index.html?v=2b77c41">Play free<span class="sub">no wallet needed</span></a>
           <!-- FREE-PLAY-1 (ruling 2, 2026-10-11) — when config.claimOpen is on, the free claim stands BESIDE the solo Enter
                for a non-holder on Polygon; the claim never replaces Enter. Hidden in every other state. -->
           <button id="rite-claim" class="rite-btn" type="button" hidden></button>
@@ -491,6 +510,8 @@
         var claimBtn = document.getElementById("rite-claim"); // FREE-PLAY-1 (ruling 2) — the claim, beside Enter
         var line = document.getElementById("rite-line");
         var buy = document.getElementById("rite-buy");
+        var thr = document.querySelector(".rite-threshold");
+        var play = document.getElementById("rite-play"); // GUEST-PLAY-1 — free play, no wallet
         var door = document.getElementById("rite-doorline"); // S-GATE-1 — the ruled door line (non-holder only)
         var buyline = document.getElementById("rite-buyline"); // S-BUNDLE-1 — the second door FOLLOWS it, in visibility too:
                                                               //   a Torana holder is never invited to buy what they hold
@@ -586,7 +607,9 @@
         // The one tag-only analytics event fires first (utm only — js/solotrack.js), then the holder's own road.
         var soloEnterShown = false;
         function enterSolo() {
-          try { if (window.DYSoloTrack) window.DYSoloTrack.soloStart(); } catch (e) {}
+          // GUEST-PLAY-1 (owner ruling 2026-10-26): solo_start now fires at the player's FIRST BATTLE, from the game copy's
+          // injected block — not here (it would count twice). The tracker still mounts on this page: it keeps the visit's
+          // utm tags in the session, which the game's tag reads.
           enterTheHall();
         }
         function enterTheHall() {
@@ -595,8 +618,8 @@
           var entered = false;
           try { entered = !!localStorage.getItem("dy_site_entered"); } catch (e) {}
           function go() {
-            if (reduce) { window.location.href = "game/index.html?v=ad978f0"; return; }
-            doorWipe(function () { window.location.href = "game/index.html?v=ad978f0"; });
+            if (reduce) { window.location.href = "game/index.html?v=2b77c41"; return; }
+            doorWipe(function () { window.location.href = "game/index.html?v=2b77c41"; });
           }
           if (!entered) { thresholdNotice(go); } else { go(); }
         }
@@ -643,6 +666,8 @@
           if (door) door.hidden = true; // S-GATE-1 — door line defaults hidden; only the connected non-holder state reveals it
           if (buyline) buyline.hidden = true;
           if (btn) btn.hidden = false; // S-RITE-4 — the action box is visible in EVERY state except the voucher branch (which hides it)
+          if (play) play.hidden = !(!s.hasProvider || !s.connected); // GUEST-PLAY-1 — "Play free" only while no wallet is connected
+          if (thr) thr.classList.toggle("rite-pair", !!play && !play.hidden); // GUEST-PLAY-1 — the phone layout pairs the two
           soloEnterShown = false; // FREE-PLAY-1 — only the connected-on-Polygon non-holder state sets it
           if (claimBtn) { claimBtn.hidden = true; claimBtn.onclick = null; } // FREE-PLAY-1 (ruling 2) — the claim shows only beside a solo Enter
 
@@ -657,7 +682,7 @@
               return;
             }
             // absence CONCLUDED — render honest guidance now, and a Retry that re-runs detection.
-            msg.textContent = s.inApp ? "Your wallet isn't responding." : "Connect a Polygon wallet to play free.";
+            msg.textContent = s.inApp ? "Your wallet isn't responding." : "Play free — no wallet needed. Connect a Polygon wallet only to sit at the Hall's tables.";
             noWallet();
             setBtn("Retry", "check for your wallet again", {
               onClick: function () { msg.textContent = "Looking for your wallet…"; line.textContent = ""; window.DYWallet.retry(); },
@@ -665,7 +690,7 @@
             return;
           }
           if (!s.connected) {
-            msg.textContent = "Connect a Polygon wallet to play free.";
+            msg.textContent = "Play free — no wallet needed. Connect a Polygon wallet only to sit at the Hall's tables.";
             setBtn("Declare Yourself", "connect wallet", {
               onClick: function () {
                 line.textContent = "Awaiting your seal…";

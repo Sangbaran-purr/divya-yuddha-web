@@ -3,6 +3,7 @@
 - Source repo: divya-yuddha
 - Source commit: `ad978f01112f7f560edf295d2867a038bebbc7d4` (ad978f0)
 - Source committed: 2026-10-16 12:53:36 +0530
+- Copy id (the stamp, GUEST-PLAY-1): `2b77c41` — 7 hex of the sha-256 of game/index.html
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -25,20 +26,21 @@
 - KEPT VISIBLE: the Collection gallery (as a card viewer).
 
 ## Gate preamble (marker: DYW-GATE-START / DYW-GATE-END)
-- Honest-door session check: no site pass -> redirect to ../rite.html. A courtesy redirect, not security.
+- GUEST-PLAY-1 (owner ruling 2026-10-26): NO pass check and NO redirect - free play needs no wallet. (Until then: no site pass -> redirect to ../rite.html, a courtesy redirect, never security.) The Hall keeps its own gate (wallet + Torana) and the match server its own check.
+- The solo_start tag (GUEST-PLAY-1): one tag-only Plausible event the first time this browser starts a battle; utm values only; never in the Hall's or the Daily Puzzle's frame.
 - localStorage namespace shim (prefix "dyw::"): the copy keeps its own memory, isolated from the free game (both live on the same github.io origin, which otherwise shares localStorage).
 - Return-to-gate gem-mark (bottom-left, safe-area aware). Skipped when the page is framed with ?wire=1 (the Hall's battle frame): a tap there would navigate the battle away mid-match (S-HALL-WIRE-1 R5).
-- MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle (/play/daily/) frames this copy with ?puzzle=1. That frame — same origin, parent under /play/daily/ — is the ONE road that skips the pass (the puzzle is free for everyone) and the gem. A direct visit with ?puzzle=1, or any other frame, still goes to the rite.
+- MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle (/play/daily/) frames this copy with ?puzzle=1. That frame — same origin, parent under /play/daily/ — skips the gem (the page around it is the way back) and the solo_start tag.
 
 ## Notes at sync time
-- Source working tree dirty files: 13 (ignored by the archive method).
-- game/ in-repo size: 2272 KB.
+- Source working tree dirty files: 20 (ignored by the archive method).
+- game/ in-repo size: 2276 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty-two site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, register.html x2, my-invites.html x2) are stamped game/index.html?v=ad978f0 — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 22.
+- The twenty-two site->game links (rite.html x5, index.html x3, treasury.html x2, demo/index.html x2, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2) are stamped game/index.html?v=2b77c41 — the COPY ID (GUEST-PLAY-1): the first 7 hex of the sha-256 of this game/index.html, so they change exactly when the copy's BYTES change (a new source commit OR a changed injected block). The sync fails if the link count is not exactly 22.
 
 ## STAMP (S-HALL-WIRE-1 R4)
-- game/STAMP holds the source short sha (ad978f0), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
+- game/STAMP holds the copy id (2b77c41), plain text (the source commit is recorded above). The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh

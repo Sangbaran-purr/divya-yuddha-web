@@ -121,7 +121,7 @@ async function run() {
     const block = (t) => (t.match(/<!-- DYW-S3-SUPPRESS-START[\s\S]*?<!-- DYW-S3-SUPPRESS-END -->/) || [""])[0];
     ok("GM3 · the copy's S3 block is BYTE-IDENTICAL to what the sync script injects (re-applied every sync, never hand-edited)",
        block(R("scripts/sync_game.sh")).length > 500 && block(R("scripts/sync_game.sh")) === block(g) && block(g).indexOf("(6) SITE-AUDIT-1") >= 0 &&
-       R("game/STAMP").trim() === "ad978f0");
+       R("game/STAMP").trim() === require("crypto").createHash("sha256").update(R("game/index.html")).digest("hex").slice(0, 7));   // GUEST-PLAY-1: the stamp is the COPY ID
     // MINI-GAMES-1 — the Daily Puzzle door on the game's main menu (owner ruling 2026-10-14: found from the game only)
     const btn = (g.match(/<button class="mode plaque-lg active" id="mode-daily">[\s\S]*?<\/button>/) || [""])[0];
     const door = (g.match(/\(function\(\)\{\n  var dp = document\.getElementById\('mode-daily'\);[\s\S]*?\n\}\)\(\);/) || [""])[0];
@@ -233,7 +233,7 @@ async function run() {
        /<span class="declared">Connected<\/span>/.test(R("index.html")) && /doorwaySub\.innerHTML = '<a href="rite\.html">play solo — free<\/a>'/.test(R("index.html")));
     const rt = vis("rite.html");
     ok("TX9 · rite meta/og: free solo + the Torana opens multiplayer (no 'free Access token')", rt.indexOf("free Access token") < 0 &&
-       /<meta name="description" content="Connect a Polygon wallet to play Divya Yuddha free\./.test(rt) && /<meta property="og:description" content="Play free, solo\. The Torana opens multiplayer\."/.test(rt));
+       /<meta name="description" content="Play Divya Yuddha free in your browser — no wallet needed\. Connect a Polygon wallet to sit at the Hall's tables\."/.test(rt) && /<meta property="og:description" content="Play free, solo\. The Torana opens multiplayer\."/.test(rt));
   }
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));

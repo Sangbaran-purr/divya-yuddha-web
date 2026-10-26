@@ -395,9 +395,11 @@ async function main() {
       /m\.type === 'puzzle:perform'\) pzPerform\(m\.line\)/.test(blk) && !/\.solve\(|solve\(/.test(blk));
     ok("FR1 · the copy is the game's puzzle mode (game/STAMP " + STAMP + "): no tap-to-skip, no AI, battle music never fetched",
       /layer\.onclick=PUZZLE_MODE \? null : skipChoreo;/.test(G) && /if \(PUZZLE_MODE\)\{ pzPump\(\); return; \}/.test(G) && /filter\(\(\[k\]\)=>!\(PUZZLE_MODE && \(k==='menu'\|\|k==='battle'\)\)\)/.test(G));
-    ok("FR2 · the gate lets ONLY the Daily Puzzle's own frame through without the pass (framed, same origin, parent under /play/daily/, ?puzzle=1); every other road still goes to the rite, and the gem is hidden in that frame",
+    // GUEST-PLAY-1 (2026-10-26): there is no pass and no redirect for ANY road now — the frame is still recognised (same
+    //   origin, parent under /play/daily/, ?puzzle=1) so the gem and the solo tag stay out of it
+    ok("FR2 · the copy recognises ONLY the Daily Puzzle's own frame (framed, same origin, parent under /play/daily/, ?puzzle=1): no road is redirected any more (GUEST-PLAY-1), and the gem and the solo tag stay out of that frame",
       /dailyFrame = window\.top !== window && \/\[\?&\]puzzle=1\(&\|\$\)\/\.test\(location\.search\) && window\.parent\.location\.origin === location\.origin && \/\^\\\/play\\\/daily\\\/\/\.test\(window\.parent\.location\.pathname\);/.test(G)
-        && /if \(!dailyFrame && !sessionStorage\.getItem\("dyw_pass"\)\) \{ location\.replace\("\.\.\/rite\.html"\); return; \}/.test(G) && /if \(dailyFrame\) return;/.test(G));
+        && G.indexOf('location.replace("../rite.html")') < 0 && /if \(dailyFrame\) return;/.test(G) && /if \(dailyFrame \|\| wireFrame \|\| !SOLO_TAG\.enabled\) return;/.test(G));
     ok("FR3 · the frame loads the site's own puzzle code, from the page's folder (../play/daily/puzzle-core.js)", /const PZ_CORE_URL = '\.\.\/play\/daily\/puzzle-core\.js';/.test(G));
   });
 

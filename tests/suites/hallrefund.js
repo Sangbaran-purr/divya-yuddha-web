@@ -211,16 +211,18 @@ async function run() {
     ok("G1 · a non-holder's gate screen shows 'Your stakes' — recovering a stake is not playing", txt(h.w).indexOf("Tables against other players need a Torana") === 0 &&
        txt(h.w).indexOf("Your stakes") >= 0 && !!btn(h.w, "cancel", id), txt(h.w).slice(0, 200));
     const link = h.w.document.getElementById("hall-solo");
-    ok("G2 · and 'Play solo (free) →' (its plain href is the rite)", !!link && link.textContent === "Play solo (free) →" && link.getAttribute("href") === "../rite.html");
+    // GUEST-PLAY-1 (owner ruling 2026-10-26): solo needs no wallet — the road goes to the GAME in every wallet state
+    ok("G2 · and 'Play solo (free) →' (its plain href is the game — GUEST-PLAY-1; it was the rite)", !!link && link.textContent === "Play solo (free) →" && link.getAttribute("href") === "../game/index.html");
     h.w.sessionStorage.setItem("dyw_demo", "1");
     h.w.DYWallet.state.chainOk = true; h.w.DYWallet.state.connected = true;
     const ev = new h.w.MouseEvent("click", { bubbles: true, cancelable: true }); link.dispatchEvent(ev);
-    ok("G3 · on Polygon it carries the rite's own pass into the game (dyw_pass set, dyw_demo cleared, the link's default stopped)",
-       ev.defaultPrevented && h.w.sessionStorage.getItem("dyw_pass") === "1" && h.w.sessionStorage.getItem("dyw_demo") === null);
-    h.w.sessionStorage.clear();
-    h.w.DYWallet.state.chainOk = false;
+    ok("G3 · on Polygon it goes to the game bound to game/STAMP (the link's default stopped, dyw_demo cleared, no pass needed)",
+       ev.defaultPrevented && h.w.sessionStorage.getItem("dyw_demo") === null);
+    h.w.sessionStorage.clear(); h.w.sessionStorage.setItem("dyw_demo", "1");
+    h.w.DYWallet.state.chainOk = false; h.w.DYWallet.state.connected = false;
     const ev2 = new h.w.MouseEvent("click", { bubbles: true, cancelable: true }); link.dispatchEvent(ev2);
-    ok("G4 · on another network it goes to the rite (no pass set here; the link's own href stands)", !ev2.defaultPrevented && h.w.sessionStorage.getItem("dyw_pass") === null);
+    ok("G4 · NOT connected (or another network) it ALSO goes to the game — solo needs no wallet (GUEST-PLAY-1); no pass is set or needed",
+       ev2.defaultPrevented && h.w.sessionStorage.getItem("dyw_demo") === null && h.w.sessionStorage.getItem("dyw_pass") === null);
     H.teardown(h);
   }
 
@@ -234,7 +236,7 @@ async function run() {
      (HALL.match(/COMMITMENT_JOIN\(t\.stake\)/g) || []).length === 2 && (HALL.match(/[^_]COMMITMENT\((chosen\.stake|ctx\.stakeWei)\)/g) || []).length === 2 &&
      !/COMMITMENT\(t\.stake\)/.test(HALL));
   const hh = fs.readFileSync(path.join(H.SITE, "mp", "hall.html"), "utf8");
-  ok("X3 · stamps: hall.js h35, hall.css h12", /hall\.js\?v=h35"/.test(hh) && /hall\.css\?v=h12"/.test(hh));
+  ok("X3 · stamps: hall.js h36, hall.css h12", /hall\.js\?v=h36"/.test(hh) && /hall\.css\?v=h12"/.test(hh));
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));
   process.exit(fail ? 1 : 0);

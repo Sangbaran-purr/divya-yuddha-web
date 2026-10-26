@@ -344,9 +344,11 @@ async function main() {
   // ═══ the synced copy carries what the frame needs (R4 STAMP · R5 the gem skip) ═══
   {
     const snap = fs.readFileSync(path.join(H.SITE, "game/SNAPSHOT.md"), "utf8");
-    const short = ((snap.match(/Source commit: `[0-9a-f]+` \(([0-9a-f]+)\)/) || [])[1]) || null;
-    ok("F36 · game/STAMP names the synced commit — the SNAPSHOT's own short sha",
-       fs.readFileSync(path.join(H.SITE, "game/STAMP"), "utf8").trim() === short, short);
+    // GUEST-PLAY-1 — the stamp is the COPY ID (7 hex of the sha-256 of game/index.html): it moves when the copy's BYTES do
+    const short = ((snap.match(/Copy id \(the stamp, GUEST-PLAY-1\): `([0-9a-f]{7})`/) || [])[1]) || null;
+    const want = require("crypto").createHash("sha256").update(fs.readFileSync(path.join(H.SITE, "game/index.html"))).digest("hex").slice(0, 7);
+    ok("F36 · game/STAMP names the synced copy — the SNAPSHOT's own copy id, the hash of the copy's bytes",
+       fs.readFileSync(path.join(H.SITE, "game/STAMP"), "utf8").trim() === short && short === want, short + " vs " + want);
     const gi = fs.readFileSync(path.join(H.SITE, "game/index.html"), "utf8");
     // HALL-SYNC-1 — the exports reach the hosted game: every manifest URL (registry, faction effects, effect + actor specs and
     //   atlases) resolves against the game's ONE FX.base, cross-linked to the free game's Pages origin — never a relative base

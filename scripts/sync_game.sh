@@ -153,9 +153,8 @@ cat > "$PRE" <<'PREAMBLE'
 (function(){
   var dailyFrame = false; /* MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle frames this copy in puzzle mode (?puzzle=1) from /play/daily/ on THIS origin. That frame alone skips the pass; nothing else does (a direct visit, any other frame, any other page). */
   try { dailyFrame = window.top !== window && /[?&]puzzle=1(&|$)/.test(location.search) && window.parent.location.origin === location.origin && /^\/play\/daily\//.test(window.parent.location.pathname); } catch (e) { dailyFrame = false; }
-  try {
-    if (!dailyFrame && !sessionStorage.getItem("dyw_pass")) { location.replace("../rite.html"); return; }
-  } catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }
+  /* GUEST-PLAY-1 (owner ruling 2026-10-26): free play needs no wallet and no pass - the courtesy redirect to the rite is
+     GONE. The Hall keeps its own gate (wallet + Torana) and the match server its own check; neither lives here. */
   var NS = "dyw::";
   try {
     var real = window.localStorage;
@@ -195,6 +194,50 @@ cat > "$PRE" <<'PREAMBLE'
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addGem);
   else addGem();
+  /* GUEST-PLAY-1 — THE solo_start TAG, moved here from the rite's Enter (owner ruling 2026-10-26): ONE tag-only
+     Plausible event the first time this browser starts a battle (a quick battle or a story chapter). The store's
+     zero-PII law, as js/solotrack.js: only the three utm values travel (from this URL, the demo page around it, or the
+     site's own session key), nothing else. Never inside the Hall's battle frame or the Daily Puzzle's (not solo play).
+     The script and the switch are config.js's analytics block (tests/suites/guestplay.js pins them equal). A blocked or
+     failed tag is a silent no-op that can never stand between the player and the battle. */
+  var SOLO_TAG = { enabled: true, script: "https://plausible.io/js/pa-sJ1oC1_YVyaxd2ADo13iV.js" };
+  var wireFrame = false; try { wireFrame = window.top !== window && /[?&]wire=1(&|$)/.test(location.search); } catch (e) { wireFrame = true; }
+  function soloTags(){
+    var F = ["utm_source", "utm_medium", "utm_campaign"], qs = [location.search], out = {}, got = null, raw = null;
+    try { if (window.top !== window && window.parent.location.origin === location.origin) qs.push(window.parent.location.search); } catch (e) {}
+    for (var i = 0; i < qs.length && !got; i++) {
+      var any = false, f = {};
+      for (var j = 0; j < F.length; j++) { var m = String(qs[i] || "").match(new RegExp("[?&]" + F[j] + "=([^&#]*)")); if (m) { any = true; try { f[F[j]] = decodeURIComponent(m[1].replace(/\+/g, " ")); } catch (e) { f[F[j]] = m[1]; } } }
+      if (any) got = f;
+    }
+    if (!got) { try { raw = sessionStorage.getItem("dystore::utm"); got = raw ? JSON.parse(raw) : null; } catch (e) { got = null; } }
+    if (!got || typeof got !== "object") return out;
+    for (var k = 0; k < F.length; k++) { var v = got[F[k]]; if (typeof v === "string" && v !== "" && !/0x[0-9a-fA-F]{40}/.test(v)) out[F[k]] = v; }
+    return out;
+  }
+  function soloStartOnce(){
+    if (dailyFrame || wireFrame || !SOLO_TAG.enabled) return;
+    try { if (real.getItem(NS + "dy_solo_started")) return; real.setItem(NS + "dy_solo_started", "1"); } catch (e) { return; }
+    try {
+      var w = window;
+      w.plausible = w.plausible || function () { (w.plausible.q = w.plausible.q || []).push(arguments); };
+      w.plausible.init = w.plausible.init || function (o) { w.plausible.o = o || {}; };
+      w.plausible.init({ autoCapturePageviews: false });
+      w.plausible("solo_start", { props: soloTags() });
+      var sc = document.createElement("script"); sc.async = true; sc.src = SOLO_TAG.script; document.head.appendChild(sc);
+    } catch (e) {}
+  }
+  function wrapStarts(){
+    ["startGame", "startStoryChapter"].forEach(function (name) {
+      var orig = window[name];
+      if (typeof orig !== "function" || orig.__dywSolo) return;
+      var wrapped = function () { soloStartOnce(); return orig.apply(this, arguments); };
+      wrapped.__dywSolo = true;
+      window[name] = wrapped;
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wrapStarts);
+  else wrapStarts();
 })();
 </script>
 <!-- DYW-S3-SUPPRESS-START (S8 WORD 2; re-applied every sync). Hide the free-platform economy surfaces.
@@ -267,12 +310,18 @@ fi
 
 GAME_BYTES="$(du -sk "$DEST" | cut -f1)"
 
+# GUEST-PLAY-1 — THE COPY ID: the stamp moves when the copy's BYTES move (a new source commit OR a changed injected
+# block). The source short sha alone stood still when only the injected block changed, so a browser's cached copy would
+# have kept the old block. 7 hex of the sha-256 of the final index.html (every injection is done above this line).
+COPY_ID="$(shasum -a 256 "$DEST/index.html" | cut -c1-7)"
+if ! printf '%s' "$COPY_ID" | grep -qE '^[0-9a-f]{7}$'; then echo "error: could not compute the copy id" >&2; exit 1; fi
 cat > "$DEST/SNAPSHOT.md" <<SNAP
 # Gated game snapshot
 
 - Source repo: divya-yuddha
 - Source commit: \`$SRC_COMMIT\` ($SRC_SHORT)
 - Source committed: $SRC_DATE
+- Copy id (the stamp, GUEST-PLAY-1): \`$COPY_ID\` — 7 hex of the sha-256 of game/index.html
 - Method: \`git archive\` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -295,20 +344,21 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - KEPT VISIBLE: the Collection gallery (as a card viewer).
 
 ## Gate preamble (marker: DYW-GATE-START / DYW-GATE-END)
-- Honest-door session check: no site pass -> redirect to ../rite.html. A courtesy redirect, not security.
+- GUEST-PLAY-1 (owner ruling 2026-10-26): NO pass check and NO redirect - free play needs no wallet. (Until then: no site pass -> redirect to ../rite.html, a courtesy redirect, never security.) The Hall keeps its own gate (wallet + Torana) and the match server its own check.
+- The solo_start tag (GUEST-PLAY-1): one tag-only Plausible event the first time this browser starts a battle; utm values only; never in the Hall's or the Daily Puzzle's frame.
 - localStorage namespace shim (prefix "$NS_PREFIX"): the copy keeps its own memory, isolated from the free game (both live on the same github.io origin, which otherwise shares localStorage).
 - Return-to-gate gem-mark (bottom-left, safe-area aware). Skipped when the page is framed with ?wire=1 (the Hall's battle frame): a tap there would navigate the battle away mid-match (S-HALL-WIRE-1 R5).
-- MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle (/play/daily/) frames this copy with ?puzzle=1. That frame — same origin, parent under /play/daily/ — is the ONE road that skips the pass (the puzzle is free for everyone) and the gem. A direct visit with ?puzzle=1, or any other frame, still goes to the rite.
+- MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle (/play/daily/) frames this copy with ?puzzle=1. That frame — same origin, parent under /play/daily/ — skips the gem (the page around it is the way back) and the solo_start tag.
 
 ## Notes at sync time
 - Source working tree dirty files: $SRC_DIRTY (ignored by the archive method).
 - game/ in-repo size: ${GAME_BYTES} KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty site->game links (rite.html x4, index.html x3, treasury.html x2, demo/index.html x1, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2) are stamped game/index.html?v=$SRC_SHORT — bound to this HEAD short sha, so they change exactly when the copy changes. The sync fails if the link count is not exactly 20.
+- The twenty-two site->game links (rite.html x5, index.html x3, treasury.html x2, demo/index.html x2, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2) are stamped game/index.html?v=$COPY_ID — the COPY ID (GUEST-PLAY-1): the first 7 hex of the sha-256 of this game/index.html, so they change exactly when the copy's BYTES change (a new source commit OR a changed injected block). The sync fails if the link count is not exactly 22.
 
 ## STAMP (S-HALL-WIRE-1 R4)
-- game/STAMP holds the source short sha ($SRC_SHORT), plain text. The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
+- game/STAMP holds the copy id ($COPY_ID), plain text (the source commit is recorded above). The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh
@@ -318,15 +368,24 @@ SNAP
 # answer wire:ready. mp/ stays outside the entry-link ledger (S-HALL-ENTRY-1 R2), so the Hall cannot carry a stamped
 # link; instead the sync writes the short sha beside the copy and the Hall reads it (no-store) at mount. A file the
 # sync owns — never a link in mp/, never parsed out of SNAPSHOT.md. Guarded like every other sync output.
-printf '%s\n' "$SRC_SHORT" > "$DEST/STAMP"
-if [ "$(cat "$DEST/STAMP")" != "$SRC_SHORT" ] || ! grep -qE '^[0-9a-f]{7,}$' "$DEST/STAMP"; then
-  echo "error: game/STAMP was not written as the source short sha" >&2
+printf '%s\n' "$COPY_ID" > "$DEST/STAMP"
+if [ "$(cat "$DEST/STAMP")" != "$COPY_ID" ] || ! grep -qE '^[0-9a-f]{7,}$' "$DEST/STAMP"; then
+  echo "error: game/STAMP was not written as the copy id" >&2
   exit 1
 fi
-echo "sync_game: STAMP -> $SRC_SHORT"
+echo "sync_game: STAMP -> $COPY_ID (copy id; source $SRC_SHORT)"
 # S-HALL-WIRE-1 (R5) — the gate gem must skip the Hall's battle frame; assert the skip line landed exactly once.
-if [ "$(grep -c 'nor inside the Daily Puzzle' "$DEST/index.html")" != "1" ] || [ "$(grep -c 'if (!dailyFrame && !sessionStorage.getItem("dyw_pass"))' "$DEST/index.html")" != "1" ]; then
-  echo "error: the Daily Puzzle frame's gate road is missing from the injected preamble" >&2
+if [ "$(grep -c 'nor inside the Daily Puzzle' "$DEST/index.html")" != "1" ] || [ "$(grep -c 'var dailyFrame = false;' "$DEST/index.html")" != "1" ]; then
+  echo "error: the Daily Puzzle frame's road is missing from the injected preamble" >&2
+  exit 1
+fi
+# GUEST-PLAY-1 — the courtesy redirect is GONE: no pass check and no bounce to the rite may survive in the copy
+if [ "$(grep -c 'location.replace("../rite.html")' "$DEST/index.html")" != "0" ] || [ "$(grep -c 'sessionStorage.getItem("dyw_pass")' "$DEST/index.html")" != "0" ]; then
+  echo "error: the free-play redirect to the rite is still in the copy (GUEST-PLAY-1 removed it)" >&2
+  exit 1
+fi
+if [ "$(grep -c 'GUEST-PLAY-1 — THE solo_start TAG' "$DEST/index.html")" != "1" ]; then
+  echo "error: the solo_start tag is missing from the injected preamble" >&2
   exit 1
 fi
 if [ "$(grep -c 'S-HALL-WIRE-1 (R5): never inside the Hall' "$DEST/index.html")" != "1" ]; then
@@ -349,18 +408,20 @@ fi
 #  game/STAMP and carries no stamped link of its own.)
 # (ICO-SIMPLE-1, owner rulings 2026-10-25: register.html became a bare redirect to the dashboard's buy panel and links
 #  the game nowhere — it LEFT the ledger [-2]. Managed set now 9 pages / 20 links.)
+# (GUEST-PLAY-1, owner rulings 2026-10-26: the rite's "Play free" button [+1] and the demo's "Play free" [+1] now go to the
+#  game. Managed set now 9 pages / 22 links. The stamp is the COPY ID — it moves when the copy's bytes do.)
 ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html $SITE_REPO/store.html $SITE_REPO/explore.html $SITE_REPO/mint.html $SITE_REPO/dashboard.html $SITE_REPO/my-invites.html"
 LINKS_BEFORE="$(grep -oF 'game/index.html' $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_BEFORE" != "20" ]; then
-  echo "error: expected exactly 20 site->game entry links (rite.html x4 + index.html x3 + treasury.html x2 + demo/index.html x1 + store.html x2 + explore.html x2 + mint.html x2 + dashboard.html x2 + my-invites.html x2), found $LINKS_BEFORE (site nav changed)" >&2
+if [ "$LINKS_BEFORE" != "22" ]; then
+  echo "error: expected exactly 22 site->game entry links (rite.html x5 + index.html x3 + treasury.html x2 + demo/index.html x2 + store.html x2 + explore.html x2 + mint.html x2 + dashboard.html x2 + my-invites.html x2), found $LINKS_BEFORE (site nav changed)" >&2
   exit 1
 fi
-SHA="$SRC_SHORT" perl -i -pe 's{game/index\.html(\?v=[0-9a-f]+)?}{game/index.html?v=$ENV{SHA}}g' $ENTRY_FILES
-LINKS_STAMPED="$(grep -oF "game/index.html?v=$SRC_SHORT" $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_STAMPED" != "20" ]; then
-  echo "error: entry-link stamping did not produce 20 stamped links (got $LINKS_STAMPED)" >&2
+SHA="$COPY_ID" perl -i -pe 's{game/index\.html(\?v=[0-9a-f]+)?}{game/index.html?v=$ENV{SHA}}g' $ENTRY_FILES
+LINKS_STAMPED="$(grep -oF "game/index.html?v=$COPY_ID" $ENTRY_FILES | wc -l | tr -d ' ')"
+if [ "$LINKS_STAMPED" != "22" ]; then
+  echo "error: entry-link stamping did not produce 22 stamped links (got $LINKS_STAMPED)" >&2
   exit 1
 fi
-echo "sync_game: stamped 20 entry links -> game/index.html?v=$SRC_SHORT"
+echo "sync_game: stamped 22 entry links -> game/index.html?v=$COPY_ID"
 
 echo "sync_game: done. game/ = ${GAME_BYTES} KB (video + vfx + heavy dirs + manifest cross-linked, not copied)."

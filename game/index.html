@@ -7,9 +7,8 @@
 (function(){
   var dailyFrame = false; /* MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle frames this copy in puzzle mode (?puzzle=1) from /play/daily/ on THIS origin. That frame alone skips the pass; nothing else does (a direct visit, any other frame, any other page). */
   try { dailyFrame = window.top !== window && /[?&]puzzle=1(&|$)/.test(location.search) && window.parent.location.origin === location.origin && /^\/play\/daily\//.test(window.parent.location.pathname); } catch (e) { dailyFrame = false; }
-  try {
-    if (!dailyFrame && !sessionStorage.getItem("dyw_pass")) { location.replace("../rite.html"); return; }
-  } catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }
+  /* GUEST-PLAY-1 (owner ruling 2026-10-26): free play needs no wallet and no pass - the courtesy redirect to the rite is
+     GONE. The Hall keeps its own gate (wallet + Torana) and the match server its own check; neither lives here. */
   var NS = "dyw::";
   try {
     var real = window.localStorage;
@@ -49,6 +48,50 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addGem);
   else addGem();
+  /* GUEST-PLAY-1 — THE solo_start TAG, moved here from the rite's Enter (owner ruling 2026-10-26): ONE tag-only
+     Plausible event the first time this browser starts a battle (a quick battle or a story chapter). The store's
+     zero-PII law, as js/solotrack.js: only the three utm values travel (from this URL, the demo page around it, or the
+     site's own session key), nothing else. Never inside the Hall's battle frame or the Daily Puzzle's (not solo play).
+     The script and the switch are config.js's analytics block (tests/suites/guestplay.js pins them equal). A blocked or
+     failed tag is a silent no-op that can never stand between the player and the battle. */
+  var SOLO_TAG = { enabled: true, script: "https://plausible.io/js/pa-sJ1oC1_YVyaxd2ADo13iV.js" };
+  var wireFrame = false; try { wireFrame = window.top !== window && /[?&]wire=1(&|$)/.test(location.search); } catch (e) { wireFrame = true; }
+  function soloTags(){
+    var F = ["utm_source", "utm_medium", "utm_campaign"], qs = [location.search], out = {}, got = null, raw = null;
+    try { if (window.top !== window && window.parent.location.origin === location.origin) qs.push(window.parent.location.search); } catch (e) {}
+    for (var i = 0; i < qs.length && !got; i++) {
+      var any = false, f = {};
+      for (var j = 0; j < F.length; j++) { var m = String(qs[i] || "").match(new RegExp("[?&]" + F[j] + "=([^&#]*)")); if (m) { any = true; try { f[F[j]] = decodeURIComponent(m[1].replace(/\+/g, " ")); } catch (e) { f[F[j]] = m[1]; } } }
+      if (any) got = f;
+    }
+    if (!got) { try { raw = sessionStorage.getItem("dystore::utm"); got = raw ? JSON.parse(raw) : null; } catch (e) { got = null; } }
+    if (!got || typeof got !== "object") return out;
+    for (var k = 0; k < F.length; k++) { var v = got[F[k]]; if (typeof v === "string" && v !== "" && !/0x[0-9a-fA-F]{40}/.test(v)) out[F[k]] = v; }
+    return out;
+  }
+  function soloStartOnce(){
+    if (dailyFrame || wireFrame || !SOLO_TAG.enabled) return;
+    try { if (real.getItem(NS + "dy_solo_started")) return; real.setItem(NS + "dy_solo_started", "1"); } catch (e) { return; }
+    try {
+      var w = window;
+      w.plausible = w.plausible || function () { (w.plausible.q = w.plausible.q || []).push(arguments); };
+      w.plausible.init = w.plausible.init || function (o) { w.plausible.o = o || {}; };
+      w.plausible.init({ autoCapturePageviews: false });
+      w.plausible("solo_start", { props: soloTags() });
+      var sc = document.createElement("script"); sc.async = true; sc.src = SOLO_TAG.script; document.head.appendChild(sc);
+    } catch (e) {}
+  }
+  function wrapStarts(){
+    ["startGame", "startStoryChapter"].forEach(function (name) {
+      var orig = window[name];
+      if (typeof orig !== "function" || orig.__dywSolo) return;
+      var wrapped = function () { soloStartOnce(); return orig.apply(this, arguments); };
+      wrapped.__dywSolo = true;
+      window[name] = wrapped;
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wrapStarts);
+  else wrapStarts();
 })();
 </script>
 <!-- DYW-S3-SUPPRESS-START (S8 WORD 2; re-applied every sync). Hide the free-platform economy surfaces.
