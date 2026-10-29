@@ -242,7 +242,7 @@ async function dashboardPage(c, player, opts) {
   w.DY_MF_CONFIG.readRpcUrl = RPC;
   w.DY_MF_CONFIG.readRpcUrlFallbacks = [];
   w.DY_MF_CONFIG.contracts.dycoin = c.addrs.dyc;
-  for (const k of ["vestingVault", "holderStaking", "roiRedemption", "dycoinSale", "dropDesk"]) w.DY_MF_CONFIG.contracts[k] = null;
+  for (const k of ["vestingVault", "holderStaking", "roiRedemption", "dycoinSale", "dropDesk", "toranaClaim"]) w.DY_MF_CONFIG.contracts[k] = null;   // TORANA-AUTO-1: hermetic unless a test names it
   // the two switches, set EXPLICITLY (the shipped config is live since WINNINGS-5). Absent => the dormant face.
   w.DY_MF_CONFIG.contracts.winningsDesk = (opts.winnings && opts.winnings.desk) || null;
   w.DY_MF_CONFIG.winningsServiceUrl = (opts.winnings && opts.winnings.service) || null;

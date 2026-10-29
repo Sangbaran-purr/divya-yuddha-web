@@ -256,7 +256,7 @@ async function run() {
     ok("X3 · the coupon POST sends nonce + signature and nothing else",
        /JSON\.stringify\(\{ nonce: ch\.nonce, signature: sig \}\)/.test(dash));
     ok("X4 · STAMPS BUMPED — dashboard.js, dashboard.css and mf-config.js all carry their current ?v= (WINNINGS-5 switch-on)",
-       /js\/dashboard\.js\?v=mf45/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf11/.test(html));
+       /js\/dashboard\.js\?v=mf46/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf12/.test(html));
     // WINNINGS-5 (2026-10-10): the desk is LIVE. The shipped config now carries the real desk and the live bot — and
     // nothing else: a typo here would point every player's withdrawal at the wrong contract or service.
     ok("X5 · the shipped config carries the LIVE desk and the live bot (WINNINGS-5 switch-on)",

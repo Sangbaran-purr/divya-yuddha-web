@@ -262,3 +262,26 @@ from the bot's own tiers, the step reached highlighted; "Withdraw on the dashboa
 whenever Unlocked (ready) > 0, and dimmed only at 0. Card names come from the store page's own lookup (the launch list,
 then the wave registry); a suite check holds every live id to the store's resolveCard, and on 2026-10-14 all 87 live
 ids were checked against their on-chain metadata (WaveCardNFT tokenURI base) and priceOf/1e14 - 0 mismatches.
+
+## 14. YOUR TORANA (TORANA-AUTO-1, owner rulings 2026-10-29) - the automatic Torana for ICO buyers of USD 100+
+
+ToranaIcoClaim (`0xc92dc5dfbda2b70F20286Bc5A0E69DD0832Be4e7`, no owner, nothing changeable) mints ONE Torana to any wallet
+whose ICO spend - the presale and the public sale added together, read live from the sale - is USD 100 or more. The
+approval bot sends the claim within minutes (TORANA_AUTO); anyone may call it, and the Torana always goes to the buyer.
+The panel reads `status(me)` (and, only when eligible, simulates `claimFor(me)` from the wallet itself, which is how
+"can't receive" is known before any fee is asked). It is hidden unless it has something to say; a wallet that already
+holds a Torana another way, has bought nothing, or whose read failed sees no panel (a failed read is never a guess).
+After a purchase on this page, the buy panel carries the S1 or S2 line under "Purchase complete".
+
+### Ruled copy (pinned by `mp/copyproof.js`, doc → `js/dashboard.js`)
+- Your Torana is on its way - it arrives in your wallet within a few minutes.
+- Buy USD [X] more in the sale and a Torana comes with it.
+- Your Torana hasn't arrived yet. You can claim it yourself - it's free; you pay only the network fee.
+- Claim my Torana
+- Your wallet can't receive the Torana right now. Nothing is lost - it stays yours to claim.
+- Your Torana has arrived.
+
+"On its way" shows for 10 minutes after a buy made on this page (a timestamp in this browser); after that, an eligible
+wallet that still has no Torana is offered the self-claim. The Treasury's second road ("Or buy USD 100 or more of DYC in
+the sale - a Torana comes with it.") and the homepage's corrected Torana bullet are ruled in RULINGS_2026-08-27,
+amendment 2026-10-29.

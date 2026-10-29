@@ -218,6 +218,19 @@ window.DYDash = (function () {
   var I_COPIED = "Link copied.";
   function I_UNLOCKS_ON(date) { return "Unlocks on " + date; }
   var I_MINE = "See my invites →";                                            // MY-INVITES-1 (DASHBOARD_DESIGN_v1 §12)
+  // ── TORANA-AUTO-1 · THE AUTOMATIC TORANA (owner rulings 2026-10-29, DASHBOARD_DESIGN_v1 §14, pinned by mp/copyproof.js) ──
+  //    ToranaIcoClaim mints one Torana to any wallet whose ICO spend (presale + public sale) is USD 100 or more. The bot
+  //    sends the claim within minutes; the buyer can also claim it here, paying only the network fee. ──
+  var T_ON_WAY = "Your Torana is on its way - it arrives in your wallet within a few minutes.";          // S1
+  function T_MORE(usd) { return "Buy USD " + usd + " more in the sale and a Torana comes with it."; }    // S2
+  var T_NOT_YET = "Your Torana hasn't arrived yet. You can claim it yourself - it's free; you pay only the network fee.";   // S3
+  var T_CLAIM = "Claim my Torana";                                                                       // S4
+  var T_CANT = "Your wallet can't receive the Torana right now. Nothing is lost - it stays yours to claim.";              // S5
+  var T_ARRIVED = "Your Torana has arrived.";                                                            // S6
+  var TORANA_ABI = ["function status(address) view returns (uint8, uint256, uint256)", "function claimFor(address) returns (uint256)",
+    "error NotEligible(address buyer, uint256 spentUsdE18)", "error AlreadyClaimed(address buyer)", "error HoldsTorana(address buyer)",
+    "error NotAuthorizedMinter(address caller)", "error AlreadyHolds(address holder)", "error ERC721InvalidReceiver(address receiver)"];
+  var TORANA_RECENT_MS = 10 * 60 * 1000;   // within this long after a buy here, "on its way" (S1); after it, the self-claim (S3/S4)
   var I_READY = "Ready to withdraw";
   var I_PAID = "Paid";
   var I_HELD = "Held for review";
@@ -331,7 +344,8 @@ window.DYDash = (function () {
   var MIN_BUY_USDT = 100000000n; // M-F4 defect 1: page-side minimum purchase = 100 USDT (6-dec). Ruled 2026-08-06.
   // GAS floors (house law: explicit gas limit for every state-touching call). redeem cold-state floor: measured max
   // 140,296 (cold nonce SSTORE + cold recipient + funding reconcile) → 160,000 with margin.
-  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, winRedeem: 260000, approve: 90000, buy: 380000, redeem: 160000, send: 90000 };
+  var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, winRedeem: 260000, approve: 90000, buy: 380000, redeem: 160000, send: 90000,
+    toranaClaim: 250000 };   // TORANA-AUTO-1: measured 141,353–145,788 on a fork; room for a smart-account receiver
   // S-STAKE-GATE-1 (owner ruling 2026-08-22): staking LIQUID DYC from the dashboard requires a 10,000 DYC floor
   // (the $100 line at 100 DYC/USD). Pure balanceOf threshold — SOURCE-BLIND (ICO liquid and P2P-received liquid
   // qualify equally). wei-DYC bigint, compared against the raw balanceOf — never a float on a formatted string. The
@@ -407,6 +421,8 @@ window.DYDash = (function () {
       // "cards earn the same shares" line hidden on mainnet (found at the v2 go-live check, 2026-10-14). Unset: hidden.
       cardStore: oc.cardStore || fc.cardStore || pc.cardUsdStore || null,
       accessNFT: oc.accessNFT || fc.accessNFT || (PLAYER && PLAYER.contracts && PLAYER.contracts.accessNFT) || null,
+      // TORANA-AUTO-1 — ToranaIcoClaim. Unset: the Torana panel stays hidden and nothing is read for it.
+      toranaClaim: oc.toranaClaim || fc.toranaClaim || (PLAYER && PLAYER.contracts && PLAYER.contracts.toranaClaim) || null,
       usdt: oc.usdt || fc.usdt || null,
       usdc: oc.usdc || fc.usdc || null,                  // ICO-SIMPLE-1: the Sale takes USDC as well as USDT
       // ICO-SIMPLE-1 — the approval bot's instant voucher door. NULL => only the published allowlist is read.
@@ -788,6 +804,22 @@ window.DYDash = (function () {
         if (c.inviteServiceUrl && c.accessNFT) {
           var tn = new ethersRef.Contract(c.accessNFT, ["function balanceOf(address) view returns (uint256)"], provider);
           jobs.push(tn.balanceOf(addr).then(function (b) { data.torana = b; }).catch(function () { data.toranaErr = true; }));
+        }
+        // TORANA-AUTO-1 — where this wallet stands with the automatic Torana: status(me), and — only when eligible — a
+        // simulation of claimFor(me) from the wallet itself, which is how "can't receive" (S5) is known before any fee.
+        // A failed read shows nothing (busy-sentinel law): the panel stays hidden rather than guess.
+        if (c.toranaClaim) {
+          var tk = new ethersRef.Contract(c.toranaClaim, TORANA_ABI, provider);
+          jobs.push(tk.status(addr).then(function (r) {
+            data.toranaSt = { s: Number(r[0]), spent: r[1], short: r[2] };
+            if (data.toranaSt.s !== 0) return;
+            return tk.claimFor.staticCall(addr, { from: addr }).then(function () { data.toranaCant = false; }, function (e) {
+              var name = null;
+              try { name = tk.interface.parseError(e && (e.data || (e.info && e.info.error && e.info.error.data))).name; } catch (_) {}
+              data.toranaCant = name === "ERC721InvalidReceiver" || (name === null && !!(e && e.code === "CALL_EXCEPTION"));
+              if (name === "NotAuthorizedMinter") data.toranaOff = true;   // the master's off switch: offer no button
+            });
+          }).catch(function () { data.toranaSt = null; }));
         }
         // STAKING + REWARDS
         if (c.holderStaking) {
@@ -1456,6 +1488,7 @@ window.DYDash = (function () {
 
   function renderWinnings() {
     renderInvites();                              // the invites card rides every repaint of its sibling
+    renderTorana();                               // TORANA-AUTO-1: and so does the Torana panel
     var host = $("winnings-body"); if (!host) return;
     var c = cfg();
 
@@ -1685,6 +1718,46 @@ window.DYDash = (function () {
     return (!winDormant() && !!data.win) ? I_READY : I_WAITING_DESK;
   }
   function invShort(a) { var s = String(a || ""); return /^0x[0-9a-fA-F]{40}$/.test(s) ? shortAddr(s) : s; }
+
+  // ── TORANA-AUTO-1 · the Torana panel ────────────────────────────────────────────────────────────────────────────
+  // Shown only when it has something to say: eligible (S1 "on its way" right after a buy here, else S3 + the S4 self-claim,
+  // or S5 when the wallet would refuse the NFT), claimed through the ICO claim (S6), or an ICO buyer still under USD 100
+  // (S2). A wallet that already holds a Torana another way, has bought nothing, or whose read failed sees no panel.
+  function toranaBoughtKey(me) { return "dyt::boughtAt::" + String(me || "").toLowerCase(); }
+  function toranaRecent(me) {
+    try { var t = Number(localStorage.getItem(toranaBoughtKey(me))); return t > 0 && Date.now() - t < TORANA_RECENT_MS; } catch (_) { return false; }
+  }
+  function usdCeil2(e18) { var cents = (BigInt(e18) + 9999999999999999n) / 10000000000000000n; return (Number(cents) / 100).toFixed(2); }
+  function renderTorana() {
+    var panel = $("torana-panel"), host = $("torana-body");
+    if (!panel || !host) return;
+    var c = cfg(), st = data && data.toranaSt, me = W.state && W.state.address;
+    var h = "";
+    if (c.toranaClaim && isConnected() && st) {
+      if (st.s === 0 && !data.toranaOff) {
+        if (data.toranaCant) h = "<p class='win-note' id='torana-cant'>" + esc(T_CANT) + "</p>";
+        else if (toranaRecent(me)) h = "<p class='win-note' id='torana-onway'>" + esc(T_ON_WAY) + "</p>";
+        else h = "<p class='win-note' id='torana-notyet'>" + esc(T_NOT_YET) + "</p>"
+          + "<div class='win-steps'><button class='rite-btn' id='torana-claim'>" + esc(T_CLAIM) + "</button></div>";
+      } else if (st.s === 2) h = "<p class='win-note' id='torana-arrived'>" + esc(T_ARRIVED) + "</p>";
+      else if (st.s === 1 && st.spent > 0n) h = "<p class='win-note' id='torana-more'>" + esc(T_MORE(usdCeil2(st.short))) + "</p>";
+    }
+    if (!h) { panel.style.display = "none"; host.innerHTML = ""; return; }
+    panel.style.display = "";
+    host.innerHTML = h;
+    if ($("torana-claim")) $("torana-claim").onclick = actClaimTorana;
+  }
+  function actClaimTorana() {
+    var c = cfg(), me = W.state.address;
+    runAction({
+      contractAddr: c.toranaClaim, abi: TORANA_ABI, gas: GAS.toranaClaim,
+      simFn: function (k) { return k.claimFor.staticCall(me); },
+      sendFn: function (k, o) { return k.claimFor(me, o); },
+      title: T_CLAIM,
+      body: "Claim the Torana your ICO purchase earned. It is free - you pay only the network fee.",
+      successMsg: T_ARRIVED,
+    });
+  }
 
   function renderInvites() {
     var panel = $("invites-panel"), host = $("invites-body");
@@ -2193,6 +2266,19 @@ window.DYDash = (function () {
       "<button class='btn-g btn-block' id='buy-again' style='margin-top:8px'>Buy more</button>";
     $("buy-again").onclick = function () { buyState.done = null; renderBuy(); };
     if ($("buy-stake")) $("buy-stake").onclick = actStakeAfterBuy;
+    // TORANA-AUTO-1 — the Torana line under the purchase: S1 when this buy qualified, S2 with the amount still missing
+    if (c.toranaClaim && W.state && W.state.address) {
+      var me = W.state.address;
+      try { localStorage.setItem(toranaBoughtKey(me), String(Date.now())); } catch (_) {}
+      withEthers().then(function () { return new ethersRef.Contract(c.toranaClaim, TORANA_ABI, readProvider()).status(me); }).then(function (r) {
+        var s = Number(r[0]), line = s === 0 ? T_ON_WAY : (s === 1 && r[1] > 0n ? T_MORE(usdCeil2(r[2])) : null);
+        var done = $("buy-done");
+        if (line && done && !$("buy-torana")) {
+          var p = document.createElement("div"); p.className = "buy-narrate"; p.id = "buy-torana"; p.style.marginTop = "8px"; p.textContent = line;
+          done.parentNode.insertBefore(p, done.nextSibling);
+        }
+      }).catch(function () {});   // a failed read says nothing — never a guess
+    }
   }
   function actStakeAfterBuy() {
     var c = cfg(), me = W.state.address;

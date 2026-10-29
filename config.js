@@ -58,6 +58,7 @@ window.DY_CONFIG = {
   // marketplace may need its OWN coin field then. Left untouched pending an owner ruling.
   contracts: {
     accessNFT: "0xcADBA9d1f8B33567AcB7c0120c59Df306f92dd9d", // W3-MAINNET-1 — master-owned AccessNFT (mainnet)
+    toranaClaim: "0xc92dc5dfbda2b70F20286Bc5A0E69DD0832Be4e7", // TORANA-AUTO-1 — the automatic Torana for ICO buyers of USD 100+
     waveCardNFT: "0xfadAA859eE1d4e0c0eB2B5aBa9FC5E15dd37537A", // W3-REDEPLOY-WAVE — reborn WaveCardNFT (IPFS baseURI, mainnet); block 92465169
     dycoin: "0x10c29BC02A2c3587D0085B0d60E4D6024D25B611", // W3-MAINNET-1 — CANONICAL money-stack DYC (ERC1967 proxy, mainnet)
     marketplace: null, // no mainnet deploy — the frozen Phase-A Marketplace was Amoy-only (NOT LIVE, zero site reads)

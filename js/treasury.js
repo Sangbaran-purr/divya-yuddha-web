@@ -253,7 +253,9 @@ window.DYTreasury = (function () {
       '<div class="tre-mark-text"><b>Torana — your Access Card</b>' +
       (held
         ? '<span class="tre-mark-sub held">held in your name — the Hall\'s tables are open to you.</span>'
-        : '<span class="tre-mark-sub">not yet held. <a href="store.html#bundle">Get it in the store: a Torana and 500 DYC for USD 20.</a></span>') +
+        : '<span class="tre-mark-sub">not yet held. <a href="store.html#bundle">Get it in the store: a Torana and 500 DYC for USD 20.</a> ' +
+          // TORANA-AUTO-1 (S7, ruled 2026-10-29): the second road — ToranaIcoClaim mints one to every ICO buyer of USD 100+
+          '<a href="dashboard.html#buy-panel">Or buy USD 100 or more of DYC in the sale - a Torana comes with it.</a></span>') +
       "</div>";
   }
 

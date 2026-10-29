@@ -303,10 +303,17 @@ ok('R7 · "never sold" appears NOWHERE on any page - it survives only as the quo
 const detag = (h) => norm(String(h).replace(/<[^>]*>/g, " "));
 // FREE-PLAY-1 — the homepage carries rule 3 SCOPED TO THE HALL (its other two sentences and R7's clause unchanged)
 const TORANA_MERGED = "The Torana opens the Hall. It is sold in the store - a Torana and 500 DYC for USD 20 - and dropped to every wallet that buys DYC in the presale. It admits you; it buys no advantage. One per wallet, bound to you alone, yours to burn.";
+// TORANA-AUTO-1 (amendment 2026-10-29) — the merged bullet's presale promise over-promised (the presale minimum is USD 1);
+// the corrected bullet names the rule ToranaIcoClaim enforces. The 10-11b sentence survives only as the doc's quotation.
+const TORANA_CORRECTED = "The Torana opens the Hall. It is sold in the store - a Torana and 500 DYC for USD 20 - and comes free to every wallet that buys USD 100 or more of DYC in the sale. It admits you; it buys no advantage. One per wallet, bound to you alone, yours to burn.";
 ok("SA1 · the merged Torana bullet is ruled (amendment 2026-10-11b)", /AMENDMENT 2026-10-11b \(SITE-AUDIT-1\) - THE TORANA BULLET, MERGED/.test(RULINGS) &&
    norm(RULINGS).indexOf(norm(TORANA_MERGED)) >= 0);
-ok("SA2 · index.html's Law carries the merged bullet verbatim (the page sets the dashes as em dashes)",
-   detag(INDEX).indexOf(norm(TORANA_MERGED).split(" - ").join(" \u2014 ")) >= 0);
+ok("SA1b · TORANA-AUTO-1 · the corrected bullet is ruled (amendment 2026-10-29)", /AMENDMENT 2026-10-29 \(TORANA-AUTO-1\) - THE TORANA BULLET, CORRECTED/.test(RULINGS) &&
+   norm(RULINGS).indexOf(norm(TORANA_CORRECTED)) >= 0);
+ok("SA2 · index.html's Law carries the CORRECTED bullet verbatim (the page sets the dashes as em dashes)",
+   detag(INDEX).indexOf(norm(TORANA_CORRECTED).split(" - ").join(" \u2014 ")) >= 0);
+ok("SA2b · the over-promise is GONE from every page: no 'dropped to every wallet that buys DYC in the presale' on index, rite or the Hall",
+   detag(INDEX).indexOf("dropped to every wallet that buys DYC in the presale") < 0 && norm(RITE).indexOf("dropped to every wallet") < 0 && norm(HALL).indexOf("dropped to every wallet") < 0);
 ok("the rite's status line names the store (the claim stays shut)",
    norm(RITE).indexOf(norm("The Rite is not yet open. The Torana can be bought now in the store - a Torana and 500 DYC for USD 20.")) >= 0 &&
    /claimOpen/.test(RITE));
@@ -578,6 +585,34 @@ ok("MI-P · the page never shortens or rebuilds a wallet itself (no shortAddr, n
 
 // WINNINGS-4: THREE pairs now (Hall, Store, Dashboard). RULED_N counts the first two; DASH_LAW is the third and
 // is added here so the arithmetic printed below is the true one, not an inherited one. MY-INVITES-1 adds the fourth.
-const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length;
-console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across FOUR pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// TORANA-AUTO-1 — THE FIFTH PAIR: DASHBOARD_DESIGN_v1 §14 -> js/dashboard.js (the Torana panel and the after-buy line),
+// and the Treasury's second road (RULINGS amendment 2026-10-29) -> js/treasury.js.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+const TREAS = fs.readFileSync(path.resolve(__dirname, "..", "js", "treasury.js"), "utf8");
+const T_DOC = (DDOC.split("## 14. YOUR TORANA")[1] || "");
+const T_LAW = [
+  ["TA1 on its way",  "Your Torana is on its way - it arrives in your wallet within a few minutes."],
+  ["TA2 buy more",    "Buy USD [X] more in the sale and a Torana comes with it."],
+  ["TA3 not yet",     "Your Torana hasn't arrived yet. You can claim it yourself - it's free; you pay only the network fee."],
+  ["TA4 button",      "Claim my Torana"],
+  ["TA5 can't",       "Your wallet can't receive the Torana right now. Nothing is lost - it stays yours to claim."],
+  ["TA6 arrived",     "Your Torana has arrived."],
+];
+console.log("\n── YOUR TORANA · DASHBOARD_DESIGN_v1 §14 ruled copy (doc → js/dashboard.js) + the Treasury's second road ──");
+for (const [tag, line] of T_LAW) {
+  ok(tag + " — in §14 of the doc", norm(T_DOC).indexOf(norm(line)) >= 0, line);
+  ok(tag + " — carried verbatim by dashboard.js", carriesIn(DASH, line, false), line);
+}
+const T_SECOND_ROAD = "Or buy USD 100 or more of DYC in the sale - a Torana comes with it.";
+ok("TA7 · the Treasury's second road is ruled (amendment 2026-10-29)", norm(RULINGS).indexOf(norm(T_SECOND_ROAD)) >= 0);
+ok("TA7 · …and carried by treasury.js, linking to the dashboard's buy panel",
+   norm(TREAS).indexOf(norm('<a href="dashboard.html#buy-panel">' + T_SECOND_ROAD + "</a>")) >= 0);
+ok("TA8 · no Torana line says 'presale' — both rounds count (owner ruling 2026-10-29)",
+   T_LAW.every((r) => !/presale/i.test(r[1])) && !/presale/i.test(T_SECOND_ROAD) && !/presale/i.test(TORANA_CORRECTED));
+ok("TA9 · the console's direct-mint Release button and its USD bands are RETIRED (the claims list replaces them)",
+   !/torana-release|cfg-torana-definite|cfg-torana-discretion|toranaDefiniteUsd|toranaDiscretionUsd/.test(fs.readFileSync(path.resolve(__dirname, "..", "admin.html"), "utf8") + fs.readFileSync(path.resolve(__dirname, "..", "js", "admin.js"), "utf8")));
+
+const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length;
+console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across FIVE pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);

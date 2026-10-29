@@ -30,6 +30,9 @@ window.DY_MF_CONFIG = {
     // Deployed by the master at block 95,283,175 (tx 0x8373f100…), Polygonscan-verified, owned by the master, funded
     // 50 USDT0, unpaused. Setting it (with the two service URLs below) is what lights the Withdraw card.
     winningsDesk: "0x2F424C37937160E646138392CE986aF1C0e65947",
+    // TORANA-AUTO-1 (2026-10-29) — ToranaIcoClaim: a Torana for every ICO buyer of USD 100+ (no owner, nothing changeable;
+    // switched on by the master's setMinter). The dashboard reads status(me) and offers the self-claim. Served by dy-rpc.
+    toranaClaim: "0xc92dc5dfbda2b70F20286Bc5A0E69DD0832Be4e7",
   },
 
   // WINNINGS-4 — the approval-bot's winnings endpoints (challenge + coupon). NULL until the service is deployed

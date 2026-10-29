@@ -30,6 +30,7 @@ window.DY_ADMIN_CONFIG = {
   // W3-MAINNET-1 — Polygon mainnet full-stack deployment (2026-08). Chain 137. Addresses verbatim from the crossing.
   contracts: {
     accessNFT: "0xcADBA9d1f8B33567AcB7c0120c59Df306f92dd9d", // master-owned AccessNFT (TORANA slot; arms dark→lit)
+    toranaClaim: "0xc92dc5dfbda2b70F20286Bc5A0E69DD0832Be4e7", // TORANA-AUTO-1 — ToranaIcoClaim (the Torana claims panel)
     waveCardNFT: "0xfadAA859eE1d4e0c0eB2B5aBa9FC5E15dd37537A", // W3-REDEPLOY-WAVE — reborn master-owned WaveCardNFT (IPFS baseURI)
     dycoin: "0x10c29BC02A2c3587D0085B0d60E4D6024D25B611", // money-stack DYC (ERC1967 proxy)
     dycoinSale: "0x088233d79BD0Df395E364C180F790C2E655F648B", // DYCoinSale — Approve Buyers + Registry gate (allowlistSigner = robot)

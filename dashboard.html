@@ -11,8 +11,8 @@
     <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/threshold.css?v=s1g" />
     <link rel="stylesheet" href="css/dashboard.css?v=mf7" />
-    <script src="config.js?v=s21"></script>
-    <script src="mf-config.js?v=mf11"></script>
+    <script src="config.js?v=s22"></script>
+    <script src="mf-config.js?v=mf12"></script>
   </head>
   <body class="dash">
     <!-- S-DASH-NAV-1 — the shared house header/nav (S-NAV-1), reused verbatim: seven doors, mobile dropdown, and the
@@ -160,6 +160,13 @@
           <div id="invites-body"></div>
         </div>
 
+        <!-- TORANA-AUTO-1 — the automatic Torana (ToranaIcoClaim). HIDDEN unless the connected wallet has something to be
+             told: on its way / not yet + Claim my Torana / can't receive / arrived / how much more to buy. -->
+        <div class="panel-box winnings-panel torana-panel" id="torana-panel" style="display:none">
+          <div class="sec-label"><span class="sec-num">&#9670;</span> YOUR TORANA</div>
+          <div id="torana-body"></div>
+        </div>
+
         <!-- 3 + 4 -->
         <div class="mid-row">
           <div class="panel-box">
@@ -244,7 +251,7 @@
 
     <script src="js/wallet.js?v=s1s"></script>
     <script src="js/invite.js?v=i2"></script>
-    <script src="js/dashboard.js?v=mf45"></script>
+    <script src="js/dashboard.js?v=mf46"></script>
     <script>
       window.DYDash.mount();
     </script>
