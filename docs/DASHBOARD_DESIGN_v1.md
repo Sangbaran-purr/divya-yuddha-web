@@ -113,6 +113,15 @@ Every line below is asserted verbatim against the source.
 > asked anyway (the store roads then pass their own gas budget as the gas limit, so the wallet opens instead of the
 > page's estimate failing first). The presale buy no longer stops on the gas sentence; the other dashboard actions do.
 
+> AMENDMENT 2026-10-29 (BOT-COLDSCAN-1, owner rulings): THE WARMING SENTENCES. After a restart the approval bot's first
+> count takes a while; until it finishes, a request waits up to 20 s and then gets the named answer WARMING - never a
+> smaller or partial number. The dashboard's withdraw and invite-code requests now give up after 30 s with the same
+> sentence. Ruled word for word:
+>
+> - Withdrawals are waking up - try again in a minute. Nothing is lost.
+> - Your code is ready. Who used it is still being counted - check again in a minute.
+> - Your invite code is still being prepared - try again in a minute. Nothing is lost.
+
 ## 12. AFFILIATE-1 rung 3 (2026-10-09) - ONE WITHDRAW CARD, AND THE TORANA INVITES CARD
 
 The desk is web3 `fc5d117`: one `DeskCoupon(wallet, cumulativeWinningsWei, cumulativeInviteWei, deadline)` carries two
@@ -245,6 +254,7 @@ button links there). The page makes no chain reads (card names come from the loc
 - 125 DYC = USD 1.
 - What they bought
 - (highest tier reached only)
+- Your invites are still being counted - try again in a minute. Nothing is lost. *(BOT-COLDSCAN-1, ruled 2026-10-29: the bot is still counting after a restart)*
 
 Review fixes (owner, 2026-10-14): the direct-invitees column is "What they bought"; the weekly bonus (v2) shows the whole
 ladder under the count - "20 bundles → USD 40 · 50 → USD 100 · 100 → USD 200 · 200 → USD 400 (highest tier reached only)" -

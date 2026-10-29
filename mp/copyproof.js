@@ -502,6 +502,10 @@ const DASH_LAW = [
   ["N6 try again",       "We can't check that right now - nothing is lost. Try again shortly."],
   ["N7 not open",        "Invites are not open yet."],
   ["N8 fallback",        "Invites are unavailable right now."],
+  // BOT-COLDSCAN-1 (ruled 2026-10-29) — the bot is still counting after a restart; never a smaller number
+  ["WM1 withdraw warming", "Withdrawals are waking up - try again in a minute. Nothing is lost."],
+  ["WM2 code list warming", "Your code is ready. Who used it is still being counted - check again in a minute."],
+  ["WM3 code warming",   "Your invite code is still being prepared - try again in a minute. Nothing is lost."],
 ];
 console.log("\n── THE DASHBOARD'S LAW · DASHBOARD_DESIGN_v1 section 11 ruled copy (doc → js/dashboard.js) ──");
 for (const [tag, line] of DASH_LAW) {
@@ -562,6 +566,7 @@ const MI_LAW = [
   ["MI15 dyc note",        "125 DYC = USD 1.", MYI],
   ["MI16 invitee column",  "What they bought", MYI],
   ["MI17 ladder tail",     "(highest tier reached only)", MYI],
+  ["MI18 warming",         "Your invites are still being counted - try again in a minute. Nothing is lost.", MYI],   // BOT-COLDSCAN-1
 ];
 console.log("\n── MY INVITES · DASHBOARD_DESIGN_v1 §13 ruled copy (doc → js/myinvites.js, + the dashboard's link) ──");
 for (const [tag, line, src] of MI_LAW) {

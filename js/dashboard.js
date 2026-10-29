@@ -213,7 +213,7 @@ window.DYDash = (function () {
   var I_REVIEW = "More than 25 rewards in one month are checked by hand before they unlock.";
   var I_NONE = "No invited purchases yet.";
   var I_UNSHOWN = "Your invited purchases can't be shown right now.";
-  // BOT-COLDSCAN-1 (proposed wording, for the owner's ruling) — the bot has just restarted and is still counting
+  // BOT-COLDSCAN-1 (ruled 2026-10-29, pinned by mp/copyproof.js) — the bot has just restarted and is still counting
   var I_WARMING = "Your code is ready. Who used it is still being counted - check again in a minute.";
   var I_COPIED = "Link copied.";
   function I_UNLOCKS_ON(date) { return "Unlocks on " + date; }
@@ -253,7 +253,7 @@ window.DYDash = (function () {
     CODE_COLLISION: "Please sign once more to create your code.",
     TRY_AGAIN: "We can't check that right now - nothing is lost. Try again shortly.",
     NOT_CONFIGURED: "Invites are not open yet.",
-    // BOT-COLDSCAN-1 (proposed wording) — the code request took longer than the time limit (the bot is waking up)
+    // BOT-COLDSCAN-1 (ruled 2026-10-29, pinned by mp/copyproof.js) — the code request took longer than the time limit (the bot is waking up)
     WARMING: "Your invite code is still being prepared - try again in a minute. Nothing is lost.",
   };
   var INV_FALLBACK = "Invites are unavailable right now.";
@@ -287,7 +287,7 @@ window.DYDash = (function () {
     KYC_REQUIRED: "Withdrawals need identity verification first.",
     OFAC_MATCH: "This wallet can't be served.",
     DENY_LIST: "This wallet can't be served.",
-    // BOT-COLDSCAN-1 (proposed wording) — the bot has just restarted: its first count is still running
+    // BOT-COLDSCAN-1 (ruled 2026-10-29, pinned by mp/copyproof.js) — the bot has just restarted: its first count is still running
     WARMING: "Withdrawals are waking up - try again in a minute. Nothing is lost.",
   };
   // BOT-COLDSCAN-1 — the withdraw and invite-code calls get a TIME LIMIT (they had none: after a bot restart they could

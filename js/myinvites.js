@@ -25,7 +25,7 @@ window.DYMyInvites = (function () {
   var MI_CLOSED = "My Invites is not open yet.";
   var MI_DOWN = "Your invites can't be read right now - nothing is lost. Try again in a moment.";
   var MI_DECLINED = "Nothing was shown - the message is free and moves no money. Tap Show my invites to try again.";
-  // BOT-COLDSCAN-1 (proposed wording, for the owner's ruling) — the bot has just restarted and is still counting
+  // BOT-COLDSCAN-1 (ruled 2026-10-29, pinned by mp/copyproof.js) — the bot has just restarted and is still counting
   var MI_WARMING = "Your invites are still being counted - try again in a minute. Nothing is lost.";
   var MI_NOCODE = "You don't have an invite code yet - get one on the dashboard.";
   var MI_COUNTS_V1 = "Counts only purchases that pay: a friend's first bundle, bought after they joined you. Top-ups and card buys never pay.";
