@@ -25,6 +25,8 @@ window.DYMyInvites = (function () {
   var MI_CLOSED = "My Invites is not open yet.";
   var MI_DOWN = "Your invites can't be read right now - nothing is lost. Try again in a moment.";
   var MI_DECLINED = "Nothing was shown - the message is free and moves no money. Tap Show my invites to try again.";
+  // BOT-COLDSCAN-1 (proposed wording, for the owner's ruling) — the bot has just restarted and is still counting
+  var MI_WARMING = "Your invites are still being counted - try again in a minute. Nothing is lost.";
   var MI_NOCODE = "You don't have an invite code yet - get one on the dashboard.";
   var MI_COUNTS_V1 = "Counts only purchases that pay: a friend's first bundle, bought after they joined you. Top-ups and card buys never pay.";
   var MI_COUNTS_V2 = "Counts only purchases that pay: a first bundle or a USD card, bought after the buyer joined. Top-ups and DYC card buys never pay.";
@@ -35,7 +37,7 @@ window.DYMyInvites = (function () {
   var MI_LADDER_TAIL = "(highest tier reached only)";
 
   var data = null, dataFor = null, err = null, busy = false;
-  var TIMEOUT_MS = 15000;
+  var TIMEOUT_MS = 30000;   // BOT-COLDSCAN-1: the bot answers within 20 s while it warms up (was 15 s — it cut that answer off)
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -92,6 +94,7 @@ window.DYMyInvites = (function () {
       return Promise.race([post, late]);
     }).then(function (r) {
       busy = false;
+      if (r && r.refused === "WARMING") { err = MI_WARMING; data = null; render(); return; }   // BOT-COLDSCAN-1: never zeros while warming
       if (!r || !r.ok) { err = MI_DOWN; data = null; render(); return; }
       if (String(ws().address || "").toLowerCase() !== String(me).toLowerCase()) { data = null; render(); return; }   // the pen moved meanwhile
       data = r; dataFor = String(me).toLowerCase(); render();

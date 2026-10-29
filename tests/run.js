@@ -37,10 +37,10 @@ const SUITES = [
   { name: "consoleroad",   file: path.join(__dirname, "suites", "consoleroad.js"), chain: false, expect: 102 },
   { name: "stakedframe",   file: path.join(__dirname, "suites", "stakedframe.js"), chain: true, expect: 29 },
   { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 102 },
-  { name: "winnings",      file: path.join(__dirname, "suites", "winnings.js"), chain: true, expect: 41 },
+  { name: "winnings",      file: path.join(__dirname, "suites", "winnings.js"), chain: true, expect: 44 },
   // AFFILIATE-1 rung 3 — Torana Invites (store + dashboard) and the ONE Withdraw card, against the REAL desk with
   // coupons signed by the bot's own signer and every invite signature checked by the bot's own verifier.
-  { name: "invites",       file: path.join(__dirname, "suites", "invites.js"), chain: true, expect: 117, capMs: 600000 },
+  { name: "invites",       file: path.join(__dirname, "suites", "invites.js"), chain: true, expect: 119, capMs: 600000 },
   // FEE-1 — the one player fee rule: the 7 measured mainnet blocks, the floor, read failure, the anvil compounding
   // control, real sends on two pages, and every write road reaching the one function.
   { name: "fees",          file: path.join(__dirname, "suites", "fees.js"), chain: true, expect: 26, capMs: 600000 },
@@ -58,7 +58,7 @@ const SUITES = [
   // CARD-STORE-1 C3 — the USD card button against the REAL WaveCardUsdSale (tokens planted at their Polygon addresses)
   { name: "cardusd",       file: path.join(__dirname, "suites", "cardusd.js"), chain: true, expect: 63, capMs: 600000 },
   // MY-INVITES-1 — the affiliate's own page against the REAL bot over a REAL chain (a 7-deep tree, both schemes)
-  { name: "myinvites",     file: path.join(__dirname, "suites", "myinvites.js"), chain: true, expect: 58, capMs: 900000 },
+  { name: "myinvites",     file: path.join(__dirname, "suites", "myinvites.js"), chain: true, expect: 60, capMs: 900000 },
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
   { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 34 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)

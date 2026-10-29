@@ -331,6 +331,18 @@ async function main() {
     ok("A6 · a bot REFUSAL renders the plain sentence, never zeros", q(h.w, "#mi-err") && q(h.w, "#mi-err").textContent === MI_DOWN && !q(h.w, "#mi-levels"));
     H.teardown(h);
   }
+  {
+    // BOT-COLDSCAN-1 — the bot has just restarted and is still counting: its own sentence, never zeros
+    const h = await H.myInvitesPage(c, W[0], Object.assign({ svc: { "/invites/mine": () => ({ ok: false, refused: "WARMING", sentence: "x" }) } }, process.env.DY_PAGE_MUTANT ? { pageSrc: process.env.DY_PAGE_MUTANT } : {}));
+    await waitFor("provider", () => h.w.DYWallet.state.hasProvider); await h.w.DYWallet.connect(); await waitFor("connected", () => h.w.DYWallet.state.connected);
+    await show(h);
+    ok("A7 · WARMING renders 'still being counted' (proposed wording) — no table, no money, no zeros",
+       q(h.w, "#mi-err") && q(h.w, "#mi-err").textContent === "Your invites are still being counted - try again in a minute. Nothing is lost." && !q(h.w, "#mi-levels") && !q(h.w, "#mi-money"),
+       q(h.w, "#mi-err") && q(h.w, "#mi-err").textContent);
+    const src = fs.readFileSync(PAGE_JS, "utf8");
+    ok("A8 · the My Invites time limit is 30 s (the bot answers within 20 s while warming; 15 s cut that answer off)", /var TIMEOUT_MS = 30000;/.test(src));
+    H.teardown(h);
+  }
 
   console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail));
   return fail;

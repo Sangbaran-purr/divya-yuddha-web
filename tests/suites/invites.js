@@ -434,6 +434,7 @@ async function run() {
         seen.results.push(v);
         if (!v.ok) return { refused: "BAD_SIGNATURE", sentence: "x" };
         if (opts.refuse) return { refused: opts.refuse, sentence: "x" };
+        if (opts.hang) return new Promise(() => {});                  // BOT-COLDSCAN-1: a bot that never answers
         const out = { code: v.code, existing: false };
         if (opts.invites) out.invites = opts.invites;
         if (opts.extra) Object.assign(out, opts.extra);     // INVITES-2: the v2 fields (scheme, week) ride beside the list
@@ -576,6 +577,24 @@ async function run() {
     await waitFor("the refusal", () => txt(h3.w, "#ov-fail-msg").length > 0);
     ok("DL3 · a refusal answers in the ruled words (NO_TORANA)", txt(h3.w, "#ov-fail-msg") === "Invite codes are for Torana holders.", txt(h3.w, "#ov-fail-msg"));
     H.teardown(h3);
+    // BOT-COLDSCAN-1 — the bot has just restarted: it sends the code and says the list is still being counted
+    const s4 = codeStub(await chainIdOf(c), { extra: { warming: true } });
+    const h4 = await H.dashboardPage(c, c.player, { invite: "https://bot.test", svc: s4.stub });
+    await dashConnect(h4.w);
+    H.click(h4.w, "#inv-get");
+    await waitFor("the code", () => !!q(h4.w, "#inv-code"));
+    ok("DL4 · WARMING: the code is shown and the list says it is still being counted (proposed wording) — never 'no purchases'",
+       txt(h4.w, "#inv-list-note") === "Your code is ready. Who used it is still being counted - check again in a minute." && !q(h4.w, ".inv-row"), txt(h4.w, "#inv-list-note"));
+    H.teardown(h4);
+    // …and the code call has a TIME LIMIT now (it had none): past it, the warming sentence
+    const s5 = codeStub(await chainIdOf(c), { hang: true });
+    const h5 = await H.dashboardPage(c, c.player, { invite: "https://bot.test", svc: s5.stub, ls: { "dymf::config": JSON.stringify({ svcTimeoutMs: 1500 }) } });
+    await dashConnect(h5.w);
+    H.click(h5.w, "#inv-get");
+    await waitFor("the time limit", () => txt(h5.w, "#ov-fail-msg").length > 0);
+    ok("DL5 · TIME LIMIT — a bot that never answers the code request ends in the warming sentence (proposed wording)",
+       txt(h5.w, "#ov-fail-msg") === "Your invite code is still being prepared - try again in a minute. Nothing is lost." && s5.seen.calls === 1, txt(h5.w, "#ov-fail-msg"));
+    H.teardown(h5);
   }
 
   // ═══════════════ DV · INVITES-2 — THE v2 CARD, ONLY WHILE THE DIGEST SAYS v2 ═══════════════
@@ -835,8 +854,8 @@ async function run() {
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
     ok("X4 · STAMPS: store.js s27, store.css s10 (CARD-STORE-1 C3 + review fix + C5 + C5-A), invite.js i2, mf-config mf11 on store.html",
        /js\/store\.js\?v=s27/.test(sh) && /css\/store\.css\?v=s10/.test(sh) && /js\/invite\.js\?v=i2/.test(sh) && /mf-config\.js\?v=mf11/.test(sh));
-    ok("X5 · STAMPS: dashboard.js mf43, dashboard.css mf7, invite.js i2, mf-config mf11 on dashboard.html",
-       /js\/dashboard\.js\?v=mf43/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf11/.test(dh));
+    ok("X5 · STAMPS: dashboard.js mf44, dashboard.css mf7, invite.js i2, mf-config mf11 on dashboard.html",
+       /js\/dashboard\.js\?v=mf44/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf11/.test(dh));
     ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s27, report mf-config mf11)",
        /js\/store\.js\?v=s27/.test(th) && /mf-config\.js\?v=mf11/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));

@@ -213,6 +213,8 @@ window.DYDash = (function () {
   var I_REVIEW = "More than 25 rewards in one month are checked by hand before they unlock.";
   var I_NONE = "No invited purchases yet.";
   var I_UNSHOWN = "Your invited purchases can't be shown right now.";
+  // BOT-COLDSCAN-1 (proposed wording, for the owner's ruling) — the bot has just restarted and is still counting
+  var I_WARMING = "Your code is ready. Who used it is still being counted - check again in a minute.";
   var I_COPIED = "Link copied.";
   function I_UNLOCKS_ON(date) { return "Unlocks on " + date; }
   var I_MINE = "See my invites →";                                            // MY-INVITES-1 (DASHBOARD_DESIGN_v1 §12)
@@ -251,6 +253,8 @@ window.DYDash = (function () {
     CODE_COLLISION: "Please sign once more to create your code.",
     TRY_AGAIN: "We can't check that right now - nothing is lost. Try again shortly.",
     NOT_CONFIGURED: "Invites are not open yet.",
+    // BOT-COLDSCAN-1 (proposed wording) — the code request took longer than the time limit (the bot is waking up)
+    WARMING: "Your invite code is still being prepared - try again in a minute. Nothing is lost.",
   };
   var INV_FALLBACK = "Invites are unavailable right now.";
 
@@ -283,7 +287,16 @@ window.DYDash = (function () {
     KYC_REQUIRED: "Withdrawals need identity verification first.",
     OFAC_MATCH: "This wallet can't be served.",
     DENY_LIST: "This wallet can't be served.",
+    // BOT-COLDSCAN-1 (proposed wording) — the bot has just restarted: its first count is still running
+    WARMING: "Withdrawals are waking up - try again in a minute. Nothing is lost.",
   };
+  // BOT-COLDSCAN-1 — the withdraw and invite-code calls get a TIME LIMIT (they had none: after a bot restart they could
+  // spin for ten minutes). The bot itself answers within 20 s while it warms up; 30 s leaves room for the network. Past
+  // it, the warming sentence. (A test may shorten it through the page's own override, "svcTimeoutMs".)
+  function svcTimeoutMs() { var t = Number(ov().svcTimeoutMs); return t > 0 ? t : 30000; }
+  function withinLimit(p) {
+    return Promise.race([p, new Promise(function (res) { setTimeout(function () { res({ __timeout: true }); }, svcTimeoutMs()); })]);
+  }
   var _errIface = null;
   function errIface() { if (!_errIface && ethersRef) _errIface = new ethersRef.Interface(ERR_ABI); return _errIface; }
   // dig the revert bytes out of ethers' nested error shapes
@@ -1524,13 +1537,14 @@ window.DYDash = (function () {
           .then(function () { return new ethersRef.BrowserProvider(window.ethereum).getSigner(); })
           .then(function (sg) { return sg.signMessage(ch.message); })
           .then(function (sig) {
-          return fetch(base + "/winnings/coupon", {
+          return withinLimit(fetch(base + "/winnings/coupon", {
             method: "POST", headers: { "content-type": "application/json" },
             body: JSON.stringify({ nonce: ch.nonce, signature: sig }),   // NO wallet field: the service recovers it
-          }).then(function (r) { return r.json(); });
+          }).then(function (r) { return r.json(); }));
         });
       })
       .then(function (res) {
+        if (res && res.__timeout) { failBox(SVC_PLAIN.WARMING); return done(); }   // BOT-COLDSCAN-1: past the limit
         if (!res || res.refused) {
           // the SITE's ruled sentence wins for a known reason (rung 3 owns this copy); the service's own words
           // stand in only for a reason this page has never heard of
@@ -1635,6 +1649,7 @@ window.DYDash = (function () {
   //  is whatever the service returns beside the code; buyers arrive and are shown SHORTENED, never in full.
   // ═══════════════════════════════════════════════════════════════════════
   var invCode = null;      // the code, once the service answered
+  var invWarming = false;  // BOT-COLDSCAN-1: the bot sent the code but is still counting who used it
   var invItems = null;     // [{ buyer, ts, unlockAt, status: pending|unlocked|held, rewardWei }] or null = not provided
   var invBusy = false;
   // INVITES-2 — which copy the card speaks: the ACTIVE scheme from the bot's daily digest (the latest entry), read once,
@@ -1756,7 +1771,7 @@ window.DYDash = (function () {
   }
 
   function invListHtml() {
-    if (invItems == null) return "<p class='win-note' id='inv-list-note'>" + esc(I_UNSHOWN) + "</p>";
+    if (invItems == null) return "<p class='win-note' id='inv-list-note'>" + esc(invWarming ? I_WARMING : I_UNSHOWN) + "</p>";
     if (!invItems.length) return "<p class='win-note' id='inv-list-note'>" + esc(I_NONE) + "</p>";
     var dec = data.dycDec || 18;
     var tot = { all: 0n, ready: 0n, pending: 0n, held: 0n, paid: 0n };
@@ -1797,18 +1812,20 @@ window.DYDash = (function () {
         return sg.getAddress().then(function (me) {
           var td = window.DYInvite.codeRequestTypedData(PLAYER.chain.id, me, issuedAt, ethersRef);
           return sg.signTypedData(td.domain, td.types, td.message).then(function (sig) {
-            return fetch(base + "/invites/code", {
+            return withinLimit(fetch(base + "/invites/code", {
               method: "POST", headers: { "content-type": "application/json" },
               body: JSON.stringify({ wallet: td.message.wallet, issuedAt: issuedAt, signature: sig }),
-            }).then(function (r) { return r.json(); });
+            }).then(function (r) { return r.json(); }));
           });
         });
       })
       .then(function (res) {
+        if (res && res.__timeout) { failBox(INV_SVC.WARMING); return done(); }   // BOT-COLDSCAN-1: past the limit
         if (!res || res.refused || !res.code) {
           failBox(INV_SVC[res && res.refused] || INV_FALLBACK);
           return done();
         }
+        invWarming = res.warming === true;                                       // BOT-COLDSCAN-1: the list is still being counted
         invCode = window.DYInvite.normCode(res.code);
         invItems = Array.isArray(res.invites) ? res.invites.map(function (x, k) {
           return { key: k, buyer: x.buyer, ts: x.ts, unlockAt: x.unlockAt, status: x.status,

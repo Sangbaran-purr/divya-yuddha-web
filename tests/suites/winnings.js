@@ -36,6 +36,7 @@ function svcStub(c, wallet, cumulative, opts) {
     "/winnings/coupon": (init) => {
       seen.coupon++;
       seen.bodies.push(JSON.parse((init && init.body) || "{}"));
+      if (opts.hang) return new Promise(() => {});                    // BOT-COLDSCAN-1: a bot that never answers
       if (opts.refuse) return { refused: opts.refuse, sentence: opts.sentence };
       return couponFor(c, wallet, cumulative, opts.ttl);
     },
@@ -164,6 +165,7 @@ async function run() {
       ["GEO_DENIED", "Withdrawals aren't available from your location."],
       ["KYC_REQUIRED", "Withdrawals need identity verification first."],
       ["NOTHING_TO_WITHDRAW", "You have nothing to withdraw yet."],   // S3, amended at AFFILIATE-1 rung 3
+      ["WARMING", "Withdrawals are waking up - try again in a minute. Nothing is lost."],   // BOT-COLDSCAN-1 (proposed wording)
     ];
     for (const [reason, sentence] of cases) {
       const c = await H.chainWinnings();
@@ -211,6 +213,22 @@ async function run() {
     H.teardown(h);
   }
   {
+    // BOT-COLDSCAN-1 — the withdraw call has a TIME LIMIT now (it had none). A bot that never answers ends in the warming
+    // sentence, and the button is usable again. (The limit is 30 s; the page's own override shortens it for the test.)
+    const c = await H.chainWinnings();
+    const s = svcStub(c, c.player.address, 900n * DEC, { hang: true });
+    const h = await H.dashboardPage(c, c.player, { winnings: { desk: c.addrs.desk, service: "https://bot.test" }, svc: s.stub,
+      ls: { "dymf::config": JSON.stringify({ svcTimeoutMs: 1500 }) } });
+    const w = h.w;
+    await connect(w);
+    w.document.querySelector("#win-coupon").click();
+    await settle(w, 2600);
+    ok("S · TIME LIMIT — a bot that never answers ends in the warming sentence, and step 1 is offered again (no endless spinner)",
+       txt(w, "#ov-fail-msg") === "Withdrawals are waking up - try again in a minute. Nothing is lost." && !!w.document.querySelector("#win-coupon") && !w.document.querySelector("#win-coupon").disabled,
+       txt(w, "#ov-fail-msg"));
+    H.teardown(h);
+  }
+  {
     // (d) a paused desk
     const c = await H.chainWinnings({ paused: true });
     const s = svcStub(c, c.player.address, 900n * DEC);
@@ -233,10 +251,12 @@ async function run() {
     ok("X1 · no analytics event is attached to the money card",
        !/window\.plausible|plausible\(|dystore::utm|DYStore\.track|\btrack\(/.test(winBlock));
     ok("X2 · the desk read is gated on the desk existing", /if \(c\.winningsDesk\) \{/.test(dash));
+    ok("X3b · BOT-COLDSCAN-1: the coupon POST is inside the time limit, and the limit defaults to 30 s",
+       /return withinLimit\(fetch\(base \+ "\/winnings\/coupon"/.test(dash) && /return t > 0 \? t : 30000;/.test(dash));
     ok("X3 · the coupon POST sends nonce + signature and nothing else",
        /JSON\.stringify\(\{ nonce: ch\.nonce, signature: sig \}\)/.test(dash));
     ok("X4 · STAMPS BUMPED — dashboard.js, dashboard.css and mf-config.js all carry their current ?v= (WINNINGS-5 switch-on)",
-       /js\/dashboard\.js\?v=mf43/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf11/.test(html));
+       /js\/dashboard\.js\?v=mf44/.test(html) && /css\/dashboard\.css\?v=mf7/.test(html) && /mf-config\.js\?v=mf11/.test(html));
     // WINNINGS-5 (2026-10-10): the desk is LIVE. The shipped config now carries the real desk and the live bot — and
     // nothing else: a typo here would point every player's withdrawal at the wrong contract or service.
     ok("X5 · the shipped config carries the LIVE desk and the live bot (WINNINGS-5 switch-on)",
