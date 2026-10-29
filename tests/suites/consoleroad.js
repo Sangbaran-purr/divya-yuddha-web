@@ -360,7 +360,7 @@ async function main() {
     ok("F4 · the deadline still carries its own mark through the funnel", dl.__deadline === true);
     const src = fs.readFileSync(path.join(SITE, "js/admin.js"), "utf8");
     const funnel = src.indexOf('The archive is busy or unreachable');
-    const log = src.lastIndexOf('console.error("[DY admin] TORANA find-eligible failed:', funnel);
+    const log = src.lastIndexOf('console.error("[DY admin] TORANA claims read failed:', funnel);   // TORANA-AUTO-1: the panel's read was renamed with it
     ok("F5 · THE TRUTH IS LOGGED — the underlying error reaches the console BEFORE the three-way funnel collapses it",
        log > 0 && log < funnel);
     ok("F6 · and the owner still reads the same plain words (the friendly message was not traded away)", funnel > 0);
