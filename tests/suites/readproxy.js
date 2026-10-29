@@ -136,10 +136,10 @@ async function run() {
     const pages = ["index.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html", "mint.html", "my-invites.html"];
     const read = (p) => fs.readFileSync(path.join(SITE, p), "utf8");
     ok("X1 · config.js is stamped s21 on every page that loads it (10; CARD-STORE-1 C3 moved it; my-invites.html joined; register.html left as a redirect; STORE-LOAD-1 the fork mode)", pages.every((p) => /config\.js\?v=s21"/.test(read(p))) && pages.every((p) => !/config\.js\?v=s20"/.test(read(p))));
-    ok("X2 · wallet.js s1s, mf-config.js mf11, dashboard.js mf44, report.js mf4f",
+    ok("X2 · wallet.js s1s, mf-config.js mf11, dashboard.js mf45, report.js mf4f",
        pages.filter((p) => /js\/wallet\.js\?v=/.test(read(p))).every((p) => /js\/wallet\.js\?v=s1s"/.test(read(p)))
          && ["dashboard.html", "report.html", "store.html", "mint.html"].every((p) => /mf-config\.js\?v=mf11"/.test(read(p)))
-         && /js\/dashboard\.js\?v=mf44"/.test(read("dashboard.html")) && /js\/report\.js\?v=mf4f"/.test(read("report.html")));
+         && /js\/dashboard\.js\?v=mf45"/.test(read("dashboard.html")) && /js\/report\.js\?v=mf4f"/.test(read("report.html")));
   }
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));

@@ -854,8 +854,8 @@ async function run() {
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
     ok("X4 · STAMPS: store.js s27, store.css s10 (CARD-STORE-1 C3 + review fix + C5 + C5-A), invite.js i2, mf-config mf11 on store.html",
        /js\/store\.js\?v=s27/.test(sh) && /css\/store\.css\?v=s10/.test(sh) && /js\/invite\.js\?v=i2/.test(sh) && /mf-config\.js\?v=mf11/.test(sh));
-    ok("X5 · STAMPS: dashboard.js mf44, dashboard.css mf7, invite.js i2, mf-config mf11 on dashboard.html",
-       /js\/dashboard\.js\?v=mf44/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf11/.test(dh));
+    ok("X5 · STAMPS: dashboard.js mf45, dashboard.css mf7, invite.js i2, mf-config mf11 on dashboard.html",
+       /js\/dashboard\.js\?v=mf45/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf11/.test(dh));
     ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s27, report mf-config mf11)",
        /js\/store\.js\?v=s27/.test(th) && /mf-config\.js\?v=mf11/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));
