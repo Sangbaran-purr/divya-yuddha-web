@@ -453,7 +453,7 @@ const DASH_LAW = [
   ["E3 exhausted",       "You have withdrawn all of your winnings so far."],
   ["E4 expired",         "This withdrawal approval has expired. Approvals last 4 hours - ask for a fresh one."],
   ["E5 paused",          "Withdrawals are paused for a moment."],
-  ["E6 reserve short",   "The cash-out desk's reserve can't cover this right now. Try a smaller amount or check back later."],
+  ["E6 reserve short",   "The cash-out desk's reserve can't cover this right now. Your winnings are safe; check back later."],   // amended WINNINGS-INSTANT-1 (D8, 2026-10-30)
   ["E7 bad signature",   "This withdrawal approval couldn't be verified. It may be from an old signing key - ask for a fresh one."],
   ["S1 deriver refusal", "We can't confirm your winnings right now - nothing is lost. Try again shortly."],
   ["S2 rate limited",    "You've just asked for one - give it a minute and try again."],
@@ -613,6 +613,27 @@ ok("TA8 · no Torana line says 'presale' — both rounds count (owner ruling 202
 ok("TA9 · the console's direct-mint Release button and its USD bands are RETIRED (the claims list replaces them)",
    !/torana-release|cfg-torana-definite|cfg-torana-discretion|toranaDefiniteUsd|toranaDiscretionUsd/.test(fs.readFileSync(path.resolve(__dirname, "..", "admin.html"), "utf8") + fs.readFileSync(path.resolve(__dirname, "..", "js", "admin.js"), "utf8")));
 
-const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length;
-console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across FIVE pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// WINNINGS-INSTANT-1 (owner rulings 2026-10-30, D8 — approved word for word): DASHBOARD_DESIGN_v1 §15 → js/dashboard.js
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+const WI_DOC = (DDOC.split("## 15. INSTANT WINNINGS")[1] || "");
+const WI_LAW = [
+  ["WI1 W-CAP",       "Up to USD [CAP] of winnings per withdrawal."],
+  ["WI2 W-OVER",      "You've won [TOTAL] DYC. You can withdraw up to USD [CAP] now; the rest becomes available with your next withdrawal, 24 hours after this one."],
+  ["WI3 W-H",         "[HELD] DYC of your winnings is under a routine check before it can be withdrawn. Nothing is lost: it stays yours and is released after the check."],
+  ["WI4 DESK_LOW",    "The cash-out desk is being refilled. Your winnings are safe; try again later."],
+  ["WI5 reserve",     "The cash-out desk's reserve can't cover this right now. Your winnings are safe; check back later."],
+];
+console.log("\n── INSTANT WINNINGS · DASHBOARD_DESIGN_v1 §15 ruled copy (doc → js/dashboard.js) ──");
+for (const [tag, line] of WI_LAW) {
+  ok(tag + " — in §15 of the doc", norm(WI_DOC).indexOf(norm(line)) >= 0, line);
+  ok(tag + " — carried verbatim by dashboard.js", carriesIn(DASH, line, false), line);
+}
+ok("WI6 · the cap is never written into the page: dashboard.js reads it from the bot's /winnings/policy",
+   /\/winnings\/policy/.test(DASH) && !/Up to USD 100 of winnings/.test(DASH));
+ok("WI7 · the winnings desk's reserve line no longer asks for a smaller amount (the card has no amount field)",
+   /ERR_WINNINGS = \{[\s\S]*?ReserveInsufficient: "The cash-out desk's reserve can't cover this right now\. Your winnings are safe; check back later\."/.test(DASH));
+
+const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length;
+console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across SIX pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);

@@ -78,7 +78,7 @@ Every line below is asserted verbatim against the source.
 - You have withdrawn all of your winnings so far.
 - This withdrawal approval has expired. Approvals last 4 hours - ask for a fresh one.
 - Withdrawals are paused for a moment.
-- The cash-out desk's reserve can't cover this right now. Try a smaller amount or check back later.
+- The cash-out desk's reserve can't cover this right now. Your winnings are safe; check back later. *(amended WINNINGS-INSTANT-1, 2026-10-30 - was "...Try a smaller amount or check back later."; the card has no amount to make smaller. The staking cash-out's own line in `ERR_PLAIN` is unchanged - see §15.)*
 - This withdrawal approval couldn't be verified. It may be from an old signing key - ask for a fresh one.
 
 **The service's refusals** (`SVC_PLAIN`)
@@ -285,3 +285,26 @@ After a purchase on this page, the buy panel carries the S1 or S2 line under "Pu
 wallet that still has no Torana is offered the self-claim. The Treasury's second road ("Or buy USD 100 or more of DYC in
 the sale - a Torana comes with it.") and the homepage's corrected Torana bullet are ruled in RULINGS_2026-08-27,
 amendment 2026-10-29.
+
+## 15. INSTANT WINNINGS, CAPPED (WINNINGS-INSTANT-1, owner rulings 2026-10-30)
+
+Game winnings stay instant (a win is withdrawable a few minutes after it settles). New: the approval bot signs at most
+USD [CAP] of WINNINGS per withdrawal - the bot's setting `WINNINGS_DAILY_CAP_USD` (100 at go-live), read by this page from
+`/winnings/policy`, never written into it. The desk allows one withdrawal per wallet per 24 hours, so the per-withdrawal
+cap IS the daily cap, and "a day" is 24 hours after the last withdrawal (the desk's rule, not the UTC day). What is above
+the cap carries over to the next withdrawal by itself. Invite rewards are not capped and keep their 7-day wait. Winnings
+from matches held for review (same pair, fast forfeit, new player) are shown apart and released by the owner in the
+"Winnings Holds" tab. A withdrawal the desk's reserve can't cover is refused before anything is signed - never part-paid,
+and the player's one withdrawal in 24 hours is not used up.
+
+### Ruled copy (pinned by `mp/copyproof.js`, doc → `js/dashboard.js`)
+- Up to USD [CAP] of winnings per withdrawal.
+- You've won [TOTAL] DYC. You can withdraw up to USD [CAP] now; the rest becomes available with your next withdrawal, 24 hours after this one.
+- [HELD] DYC of your winnings is under a routine check before it can be withdrawn. Nothing is lost: it stays yours and is released after the check.
+- The cash-out desk is being refilled. Your winnings are safe; try again later.
+- The cash-out desk's reserve can't cover this right now. Your winnings are safe; check back later.
+
+[TOTAL] is the winnings still to be withdrawn (not held); [HELD] the held winnings not yet paid. The desk-unreadable and
+holds-unreadable refusals reuse the existing "We can't confirm your winnings right now - nothing is lost. Try again
+shortly." The staking cash-out's reserve line ("...Try a smaller amount or check back later.") is NOT part of this ruling:
+its wording is open (that panel also has no amount field - flagged to the owner 2026-10-30).

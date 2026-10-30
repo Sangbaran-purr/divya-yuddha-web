@@ -194,6 +194,11 @@ window.DYDash = (function () {
   var W_FACILITY = "Withdrawals are available while the desk's USDT reserve lasts. This is a facility, not an entitlement.";
   var W_DORMANT = "Withdrawals are not yet open. The desk opens when the reserve is funded.";
   var W_FRESH = "A win needs a few minutes on chain before it can be withdrawn.";
+  // WINNINGS-INSTANT-1 (owner rulings 2026-10-30, D8 — approved word for word; pinned by mp/copyproof.js). The cap is the
+  // bot's setting (WINNINGS_DAILY_CAP_USD), read from /winnings/policy — never a number written into this page.
+  var W_CAP = function (cap) { return "Up to USD " + cap + " of winnings per withdrawal."; };
+  var W_OVER = function (total, cap) { return "You've won " + total + " DYC. You can withdraw up to USD " + cap + " now; the rest becomes available with your next withdrawal, 24 hours after this one."; };
+  var W_HELD = function (held) { return held + " DYC of your winnings is under a routine check before it can be withdrawn. Nothing is lost: it stays yours and is released after the check."; };
   function W_CONFIRM(dyc, usdt) { return "Withdraw " + dyc + " DYC and receive " + usdt + " USDT. The DYC returns to the treasury."; }
   function W_REOPENS(when) { return "Your next withdrawal opens at " + when + "."; }
 
@@ -281,7 +286,7 @@ window.DYDash = (function () {
     InviteEntitlementExhausted: "You have withdrawn all of your invite rewards so far.",
     ExpiredCoupon: "This withdrawal approval has expired. Approvals last 4 hours - ask for a fresh one.",
     EnforcedPause: "Withdrawals are paused for a moment.",
-    ReserveInsufficient: "The cash-out desk's reserve can't cover this right now. Try a smaller amount or check back later.",
+    ReserveInsufficient: "The cash-out desk's reserve can't cover this right now. Your winnings are safe; check back later.",   // D8 (2026-10-30)
     BadSignature: "This withdrawal approval couldn't be verified. It may be from an old signing key - ask for a fresh one.",
     ZeroAmount: "Enter an amount to withdraw.",
   };
@@ -302,6 +307,11 @@ window.DYDash = (function () {
     DENY_LIST: "This wallet can't be served.",
     // BOT-COLDSCAN-1 (ruled 2026-10-29, pinned by mp/copyproof.js) — the bot has just restarted: its first count is still running
     WARMING: "Withdrawals are waking up - try again in a minute. Nothing is lost.",
+    // WINNINGS-INSTANT-1 (D7, D8 — ruled 2026-10-30): the desk can't cover this withdrawal (refused, never part-paid);
+    // the desk or the holds couldn't be read (refused, never signed past — D10)
+    DESK_LOW: "The cash-out desk is being refilled. Your winnings are safe; try again later.",
+    DESK_UNREADABLE: "We can't confirm your winnings right now - nothing is lost. Try again shortly.",
+    HOLDS_UNREADABLE: "We can't confirm your winnings right now - nothing is lost. Try again shortly.",
   };
   // BOT-COLDSCAN-1 — the withdraw and invite-code calls get a TIME LIMIT (they had none: after a bot restart they could
   // spin for ten minutes). The bot itself answers within 20 s while it warms up; 30 s leaves room for the network. Past
@@ -1461,6 +1471,17 @@ window.DYDash = (function () {
   //  service actually returned. There is no path that sends a transaction without one.
   // ═══════════════════════════════════════════════════════════════════════
   var winCoupon = null;   // { coupon:{wallet,cumulativeWinningsWei,cumulativeInviteWei,deadline}, signature, cumulativeWinningsWei, cumulativeInviteWei }
+  // WINNINGS-INSTANT-1 — the bot's cap (public, /winnings/policy) and this wallet's own view from its last request:
+  // { capUsd, unpaidWei, nowWei, aboveCapWei, heldWei, nextAllowanceAt } (strings of wei). Cleared with the wallet.
+  var winPolicy = null, winPolicyAsked = false, winView = null;
+  function capText(cap) { var n = Number(cap); return Number.isInteger(n) ? String(n) : n.toFixed(2); }
+  function askWinPolicy() {
+    var base = winSvcBase(); if (!base || winPolicyAsked) return;
+    winPolicyAsked = true;
+    fetch(base + "/winnings/policy").then(function (r) { return r.json(); })
+      .then(function (j) { if (j && Number(j.capUsd) > 0) { winPolicy = { capUsd: Number(j.capUsd) }; renderWinnings(); } })
+      .catch(function () { winPolicyAsked = false; });   // no cap line until it reads; asked again on the next paint
+  }
   var winBusy = false;
 
   function winSvcBase() { var u = cfg().winningsServiceUrl; return u ? String(u).replace(/\/+$/, "") : null; }
@@ -1503,6 +1524,7 @@ window.DYDash = (function () {
         + "<p class='win-note'>" + esc(W_FACILITY) + "</p>";
       return;
     }
+    askWinPolicy();
     if (!isConnected()) {
       host.innerHTML = "<p class='win-lead'>" + esc(V_LEAD) + "</p><div class='notlive'>Connect your wallet to see what you can withdraw.</div>";
       return;
@@ -1528,7 +1550,14 @@ window.DYDash = (function () {
       + "<span class='win-fact'>" + esc(W_RATE) + "</span>"
       + "<span class='win-fact'>" + esc(W_FLOOR) + "</span>"
       + "<span class='win-fact'>" + esc(W_CADENCE) + "</span>"
+      + (winPolicy ? "<span class='win-fact' id='win-cap'>" + esc(W_CAP(capText(winPolicy.capUsd))) + "</span>" : "")
       + "</div>";
+    // WINNINGS-INSTANT-1 — over the cap (the rest carries to the next withdrawal) and held for review, from the bot's answer
+    if (winView) {
+      var vcap = capText(winView.capUsd != null ? winView.capUsd : (winPolicy && winPolicy.capUsd));
+      if (BigInt(winView.aboveCapWei || "0") > 0n) h += "<p class='win-note' id='win-over'>" + esc(W_OVER(fmt(BigInt(winView.unpaidWei), dec), vcap)) + "</p>";
+      if (BigInt(winView.heldWei || "0") > 0n) h += "<p class='win-note' id='win-held'>" + esc(W_HELD(fmt(BigInt(winView.heldWei), dec))) + "</p>";
+    }
 
     if (unknown) {
       h += "<p class='win-note'>The desk is busy or unreachable — your winnings are safe. Try again in a moment.</p>";
@@ -1578,6 +1607,7 @@ window.DYDash = (function () {
       })
       .then(function (res) {
         if (res && res.__timeout) { failBox(SVC_PLAIN.WARMING); return done(); }   // BOT-COLDSCAN-1: past the limit
+        winView = res && res.winnings ? res.winnings : null;   // WINNINGS-INSTANT-1: the cap/held view rides refusals too
         if (!res || res.refused) {
           // the SITE's ruled sentence wins for a known reason (rung 3 owns this copy); the service's own words
           // stand in only for a reason this page has never heard of
@@ -1660,6 +1690,7 @@ window.DYDash = (function () {
               return chain.then(function () {
                 pending(false);
                 winCoupon = null;                 // the approval is spent; step 2 is unreachable again until step 1
+                winView = null;                   // WINNINGS-INSTANT-1: its cap/held view is spent with it
                 refresh();
                 toast("Withdrawn — " + usdTxt + " USDT is in your wallet.", redeemTx);
               });
