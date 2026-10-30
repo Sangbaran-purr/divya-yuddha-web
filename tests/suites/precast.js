@@ -217,15 +217,16 @@ async function run() {
     // the ROAD-level failure too (readProvider itself throws before a job exists) — the S2-class mutant
     w.DY_CONFIG.chain.readRpcUrls = [good.url];
     w.DYWallet._resetReadRoad();
-    const realRP = w.DYWallet.readProvider;
+    const realRP = w.DYWallet.readProvider, realMC0 = w.DYWallet.multicall;
     w.DYWallet.readProvider = function () { throw new Error("no read road"); };
+    w.DYWallet.multicall = function () { return Promise.reject(new Error("no read road")); };   // STORE-READS-1: the reads ride ONE multicall
     await w.DYStore._bundleRefresh();                      // clear the P12 flash off the tile
     before = sends(h);
     H.click(w, ".b-buy");
     await H.until(() => /Couldn't check this wallet just now/.test(bodyText(w)), 30000, "the P12 stop, road-level");
     ok("K24 · a road that throws before any job also stops at P12", true);
     ok("K25 · and still nothing was signed", sends(h) - before === 0);
-    w.DYWallet.readProvider = realRP;
+    w.DYWallet.readProvider = realRP; w.DYWallet.multicall = realMC0;
     good.srv.close(); H.teardown(h);
   }
   {
@@ -304,13 +305,20 @@ async function run() {
       };
       return p;
     };
+    // STORE-READS-1: the pre-cast read is ONE multicall now — the switch is forced while THAT call is in flight
+    const realMC = w.DYWallet.multicall;
+    w.DYWallet.multicall = function (calls) {
+      const p = realMC(calls);
+      if (!flipped) { flipped = true; w.DYWallet.state.address = "0x000000000000000000000000000000000000dEaD"; }
+      return p;
+    };
     const before = sends(h);
     H.click(w, ".b-buy");
     await H.until(() => /Couldn't check this wallet just now/.test(bodyText(w)), 30000, "the P12 stop after the switch");
     ok("K32 · the switch was really forced mid-read (not before it, not after)", flipped === true);
     ok("K33 · the road stopped at P12 and NOTHING was signed for the wallet that arrived",
        sends(h) - before === 0);
-    w.DYWallet.readProvider = realRP; w.DYWallet.state.address = wasAddr;
+    w.DYWallet.readProvider = realRP; w.DYWallet.multicall = realMC; w.DYWallet.state.address = wasAddr;
     good.srv.close(); H.teardown(h);
   }
 
@@ -326,10 +334,13 @@ async function run() {
     const KEPT = /\ba\.(balance|allowance|bundlePrice|packPrice)\b/;
     const buyFn = fn("bundleBuy", "bundleTopUp");
     const topFn = fn("bundleTopUp", "bundleReceipt");
-    ok("L1 · bundleBuy reads NO kept balance/allowance/price", !KEPT.test(buyFn),
-       (buyFn.match(KEPT) || [""])[0]);
-    ok("L2 · bundleTopUp reads NO kept balance/allowance/price", !KEPT.test(topFn),
-       (topFn.match(KEPT) || [""])[0]);
+    // STORE-READS-1 (owner ruling 1): the ONE kept value a road may read is the price the tile SHOWED — captured once, only
+    // to compare with the fresh price (a moved price stops the buy). Every DECISION still reads F; nothing else is kept.
+    const buyRest = buyFn.replace("var shownPrice = a.bundlePrice;", ""), topRest = topFn.replace("var shownPrice = a.packPrice;", "");
+    ok("L1 · bundleBuy reads NO kept balance/allowance/price — save the shown price, read once only to detect a moved price",
+       !KEPT.test(buyRest) && /var shownPrice = a\.bundlePrice;/.test(buyFn) && /freshStop\(F, shownPrice\)/.test(buyFn), (buyRest.match(KEPT) || [""])[0]);
+    ok("L2 · bundleTopUp reads NO kept balance/allowance/price — save the shown pack price, the same way",
+       !KEPT.test(topRest) && /var shownPrice = a\.packPrice;/.test(topFn) && /freshStop\(F, shownPrice\)/.test(topFn), (topRest.match(KEPT) || [""])[0]);
     ok("L3 · both roads take their decisions from the pre-cast read instead",
        /preCastRead\(a, me, false\)/.test(buyFn) && /F\.allowance >= F\.bundlePrice/.test(buyFn) &&
        /preCastRead\(a, me, true\)/.test(topFn) && /F\.allowance >= total/.test(topFn));
@@ -339,10 +350,13 @@ async function run() {
     // (2) ALL OR NOTHING. A per-job catch here would turn a failed read back into a guess (`undefined`), which is
     //     exactly the class of bug STORE-READ-2 shipped on the tile.
     const pre = fn("preCastRead", "writeBackFresh");
+    // STORE-READS-1: the pre-cast is ONE multicall; ANY unread field rejects the whole read (P12), never a value
     ok("L5 · preCastRead has NO per-job catch — a failed read propagates, it never becomes a value",
-       pre.indexOf("catch") < 0 && /Promise\.all\(jobs\)/.test(pre), pre.slice(0, 120));
-    ok("L6 · the pre-cast rides the WALKING road, not a pinned endpoint",
-       /readProvider\(\)/.test(pre) && !/scanProvider|JsonRpcProvider/.test(pre));
+       pre.indexOf("catch") < 0 && /window\.DYWallet\.multicall\(calls\)/.test(pre) && /if \(r\.some\(function \(q\) \{ return !q\.ok; \}\)\) throw/.test(pre), pre.slice(0, 120));
+    const wal = fs.readFileSync(path.join(SITE, "js", "wallet.js"), "utf8");
+    const mcFn = wal.slice(wal.indexOf("function multicall("), wal.indexOf("function scanProvider("));
+    ok("L6 · the pre-cast rides the WALKING road (its multicall is built on readProvider()), not a pinned endpoint",
+       !/scanProvider|JsonRpcProvider/.test(pre) && /MC3_ABI, readProvider\(\)\)/.test(mcFn));
 
     // (3) the write-back may never cross a wallet or a chain (carryForward's law, applied to the fresh values)
     const wb = fn("writeBackFresh", "preCastStop");

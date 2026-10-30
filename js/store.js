@@ -389,8 +389,10 @@ window.DYStore = (function () {
       // …and a purchase that just ENDED keeps its message (ok or refused) across the repaint — a buyer never sees the
       // reason flash and vanish under a wallet-change repaint
       Array.prototype.forEach.call(buyCache.grid.querySelectorAll("figure[data-card]"), function (f) {
-        var m = f.querySelector(".st-msg:not(.b-invite-note)");
-        if (m && /\b(ok|bad)\b/.test(m.className) && m.textContent) cardFlash[f.getAttribute("data-card")] = { text: m.textContent, cls: m.className };
+        var m = f.querySelector(".st-msg:not(.b-invite-note)"), n = f.querySelector(".b-invite-note"), keep = {};
+        if (m && /\b(ok|bad)\b/.test(m.className) && m.textContent) { keep.text = m.textContent; keep.cls = m.className; }
+        if (n && n.textContent) keep.note = { text: n.textContent, cls: n.className };   // the invite line rides along too
+        if (keep.text || keep.note) cardFlash[f.getAttribute("data-card")] = keep;
       });
       renderBuy(buyCache.ethers, buyCache.statusEl, buyCache.grid, buyCache.open, buyCache.rows, buyCache.usdOpen);
     };
@@ -498,10 +500,15 @@ window.DYStore = (function () {
       buildBuyAction(ethers, actions, msg, row, card, openState, soldOut, priced, function () { loadBuy(statusEl, grid); });
       buildUsdAction(actions, msg, row, usdLive, soldOut, function () { loadBuy(statusEl, grid); });
       var fl = cardFlash[row.card.cardId];
-      if (fl) { msg.className = typeof fl === "string" ? "st-msg bad" : fl.cls; msg.textContent = typeof fl === "string" ? fl : fl.text; delete cardFlash[row.card.cardId]; }
+      if (fl) {
+        delete cardFlash[row.card.cardId];
+        if (typeof fl === "string") { msg.className = "st-msg bad"; msg.textContent = fl; }
+        else if (fl.text) { msg.className = fl.cls; msg.textContent = fl.text; }
+      }
       cf.fig.setAttribute("data-card", String(row.card.cardId));
       cf.fig.appendChild(actions);
       cf.fig.appendChild(msg);
+      if (fl && fl.note) cf.fig.insertBefore(txt("div", fl.note.cls, fl.note.text), msg);
       // ZOOM (second door): the art opens the lightbox; the SAME buy flow is wired inside it
       makeZoomTrigger(cf.frameWrap, {
         card: card,

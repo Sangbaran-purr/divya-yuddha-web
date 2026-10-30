@@ -852,12 +852,12 @@ async function run() {
        !/plausible|track\(/.test((dash.split("AFFILIATE-1 rung 3 — THE TORANA INVITES CARD")[1] || "").split("function renderRedeem()")[0]));
     ok("X3 · the store's invite step carries no analytics call either",
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
-    ok("X4 · STAMPS: store.js s29, store.css s10 (CARD-STORE-1 C3 + review fix + C5 + C5-A), invite.js i2, mf-config mf13 on store.html",
-       /js\/store\.js\?v=s29/.test(sh) && /css\/store\.css\?v=s10/.test(sh) && /js\/invite\.js\?v=i2/.test(sh) && /mf-config\.js\?v=mf13/.test(sh));
+    ok("X4 · STAMPS: store.js s30, store.css s10 (CARD-STORE-1 C3 + review fix + C5 + C5-A), invite.js i2, mf-config mf13 on store.html",
+       /js\/store\.js\?v=s30/.test(sh) && /css\/store\.css\?v=s10/.test(sh) && /js\/invite\.js\?v=i2/.test(sh) && /mf-config\.js\?v=mf13/.test(sh));
     ok("X5 · STAMPS: dashboard.js mf49, dashboard.css mf7, invite.js i2, mf-config mf13 on dashboard.html",
        /js\/dashboard\.js\?v=mf49/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf13/.test(dh));
-    ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s29, report mf-config mf13)",
-       /js\/store\.js\?v=s29/.test(th) && /mf-config\.js\?v=mf13/.test(rh));
+    ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s30, report mf-config mf13)",
+       /js\/store\.js\?v=s30/.test(th) && /mf-config\.js\?v=mf13/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));
   }
 
