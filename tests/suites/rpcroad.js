@@ -192,7 +192,7 @@ async function run() {
     const h = await H.storePage(c, c.player, { shippedRoads: true });
     let landed = true;
     try { await H.until(() => /In stock/.test(txt(h.w, "#bundle-body")), 20000, "In stock on the proxy"); } catch (e) { landed = false; }
-    ok("STORE1 · the store's tile reads 'In stock' over the shipped road (the proxy)", landed, txt(h.w, "#bundle-body").slice(0, 160));
+    ok("STORE1 · the store's tile reads 'In stock' over the shipped road (the proxy)", landed, txt(h.w, "#bundle-body").slice(0, 160) + " || dy-rpc: " + dy.logs.slice(-8).join(" | ") + " || hosts: " + JSON.stringify(Array.from(new Set(T.hosts))));
     const before = getLogsServed(dy.logs);
     const nft = new ethers.Contract(c.addrs.nft, ["event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"], h.w.DYWallet.readProvider());
     const r = await h.w.DYWallet.scanLogsResumable(nft, nft.filters.Transfer(), 1, 15000, "dyrr::scan");
