@@ -354,7 +354,8 @@ async function run() {
     const wal = fs.readFileSync(path.join(SITE, "js/wallet.js"), "utf8");
     const list = (cfg.match(/readRpcUrls:\s*\[([\s\S]*?)\]/) || [])[1] || "";
     const urls = (list.match(/"https:\/\/[^"]+"/g) || []);
-    ok("X1 · the read road is a LIST of four verified endpoints", urls.length === 4, urls.join(", "));
+    ok("X1 · the read road is ONE endpoint — our own proxy (RPC-CLEANUP-1: no free public RPC behind it)",
+       urls.length === 1 && urls[0] === '"https://rpc.divyayuddha.games"', urls.join(", "));
     ok("X2 · and every one of them is KEYLESS (no key may enter a page)",
        urls.every((u) => !/[?&](apikey|key|token)=/i.test(u) && !/\/v2\/|\/v3\//.test(u)), urls.join(", "));
     ok("X3 · the fall-through rule is an ALLOW-LIST — only revert DATA stops the walk",
@@ -375,9 +376,9 @@ async function run() {
     const poolFn = wal.slice(wal.indexOf("function mkTamed"), wal.indexOf("function poolFor"));
     ok("X4 · the load-read budget is 4s with ONE attempt (the next endpoint is the retry)",
        /READ_TIMEOUT = 4000/.test(wal) && /maxAttempts: 1/.test(poolFn) && /READ_TIMEOUT\)/.test(wal));
-    ok("X4b · and the SCAN road keeps its tuned 10s and its 2 attempts — scanProvider USES SCAN_TIMEOUT",
+    ok("X4b · and the SCAN road has its own 22 s (past dy-rpc's 20 s scan budget) and 2 attempts — scanProvider USES SCAN_TIMEOUT",
        scanFn.length > 100 && /req\.timeout = SCAN_TIMEOUT/.test(scanFn) && /maxAttempts: 2/.test(scanFn)
-       && /SCAN_TIMEOUT = 10000/.test(wal), "len " + scanFn.length);
+       && /SCAN_TIMEOUT = 22000/.test(wal), "len " + scanFn.length);
     ok("X5 · writes are untouched — the failover road is reads only, never the signer",
        !/sendWalking[\s\S]{0,400}getSigner/.test(wal));
     const treasury = fs.readFileSync(path.join(SITE, "treasury.html"), "utf8");

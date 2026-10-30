@@ -30,6 +30,10 @@ const ALCHEMY_CAP = 10;
 const DRPC_SPAN_CAP = 101;
 const ONERPC_CAP_50 = 50; // measured: 101 accepted, 102 refused — stable at the deploy block AND at the head
 const DEPLOY = 92050143, HEAD = 94291762;
+// RPC-CLEANUP-1 (owner rulings 2026-10-30): the console's history road is the owner's Read RPC URL override if set, else
+// OUR PROXY — drpc and publicnode are gone. The adaptive machinery (depth probe, width discovery, halving, pacing) still
+// governs the owner's URL; on the proxy a panel starts at its 10,000,000-block width with no probe and no pause.
+const PROXY = "https://rpc.divyayuddha.games", OWNER = "https://owner.example/keyed";
 
 // an ethers-v6-shaped rejection: the JSON-RPC error rides `info.error`, which is what errText() flattens
 function rpcErr(shape) {
@@ -122,57 +126,64 @@ async function main() {
   ok("A2 · it boots clean — no jsdom error", A.errs.length === 0, A.errs.join(" | "));
   if (!A.road) { console.log("\n  ✖ cannot continue without the seam"); process.exitCode = 1; return; }
 
-  // ═══ B. THE PROBE — depth is the question; width is not a verdict ═══
+  // ═══ B. THE PROBE — depth is the question; width is not a verdict (the OWNER's URL; the proxy needs none) ═══
   {
     const B = boot(), road = B.road;
-    const drpc = fakeEndpoint({ cap: DRPC_SPAN_CAP });                    // serves depth, refuses width>101
-    const pub = fakeEndpoint({ pruned: true });
-    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({
-      "https://polygon.drpc.org": drpc, "https://polygon-bor-rpc.publicnode.com": pub,
-    }));
-    cfgWrite(B.w, { deployBlock: DEPLOY });
+    const capped = fakeEndpoint({ cap: DRPC_SPAN_CAP });                  // the owner's URL: serves depth, refuses width>101
+    const proxy = fakeEndpoint({ cap: 10000000 });
+    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({ [OWNER]: capped, [PROXY]: proxy }));
+    cfgWrite(B.w, { deployBlock: DEPLOY, readRpcUrl: OWNER });
     await road.withEthers();
     const h = await road.historyProvider("0xsale");
     // The FIRST question is depth, and it is one block. GATE-FIX-1b adds a width proof AFTER it (so a wall is
     // never handed to the scan), so selection is no longer a single read — but no read is ever the old 128.
-    ok("B1 · the FIRST question is DEPTH — a single block at the deploy block, never the old hardcoded 128",
-       drpc.seen[0] && drpc.seen[0].span === 1 && drpc.seen[0].from === DEPLOY,
-       JSON.stringify(drpc.seen[0]));
+    ok("B1 · the FIRST question to the owner's URL is DEPTH — a single block at the deploy block, never the old hardcoded 128",
+       capped.seen[0] && capped.seen[0].span === 1 && capped.seen[0].from === DEPLOY,
+       JSON.stringify(capped.seen[0]));
     ok("B1b · and the 128-block probe is gone for good — no read of that width is ever issued",
-       drpc.seen.every((x) => x.span !== 128), JSON.stringify(drpc.seen.map((x) => x.span)));
+       capped.seen.every((x) => x.span !== 128), JSON.stringify(capped.seen.map((x) => x.span)));
     ok("B1c · the reads after it are the width proof, so the scan is only ever handed a usable road (GATE-FIX-1b)",
-       drpc.seen.length > 1 && drpc.seen.slice(1).every((x) => x.span > 1));
-    ok("B2 · THE FAULT: an endpoint that serves depth but refuses width-128 is ACCEPTED (today's drpc)",
-       h && h.url === "https://polygon.drpc.org");
-    ok("B3 · it never even asked the pruned node — the first candidate answered", pub.seen.length === 0);
-    // the mutant: had the probe stayed 128 wide, drpc would have been refused and we would be on the pruned node
-    const wide = await drpc.getLogs({ fromBlock: DEPLOY, toBlock: DEPLOY + 127 }).then(() => null, (e) => e);
+       capped.seen.length > 1 && capped.seen.slice(1).every((x) => x.span > 1));
+    ok("B2 · an owner endpoint that serves depth but refuses width-128 is ACCEPTED (the GATE-FIX-1 fault stays fixed)",
+       h && h.url === OWNER);
+    ok("B3 · the proxy behind it was never asked — the owner's URL answered", proxy.seen.length === 0);
+    const wide = await capped.getLogs({ fromBlock: DEPLOY, toBlock: DEPLOY + 127 }).then(() => null, (e) => e);
     ok("B4 · MUTANT — the old 128-block probe really is refused by this fixture (the fault is reproduced, not assumed)",
        !!wide && road.isRangeError(wide));
   }
   {
     const B = boot(), road = B.road;
-    const pruned = fakeEndpoint({ pruned: true }), good = fakeEndpoint({ cap: DRPC_SPAN_CAP });
-    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({
-      "https://owner.example/keyed": pruned, "https://polygon.drpc.org": good, "https://polygon-bor-rpc.publicnode.com": fakeEndpoint({ pruned: true }),
-    }));
-    cfgWrite(B.w, { deployBlock: DEPLOY, readRpcUrl: "https://owner.example/keyed" });
+    const pruned = fakeEndpoint({ pruned: true }), proxy = fakeEndpoint({ cap: 10000000 });
+    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({ [OWNER]: pruned, [PROXY]: proxy }));
+    cfgWrite(B.w, { deployBlock: DEPLOY, readRpcUrl: OWNER });
     await road.withEthers();
     const h = await road.historyProvider("0xsale");
-    ok("B5 · the owner's Read RPC URL is tried FIRST, as before the fix", pruned.seen.length === 1);
-    ok("B6 · a PRUNED endpoint is a depth failure → fail over, and the fall-back is flagged",
-       h.url === "https://polygon.drpc.org" && h.fellBack === true);
+    ok("B5 · the owner's Read RPC URL is tried FIRST, as before", pruned.seen.length === 1);
+    ok("B6 · a PRUNED owner endpoint is a depth failure → fail over to the PROXY, and the fall-back is flagged",
+       h.url === PROXY && h.fellBack === true);
   }
   {
     const B = boot(), road = B.road;
-    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({
-      "https://polygon.drpc.org": fakeEndpoint({ pruned: true }), "https://polygon-bor-rpc.publicnode.com": fakeEndpoint({ pruned: true }),
-    }));
+    const proxy = fakeEndpoint({ cap: 10000000, logs: (a, b) => [{ args: { buyer: "0xb", usdE18: 1n } }] });
+    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({ [PROXY]: proxy }));
     cfgWrite(B.w, { deployBlock: DEPLOY });
     await road.withEthers();
-    const e = await road.historyProvider("0xsale").then(() => null, (x) => x);
-    ok("B7 · every candidate pruned → the archive class, which is what the owner's plain-words message reads",
-       !!e && e.__archive === true && road.isArchiveError(e) === true);
+    const h = await road.historyProvider("0xsale");
+    ok("B7 · NO Read RPC URL set (any browser): the console's history road is the PROXY",
+       h && h.url === PROXY && h.fellBack === false, JSON.stringify(h && h.url));
+    ok("B7b · and choosing it cost NO read — no depth probe, no width discovery on our own proxy", proxy.seen.length === 0, String(proxy.seen.length));
+    ok("B7c · the proxy's starting width is its 10,000,000-block cap (owner ruling E) — not the 9,999 keyed-endpoint start",
+       road.archiveSpan(PROXY) === 10000000 && road.isProxy(PROXY) && road.archiveSpan(OWNER) === road.LOG_CHUNK_START);
+    // ONE PRESS: the Torana claims scan (scanPurchasedByBuyer) over the whole money-stack history on the proxy
+    const sale = { target: "0xSALE", runner: { __dyUrl: PROXY }, filters: { Purchased: () => ({}) },
+                   queryFilter: (f, a, b) => proxy.getLogs({ fromBlock: a, toBlock: b }) };
+    const key = road.ckptKey("purchased", "0xSALE");
+    const labels = [], t0 = Date.now();
+    const byBuyer = await road.scanPurchasedByBuyer(sale, DEPLOY, 96420000, (l) => labels.push(l), Date.now() + 30000, key);
+    ok("B8 · ONE PRESS: the Torana claims scan of the WHOLE history (~4.37M blocks) is ONE read on the proxy — no discovery, no pacing",
+       proxy.seen.length === 1 && proxy.seen[0].span === 96420000 - DEPLOY + 1 && labels[0] === "chunk 1/1", JSON.stringify({ reads: proxy.seen.length, labels }));
+    ok("B8b · and it lands the totals at once (well under a second here — no 120 ms courtesy pauses)",
+       byBuyer && byBuyer["0xb"] === 1n && Date.now() - t0 < 1000, String(Date.now() - t0) + " ms");
   }
 
   // ═══ C. THE SELF-TUNING WIDTH ═══
@@ -584,16 +595,13 @@ async function main() {
     // the whole fault, end to end: owner endpoint capped at 10, public archive behind it
     const B = boot(), road = B.road;
     const owner = fakeEndpoint({ cap: ALCHEMY_CAP, widthErr: ALCHEMY_FREE_ERR });
-    const drpc = fakeEndpoint({ cap: DRPC_SPAN_CAP });
-    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({
-      "https://owner.example/v2/KEY": owner, "https://polygon.drpc.org": drpc,
-      "https://polygon-bor-rpc.publicnode.com": fakeEndpoint({ pruned: true }),
-    }));
+    const proxy = fakeEndpoint({ cap: 10000000 });
+    B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({ "https://owner.example/v2/KEY": owner, [PROXY]: proxy }));
     cfgWrite(B.w, { deployBlock: DEPLOY, readRpcUrl: "https://owner.example/v2/KEY" });
     await road.withEthers();
     const h = await road.historyProvider("0xsale");
-    ok("J5 · THE FAULT: an endpoint that refuses even the FLOOR width is abandoned — we fail over instead of spinning",
-       h.url === "https://polygon.drpc.org", "chose " + h.url);
+    ok("J5 · THE FAULT: an endpoint that refuses even the FLOOR width is abandoned — we fail over to the proxy instead of spinning",
+       h.url === PROXY, "chose " + h.url);
     ok("J6 · MUTANT (no fail-over → spin): the owner endpoint was probed a BOUNDED number of times and then dropped",
        owner.seen.length > 0 && owner.seen.length <= 14, "reads against the wall=" + owner.seen.length);
     ok("J7 · it is REMEMBERED as width-incapable for the session", road.isWidthIncapable("https://owner.example/v2/KEY") === true);
@@ -608,28 +616,29 @@ async function main() {
     const before = owner.seen.length;
     const h2 = await road.historyProvider("0xsale");
     ok("J11 · MUTANT (forgets → re-probes every time): a second selection skips it WITHOUT a single further read",
-       owner.seen.length === before && h2.url === "https://polygon.drpc.org", "extra reads=" + (owner.seen.length - before));
+       owner.seen.length === before && h2.url === PROXY, "extra reads=" + (owner.seen.length - before));
     ok("J12 · and the second selection still explains itself — the note is not a one-shot",
        h2.ownerSkipped && h2.ownerSkipped.capBlocks === ALCHEMY_CAP && h2.fellBackReason === "width");
 
     // the fallback road is a REAL road: it scans and it checkpoints
     const sale = { target: "0xFALLBACK", runner: { __dyUrl: h.url }, filters: { Purchased: () => ({}) },
-                   queryFilter: (f, a, b) => drpc.getLogs({ fromBlock: a, toBlock: b }).then(() => []) };
+                   queryFilter: (f, a, b) => proxy.getLogs({ fromBlock: a, toBlock: b }).then(() => []) };
     const key = road.ckptKey("purchased", "0xFALLBACK");
     const labels = [];
     await road.scanPurchasedByBuyer(sale, 1000, 1000 + 4000, (l) => labels.push(l), Date.now() + 30000, key);
     const ck = road.ckptGet(key);
     ok("J13 · the fall-back scan is a real scan: it checkpoints", !!ck && ck.scannedTo > 1000, JSON.stringify(ck));
-    ok("J14 · and the chunk counter goes on counting normally on the fallback road", labels.some((l) => /^chunk \d+\/\d+/.test(l)), labels[0]);
+    ok("J14 · and the chunk counter goes on counting normally on the fallback road (one chunk on the proxy)", labels.some((l) => /^chunk 1\/1$/.test(l)), labels[0]);
   }
   {
     // MUTANT (message hidden): the panel sentence must NAME the limit and must NEVER be the busy message
     const road = boot().road;
-    const html = road.ownerSkippedHtml({ host: "https://owner.example/…", capBlocks: ALCHEMY_CAP }, 42239);
+    const html = road.ownerSkippedHtml({ host: "https://owner.example/…", capBlocks: ALCHEMY_CAP }, 1);
     const plain = html.replace(/<[^>]+>/g, "");
     ok("J15 · MUTANT (message hidden): the panel says the limit in plain words, with the number",
        plain.indexOf("only " + ALCHEMY_CAP + "-block reads") >= 0, plain);
-    ok("J16 · it names the consequence and its cost on the road actually taken", plain.indexOf("public archive") >= 0 && plain.indexOf("42,239 chunks") >= 0);
+    ok("J16 · it names the road actually taken — the site's read proxy (RPC-CLEANUP-1), with no chunk warning for its one call",
+       plain.indexOf("site's read proxy") >= 0 && plain.indexOf("chunks") < 0 && plain.indexOf("public archive") < 0, plain);
     ok("J17 · and it is NEVER the busy message — nothing is busy; the endpoint answered, it just answers too little",
        plain.indexOf("busy") < 0 && plain.indexOf("unreachable") < 0, plain);
     ok("J18 · KEY-SAFETY · no URL in the sentence at all", plain.indexOf("http") < 0, plain);
@@ -638,19 +647,18 @@ async function main() {
        noCap.indexOf("very small reads") >= 0 && !/\d/.test(noCap.replace(/[^0-9]/g, "")), noCap);
   }
   {
-    // every candidate a wall → the archive class IS the truth, and the busy message is then correct
+    // RPC-CLEANUP-1: the console is never left without a road — the owner's wall is skipped, the proxy always stands behind it
     const B = boot(), road = B.road;
+    const proxy = fakeEndpoint({ cap: 10000000 });
     B.w.DYWallet.loadEthers = () => Promise.resolve(fakeEthers({
-      "https://owner.example/v2/KEY": fakeEndpoint({ cap: ALCHEMY_CAP, widthErr: ALCHEMY_FREE_ERR }),
-      "https://polygon.drpc.org": fakeEndpoint({ cap: 1, widthErr: ALCHEMY_FREE_ERR }),
-      "https://polygon-bor-rpc.publicnode.com": fakeEndpoint({ cap: 1, widthErr: ALCHEMY_FREE_ERR }),
+      "https://owner.example/v2/KEY": fakeEndpoint({ cap: ALCHEMY_CAP, widthErr: ALCHEMY_FREE_ERR }), [PROXY]: proxy,
     }));
     cfgWrite(B.w, { deployBlock: DEPLOY, readRpcUrl: "https://owner.example/v2/KEY" });
     await road.withEthers();
-    const e = await road.historyProvider("0xsale").then(() => null, (x) => x);
-    ok("J20 · when EVERY road is a wall the archive class is the honest answer — the busy message is then correct",
-       !!e && e.__archive === true && road.isArchiveError(e) === true);
-    ok("J21 · and even then the owner is told why HIS endpoint was skipped", e.__ownerSkipped && e.__ownerSkipped.capBlocks === ALCHEMY_CAP);
+    const h = await road.historyProvider("0xsale").then((x) => x, () => null);
+    ok("J20 · even with the owner's endpoint a wall, the console is never left without a road: the PROXY serves the panel",
+       !!h && h.url === PROXY && proxy.seen.length === 0);
+    ok("J21 · and the owner is still told why HIS endpoint was skipped", h && h.ownerSkipped && h.ownerSkipped.capBlocks === ALCHEMY_CAP);
   }
 
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));

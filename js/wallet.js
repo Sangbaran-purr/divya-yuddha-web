@@ -243,7 +243,14 @@ window.DYWallet = (function () {
   //     network failure and falls through. Cached in memory for the visit only — never localStorage, so a wrong
   //     answer can never outlive the tab.
   var READ_TIMEOUT = 4000;   // per endpoint. ~4x the slowest measured (1032 ms); DNS failures return in ~50 ms.
-  var SCAN_TIMEOUT = 10000;  // the getLogs scan road keeps its tuned budget (owner ruling 3) — scans are legitimately slow.
+  // RPC-CLEANUP-1 (owner rulings 2026-10-30): a scan is now ONE wide getLogs on our own proxy (dy-rpc gives a scan up to
+  // 20 s upstream). The page waits a little longer than that, so the answer it gets is the proxy's plain refusal, never
+  // its own timeout.
+  var SCAN_TIMEOUT = 22000;
+  // RPC-CLEANUP-1 — THE ONE ROAD. Every site read, scans included, rides our own proxy; no free public RPC sits behind it.
+  // (config.js chain.rpcUrls is only what MetaMask is offered when it adds Polygon — the wallet's own road for SENDS, never
+  // a site read; owner ruling C leaves it alone.)
+  var PROXY_URL = "https://rpc.divyayuddha.games";
   var readPool = {};         // url -> tamed provider (built once per visit)
   var chainSeen = {};        // url -> true | false   (the once-per-visit eth_chainId verdict)
   var chainPending = {};     // url -> in-flight verdict promise (single-flight; see chainOk)
@@ -254,7 +261,7 @@ window.DYWallet = (function () {
     var over = null; try { over = window.localStorage.getItem("dy::readRpcUrl"); } catch (x) {}
     if (over) return [over];
     var list = (CFG.chain.readRpcUrls || []).slice();
-    if (!list.length) list = [CFG.chain.rpcUrls[0]];
+    if (!list.length) list = [PROXY_URL];   // RPC-CLEANUP-1: never MetaMask's suggested RPC (rpcUrls) as a read
     return list;
   }
   function mkTamed(url, timeoutMs) {
@@ -353,13 +360,12 @@ window.DYWallet = (function () {
     front.send = function (method, params) { return sendWalking(method, params); };
     return front;
   }
-  // THE SCAN ROAD, UNCHANGED (owner ruling 3): a single tamed endpoint at the tuned 10 s with maxAttempts 2, and the
-  // existing tamedOn(drpc) chunk failover. The 4 s load-read budget must never govern a getLogs walk.
+  // THE SCAN ROAD: a single tamed endpoint with maxAttempts 2. The 4 s load-read budget must never govern a getLogs walk.
+  // RPC-CLEANUP-1: the endpoint is the read road's own (our proxy, or the anvil/proof override) — the keyless scan list
+  // (publicnode/drpc/tenderly) and the drpc chunk failover are GONE. A range refusal now halves the chunk instead.
   function scanProvider() {
     var e = window.ethers;
-    var over = null; try { over = window.localStorage.getItem("dy::readRpcUrl"); } catch (x) {}
-    // READ-PROXY-2: the scan road is PINNED to the keyless list — never the read proxy at readRpcUrls[0]
-    var url = over || (CFG.chain.scanRpcUrls && CFG.chain.scanRpcUrls[0]) || CFG.chain.rpcUrls[0];
+    var url = readUrls()[0];
     var req = new e.FetchRequest(url);
     req.timeout = SCAN_TIMEOUT;
     req.setThrottleParams({ maxAttempts: 2 });
@@ -397,7 +403,7 @@ window.DYWallet = (function () {
     return { maxFeePerGas: cap, maxPriorityFeePerGas: tip, baseFee: base };
   }
   function feeFloor() { return feeFromNetwork(null, 0n); }
-  // the two network numbers, from the read road (publicnode first — never the wallet's own, sometimes stale, RPC)
+  // the two network numbers, from the read road (our proxy — never the wallet's own, sometimes stale, RPC)
   function feeRead() {
     // through the PUBLIC handle, which is readProvider itself in every page — and lets a proof hand it a dead road
     var p = (window.DYWallet && window.DYWallet.readProvider) ? window.DYWallet.readProvider() : readProvider();
@@ -432,6 +438,9 @@ window.DYWallet = (function () {
   //     Returns { candidates:[tokenId string], complete:bool } — the caller re-verifies each candidate (ownerOf /
   //     listingOf) and applies its completeness gate; an incomplete scan renders BUSY while the checkpoint advances
   //     behind the busy face (owner ruling). SEQUENTIAL — no parallel chunks (gentle on the free-tier getLogs class). ---
+  //     RPC-CLEANUP-1 (2026-10-30): the scan rides our own proxy, which serves a 10,000,000-block addressed getLogs, so
+  //     a scan is ONE call (first visit and repeat alike). The chunk machinery stays as the safety net: a range-class
+  //     refusal HALVES the chunk (down to SCAN_SPLIT_FLOOR) instead of failing over to a free public RPC.
   //     RUNG4-FIX-7C hardening (owner ruling): (1) a SHARED SINGLE-FLIGHT QUEUE — getLogs scans run ONE at a time,
   //     so the shelf's deep chunk 1 is no longer starved by the concurrent near-head listings scan (both fired on
   //     connect); the shelf is enqueued first (readHoldings before renderListings). (2) an onProgress(scannedTo,
@@ -443,7 +452,8 @@ window.DYWallet = (function () {
   // publicnode accepts a 10000-block range, but the drpc free-plan ARCHIVE FAILOVER rejects it (-32701 "ranges over
   // 10000 blocks are not supported on free plan"), which left the failover effectively dead for full chunks. 9998 → a
   // 9999-block span, under BOTH caps, so the archive failover actually works when publicnode drops a chunk.
-  var LOG_CHUNK = 9998; // 9999-block inclusive span — under publicnode's 10000 cap AND drpc free-plan's <10000 cap
+  var LOG_CHUNK = 9999999; // RPC-CLEANUP-1: a 10,000,000-block inclusive span — dy-rpc's MAX_LOG_SPAN (owner ruling E)
+  var SCAN_SPLIT_FLOOR = 2000; // the halving safety net never goes narrower than this
   // S-TREASURY-SCAN-FIX-1 FIX 2 — HEAD BUFFER: the freshest window is never PERSISTED as scanned, so it is re-scanned
   // every visit. Replica lag on load-balanced public RPCs lives in the most recent blocks; a successful-but-empty
   // getLogs there previously advanced scannedTo past a just-landed mint (candidates empty) and bookmarked it away
@@ -458,17 +468,20 @@ window.DYWallet = (function () {
   function ckptSet(key, obj) {
     try { window.localStorage.setItem(key, JSON.stringify(obj)); } catch (e) { /* private mode / quota — scan still works, just not O(delta) */ }
   }
-  function tamedOn(url) { // tamed provider on an explicit endpoint (drpc archive failover; publicnode is readProvider())
-    var e = window.ethers;
-    var req = new e.FetchRequest(url);
-    req.timeout = 10000; req.setThrottleParams({ maxAttempts: 2 });
-    return new e.JsonRpcProvider(req, CFG.chain.id, { staticNetwork: true });
+  // RPC-CLEANUP-1 — a refusal that HALVING can fix: the span is too wide for the endpoint. Our proxy's refusal says
+  // "block range too wide"; the other wordings are the ones keyed endpoints use. An "address not served" refusal shares
+  // the -32602 code but is NOT a width problem — narrowing would only repeat it — so it is excluded by name.
+  function isRangeRefusal(e) {
+    var s = ((e && e.shortMessage) || "") + " " + ((e && e.message) || "") + " " + ((e && e.error && e.error.message) || "") + " " + ((e && e.info && e.info.error && e.info.error.message) || "");
+    s = s.toLowerCase();
+    if (s.indexOf("address not served") >= 0) return false;
+    return /block range|range too wide|range is too|too many blocks|blocks? range|limited to|query returned more than|response size|too many results/.test(s);
   }
   // deadlineMs is a DURATION (run-start budget); onProgress(scannedTo, deployBlock, latest) is optional.
   function scanLogsResumable(contract, filter, deployBlock, deadlineMs, ckptKey, onProgress) {
     // STORE-READ-1: rebuild the caller's contract on the SCAN road. Callers build their contracts with
     // readProvider() (now the 4 s failover road); a getLogs walk must keep the tuned 10 s budget instead, and its
-    // own drpc chunk failover below. Done here so no caller changes and the tuning cannot drift apart.
+    // own range-halving safety net below (RPC-CLEANUP-1). Done here so no caller changes and the tuning cannot drift apart.
     contract = new window.ethers.Contract(contract.target, contract.interface, scanProvider());
     function run() {
       var deadlineAt = Date.now() + (deadlineMs || 18000);
@@ -476,14 +489,15 @@ window.DYWallet = (function () {
       var candSet = {};
       (ck.candidates || []).forEach(function (t) { candSet[t] = true; });
       var resumeFrom = ck.scannedTo && ck.scannedTo >= deployBlock ? ck.scannedTo + 1 : deployBlock;
-      var archiveUrl = CFG.chain.rpcUrls && CFG.chain.rpcUrls[1]; // drpc — the archive failover endpoint
-      var archiveContract = null;
+      // RPC-CLEANUP-1: one read of [start, end]; a range-class refusal HALVES it (both halves read, joined) down to the
+      // floor. Any other failure surfaces to the caller, which renders its busy/retry face — there is no other road.
       function readChunk(start, end) {
         return withRetry(function () { return contract.queryFilter(filter, start, end); }, 2, deadlineAt)
           .catch(function (e) {
-            if (!archiveUrl || !contract.target) throw e; // no failover available → surface the failure
-            if (!archiveContract) archiveContract = new window.ethers.Contract(contract.target, contract.interface, tamedOn(archiveUrl));
-            return archiveContract.queryFilter(filter, start, end); // FAILOVER: this chunk on drpc archive
+            var span = end - start + 1;
+            if (!isRangeRefusal(e) || span <= SCAN_SPLIT_FLOOR) throw e;
+            var mid = start + Math.floor(span / 2) - 1;
+            return readChunk(start, mid).then(function (l) { return readChunk(mid + 1, end).then(function (r) { return l.concat(r); }); });
           });
       }
       return scanProvider().getBlockNumber().then(function (latest) {

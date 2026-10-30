@@ -1,9 +1,11 @@
 "use strict";
-// READ-PROXY-2 — our own read proxy (rpc.divyayuddha.games) first on the FAST read road; the scans never touch it.
+// READ-PROXY-2 → RPC-CLEANUP-1 (owner rulings 2026-10-30) — ONE ROAD: our own read proxy (rpc.divyayuddha.games) serves
+// every site read, the getLogs history scans included. No free public RPC behind it (publicnode/drpc/tenderly are gone
+// from every read road), and no wallet rescue on the dashboard. A dead proxy is the plain error state (tests/suites/
+// rpcroad.js proves those faces); this suite pins the shipped config, the source laws and the scan road's endpoint.
 //
 // The endpoints are REAL local HTTP servers (the storeread idiom): a stand-in "proxy" that records what it is asked
-// and forwards to anvil (or is dead), and stand-ins for the keyless endpoints. The shipped config is read from disk
-// for the ordering laws; the behaviour is proven on the real store page, the real wallet read road and the real
+// and forwards to anvil. The behaviour is proven on the real store page, the real wallet read road and the real
 // getLogs scan road.
 const fs = require("fs");
 const path = require("path");
@@ -12,7 +14,6 @@ const H = require("../lib");
 
 const SITE = path.resolve(__dirname, "..", "..");
 const PROXY = "https://rpc.divyayuddha.games";
-const PUBLICNODE = "https://polygon-bor-rpc.publicnode.com", DRPC = "https://polygon.drpc.org", TENDERLY = "https://polygon.gateway.tenderly.co";
 let pass = 0, fail = 0;
 function ok(n, c, d) { if (c) { pass++; console.log("  ✓ " + n); } else { fail++; console.log("  ✖ " + n + (d ? "\n      " + d : "")); } }
 const bodyText = (w) => { const e = w.document.getElementById("bundle-body"); return e ? e.textContent.replace(/\s+/g, " ") : ""; };
@@ -43,7 +44,7 @@ function loadConfigs() {
 }
 
 async function run() {
-  console.log("\n── READ-PROXY-2 · the read proxy first; the scans keyless ──");
+  console.log("\n── RPC-CLEANUP-1 · one road: the proxy serves every read, scans included ──");
   await H.preflight();
   const RPC = process.env.DY_RPC || "http://127.0.0.1:8545";
 
@@ -51,83 +52,64 @@ async function run() {
   {
     const w = loadConfigs();
     const chain = w.DY_CONFIG.chain, mf = w.DY_MF_CONFIG;
-    ok("C1 · config.js: the read road is the proxy FIRST, then publicnode, drpc, tenderly",
-       JSON.stringify(chain.readRpcUrls) === JSON.stringify([PROXY, PUBLICNODE, DRPC, TENDERLY]), JSON.stringify(chain.readRpcUrls));
-    ok("C2 · the scan road's keyless list carries NO proxy (publicnode, drpc, tenderly)",
-       JSON.stringify(chain.scanRpcUrls) === JSON.stringify([PUBLICNODE, DRPC, TENDERLY]));
-    ok("C3 · mf-config.js: the proxy is the primary read endpoint, publicnode moved into the fallbacks (dashboard + report)",
-       mf.readRpcUrl === PROXY && JSON.stringify(mf.readRpcUrlFallbacks) === JSON.stringify([PUBLICNODE, DRPC]), mf.readRpcUrl + " " + JSON.stringify(mf.readRpcUrlFallbacks));
+    ok("C1 · config.js: the read road is the proxy ALONE (no publicnode, drpc or tenderly behind it)",
+       JSON.stringify(chain.readRpcUrls) === JSON.stringify([PROXY]), JSON.stringify(chain.readRpcUrls));
+    ok("C2 · the keyless scan list (scanRpcUrls) is GONE — the scans ride the same proxy", !("scanRpcUrls" in chain), JSON.stringify(chain.scanRpcUrls));
+    ok("C3 · mf-config.js: the proxy is the dashboard/report read endpoint, with NO fallbacks; the scan width is the proxy's 10,000,000",
+       mf.readRpcUrl === PROXY && JSON.stringify(mf.readRpcUrlFallbacks) === "[]" && mf.logChunk === 10000000, mf.readRpcUrl + " " + JSON.stringify(mf.readRpcUrlFallbacks) + " " + mf.logChunk);
+    ok("C3b · config.js rpcUrls (what MetaMask is offered when it adds Polygon — the wallet's own SEND road) is left as it was (owner ruling C)",
+       JSON.stringify(chain.rpcUrls) === JSON.stringify(["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"]), JSON.stringify(chain.rpcUrls));
     const shipped = ["config.js", "mf-config.js", "admin-config.js"].concat(fs.readdirSync(path.join(SITE, "js")).filter((f) => /\.js$/.test(f)).map((f) => "js/" + f))
       .concat(["index.html", "store.html", "dashboard.html", "report.html", "rite.html", "treasury.html", "mint.html", "register.html", "admin.html", "mp/hall.js"]);
     const with1rpc = shipped.filter((f) => { try { return /1rpc\.io/.test(fs.readFileSync(path.join(SITE, f), "utf8")); } catch (e) { return false; } });
     ok("C4 · 1rpc.io is GONE from every shipped file (it sends no CORS header — it could never serve the browser)", with1rpc.length === 0, with1rpc.join(", "));
   }
 
-  // ════════ THE SCAN ROADS ARE PINNED (source) ════════
+  // ════════ THE SCAN ROADS RIDE THE PROXY (source) ════════
   {
     const dash = fs.readFileSync(path.join(SITE, "js", "dashboard.js"), "utf8"), rep = fs.readFileSync(path.join(SITE, "js", "report.js"), "utf8");
-    // the function's CODE, comments stripped (a comment may name readRpcUrl to say it is NOT used)
+    // the function's CODE, comments stripped (a comment may name a host to say it is NOT used)
     const body = (src, name) => { const i = src.indexOf("function " + name + "("); return i < 0 ? "" : src.slice(i, src.indexOf("\n  }", i) + 4).replace(/(^|[^:])\/\/[^\n]*/g, "$1"); };   // a URL's "://" is not a comment
     const dl = body(dash, "logProvider"), rl = (rep.match(/function logProvider\(\) \{[^\n]*\}/) || [""])[0];
-    ok("S1 · the dashboard's logProvider rides chain.scanRpcUrls and never readRpcUrl", /scanRpcUrls/.test(dl) && !/readRpcUrl\b/.test(dl) && !/readRpcUrlFallbacks/.test(dl), dl.slice(0, 300));
-    ok("S2 · the report's logProvider rides chain.scanRpcUrls and never readRpcUrl", /scanRpcUrls/.test(rl) && !/readRpcUrl\b|readRpcUrlFallbacks/.test(rl), rl);
-    ok("S3 · the dashboard's diagnostics list the scan road as the keyless list", /var logUrls = \(\(PLAYER\.chain && PLAYER\.chain\.scanRpcUrls\) \|\| \[\]\)/.test(dash));
+    ok("S1 · the dashboard's logProvider: the owner's archive override, then the proxy (readRpcUrl) — no scan list, no free host",
+       /archiveReadRpc\(\)/.test(dl) && /readRpcUrl/.test(dl) && !/scanRpcUrls|drpc|publicnode|tenderly/.test(dl), dl.slice(0, 300));
+    ok("S2 · the report's logProvider rides readRpcUrl (the proxy)", /readRpcUrl/.test(rl) && !/scanRpcUrls|drpc|publicnode/.test(rl), rl);
+    ok("S3 · the dashboard's diagnostics list the scan road as the override + the proxy", /var logUrls = \[archiveReadRpc\(\), c\.readRpcUrl \|\| PROXY_URL\]/.test(dash));
+    ok("S4 · the dashboard builds NO last-resort read through the connected wallet (owner ruling D)",
+       !/walletInChain/.test(dash) && !/priority: 99/.test(dash), "walletInChain/priority 99 still present");
+    ok("S5 · the dashboard's six feed filters are ONE combined getLogs (four addresses, six topic0s, the wallet as topic1)",
+       /provider\.getLogs\(\{ address: addresses, topics: \[topic0, who\]/.test(dash));
   }
 
-  // ════════ THE BUYER'S STORE: the proxy answers first ════════
+  // ════════ THE BUYER'S STORE: the proxy answers ════════
   {
     const c = await H.chainStore();
-    const proxy = await recorder(RPC), pn = await recorder(RPC);
+    const proxy = await recorder(RPC);
     // the proxy stand-in carries a PATH and a QUERY, so the console line is proven to print the hostname alone
     // (the query is deliberately NOT a keyed-URL shape — consoleroad G2 scans every tracked file for those)
-    const h = await H.storePage(c, c.player, { readUrls: [proxy.url + "/node/v1?k=SECRETVALUE", pn.url], captureConsole: true });
+    const h = await H.storePage(c, c.player, { readUrls: [proxy.url + "/node/v1?k=SECRETVALUE"], captureConsole: true });
     await H.until(() => /In stock/.test(bodyText(h.w)), 20000, "In stock via the proxy");
-    ok("P1 · a clean store load reads 'In stock' — served by the PROXY (first on the road); publicnode never asked",
-       /In stock/.test(bodyText(h.w)) && proxy.hits.indexOf("eth_call") >= 0 && pn.hits.length === 0, JSON.stringify({ proxy: proxy.hits.slice(0, 5), pn: pn.hits }));
+    ok("P1 · a clean store load reads 'In stock' — served by the PROXY", /In stock/.test(bodyText(h.w)) && proxy.hits.indexOf("eth_call") >= 0, JSON.stringify({ proxy: proxy.hits.slice(0, 5) }));
     const lines = h.w.__console.filter((l) => /^\[read\] served by /.test(l));
     ok("P2 · ONE console line names the endpoint that answered — the hostname ONLY (no port, no path, no key)",
        lines.length === 1 && lines[0] === "[read] served by 127.0.0.1", JSON.stringify(h.w.__console));
-    proxy.srv.close(); pn.srv.close(); H.teardown(h);
-  }
-  {
-    const c = await H.chainStore();
-    const proxy = await recorder(RPC, "dead"), pn = await recorder(RPC);
-    const pnHost = new URL(pn.url).hostname;
-    const h = await H.storePage(c, c.player, { readUrls: [proxy.url, pn.url], captureConsole: true });
-    let landed = true;
-    try { await H.until(() => /In stock/.test(bodyText(h.w)), 25000, "In stock after the proxy dies"); } catch (e) { landed = false; }
-    ok("F1 · A DEAD PROXY falls through to publicnode — the tile still reads 'In stock'", landed && /In stock/.test(bodyText(h.w)) && proxy.hits.length > 0 && pn.hits.indexOf("eth_call") >= 0,
-       bodyText(h.w).slice(0, 140) + " " + JSON.stringify({ proxy: proxy.hits.slice(0, 3), pn: pn.hits.slice(0, 3) }));
-    ok("F2 · and the console line names the endpoint that DID answer", h.w.__console.filter((l) => l === "[read] served by " + pnHost).length === 1, JSON.stringify(h.w.__console));
-    ok("F3 · no failure sentence on the tile", !/unavailable - refresh to retry/.test(bodyText(h.w)));
-    proxy.srv.close(); pn.srv.close(); H.teardown(h);
+    proxy.srv.close(); H.teardown(h);
   }
 
+  // ════════ THE SCAN ROAD IS THE PROXY ════════
   {
     const c = await H.chainStore();
-    const proxy = await recorder(RPC, "deadAfterChain"), pn = await recorder(RPC);
-    const h = await H.storePage(c, c.player, { readUrls: [proxy.url, pn.url] });
-    let landed = true;
-    try { await H.until(() => /In stock/.test(bodyText(h.w)), 25000, "In stock after the proxy 502s"); } catch (e) { landed = false; }
-    ok("F4 · a proxy that passes the chain check and then FAILS EVERY READ (502) still falls through — 'In stock'",
-       landed && proxy.hits.indexOf("eth_chainId") >= 0 && proxy.hits.indexOf("eth_call") >= 0 && pn.hits.indexOf("eth_call") >= 0, JSON.stringify({ proxy: proxy.hits.slice(0, 4), pn: pn.hits.slice(0, 4) }));
-    proxy.srv.close(); pn.srv.close(); H.teardown(h);
-  }
-
-  // ════════ THE SCAN ROAD NEVER TOUCHES THE PROXY ════════
-  {
-    const c = await H.chainStore();
-    const proxy = await recorder(RPC), scan = await recorder(RPC);
-    const h = await H.storePage(c, c.player, { readUrls: [proxy.url], scanUrls: [scan.url] });
+    const proxy = await recorder(RPC);
+    const h = await H.storePage(c, c.player, { readUrls: [proxy.url] });
     const w = h.w;
-    ok("G1 · scanProvider() is built on the keyless list's first endpoint — not the proxy", w.DYWallet.scanProvider()._getConnection().url === scan.url, w.DYWallet.scanProvider()._getConnection().url);
+    ok("G1 · scanProvider() is built on the read road's endpoint — the proxy", w.DYWallet.scanProvider()._getConnection().url === proxy.url, w.DYWallet.scanProvider()._getConnection().url);
     const nft = new w.ethers.Contract(c.addrs.nft, ["event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"], w.DYWallet.readProvider());
     const before = proxy.hits.filter((m) => m === "eth_getLogs").length;
     const r = await w.DYWallet.scanLogsResumable(nft, nft.filters.Transfer(), 0, 15000, "dyrp::test");
-    ok("G2 · a real getLogs walk (the treasury/listing scan road) asks the KEYLESS endpoint and never the proxy",
-       r && r.complete === true && scan.hits.indexOf("eth_getLogs") >= 0 && proxy.hits.filter((m) => m === "eth_getLogs").length === before && before === 0,
-       JSON.stringify({ proxy: proxy.hits, scan: scan.hits.slice(0, 6) }));
-    proxy.srv.close(); scan.srv.close(); H.teardown(h);
+    const scans = proxy.hits.filter((m) => m === "eth_getLogs").length - before;
+    ok("G2 · a real getLogs walk (the treasury/listing scan road) asks the PROXY — and the whole history is ONE call",
+       r && r.complete === true && scans === 1, JSON.stringify({ getLogs: scans, complete: r && r.complete }));
+    proxy.srv.close(); H.teardown(h);
   }
 
   // ════════ STAMPS ════════
@@ -135,11 +117,12 @@ async function run() {
     // (ICO-SIMPLE-1: register.html is now a redirect to the dashboard's buy panel and loads no script)
     const pages = ["index.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html", "mint.html", "my-invites.html"];
     const read = (p) => fs.readFileSync(path.join(SITE, p), "utf8");
-    ok("X1 · config.js is stamped s22 on every page that loads it (10; CARD-STORE-1 C3 moved it; my-invites.html joined; register.html left as a redirect; STORE-LOAD-1 the fork mode)", pages.every((p) => /config\.js\?v=s22"/.test(read(p))) && pages.every((p) => !/config\.js\?v=s21"/.test(read(p))));
-    ok("X2 · wallet.js s1s, mf-config.js mf12, dashboard.js mf47, report.js mf4f",
-       pages.filter((p) => /js\/wallet\.js\?v=/.test(read(p))).every((p) => /js\/wallet\.js\?v=s1s"/.test(read(p)))
-         && ["dashboard.html", "report.html", "store.html", "mint.html"].every((p) => /mf-config\.js\?v=mf12"/.test(read(p)))
-         && /js\/dashboard\.js\?v=mf47"/.test(read("dashboard.html")) && /js\/report\.js\?v=mf4f"/.test(read("report.html")));
+    ok("X1 · config.js is stamped s23 on every page that loads it (10; RPC-CLEANUP-1)", pages.every((p) => /[" /]config\.js\?v=s23"/.test(read(p))) && pages.every((p) => !/[" /]config\.js\?v=s22"/.test(read(p))));
+    ok("X2 · wallet.js s1t, mf-config.js mf13, dashboard.js mf48, report.js mf4g, admin.js s40, hall.js h37 (RPC-CLEANUP-1)",
+       pages.filter((p) => /js\/wallet\.js\?v=/.test(read(p))).every((p) => /js\/wallet\.js\?v=s1t"/.test(read(p)))
+         && ["dashboard.html", "report.html", "store.html", "mint.html", "my-invites.html"].every((p) => /mf-config\.js\?v=mf13"/.test(read(p)))
+         && /js\/dashboard\.js\?v=mf48"/.test(read("dashboard.html")) && /js\/report\.js\?v=mf4g"/.test(read("report.html"))
+         && /js\/admin\.js\?v=s40"/.test(read("admin.html")) && /hall\.js\?v=h37"/.test(read("mp/hall.html")));
   }
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));

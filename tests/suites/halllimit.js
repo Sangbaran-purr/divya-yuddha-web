@@ -98,7 +98,7 @@ async function run() {
   ok("S1 · no timer asks for the limit any more (the request rides the authed step only)",
      !/getLossLimit\(\); \} catch \(e\) \{\} \}, \d+\)/.test(HALL) && (HALL.match(/client\.getLossLimit\(\)/g) || []).length === 1 &&
      /resumedGen = gen; signedInAs = signedInAs \|\| v\.me;\s*try \{ if \(client\.getLossLimit\) client\.getLossLimit\(\); \} catch \(e\) \{\}/.test(HALL));
-  ok("S2 · hall.js is stamped h36", /hall\.js\?v=h36"/.test(fs.readFileSync(path.join(H.SITE, "mp", "hall.html"), "utf8")));
+  ok("S2 · hall.js is stamped h37", /hall\.js\?v=h37"/.test(fs.readFileSync(path.join(H.SITE, "mp", "hall.html"), "utf8")));
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));
   process.exit(fail ? 1 : 0);

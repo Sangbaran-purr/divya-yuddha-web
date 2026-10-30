@@ -46,9 +46,9 @@ function run() {
   const f = at("http://127.0.0.1:8562/store.html?fork=1", false);
   ok("FM8 · http://127.0.0.1:8562 with ?fork=1: the fork mode is on", !f.untouched && f.w.DY_FORK && f.w.DY_FORK.on === true);
   const rp = f.w.DY_FORK.repoint;
-  ok("FM9 · the read proxy → the local dy-rpc; the keyless roads (publicnode, drpc, tenderly) → the fork",
-     rp("https://rpc.divyayuddha.games") === "http://127.0.0.1:8561" && rp("https://polygon-bor-rpc.publicnode.com") === "http://127.0.0.1:8560"
-     && rp("https://polygon.drpc.org") === "http://127.0.0.1:8560" && rp("https://polygon.gateway.tenderly.co") === "http://127.0.0.1:8560");
+  ok("FM9 · the ONE read road (the proxy, scans included) → the local dy-rpc; the free hosts are no longer mapped (RPC-CLEANUP-1: no page asks them)",
+     rp("https://rpc.divyayuddha.games") === "http://127.0.0.1:8561" && rp("https://polygon-bor-rpc.publicnode.com") === null
+     && rp("https://polygon.drpc.org") === null && rp("https://polygon.gateway.tenderly.co") === null);
   ok("FM10 · the approval bot → the local bot, path and query kept (/gas/topup, /allowlist?cb=1, /presale/voucher)",
      rp("https://approval-bot-cxa2.onrender.com/gas/topup") === "http://127.0.0.1:8563/gas/topup"
      && rp("https://approval-bot-cxa2.onrender.com/allowlist?cb=1") === "http://127.0.0.1:8563/allowlist?cb=1"

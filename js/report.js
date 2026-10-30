@@ -81,16 +81,15 @@ window.DYReport = (function () {
       " will appear here the moment the contract is deployed. Nothing is wrong — the raise simply hasn't opened yet.</div>";
   }
 
-  // Resilient wallet-free reads (M-F4/b/c) — NEVER a wallet (public page). batchMaxCount:1 (M-F4b) since
-  // public endpoints reject JSON-RPC batches. Two chains:
-  //   • readProvider() — eth_call (the report aggregates): SITE KEY (domain-locked Alchemy) primary → free.
-  //   • logProvider()  — eth_getLogs (buyer count / claimed / redeemed): FREE endpoints only (the site key's
-  //     free tier caps getLogs at 10 blocks, useless for multi-thousand-block scans).
+  // Wallet-free reads (M-F4/b/c) — NEVER a wallet (public page). batchMaxCount:1 (M-F4b).
+  // RPC-CLEANUP-1 (owner rulings 2026-10-30): ONE road for both — our own read proxy (mf-config readRpcUrl). The eth_call
+  // aggregates and the getLogs scans (buyer count / claimed / redeemed) both ride it; no free public RPC remains.
+  var PROXY_URL = "https://rpc.divyayuddha.games";
   var _provCache = {};
   function resetReadProvider() { _provCache = {}; }
   function buildProvider(tag, urls) {
     urls = (urls || []).filter(Boolean);
-    if (!urls.length) urls = [PLAYER.chain.rpcUrls[0]];
+    if (!urls.length) urls = [PROXY_URL];   // RPC-CLEANUP-1: never MetaMask's suggested RPC (rpcUrls) as a read
     if (_provCache[tag]) return _provCache[tag];
     var net = { chainId: PLAYER.chain.id, name: "amoy" };
     var opts = { staticNetwork: true, batchMaxCount: 1 };
@@ -104,18 +103,31 @@ window.DYReport = (function () {
     return prov;
   }
   function readProvider() { var c = cfg(); return buildProvider("read", [c.readRpcUrl].concat(c.readRpcUrlFallbacks || [])); }
-  // READ-PROXY-2: the getLogs scans are PINNED to the keyless list (config.js chain.scanRpcUrls) — never the read proxy
-  function logProvider() { var free = ((PLAYER.chain && PLAYER.chain.scanRpcUrls) || []).filter(Boolean); return buildProvider("log", free.length ? free : ["https://polygon-bor-rpc.publicnode.com"]); }
+  // RPC-CLEANUP-1: the getLogs scans ride the SAME proxy (it serves a 10,000,000-block addressed scan) — one call per figure.
+  function logProvider() { var c = cfg(); return buildProvider("log", [c.readRpcUrl]); }
 
-  // ---- chunked getLogs (S5a pattern): returns [] on any failure so a figure degrades to "—", never throws ----
+  // ---- getLogs (S5a pattern): returns null on failure so a figure degrades to "—", never throws ----
+  // RPC-CLEANUP-1: the chunk is the whole range on our proxy (logChunk 10,000,000). The safety net: a RANGE refusal
+  // halves the chunk (down to SCAN_SPLIT_FLOOR) and re-reads; an "address not served" refusal shares -32602 but is not
+  // a width problem, so it is never narrowed.
+  var SCAN_SPLIT_FLOOR = 2000;
+  function isRangeRefusal(e) {
+    var s = (((e && e.shortMessage) || "") + " " + ((e && e.message) || "") + " " + ((e && e.error && e.error.message) || "") + " " + ((e && e.info && e.info.error && e.info.error.message) || "")).toLowerCase();
+    if (s.indexOf("address not served") >= 0) return false;
+    return /block range|range too wide|range is too|too many blocks|blocks? range|limited to|query returned more than|response size|too many results/.test(s);
+  }
   function scanLogs(provider, address, topics, fromBlock, toBlock) {
-    var CHUNK = cfg().logChunk || 3000, out = [], from = fromBlock;
+    var chunk = cfg().logChunk || 10000000, out = [], from = fromBlock;
     function step() {
       if (from > toBlock) return Promise.resolve(out);
-      var to = Math.min(from + CHUNK - 1, toBlock);
+      var to = Math.min(from + chunk - 1, toBlock);
       return provider.getLogs({ address: address, topics: topics, fromBlock: from, toBlock: to })
         .then(function (logs) { out = out.concat(logs); from = to + 1; return step(); })
-        .catch(function () { return null; }); // an unsupported/limited RPC → give up cleanly
+        .catch(function (e) {
+          var span = to - from + 1;
+          if (isRangeRefusal(e) && span > SCAN_SPLIT_FLOOR) { chunk = Math.max(SCAN_SPLIT_FLOOR, Math.floor(span / 2)); return step(); }
+          return null; // the proxy refused or is down → this figure shows "—" (the page's plain unavailable state)
+        });
     }
     return step();
   }

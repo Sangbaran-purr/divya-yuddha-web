@@ -28,7 +28,7 @@ const DEC_SRC = grab(/var DEC = [^\n]*/, "DEC");
 const COPY_SRC = grab(/  var BALANCE_UNREAD[\s\S]*?var WRONG_CHAIN = [^\n]*/, "the ruled copy");
 const MSG_SRC = grab(/  function errText\(e\)[\s\S]*?    return WALLET_FALLBACK;\n  \}/, "ceremonyMsg");   // SITE-AUDIT-1 batch 2: ends at the plain fallback
 const PRE_SRC = grab(/  function preflightLine\(\) \{[\s\S]*?\n  \}/, "preflightLine");
-const READ_SRC = grab(/  var HALL_READ_FALLBACKS = [\s\S]*?function readRpcUrls\(\) \{[\s\S]*?\n  \}/, "readRpcUrls");
+const READ_SRC = grab(/  var READ_BACKOFF_MS = [\s\S]*?function readRpcUrls\(\) \{[\s\S]*?\n  \}/, "readRpcUrls");
 const LIQ_SRC = grab(/  function readLiquid\(ethers\) \{[\s\S]*?\n  \}/, "readLiquid");
 const DYCOF = 'function dycOf(wei){ try{ return (BigInt(wei)/DEC).toString(); }catch(e){ return "0"; } }';
 
@@ -148,38 +148,39 @@ const E_OTHER = { message: "could not coalesce error" };
      !/ensurePolygon\(bp\)/.test(road.replace(/return ensurePolygon\(bp\)\.then\(function \(\) \{/, "return (function () {")));
 }
 
-// ═══ E. THE READ ROAD FAILS OVER ═══
+// ═══ E. THE READ ROAD — RPC-CLEANUP-1: one road (our proxy), a blip asked once more ═══
 {
+  const PROXY = "https://rpc.divyayuddha.games";
   const urls = new Function("CFG", "lsGet", READ_SRC + "\nreturn readRpcUrls;")(
-    { chain: { readRpcUrls: ["https://polygon-bor-rpc.publicnode.com"] } }, () => null)();
-  ok("E1 · the Hall's read road carries a SECOND endpoint (one url and no retry is how the balance went unread)",
-     urls.length >= 2 && urls[0] === "https://polygon-bor-rpc.publicnode.com", JSON.stringify(urls));
+    { chain: { readRpcUrls: [PROXY] } }, () => null)();
+  ok("E1 · the Hall's read road is the site's ONE road — the proxy, and NO free public RPC appended (drpc is gone)",
+     urls.length === 1 && urls[0] === PROXY, JSON.stringify(urls));
   const soleOverride = new Function("CFG", "lsGet", READ_SRC + "\nreturn readRpcUrls;")(
-    { chain: { readRpcUrls: ["https://polygon-bor-rpc.publicnode.com"] } }, () => "http://127.0.0.1:8545")();
+    { chain: { readRpcUrls: [PROXY] } }, () => "http://127.0.0.1:8545")();
   ok("E2 · a local-proof override stays SOLE — an anvil run never falls through to mainnet",
      soleOverride.length === 1 && soleOverride[0] === "http://127.0.0.1:8545", JSON.stringify(soleOverride));
 
-  // drive the SHIPPED readLiquid with a stub whose FIRST endpoint throws
+  // drive the SHIPPED readLiquid with a stub whose listed ASKS (0 = the first, 1 = the retry) throw
   function drive(failing) {
-    const seen = [];
+    const seen = []; let asks = 0;
     const st = { liquid: undefined, liquidRead: null, renders: 0 };
     const fakeEthers = { Contract: function (a, b, prov) { return { balanceOf: () => { seen.push(prov.__url); return prov.__fail ? Promise.reject(new Error("dead")) : Promise.resolve(7n); } }; } };
     const code = [READ_SRC, LIQ_SRC, "return readLiquid(ethers);"].join("\n");
     const p = new Function("CFG", "lsGet", "ethers", "dycAddr", "me", "DYC_ABI", "readProvider", "afterRead",
       "liquid", "liquidRead", "__set", code.replace(/liquid = /g, "__set('liquid', ").replace(/liquidRead = /g, "__set('liquidRead', ")
         .replace(/__set\('liquid', (b|null);/g, "__set('liquid', $1);").replace(/__set\('liquidRead', ("[a-z]+");/g, "__set('liquidRead', $1);"))(
-      { chain: { readRpcUrls: ["https://polygon-bor-rpc.publicnode.com"] } }, () => null, fakeEthers,
-      () => "0xdyc", "0xme", [], (e, i) => ({ __url: urls[i || 0], __fail: failing.indexOf(i || 0) >= 0 }),
+      { chain: { readRpcUrls: [PROXY] } }, () => null, fakeEthers,
+      () => "0xdyc", "0xme", [], (e, i) => ({ __url: urls[i || 0], __fail: failing.indexOf(asks++) >= 0 }),
       () => { st.renders++; }, undefined, null, (k, v) => { st[k] = v; });
     return p.then(() => ({ seen, st }));
   }
   return drive([0]).then((r) => {
-    ok("E3 · the FIRST endpoint failing no longer surrenders — the read walks on to the second",
-       r.seen.length === 2 && r.seen[0] === urls[0] && r.seen[1] === urls[1], JSON.stringify(r.seen));
+    ok("E3 · a FIRST ask failing does not surrender — the proxy is asked once more, after the backoff",
+       r.seen.length === 2 && r.seen[0] === PROXY && r.seen[1] === PROXY, JSON.stringify(r.seen));
     ok("E4 · and the balance is then READ, not null", r.st.liquid === 7n && r.st.liquidRead === "ok", JSON.stringify({ l: String(r.st.liquid), s: r.st.liquidRead }));
     return drive([0, 1]);
   }).then((r) => {
-    ok("E5 · only when EVERY endpoint fails does it surrender — and it records WHY, so the rows can say so",
+    ok("E5 · only when BOTH asks fail does it surrender — and it records WHY, so the rows can say so (the busy face)",
        r.st.liquid === null && r.st.liquidRead === "failed", JSON.stringify({ l: String(r.st.liquid), s: r.st.liquidRead }));
 
     // ═══ F. THE PRE-FLIGHT NEVER SHOWS AN UNREAD NUMBER ═══

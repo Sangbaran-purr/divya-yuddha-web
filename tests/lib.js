@@ -232,15 +232,17 @@ async function dashboardPage(c, player, opts) {
     return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
   };
   const chainId = Number((await c.provider.getNetwork()).chainId);
-  w.localStorage.setItem("dy::readRpcUrl", RPC);
+  // RPC-CLEANUP-1 — `opts.shippedRoads`: leave the SHIPPED read endpoints alone (rpc.divyayuddha.games); the suite routes
+  // that host to a local dy-rpc at the transport (ethers' FetchRequest.registerGetUrl). Otherwise every read is pointed
+  // at anvil directly, as before.
+  if (!opts.shippedRoads) w.localStorage.setItem("dy::readRpcUrl", RPC);
   for (const [k, v] of Object.entries(opts.ls || {})) w.localStorage.setItem(k, v);
   const run = (p) => w.eval(fs.readFileSync(p, "utf8"));
   run(path.join(SITE, "config.js"));
   run(path.join(SITE, "mf-config.js"));
   w.DY_CONFIG.chain.id = chainId;
   w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
-  w.DY_MF_CONFIG.readRpcUrl = RPC;
-  w.DY_MF_CONFIG.readRpcUrlFallbacks = [];
+  if (!opts.shippedRoads) { w.DY_MF_CONFIG.readRpcUrl = RPC; w.DY_MF_CONFIG.readRpcUrlFallbacks = []; }
   w.DY_MF_CONFIG.contracts.dycoin = c.addrs.dyc;
   for (const k of ["vestingVault", "holderStaking", "roiRedemption", "dycoinSale", "dropDesk", "toranaClaim"]) w.DY_MF_CONFIG.contracts[k] = null;   // TORANA-AUTO-1: hermetic unless a test names it
   // the two switches, set EXPLICITLY (the shipped config is live since WINNINGS-5). Absent => the dormant face.
@@ -297,7 +299,7 @@ async function storePage(c, player, opts) {
   const chainId = Number((await c.provider.getNetwork()).chainId);
   // STORE-READ-1: `opts.readUrls` drives the FAILOVER LIST instead of the single-endpoint override. The override
   // collapses the road to one endpoint by design, so a failover test must clear it and set the list itself.
-  if (!opts.readUrls) w.localStorage.setItem("dy::readRpcUrl", RPC);
+  if (!opts.readUrls && !opts.shippedRoads) w.localStorage.setItem("dy::readRpcUrl", RPC);   // RPC-CLEANUP-1: see dashboardPage
   w.localStorage.setItem("dystore::playStoreAddress", c.addrs.ps);
   w.localStorage.setItem("dystore::usdcAddress", c.addrs.usdc);
   w.localStorage.setItem("dystore::usdtAddress", c.addrs.usdt);

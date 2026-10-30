@@ -52,22 +52,15 @@ window.DY_MF_CONFIG = {
   presaleVoucherUrl: "https://approval-bot-cxa2.onrender.com/presale/voucher",
   gasTopUpUrl: "https://approval-bot-cxa2.onrender.com/gas/topup",  // GAS-HELP-1 R3: POL for the network fee (dormant until the bot's GAS_TOPUP=on — until then it answers 503 and the roads show the fallback line)
 
-  // ── Polygon mainnet read endpoints (W3-MAINNET-1) ──
-  // The verified primary is publicnode (CORS-clean, full node, reliable eth_call), drpc a redundant fallback; the
-  // connected wallet remains the last-resort rescue. Tried in order (FallbackProvider, quorum 1). No API key needed.
-  // (A domain-locked mainnet Alchemy key can be dropped in later for eth_call headroom — small pile, not required.)
-  // READ-PROXY-2 — our own read proxy first (the fast eth_call road); publicnode moves into the fallbacks. The getLogs
-  // scans never use these: they ride config.js chain.scanRpcUrls (keyless), pinned in dashboard.js and report.js.
+  // ── Polygon mainnet read endpoint ──
+  // RPC-CLEANUP-1 (owner rulings 2026-10-30) — ONE ROAD: our own read proxy (dy-rpc → a keyed provider, server-side)
+  // serves every dashboard/report read, the getLogs history scans included. No free public RPC and no wallet rescue
+  // (ruling D) sits behind it: if it is down the page shows its plain "couldn't load — try again" state.
   readRpcUrl: "https://rpc.divyayuddha.games",
-  readRpcUrlFallbacks: [
-    "https://polygon-bor-rpc.publicnode.com",
-    "https://polygon.drpc.org",
-  ],
-  // ⚠ eth_getLogs SPLIT: the domain-locked key's free tier caps eth_getLogs at a 10-block range —
-  // useless for the feed/report scans (thousands of blocks). So getLogs runs on the FREE endpoints
-  // (drpc/publicnode/thirdweb — large ranges OK); only eth_call (the card reads that failed the
-  // owner) uses the reliable site key. logChunk sizes that free-endpoint getLogs line.
-  logChunk: 3000,
+  readRpcUrlFallbacks: [],
+  // the getLogs scan width: dy-rpc serves an addressed scan up to 10,000,000 blocks (MAX_LOG_SPAN, ruling E), so the
+  // whole history is ONE call. The halving safety net in the pages still narrows on a range refusal.
+  logChunk: 10000000,
 
   // The block the mainnet stack deployed at — the getLogs scans start here.
   deployBlock: 92050143,

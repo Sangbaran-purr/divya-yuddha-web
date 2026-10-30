@@ -446,38 +446,36 @@ window.DYDash = (function () {
   }
 
   function withEthers() { return W.loadEthers().then(function (e) { ethersRef = e; return e; }); }
-  // Resilient reads (M-F4/b/c). Two chains from ONE builder:
-  //   • readProvider() — eth_call (the card reads): SITE KEY (domain-locked Alchemy) primary → free
-  //     endpoints → connected wallet. batchMaxCount:1 (M-F4b) since public endpoints reject batches.
-  //   • logProvider()  — eth_getLogs (feed): S-FEED-3 — owner's archive Read RPC first (admin key), then drpc-first
-  //     archive-capable fallbacks, then publicnode, then the wallet. The site Alchemy key caps getLogs at 10 blocks so
-  //     it is never used for logs; the archive URL is what reaches deep history (publicnode prunes it).
+  // Reads (M-F4/b/c). Two chains from ONE builder. batchMaxCount:1 (M-F4b).
+  //   • readProvider() — eth_call (the card reads): our own read proxy (mf-config readRpcUrl).
+  //   • logProvider()  — eth_getLogs (the feed): the owner's archive Read RPC override if this browser has one (S-FEED-3,
+  //     the key-safety cross-reader), else the SAME proxy.
+  // RPC-CLEANUP-1 (owner rulings 2026-10-30): no free public RPC on either chain, and NO last-resort read through the
+  // connected wallet (ruling D — a stale wallet RPC has given wrong readings before). If the proxy is down, the cards
+  // show their plain "couldn't load — try again" state.
+  var PROXY_URL = "https://rpc.divyayuddha.games";
   var _provCache = {};
-  function walletInChain() { return !!(window.ethereum && isConnected() && W.state.chainOk); }
-  function buildProvider(tag, urls, connected) {
+  function buildProvider(tag, urls) {
     var net = { chainId: PLAYER.chain.id, name: "amoy" };
     urls = (urls || []).filter(Boolean);
-    if (!urls.length) urls = [PLAYER.chain.rpcUrls[0]];
-    var key = urls.join(",") + "|" + connected;
+    if (!urls.length) urls = [PROXY_URL];   // RPC-CLEANUP-1: never MetaMask's suggested RPC (rpcUrls) as a read
+    var key = urls.join(",");
     if (_provCache[tag] && _provCache[tag].key === key) return _provCache[tag].prov;
     var configs = urls.map(function (u, i) {
       return { provider: new ethersRef.JsonRpcProvider(u, net, { staticNetwork: true, batchMaxCount: 1 }), priority: i + 1, stallTimeout: 2500, weight: 1 };
     });
-    if (connected) {
-      try { configs.push({ provider: new ethersRef.BrowserProvider(window.ethereum), priority: 99, stallTimeout: 5000, weight: 1 }); } catch (e) {}
-    }
     var prov;
     try { prov = configs.length > 1 ? new ethersRef.FallbackProvider(configs, net, { quorum: 1 }) : configs[0].provider; }
     catch (e) { prov = configs[0].provider; }
     _provCache[tag] = { key: key, prov: prov };
     return prov;
   }
-  function readProvider() { var c = cfg(); return buildProvider("read", [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []), walletInChain()); }
+  function readProvider() { var c = cfg(); return buildProvider("read", [c.readRpcUrl].concat(c.readRpcUrlFallbacks || [])); }
   // S-FEED-3: the owner sets an archive-capable Read RPC in the ADMIN Configuration panel — but that panel writes to a
   // DISTINCT localStorage namespace ("dyadmin::config") from this dashboard's ("dymf::config"), same origin. That mismatch
   // is why the archive key never unstuck the feed. So the feed reads the admin key DIRECTLY — the owner's one paste extends
   // deep-history reach here too, with NO RPC field shown on the buyer dashboard (buyers don't see plumbing). READ-ONLY: this
-  // URL only serves getLogs; it never signs. Falls back to the current road (drpc-first, then publicnode) when absent.
+  // URL only serves getLogs; it never signs. Absent → the read proxy (RPC-CLEANUP-1).
   function archiveReadRpc() {
     var keys = ["dyadmin::config", LS_KEY]; // admin panel first, then this dashboard's own override
     for (var i = 0; i < keys.length; i++) {
@@ -487,12 +485,10 @@ window.DYDash = (function () {
   }
   function logProvider() {
     var urls = [], arch = archiveReadRpc();
-    if (arch) urls.push(arch); // archive Read RPC first — extends getLogs to deep history (publicnode prunes, some free caps range)
-    // drpc-first archive-capable fallbacks (the proven admin/s18 pattern), then the KEYLESS scan list.
-    // READ-PROXY-2: PINNED to config.js chain.scanRpcUrls — the read proxy (readRpcUrl) never serves a getLogs scan.
-    ["https://polygon.drpc.org"].concat((PLAYER.chain && PLAYER.chain.scanRpcUrls) || ["https://polygon-bor-rpc.publicnode.com"])
-      .forEach(function (u) { if (u && urls.indexOf(u) < 0) urls.push(u); });
-    return buildProvider("log", urls, walletInChain());
+    if (arch) urls.push(arch);                 // the owner's own keyed archive URL (his browser only) first
+    var proxy = cfg().readRpcUrl || PROXY_URL; // RPC-CLEANUP-1: then our proxy — the free scan list (drpc/publicnode) is gone
+    if (urls.indexOf(proxy) < 0) urls.push(proxy);
+    return buildProvider("log", urls);
   }
   function resetReadProvider() { _provCache = {}; }
 
@@ -1178,24 +1174,61 @@ window.DYDash = (function () {
   var feedScanSettled = false; // S-FEED-2: true once the scan resolves — gates "No activity yet" vs "…loading"
   var GBN_TIMEOUT_MS = 12000;  // S-DASH-FEED-1 (R3): bound getBlockNumber so a hung RPC falls to the busy+retry face, never forever-loading
   function withTimeout(p, ms) { return new Promise(function (res, rej) { var t = setTimeout(function () { rej(new Error("timeout")); }, ms); p.then(function (v) { clearTimeout(t); res(v); }, function (e) { clearTimeout(t); rej(e); }); }); }
-  // Run the 5 per-wallet event filters over [from, to] (newest-first), pushing rows into `evs`. Resolves to the
-  //   CONTIGUOUS low-watermark reached = the HIGHEST of the filters' reached-lows (the least-progressed filter bounds
-  //   the range that is FULLY scanned by every filter). No new shared mutable span — the retry-guarded feedSpan is reused.
-  function scanRange(provider, c, addr, from, to, evs) {
-    var jobs = [], lows = [];
-    function J(p) { jobs.push(p.then(function (low) { lows.push(low); })); }
-    if (c.vestingVault) { var vv = new ethersRef.Contract(c.vestingVault, VEST_ABI, provider);
-      J(scan(vv, vv.filters.Claimed(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Claimed", ic: "vesting", details: "Vesting claimed", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash }); })); }
-    if (c.holderStaking) { var hs = new ethersRef.Contract(c.holderStaking, STAKE_ABI, provider);
-      J(scan(hs, hs.filters.Staked(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Staked", ic: "staked", details: "Staked to earn", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash }); }));
-      J(scan(hs, hs.filters.VestedRegistered(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: fmt(e.args.principal) + " DYC", hash: e.transactionHash }); }));
-      J(scan(hs, hs.filters.RoiAccrued(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Claimed", ic: "rewards", details: "Reward claimed", amt: fmt(e.args.amount) + " DYC", hash: e.transactionHash }); })); }
-    if (c.roiRedemption) { var rd = new ethersRef.Contract(c.roiRedemption, DESK_ABI, provider);
-      J(scan(rd, rd.filters.Redeemed(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Cashed Out", ic: "rewards", details: "Cash out to USDT", amt: fmt(e.args.dycAmount) + " DYC → " + fmt(e.args.usdtOut, 6) + " USDT", hash: e.transactionHash }); })); }
+  // Run the 6 per-wallet event filters over [from, to] (newest-first), pushing rows into `evs`. Resolves to the
+  //   low-watermark reached (== from on a complete scan).
+  // RPC-CLEANUP-1 (owner rulings 2026-10-30): the six filters are ONE eth_getLogs — every one of these events carries the
+  //   wallet as its FIRST indexed field, so a single filter (the four contracts' addresses, topic0 ∈ the six events,
+  //   topic1 = the wallet) returns exactly the union the six filters returned. On our proxy (10,000,000-block span) the
+  //   whole history is ONE call; the session-shared halving in scan() stays as the safety net.
+  function feedFilterParts(c) {
+    var parts = [];   // { address, iface, events: [{ name, row(e) }] }
+    if (c.vestingVault) parts.push({ address: c.vestingVault, abi: VEST_ABI, events: [
+      { name: "Claimed", row: function (e) { return { type: "Claimed", ic: "vesting", details: "Vesting claimed", amt: fmt(e.args.amount) + " DYC" }; } }] });
+    if (c.holderStaking) parts.push({ address: c.holderStaking, abi: STAKE_ABI, events: [
+      { name: "Staked", row: function (e) { return { type: "Staked", ic: "staked", details: "Staked to earn", amt: fmt(e.args.amount) + " DYC" }; } },
+      { name: "VestedRegistered", row: function (e) { return { type: "Activated", ic: "staked", details: "Vesting activated to staked", amt: fmt(e.args.principal) + " DYC" }; } },
+      { name: "RoiAccrued", row: function (e) { return { type: "Claimed", ic: "rewards", details: "Reward claimed", amt: fmt(e.args.amount) + " DYC" }; } }] });
+    if (c.roiRedemption) parts.push({ address: c.roiRedemption, abi: DESK_ABI, events: [
+      { name: "Redeemed", row: function (e) { return { type: "Cashed Out", ic: "rewards", details: "Cash out to USDT", amt: fmt(e.args.dycAmount) + " DYC → " + fmt(e.args.usdtOut, 6) + " USDT" }; } }] });
     // S-FEED-2: DYCoinSale purchases — the buy that lands DYC (85% into vesting, 15% liquid). dycOut = total DYC received.
-    if (c.dycoinSale) { var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, provider);
-      J(scan(sale, sale.filters.Purchased(addr), from, to, function (e) { evs.push({ block: e.blockNumber, type: "Purchase", ic: "liquid", details: "Bought DYC", amt: fmt(e.args.dycOut) + " DYC", hash: e.transactionHash }); })); }
-    return Promise.all(jobs).then(function () { return lows.length ? Math.max.apply(null, lows) : from; });
+    if (c.dycoinSale) parts.push({ address: c.dycoinSale, abi: SALE_ABI, events: [
+      { name: "Purchased", row: function (e) { return { type: "Purchase", ic: "liquid", details: "Bought DYC", amt: fmt(e.args.dycOut) + " DYC" }; } }] });
+    return parts;
+  }
+  function scanRange(provider, c, addr, from, to, evs) {
+    var parts = feedFilterParts(c);
+    if (!parts.length) return Promise.resolve(from);
+    var byKey = {}, addresses = [], topic0 = [];
+    parts.forEach(function (p) {
+      var iface = new ethersRef.Interface(p.abi);
+      addresses.push(p.address);
+      p.events.forEach(function (ev) {
+        var frag = iface.getEvent(ev.name);
+        byKey[p.address.toLowerCase() + ":" + frag.topicHash] = { iface: iface, frag: frag, row: ev.row };
+        if (topic0.indexOf(frag.topicHash) < 0) topic0.push(frag.topicHash);
+      });
+    });
+    var who = ethersRef.zeroPadValue(addr, 32);
+    // the `scan()` contract-shaped seam: queryFilter(filter, start, end) → decoded events (one combined getLogs)
+    var combined = {
+      queryFilter: function (_f, start, end) {
+        return provider.getLogs({ address: addresses, topics: [topic0, who], fromBlock: start, toBlock: end }).then(function (logs) {
+          var out = [];
+          logs.forEach(function (lg) {
+            var k = byKey[String(lg.address).toLowerCase() + ":" + lg.topics[0]];
+            if (!k) return;
+            var parsed; try { parsed = k.iface.parseLog({ topics: lg.topics, data: lg.data }); } catch (x) { return; }
+            if (!parsed) return;
+            out.push({ blockNumber: lg.blockNumber, transactionHash: lg.transactionHash, args: parsed.args, __row: k.row });
+          });
+          return out;
+        });
+      },
+    };
+    return scan(combined, null, from, to, function (e) {
+      var r = e.__row(e);
+      evs.push({ block: e.blockNumber, type: r.type, ic: r.ic, details: r.details, amt: r.amt, hash: e.transactionHash });
+    });
   }
   function feedStatus(status) {
     var merged = renderFeedMerged();
@@ -1377,6 +1410,7 @@ window.DYDash = (function () {
   function isRangeError(e) {
     var msg = (((e && e.error && e.error.message) || (e && e.shortMessage) || (e && e.message) || "") + "").toLowerCase();
     if (/pruned|not available on|state.{0,20}unavailable|missing trie/.test(msg)) return false; // pruning ≠ range — halving won't help
+    if (msg.indexOf("address not served") >= 0) return false;  // RPC-CLEANUP-1: our proxy's -32602 for a stranger's address — not a width
     var info = e && e.info, rs = info && info.responseStatus;
     var status = (e && e.status) || (rs && parseInt(rs, 10)) || 0;
     var code = (e && e.code) || (e && e.error && e.error.code);
@@ -2380,7 +2414,7 @@ window.DYDash = (function () {
   //  and screenshots one box; the root cause reads itself off the screen. Renders ONLY with ?diag=1;
   //  zero effect on live behaviour otherwise. Inline-styled (immune to a stale CSS cache).
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
-  var DIAG_BUILD = "mf4d"; // the version this diagnostic ships in — compare against the LOADED stamp below
+  var DIAG_BUILD = "mf48"; // the version this diagnostic ships in — compare against the LOADED stamp below
   function diagScriptVersion() {
     try {
       var s = [].slice.call(document.scripts).map(function (x) { return x.src || ""; }).filter(function (u) { return /js\/dashboard\.js/.test(u); })[0] || "";
@@ -2426,7 +2460,7 @@ window.DYDash = (function () {
   function runDiag() {
     var c = cfg();
     var callUrls = [c.readRpcUrl].concat(c.readRpcUrlFallbacks || []).filter(Boolean);
-    var logUrls = ((PLAYER.chain && PLAYER.chain.scanRpcUrls) || []).filter(Boolean); if (!logUrls.length) logUrls = callUrls.slice(1);   // READ-PROXY-2: the keyless scan list
+    var logUrls = [archiveReadRpc(), c.readRpcUrl || PROXY_URL].filter(Boolean);   // RPC-CLEANUP-1: the owner's override (if set), then the proxy
     var uniq = []; callUrls.concat(logUrls).forEach(function (u) { if (uniq.indexOf(u) < 0) uniq.push(u); });
 
     var box = document.createElement("div");

@@ -34,7 +34,7 @@ const SUITES = [
   { name: "freedoor",      file: path.join(__dirname, "suites", "freedoor.js"), chain: true, expect: 57 },
   // GATE-FIX-1: the owner console's archive road. No chain and no network — the public RPCs' 2026-09-23 wire
   // shapes are FIXTURES (docs/ARCHIVE_ROAD_2026-09-23.md); a suite that dials out measures the weather.
-  { name: "consoleroad",   file: path.join(__dirname, "suites", "consoleroad.js"), chain: false, expect: 102 },
+  { name: "consoleroad",   file: path.join(__dirname, "suites", "consoleroad.js"), chain: false, expect: 106 },
   { name: "stakedframe",   file: path.join(__dirname, "suites", "stakedframe.js"), chain: true, expect: 29 },
   { name: "bundle",        file: path.join(__dirname, "suites", "bundle.js"), chain: true, expect: 102 },
   { name: "winnings",      file: path.join(__dirname, "suites", "winnings.js"), chain: true, expect: 44 },
@@ -54,13 +54,14 @@ const SUITES = [
   // SITE-AUDIT-1 batch 2 — "Your stakes": cancel / refund / collect against the REAL StakeEscrow, socket blocked
   { name: "hallrefund",    file: path.join(__dirname, "suites", "hallrefund.js"), chain: true, expect: 26, capMs: 600000 },
   // LIMIT-DISPLAY-1 — the stored daily limit reaches the screen after a reload, however slow the sign-in
-  { name: "readproxy",     file: path.join(__dirname, "suites", "readproxy.js"), chain: true, expect: 17 },
+  { name: "readproxy",     file: path.join(__dirname, "suites", "readproxy.js"), chain: true, expect: 16 },
   // CARD-STORE-1 C3 — the USD card button against the REAL WaveCardUsdSale (tokens planted at their Polygon addresses)
   { name: "cardusd",       file: path.join(__dirname, "suites", "cardusd.js"), chain: true, expect: 63, capMs: 600000 },
   // MY-INVITES-1 — the affiliate's own page against the REAL bot over a REAL chain (a 7-deep tree, both schemes)
   { name: "myinvites",     file: path.join(__dirname, "suites", "myinvites.js"), chain: true, expect: 60, capMs: 900000 },
   { name: "torana",        file: path.join(__dirname, "suites", "torana.js"), chain: true, expect: 15, capMs: 900000 },   // TORANA-AUTO-1
   { name: "winst",         file: path.join(__dirname, "suites", "winst.js"), chain: true, expect: 14, capMs: 900000 },    // WINNINGS-INSTANT-1
+  { name: "rpcroad",       file: path.join(__dirname, "suites", "rpcroad.js"), chain: true, expect: 24 },   // RPC-CLEANUP-1: one road — no free public RPC in any site read, plain error states, the console in one press
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
   { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 34 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)

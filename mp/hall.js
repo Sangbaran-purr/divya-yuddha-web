@@ -120,16 +120,15 @@
   //  refusal: readLiquid's catch sets liquid = null, and every staked tier then read "insufficient liquid DYC" —
   //  a wallet's poverty and a dead endpoint were the same sentence (measured on the live origin, 2026-09-24).
   //  The Hall now walks its endpoints in turn with one backoff before it surrenders to the busy sentinel.
-  //  drpc is sound as a second READ endpoint: GATE-FIX-1's drpc cap is a getLogs WIDTH cap, and eth_call is not
-  //  a getLogs (measured 2026-09-24: it answers balanceOf and carries the CORS header for this origin).
-  //  THE SITE-WIDE READ ROAD IS UNTOUCHED — js/wallet.js still takes chain.readRpcUrls[0], and so does this file
-  //  when it wants one url. The local-proof override stays SOLE: an anvil run must never fall through to mainnet.
-  var HALL_READ_FALLBACKS = ["https://polygon.drpc.org"];
+  //  RPC-CLEANUP-1 (owner rulings 2026-10-30): the endpoints are the site's ONE read road (config.js readRpcUrls —
+  //  our own proxy). The drpc fallback this file used to append is GONE: no free public RPC in any site read. The
+  //  walk-with-one-backoff stays (a transient proxy blip still gets a second ask before the busy sentinel).
+  //  The local-proof override stays SOLE: an anvil run must never fall through to mainnet.
   var READ_BACKOFF_MS = 400;
   function readRpcUrls() {
     var over = lsGet("dyhall::readRpcUrl"); if (over) return [over];   // anvil/local proof: this one and no other
     var out = (((CFG.chain && CFG.chain.readRpcUrls) || []).slice());
-    HALL_READ_FALLBACKS.forEach(function (u) { if (out.indexOf(u) < 0) out.push(u); });
+    if (!out.length) out = ["https://rpc.divyayuddha.games"];           // RPC-CLEANUP-1: never a free public RPC
     return out;
   }
   function readRpcUrl() { return readRpcUrls()[0]; } // anvil override for the local proof; mainnet otherwise
@@ -180,13 +179,14 @@
     // MP-FIX-3A (4) — and now it tries the NEXT endpoint before it says that. `liquidRead` carries WHY the number
     // is missing, so the tier rows can tell "you are short" from "we could not ask" (readLiquidState below).
     var urls = readRpcUrls(), who = me;
+    var tries = Math.max(urls.length, 2);   // RPC-CLEANUP-1: one road now — a blip on it is asked once more, after the backoff
     liquidRead = "reading";
     var attempt = function (i) {
-      return new ethers.Contract(dyc, DYC_ABI, readProvider(ethers, i)).balanceOf(who).then(function (b) {
+      return new ethers.Contract(dyc, DYC_ABI, readProvider(ethers, i % urls.length)).balanceOf(who).then(function (b) {
         if (who !== me) return;                                  // the wallet changed under the read — drop it
         liquid = b; liquidRead = "ok"; afterRead();
       }, function () {
-        if (i + 1 < urls.length) return new Promise(function (res) { setTimeout(res, READ_BACKOFF_MS); }).then(function () { return attempt(i + 1); });
+        if (i + 1 < tries) return new Promise(function (res) { setTimeout(res, READ_BACKOFF_MS); }).then(function () { return attempt(i + 1); });
         if (who !== me) return;
         liquid = null; liquidRead = "failed"; afterRead();
       });

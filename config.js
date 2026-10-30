@@ -15,31 +15,16 @@ window.DY_CONFIG = {
     // full node, serves eth_maxPriorityFeePerGas + eth_sendRawTransaction), drpc a redundant second. Existing users
     // keep whatever they already registered — the site READ road below is wallet-independent, so their reads still work.
     rpcUrls: ["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"],
-    // the SITE READ endpoint (DYWallet.readProvider). Every site read rides this tamed publicnode provider
-    // (staticNetwork, fail-fast) regardless of the user's wallet RPC. Writes stay on the wallet signer.
-    // STORE-READ-1 (2026-09-29) — THE READ ROAD IS A LIST AND IS NOW WALKED. It always was a list; only [0] was
-    // ever used, so a buyer whose DNS could not resolve publicnode saw the store say "stock unavailable" when it
-    // had simply never reached the chain. Order is measured latency from a real browser at https://divyayuddha.games
-    // (392 / 793 / 792 / 1032 ms). All four answered eth_chainId 137, a live eth_call on the PlayStore, and
-    // eth_blockNumber, with CORS open to this origin. KEYLESS ONLY — no key may ever appear in a page.
-    //
-    // READ-PROXY-2 (2026-10-12) — OUR OWN READ PROXY FIRST. rpc.divyayuddha.games (dy-rpc on Render) serves the FAST
-    // read road only (eth_call / eth_blockNumber / eth_chainId); the keyless publicnode, drpc and tenderly follow it, so
-    // a dead proxy falls straight through to them. The 1rpc endpoint is GONE: it sends no CORS header, so it could never
-    // answer a browser at this origin.
-    readRpcUrls: [
-      "https://rpc.divyayuddha.games",
-      "https://polygon-bor-rpc.publicnode.com",
-      "https://polygon.drpc.org",
-      "https://polygon.gateway.tenderly.co",
-    ],
-    // READ-PROXY-2 — THE SCAN ROAD'S KEYLESS LIST. Every getLogs walk (wallet.scanProvider, the dashboard's and the
-    // report's logProvider) rides THIS list and never the proxy: deep scans stay off the one endpoint we pay for.
-    scanRpcUrls: [
-      "https://polygon-bor-rpc.publicnode.com",
-      "https://polygon.drpc.org",
-      "https://polygon.gateway.tenderly.co",
-    ],
+    // the SITE READ endpoint (DYWallet.readProvider) — every site read, history scans included, regardless of the
+    // user's wallet RPC. Writes stay on the wallet signer.
+    // RPC-CLEANUP-1 (owner rulings 2026-10-30) — ONE ROAD: our own read proxy, rpc.divyayuddha.games (dy-rpc on Render →
+    // a keyed provider, server-side). The free public RPCs (publicnode, drpc, tenderly) are GONE from every site read:
+    // drpc 400'd every dashboard load (its free getLogs span is ~100 blocks), publicnode 403'd the Treasury ("archive
+    // requests require a personal token") and is DNS-blocked on some Indian carriers, and the console's history panels
+    // crawled on them. If the proxy is down a page shows its plain "couldn't load — try again" state; the only backup
+    // is server-side (dy-rpc's optional UPSTREAM_RPC_URL_2). The history scans that READ-PROXY-2 kept off the proxy
+    // (the old `scanRpcUrls`) now ride it too — one wide addressed getLogs instead of hundreds of 10k chunks.
+    readRpcUrls: ["https://rpc.divyayuddha.games"],
     blockExplorerUrls: ["https://polygonscan.com"],
   },
 
@@ -180,9 +165,7 @@ window.DY_CONFIG = {
   if (!asked) return;
   var CHAIN = ls("dy::forkChain") || "http://127.0.0.1:8560", RPC = ls("dy::forkRpc") || "http://127.0.0.1:8561", BOT = ls("dy::forkBot") || "http://127.0.0.1:8563";
   var MAP = {
-    "rpc.divyayuddha.games": RPC,                                  // the read proxy → the local dy-rpc
-    "polygon-bor-rpc.publicnode.com": CHAIN, "polygon.drpc.org": CHAIN,   // the keyless roads (scans, fallbacks) → the fork
-    "polygon.gateway.tenderly.co": CHAIN, "gateway.tenderly.co": CHAIN,
+    "rpc.divyayuddha.games": RPC,                                  // the ONE read road (RPC-CLEANUP-1: scans too) → the local dy-rpc
     "approval-bot-cxa2.onrender.com": BOT,                         // the approval bot → the local bot
   };
   function repoint(u) {

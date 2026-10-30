@@ -51,6 +51,16 @@ window.DYAdmin = (function () {
   var LOG_CHUNK_START = 9999; // sane wide start — an archive endpoint with a real key accepts thousands
   var LOG_CHUNK_FLOOR = 50;   // never narrower than this; below it the scan is not worth issuing
   var archiveSpans = {};      // endpoint url -> discovered width (session only; a reload re-discovers)
+  // RPC-CLEANUP-1 (owner rulings 2026-10-30) — THE CONSOLE'S DEFAULT HISTORY ROAD IS OUR OWN PROXY (dy-rpc → a keyed
+  // provider, server-side), so every history panel works in ANY browser with no Read RPC URL set. The proxy serves an
+  // addressed getLogs up to 10,000,000 blocks (MAX_LOG_SPAN, ruling E), so on it a panel starts at that width — the
+  // whole history in one call — with no width discovery, no depth probe and no 120 ms pause between pieces. The owner's
+  // Read RPC URL stays an override and keeps the adaptive road (configured start, discovery, pacing) it always had.
+  var PROXY_URL = (PLAYER && PLAYER.chain && PLAYER.chain.readRpcUrls && PLAYER.chain.readRpcUrls[0]) || "https://rpc.divyayuddha.games";
+  var PROXY_SPAN = 10000000;
+  function isProxy(x) { return spanKeyOf(x) === PROXY_URL; }
+  function startFor(k) { return k === PROXY_URL ? PROXY_SPAN : chunkStart(); }
+  function pace(x) { return isProxy(x) ? Promise.resolve() : sleep(120); }   // the 120 ms courtesy is for keyed/free roads only
   function chunkStart() {
     var v = Number(cfg().logChunk);
     return Number.isFinite(v) && v >= LOG_CHUNK_FLOOR ? Math.floor(v) : LOG_CHUNK_START;
@@ -64,7 +74,7 @@ window.DYAdmin = (function () {
     if (x.provider && x.provider.__dyUrl) return x.provider.__dyUrl;
     return "_";
   }
-  function archiveSpan(x) { return archiveSpans[spanKeyOf(x)] || chunkStart(); }
+  function archiveSpan(x) { var k = spanKeyOf(x); return archiveSpans[k] || startFor(k); }
   // Halve the remembered width for this endpoint. Returns false when already at the floor (cannot shrink).
   // Narrow the remembered width after a refusal. `failedSpan` is the width that was actually REFUSED — the new
   // memory is half of THAT, never half of whatever the memory happens to hold. Measured the hard way: halving the
@@ -83,7 +93,7 @@ window.DYAdmin = (function () {
   // memory that a refusal had already lowered, and never past the configured start.
   function archiveSpanConfirm(x, okSpan) {
     var k = spanKeyOf(x);
-    if (archiveSpans[k] && archiveSpans[k] < okSpan && okSpan <= chunkStart()) archiveSpans[k] = okSpan;
+    if (archiveSpans[k] && archiveSpans[k] < okSpan && okSpan <= startFor(k)) archiveSpans[k] = okSpan;
   }
   function archiveSpanReset() { archiveSpans = {}; archiveIncapable = {}; } // Configuration save re-opens the question
 
@@ -126,8 +136,10 @@ window.DYAdmin = (function () {
     var limit = note && note.capBlocks
       ? "allows only " + note.capBlocks + "-block reads"
       : "allows only very small reads";
-    return "<span class='bad'>Your READ RPC endpoint " + limit + "</span> — using the public archive instead" +
-      (chunks ? " (slow, ~" + chunks.toLocaleString() + " chunks)" : " (slower)") +
+    // RPC-CLEANUP-1: the road the console falls back to is now the site's own read proxy (one wide call), not a slow
+    // free archive — so the sentence names it and no longer warns of thousands of chunks.
+    return "<span class='bad'>Your READ RPC endpoint " + limit + "</span> — using the site's read proxy instead" +
+      (chunks > 1 ? " (~" + chunks.toLocaleString() + " chunks)" : "") +
       ". A paid tier on your provider lifts this.";
   }
   function logWidthIncapable(url, cap, err) {
@@ -148,12 +160,10 @@ window.DYAdmin = (function () {
   var WAIT_TIMEOUT_MS = 75000; // bound tx.wait — a never-mined/dropped tx must NEVER sit PENDING (S5a-FIX-2)
   var FEE_HEADROOM = 2n; // 2x headroom over the live base+priority fee signal (S5a-FIX-2); wallet override stays possible
   var RECENT_WINDOW = 500; // recent-only history fallback span (no readRpcUrl) — last N blocks, dodges archive gating (S5a-FIX-3)
-  // S-LEDGER-FIX — shared archive-capable getLogs endpoints (drpc FIRST, publicnode next). The wallet node PRUNES deep
-  // history and the domain-locked readRpcUrl (Alchemy) caps eth_getLogs at 10 blocks; drpc is proven archive-capable at
-  // the deploy block (S-LEDGER-FIX STEP-0). Alchemy (10-blk cap) + thirdweb (1000-blk cap < LOG_CHUNK) are EXCLUDED from
-  // getLogs duty. NOTE: admin.js reads DY_ADMIN_CONFIG (admin-config.js), which does NOT carry mf-config's
-  // readRpcUrlFallbacks — so the documented drpc-first list is mirrored here to keep admin self-contained.
-  var HISTORY_RPCS = ["https://polygon.drpc.org", "https://polygon-bor-rpc.publicnode.com"];
+  // S-LEDGER-FIX → RPC-CLEANUP-1 — the shared history endpoint: our own proxy (config.js readRpcUrls[0]). The free drpc
+  // and publicnode roads are GONE (drpc's free getLogs span is ~100 blocks → the whole history was ~56,000 chunks; publicnode
+  // prunes). The wallet node still serves the console's quick reads; it never serves history.
+  var HISTORY_RPCS = [PROXY_URL];
 
   var owners = { access: null, wave: null }; // last-read on-chain owners
   var histLoaded = false;
@@ -259,6 +269,7 @@ window.DYAdmin = (function () {
     if (!e) return false;
     var s = errText(e);
     if (s.indexOf("-32701") >= 0 || s.indexOf("pruned") >= 0) return false; // DEPTH, not width — never narrow for this
+    if (s.indexOf("address not served") >= 0) return false;                 // RPC-CLEANUP-1: the proxy's -32602 for a stranger's address
     return (
       s.indexOf("block range") >= 0 ||
       s.indexOf("blocks range") >= 0 ||
@@ -278,7 +289,8 @@ window.DYAdmin = (function () {
     return (
       s.indexOf("server response 5") >= 0 || // HTTP 5xx (the observed "server response 500 Internal Server Error")
       s.indexOf("429") >= 0 || // Too Many Requests
-      s.indexOf("too many requests") >= 0 // worded rate-limit (note: isArchiveError also matches bare "too many" → catch isRateLimited FIRST)
+      s.indexOf("too many requests") >= 0 || // worded rate-limit (note: isArchiveError also matches bare "too many" → catch isRateLimited FIRST)
+      s.indexOf("upstream unavailable") >= 0 // RPC-CLEANUP-1: our proxy could not reach its provider — busy, retry, then the plain busy line
     );
   }
   // S-LEDGER-FIX-2 — retry a history read against the SAME endpoint on a rate-limit-class error, with exponential backoff
@@ -322,7 +334,7 @@ window.DYAdmin = (function () {
     if (learned && askedSpan > learned) {
       var midK = a + learned - 1;
       return readRangeAdaptive(url, read, a, midK, onRetry, combine, deadlineAt).then(function (left) {
-        return sleep(120).then(function () {
+        return pace(url).then(function () {
           return readRangeAdaptive(url, read, midK + 1, b, onRetry, combine, deadlineAt).then(function (right) {
             return join(left, right);
           });
@@ -346,7 +358,7 @@ window.DYAdmin = (function () {
       if (cut >= askedSpan) cut = half;           // never fail to make progress
       var mid = a + cut - 1;
       return readRangeAdaptive(url, read, a, mid, onRetry, combine, deadlineAt).then(function (left) {
-        return sleep(120).then(function () {
+        return pace(url).then(function () {
           return readRangeAdaptive(url, read, mid + 1, b, onRetry, combine, deadlineAt).then(function (right) {
             return join(left, right);
           });
@@ -362,6 +374,7 @@ window.DYAdmin = (function () {
   // on sight, not computed) and leaves every later chunk right-sized and individually resumable.
   // An endpoint that accepts the wide start pays exactly ONE extra read and learns nothing it did not know.
   function discoverSpan(x, read, at) {
+    if (isProxy(x)) return Promise.resolve(PROXY_SPAN);                      // RPC-CLEANUP-1: no discovery on our proxy
     if (archiveSpans[spanKeyOf(x)]) return Promise.resolve(archiveSpan(x)); // already learned this session
     function tryWidth(w) {
       return withRetry(function () { return read(at, at + w - 1); }).then(
@@ -375,7 +388,7 @@ window.DYAdmin = (function () {
         }
       );
     }
-    return tryWidth(chunkStart());
+    return tryWidth(startFor(spanKeyOf(x)));
   }
 
   // GATE-FIX-1 — grow-only scan checkpoints, ported from the proven wallet.js treasury mechanism
@@ -423,7 +436,7 @@ window.DYAdmin = (function () {
   // of the >5-min freeze, S-LEDGER-FIX-3 STEP-0). So a single history request can never grind past ~12s or silently retry 12×.
   function tamedProvider(url) {
     var req = new ethersRef.FetchRequest(url);
-    req.timeout = 12000;
+    req.timeout = 22000;   // RPC-CLEANUP-1: past dy-rpc's 20 s scan budget, so a slow scan meets the proxy's plain refusal, not ours
     req.setThrottleParams({ maxAttempts: 2 });
     var prov = new ethersRef.JsonRpcProvider(req, 137, { staticNetwork: true });
     prov.__dyUrl = url; // GATE-FIX-1: the adaptive-span memory is keyed by endpoint; stamping it here means a caller
@@ -537,6 +550,9 @@ window.DYAdmin = (function () {
       // STILL rate-limited after the retries, THROW (surface the plain-words "busy" message) — do NOT demote drpc to a
       // pruned node. Only a NON-rate-limit (archive/range/pruned) probe error means "can't serve deep history" → fail over.
       function accepted() { return { provider: p, url: url, fellBack: fellBack, fellBackReason: fellBackReason, ownerSkipped: ownerSkipped }; }
+      // RPC-CLEANUP-1 — our proxy is an archive on a keyed provider and serves the full width (MAX_LOG_SPAN): no depth
+      // probe, no width discovery — every panel's scan starts at once, in one wide call.
+      if (url === PROXY_URL) return Promise.resolve(accepted());
       // GATE-FIX-1b — WIDTH is proven here too, right after depth, because a candidate is only usable if it can
       // answer BOTH questions. Discovery is one short descent and its answer is remembered per endpoint, so the
       // scan that follows pays nothing and every other panel inherits it. An endpoint that refuses even the floor
@@ -599,7 +615,7 @@ window.DYAdmin = (function () {
     return { maxFeePerGas: ceil, maxPriorityFeePerGas: prio };
   }
   function feeOverrides(provider) {
-    // signal from publicnode (the wallet RPC lacks reliable priority-fee data); the `provider` arg is kept for
+    // signal from our read proxy (the wallet RPC lacks reliable priority-fee data); the `provider` arg is kept for
     // call-site compatibility but the fee READ no longer rides it — the FLOOR guarantees a valid tip regardless.
     return tamedProvider(PD_RPC)
       .getFeeData()
@@ -1389,9 +1405,9 @@ window.DYAdmin = (function () {
         histLoaded = false;
         // S-LEDGER-FIX-3: deadline + rate-limit FIRST (busy). Then archive (the "too many" overlap → order prevents shadowing). Else generic.
         if ((e && e.__deadline) || isRateLimited(e)) {
-          finishHtml("<span style='color:var(--ember)'>The public archive RPC is busy — retry in a minute, or set a dedicated Read RPC URL in Configuration.</span>");
+          finishHtml("<span style='color:var(--ember)'>The site's read proxy is busy or unreachable — retry in a minute, or set a dedicated Read RPC URL in Configuration.</span>");
         } else if (isArchiveError(e)) {
-          finishHtml("<span style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</span>");
+          finishHtml("<span style='color:var(--ember)'>The history couldn't be read right now — retry in a minute.</span>");
         } else {
           finishText("Could not read events (" + ((e && e.shortMessage) || "RPC error") + ").");
         }
@@ -1426,7 +1442,7 @@ window.DYAdmin = (function () {
           out.push({ block: ev.blockNumber, logIndex: ev.index, type: "Wave", to: ev.args.to, cardId: Number(ev.args.cardId), hash: ev.transactionHash });
         });
         start = end + 1;
-        return sleep(120).then(step); // gentle on the public RPC
+        return pace(access).then(step); // the 120 ms courtesy, skipped on our proxy (RPC-CLEANUP-1)
       });
     }
     return step();
@@ -1800,7 +1816,7 @@ window.DYAdmin = (function () {
       }, start, end, function () { if (onProgress) onProgress(label + ", retrying"); }).then(function (evs) {
         evs.forEach(function (ev) { total += ev.args.dycOut; });
         start = end + 1;
-        return sleep(120).then(step); // gentle on the public RPC (matches the shared road)
+        return pace(saleArchive).then(step); // the 120 ms courtesy, skipped on our proxy (RPC-CLEANUP-1)
       });
     }
     return raceDeadline(step(), deadlineAt).catch(function (e) {
@@ -1900,7 +1916,7 @@ window.DYAdmin = (function () {
           evs.forEach(function (ev) { count += 1; dyc += (ev.args && ev.args.dyc != null) ? ev.args.dyc : 0n; });  // the buyer is READ and DROPPED
           persist(end);
           start = end + 1;
-          return sleep(120).then(stepp);
+          return pace(ps).then(stepp);
         });
     }
     return discoverSpan(ps, reads, resumeFrom).then(function () { return stepp(); }, function () { return stepp(); });
@@ -1917,7 +1933,7 @@ window.DYAdmin = (function () {
     if ((fromD && tsFrom == null) || (toD && tsTo == null)) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>Dates must be YYYY-MM-DD.</span>"; return; }
     if (tsFrom != null && tsTo != null && tsTo < tsFrom) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>The window ends before it starts.</span>"; return; }
     if (btn) btn.disabled = true;
-    st.style.color = "var(--gold-aged)"; st.innerHTML = "Waking the archive — this can take ~30 seconds on first contact…";
+    st.style.color = "var(--gold-aged)"; st.innerHTML = "Reading the history…";
     var deployFrom = c.playStoreDeployBlock || c.deployBlock || 0;
     withEthers().then(function () {
       var provider = readProvider();
@@ -2121,7 +2137,7 @@ window.DYAdmin = (function () {
         evs.forEach(function (ev) { var b = (ev.args.buyer || "").toLowerCase(); byBuyer[b] = (byBuyer[b] || 0n) + ev.args.usdE18; });
         persist(end);
         start = end + 1;
-        return sleep(120).then(stepp);
+        return pace(sale).then(stepp);
       });
     }
     // learn the width first (≈7 fast refusals at worst), so chunk 1 is right-sized and banks on its own
@@ -2136,7 +2152,7 @@ window.DYAdmin = (function () {
     if (find) find.disabled = true;
     if (go) go.disabled = true;
     listEl.innerHTML = ""; cntEl.textContent = "";
-    st.style.color = "var(--gold-aged)"; st.innerHTML = "Waking the archive — this can take ~30 seconds on first contact…";
+    st.style.color = "var(--gold-aged)"; st.innerHTML = "Reading the history…";
     withEthers().then(function () {
       var provider = readProvider();
       return provider.getBlockNumber().then(function (latest) {
@@ -2723,7 +2739,7 @@ window.DYAdmin = (function () {
     // S-LEDGER-FIX-3: bounded + voiced. A 75s deadline caps the WHOLE scan; a live progress line replaces "Reading chain…";
     // a `settled` guard means a late background settle (after the deadline won) can never overwrite the terminal state.
     var settled = false;
-    var busy = "<div class='q' style='color:var(--ember)'>The public archive RPC is busy — retry in a minute, or set a dedicated Read RPC URL in Configuration.</div>";
+    var busy = "<div class='q' style='color:var(--ember)'>The site's read proxy is busy or unreachable — retry in a minute, or set a dedicated Read RPC URL in Configuration.</div>";
     function progress(msg) { if (!settled) out.innerHTML = "<div class='q'>" + escHtml(msg) + "</div>"; }
     function finish(html) { settled = true; out.innerHTML = html; }
     progress("Reading chain…");
@@ -2755,7 +2771,7 @@ window.DYAdmin = (function () {
                     // S-LEDGER-FIX-2/3: retry-with-backoff (trimmed) + 120ms inter-chunk throttle; onRetry voices "…, retrying".
                     return readRangeAdaptive(hs, function (x, y) { return hs.queryFilter(filter, x, y); }, a, b, function () { progress(label + ", retrying"); }).then(function (evs) {
                       evs.forEach(function (ev) { granted += ev.args.amount; });
-                      return sleep(120);
+                      return pace(hs);
                     });
                   });
                 })(from, Math.min(from + claimSpan - 1, latest));
@@ -2787,7 +2803,7 @@ window.DYAdmin = (function () {
       // show); then S-LEDGER-FIX-2/1: archive → plain archive message (checked after rate-limit because a "429 too many
       // requests" also matches isArchiveError's bare "too many" — order, not exclusivity, prevents shadowing); else generic.
       if ((e && e.__deadline) || isRateLimited(e)) { finish(busy); }
-      else if (isArchiveError(e)) { finish("<div class='q' style='color:var(--ember)'>History needs an archive RPC — set Read RPC URL in Configuration.</div>"); }
+      else if (isArchiveError(e)) { finish("<div class='q' style='color:var(--ember)'>The history couldn't be read right now — retry in a minute.</div>"); }
       else { finish("<div class='q'>Couldn't read the ledger: " + escHtml(decodeErr(e)) + "</div>"); }
     });
   }
@@ -2815,8 +2831,8 @@ window.DYAdmin = (function () {
   // RUNG4-FIX-1 (Fix A) — the Price Desk owner-gate READS through this tamed PUBLIC endpoint (publicnode,
   // cast-verified), NEVER the wallet's BrowserProvider. A wallet's registered RPC may be weak/absent, so a
   // BrowserProvider owner() read could return null and the gate would falsely accuse the master. Writes still
-  // ride the wallet signer. W3-MAINNET-1: mainnet publicnode.
-  var PD_RPC = "https://polygon-bor-rpc.publicnode.com";
+  // ride the wallet signer. RPC-CLEANUP-1 (2026-10-30): our own read proxy — the free publicnode road is gone.
+  var PD_RPC = PROXY_URL;
   var PD_RARITIES = ["Mythic", "Legendary", "Epic", "Rare", "Uncommon", "Common"];
   var pdReadGen = 0; // read-generation guard — a stale LOAD never clobbers a newer one
   var pdChain = {}; // cardId -> { price, cap, remaining } (BigInt) | "busy"
@@ -3248,7 +3264,11 @@ window.DYAdmin = (function () {
       dayEndTs: dayEndTs,
       bundledCkKey: bundledCkKey,
       historyProvider: historyProvider,
+      toranaFindEligible: toranaFindEligible,   // RPC-CLEANUP-1: the "Find eligible" button's own handler (its onclick), for the one-press proof
       HEAD_BUFFER: HEAD_BUFFER,
+      PROXY_URL: PROXY_URL,       // RPC-CLEANUP-1
+      PROXY_SPAN: PROXY_SPAN,
+      isProxy: isProxy,
       LOG_CHUNK_START: LOG_CHUNK_START,
       LOG_CHUNK_FLOOR: LOG_CHUNK_FLOOR,
       SCAN_DEADLINE_FLOOR_MS: SCAN_DEADLINE_FLOOR_MS,
