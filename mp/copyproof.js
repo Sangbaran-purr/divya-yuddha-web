@@ -679,6 +679,9 @@ for (const [tag, line] of SR_LAW) {
   ok(tag + " — in §4 of the doc", norm(SR_DOC).indexOf(norm(line)) >= 0, line);
   ok(tag + " — carried verbatim by store.js", carriesIn(STORE, line, false), line);
 }
+ok("SR4 · the USD card and the bundle + top-up roads stop on a moved price with the SAME ruled sentence (owner ruling 2026-10-31)",
+   /__usd === "changed"\) return PRICE_CHANGED/.test(STORE) && /throw usdStop\("changed"\)/.test(STORE)
+   && /if \(shown == null \|\| F\.price !== shown\) return PRICE_CHANGED;/.test(STORE) && (STORE.match(/freshStop\(F, shownPrice\)/g) || []).length === 2);
 ok("SR3 · the purchase's fresh read is wired at every DYC entry point (approve and buy) and stops on a moved price",
    (STORE.match(/freshCardThen\(btn, msg, row, function \(\) \{ do(ApproveThenSwap|Buy)\(/g) || []).length >= 3 && /stop = PRICE_CHANGED/.test(STORE));
 

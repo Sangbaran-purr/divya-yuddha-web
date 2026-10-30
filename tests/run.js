@@ -19,7 +19,7 @@ const PICK = ARGS.filter(function (a) { return a.indexOf("--") !== 0; });
 
 // name → file. copyproof is already committed under mp/ and needs no chain; it runs first and fastest.
 const SUITES = [
-  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 465 },
+  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 471 },
   { name: "p4",            file: path.join(__dirname, "suites", "p4.js"), chain: true, expect: 7 },
   { name: "p8rig",         file: path.join(__dirname, "suites", "p8rig.js"), chain: true, expect: 7 },
   { name: "p7dom",         file: path.join(__dirname, "suites", "p7dom.js"), chain: true, expect: 4 },
@@ -63,7 +63,7 @@ const SUITES = [
   { name: "winst",         file: path.join(__dirname, "suites", "winst.js"), chain: true, expect: 14, capMs: 900000 },    // WINNINGS-INSTANT-1
   { name: "rpcroad",       file: path.join(__dirname, "suites", "rpcroad.js"), chain: true, expect: 24 },   // RPC-CLEANUP-1: one road — no free public RPC in any site read, plain error states, the console in one press
   { name: "readfail",      file: path.join(__dirname, "suites", "readfail.js"), chain: true, expect: 20 },   // RPC-CLEANUP-1: every failure face — the ruled sentence + Try again within its limit; Try again re-reads
-  { name: "storereads",    file: path.join(__dirname, "suites", "storereads.js"), chain: true, expect: 14 },   // STORE-READS-1: the store's read budget (≤3 wallet-less, ≤6 connected), no grid re-read on connect, the purchase's fresh read
+  { name: "storereads",    file: path.join(__dirname, "suites", "storereads.js"), chain: true, expect: 16 },   // STORE-READS-1: the store's read budget (≤3 wallet-less, ≤6 connected), no grid re-read on connect, the purchase's fresh read
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
   { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 34 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)

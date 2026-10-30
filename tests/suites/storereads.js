@@ -11,7 +11,7 @@
 //   V1 wallet-less visit ≤ 3 chain calls in ≤ 3 HTTP requests · V2 connected visit ≤ 6 · V3 a wallet connect re-reads no
 //   grid · V4 upstream calls == page calls (one multicall = one billed call) · V5 a purchase reads fresh BEFORE the wallet
 //   opens · V6 a moved price stops the purchase with the ruled sentence, nothing signed · V7 sold out after load → "This card
-//   is sold out." · V8 the multicall refused → the ruled store line + Try again, and NO per-card single calls
+//   is sold out." · V9/V10 the USD card and the bundle stop on a moved price with the same sentence · V8 the multicall refused → the ruled store line + Try again, and NO per-card single calls
 //   B1–B3 · breakages: the old wallet-change grid re-read put back · the purchase's fresh read removed · per-card singles put back
 const fs = require("fs");
 const path = require("path");
@@ -201,6 +201,41 @@ async function run() {
     ok("V7 · SOLD OUT after load: \"" + S.SOLD + "\" — nothing signed", (tileOf(h.w, 2).textContent || "").indexOf(S.SOLD) >= 0 && sends() === before,
        (tileOf(h.w, 2).textContent || "").replace(/\s+/g, " ").slice(0, 200));
     await (await c.wave.sale.setPrices([c.wave.ids[1]], [2000n * DEC])).wait();
+    H.teardown(h);
+  }
+
+  // ═══ V9 + V10 · the USD card and the bundle stop on a moved price with the SAME ruled sentence (owner ruling) ═══
+  {
+    // the USD card store's owner is fixed in the contract (the master) — impersonated here, on anvil only, to open it
+    const MASTER = await c.wave.usd.owner();
+    await c.provider.send("anvil_impersonateAccount", [MASTER]);
+    await c.provider.send("anvil_setBalance", [MASTER, "0x" + (10n * DEC).toString(16)]);
+    const usdM = c.wave.usd.connect(await c.provider.getSigner(MASTER));
+    await (await usdM.setOpen(true)).wait();                          // the USD card store open: the USD buttons appear
+    const h = await page(c, {});
+    await settled(h.w); await H.until(() => h.w.DYWallet.state.connected, 10000, "connected"); await H.sleep(1500);
+    const sends = () => h.eth.__calls.filter((m) => m === "eth_sendTransaction").length;
+    const before = sends();
+    await H.until(() => tileOf(h.w, 4) && tileOf(h.w, 4).querySelector(".st-usd") && !tileOf(h.w, 4).querySelector(".st-usd").disabled, 15000, "a USD button").catch(() => {});
+    await (await c.wave.sale.setPrices([c.wave.ids[4]], [2500n * DEC])).wait();          // USD 20 -> USD 25 after the page showed 20
+    const usdBtn = tileOf(h.w, 4) && tileOf(h.w, 4).querySelector(".st-usd");
+    if (usdBtn) usdBtn.click();
+    await H.until(() => (tileOf(h.w, 4).textContent || "").indexOf(S.CHANGED) >= 0, 15000, "the USD price-changed stop").catch(() => {});
+    const t9 = (tileOf(h.w, 4).textContent || "").replace(/\s+/g, " ");
+    ok("V9 · a USD CARD whose price moved after load: \"" + S.CHANGED + "\" — nothing signed, the tile repaints the new price",
+       !!usdBtn && t9.indexOf(S.CHANGED) >= 0 && sends() === before && /2,?500|USD 25/.test(t9), t9.slice(0, 220));
+    await (await c.wave.sale.setPrices([c.wave.ids[4]], [2000n * DEC])).wait();
+    // V10 — the bundle: its USDC price moves after the tile showed it
+    const usdc = c.addrs.usdc, was = await c.ps.bundlePrice(usdc);
+    await H.until(() => !!h.w.document.querySelector(".b-buy") && !h.w.document.querySelector(".b-buy").disabled, 15000, "the bundle buy button").catch(() => {});
+    await (await c.ps.setBundlePrice(usdc, was + 1000000n)).wait();                        // + USD 1
+    const bBtn = h.w.document.querySelector(".b-buy");
+    if (bBtn) bBtn.click();
+    await H.until(() => T(h.w, "#bundle-body").indexOf(S.CHANGED) >= 0, 15000, "the bundle price-changed stop").catch(() => {});
+    ok("V10 · the BUNDLE whose price moved after load: \"" + S.CHANGED + "\" — nothing signed",
+       !!bBtn && T(h.w, "#bundle-body").indexOf(S.CHANGED) >= 0 && sends() === before, T(h.w, "#bundle-body").slice(0, 220));
+    await (await c.ps.setBundlePrice(usdc, was)).wait();
+    await (await usdM.setOpen(false)).wait();
     H.teardown(h);
   }
 
