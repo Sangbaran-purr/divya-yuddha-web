@@ -109,7 +109,7 @@ async function run() {
     await H.until(() => /In stock/.test(bodyText(w)), 20000, "the tile to read stock from the SECOND endpoint");
     ok("A1 · THE BUYER'S CASE — endpoint 1 unreachable, the store still reads stock from endpoint 2",
        /In stock/.test(bodyText(w)), bodyText(w).slice(0, 140));
-    ok("A2 · and the failure sentence is nowhere on the tile", !/unavailable - refresh to retry/.test(bodyText(w)));
+    ok("A2 · and the failure sentence is nowhere on the tile", !/We couldn't load the store right now/.test(bodyText(w)));
     ok("A3 · the working endpoint really was the one asked", good.hits.length > 0, JSON.stringify(good.hits.slice(0, 4)));
     good.srv.close(); H.teardown(h);
   }
@@ -120,9 +120,9 @@ async function run() {
     const h = await H.storePage(c, c.player, { readUrls: [DEAD, good.url] });
     const w = h.w;
     await w.DYWallet.connect();
-    await H.until(() => !/your Torana could not be read/.test(bodyText(w)) && /In stock/.test(bodyText(w)), 20000, "the connected tile");
+    await H.until(() => !/We couldn't check your Torana right now — try again/.test(bodyText(w)) && /In stock/.test(bodyText(w)), 20000, "the connected tile");
     ok("A4 · OWNERSHIP survives the fall-through too — the Torana line is not a failure",
-       !/your Torana could not be read/.test(bodyText(w)), bodyText(w).slice(0, 160));
+       !/We couldn't check your Torana right now — try again/.test(bodyText(w)), bodyText(w).slice(0, 160));
     good.srv.close(); H.teardown(h);
   }
 
@@ -192,9 +192,9 @@ async function run() {
     const c = await H.chainStore();
     const h = await H.storePage(c, c.player, { readUrls: [DEAD, "http://127.0.0.1:2", "http://127.0.0.1:3"] });
     const w = h.w;
-    await H.until(() => /refresh to retry/.test(bodyText(w)), 20000, "the honest verdict, after every endpoint failed");
+    await H.until(() => /We couldn't load the store right now/.test(bodyText(w)), 20000, "the honest verdict, after every endpoint failed");
     ok("D1 · with EVERY endpoint dead the tile does say 'refresh to retry' — the verdict is still reachable",
-       /stock unavailable - refresh to retry/.test(bodyText(w)), bodyText(w).slice(0, 140));
+       /We couldn't load the store right now — try again/.test(bodyText(w)), bodyText(w).slice(0, 140));
     H.teardown(h);
   }
 
@@ -206,7 +206,7 @@ async function run() {
     const w = h.w;
     const first = bodyText(w);          // read the very first paint, before any read can have settled
     ok("E1 · THE FIRST PAINT IS A READING STATE, NOT A VERDICT",
-       /Reading the store/.test(first) && !/unavailable - refresh to retry/.test(first), first.slice(0, 140));
+       /Reading the store/.test(first) && !/We couldn't load the store right now/.test(first), first.slice(0, 140));
     await H.until(() => /In stock/.test(bodyText(w)), 20000, "the tile to settle");
     ok("E2 · and it resolves to the real answer once the read lands", /In stock/.test(bodyText(w)));
     slow.srv.close(); H.teardown(h);
@@ -231,11 +231,11 @@ async function run() {
     w.DYWallet._resetReadRoad();
     await w.DYStore._bundleRefresh();
     ok("K2 · A FAILED REFRESH KEEPS THE NUMBERS — 'In stock' is still there",
-       /In stock/.test(bodyText(w)) && !/stock unavailable/.test(bodyText(w)), bodyText(w).slice(0, 150));
+       /In stock/.test(bodyText(w)) && !/We couldn't load the store right now/.test(bodyText(w)), bodyText(w).slice(0, 150));
     ok("K3 · and it says so, quietly, instead of pretending they are fresh",
        /Couldn't refresh just now - showing the last reading\./.test(bodyText(w)), bodyText(w).slice(0, 200));
     ok("K4 · the Torana line is kept too, not replaced by its retry sentence",
-       !/your Torana could not be read/.test(bodyText(w)));
+       !/We couldn't check your Torana right now — try again/.test(bodyText(w)));
 
     // and the line clears on the next fully successful read
     w.DY_CONFIG.chain.readRpcUrls = [good.url];
@@ -258,7 +258,7 @@ async function run() {
     w.DYWallet.readProvider = function () { throw new Error("no read road"); };
     await w.DYStore._bundleRefresh();
     ok("K5a · when the ROAD ITSELF fails, the numbers are still kept",
-       /In stock/.test(bodyText(w)) && !/stock unavailable/.test(bodyText(w)), bodyText(w).slice(0, 150));
+       /In stock/.test(bodyText(w)) && !/We couldn't load the store right now/.test(bodyText(w)), bodyText(w).slice(0, 150));
     ok("K5b · and the quiet line says so", /Couldn't refresh just now/.test(bodyText(w)), bodyText(w).slice(0, 200));
     w.DYWallet.readProvider = realRP;
     good.srv.close(); H.teardown(h);
@@ -296,7 +296,7 @@ async function run() {
     await w.DYStore._bundleRefresh();
     const t = bodyText(w);
     ok("K8 · after an ACCOUNT SWITCH a failed read never shows the previous wallet's Torana",
-       /your Torana could not be read/.test(t), t.slice(0, 220));
+       /We couldn't check your Torana right now — try again/.test(t), t.slice(0, 220));
     ok("K9 · but the contract's OWN numbers may carry across the switch", /In stock/.test(t), t.slice(0, 150));
     good.srv.close(); H.teardown(h);
   }
@@ -313,7 +313,7 @@ async function run() {
     w.DYWallet._resetReadRoad();
     await w.DYStore._bundleRefresh();
     ok("K10 · a CHAIN CHANGE drops everything — no number survives to be shown on another chain",
-       /stock unavailable/.test(bodyText(w)), bodyText(w).slice(0, 180));
+       /We couldn't load the store right now/.test(bodyText(w)), bodyText(w).slice(0, 180));
     good.srv.close(); H.teardown(h);
   }
   {

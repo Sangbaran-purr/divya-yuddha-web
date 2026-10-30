@@ -496,10 +496,12 @@ window.DYDash = (function () {
   // auto-retry (rotating the provider), and offer a manual retry once exhausted. Never say "check the address."
   var readTrouble = false, readRetry = 0, readRetryTimer = null;
   var MAX_READ_RETRY = 5;
+  // RPC-CLEANUP-1 (owner ruling 2026-10-30, docs/READ_ROAD_v1.md §2) — the ruled failure line, with its Try again button
+  // (wired by wireReadRetry; the background auto-retries still run behind it).
+  var RR_DASH = "We couldn't load this right now — try again.";
+  var TRY_AGAIN = "Try again";
   function netMsg() {
-    return readRetry < MAX_READ_RETRY
-      ? "Network connection trouble — retrying…"
-      : "Network connection trouble. <a href='#' class='read-retry' style='color:var(--gold-burnished)'>Tap to retry</a>";
+    return RR_DASH + " <button type='button' class='read-retry try-again' style='background:none;border:1px solid currentColor;color:var(--gold-burnished, #d9a84e);border-radius:6px;padding:2px 10px;margin-left:6px;font:inherit;font-size:.9em;cursor:pointer'>" + TRY_AGAIN + "</button>";
   }
   function scheduleReadRetry() {
     readTrouble = true;
@@ -1396,7 +1398,7 @@ window.DYDash = (function () {
   }
 
   // S-LIVE-FIX-1 (A2): the ~66-chunk × 5-filter scan from deployBlock over a single free RPC gets throttled on-device;
-  // one rejected getLogs used to collapse the whole feed into "Network connection trouble". Two changes fix it:
+  // one rejected getLogs used to collapse the whole feed into the network-trouble face. Two changes fix it:
   //   (1) scan NEWEST→oldest, so a mid-scan throttle keeps the most RECENT events (the user's just-done actions);
   //   (2) a failed/throttled chunk yields the partial result and flags feedIncomplete — it never rejects the batch.
   var feedIncomplete = false;
@@ -2414,7 +2416,7 @@ window.DYDash = (function () {
   //  and screenshots one box; the root cause reads itself off the screen. Renders ONLY with ?diag=1;
   //  zero effect on live behaviour otherwise. Inline-styled (immune to a stale CSS cache).
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
-  var DIAG_BUILD = "mf48"; // the version this diagnostic ships in — compare against the LOADED stamp below
+  var DIAG_BUILD = "mf49"; // the version this diagnostic ships in — compare against the LOADED stamp below
   function diagScriptVersion() {
     try {
       var s = [].slice.call(document.scripts).map(function (x) { return x.src || ""; }).filter(function (u) { return /js\/dashboard\.js/.test(u); })[0] || "";

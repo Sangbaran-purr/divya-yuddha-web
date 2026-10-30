@@ -312,7 +312,12 @@ window.DYWallet = (function () {
       var ok = parseInt(id, 16) === Number(CFG.chain.id);
       chainSeen[url] = ok; chainPending[url] = null;
       return ok;
-    }, function () { chainSeen[url] = false; chainPending[url] = null; return false; });
+    }, function () {
+      // RPC-CLEANUP-1: a NETWORK failure is not a verdict — it is NOT cached, so the next read (a Try again) asks again.
+      // Only an ANSWER (a wrong chain id) is remembered for the visit. With one road and no free RPC behind it, caching an
+      // outage here would leave every read on the page dead until a reload.
+      chainPending[url] = null; return false;
+    });
     return chainPending[url];
   }
   // Walk the list. Resolves with the first real answer; rejects with a contract revert immediately; rejects with the

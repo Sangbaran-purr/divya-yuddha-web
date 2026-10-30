@@ -361,7 +361,10 @@
   }
   var BOTH_STAKES = "Once both stakes lock, the match begins.";
   //  MP-FIX-3A — the three sentences this rung adds. Each names ONE truth; none of them stands in for another.
-  var BALANCE_UNREAD = "Couldn't read your balance - tap to retry";
+  // RPC-CLEANUP-1 (owner ruling 2026-10-30, docs/READ_ROAD_v1.md §2) — the ruled line; the ROW is the Try again button
+  // (it carries data-liquid-retry and re-reads the balance), so "Try again" is its label, never a nested button.
+  var BALANCE_UNREAD = "We couldn't read your balance right now — try again.";
+  var TRY_AGAIN = "Try again";
   function NEED_POL(fee) {
     return fee ? ("You need a little POL for the network fee - this table costs ~" + fee + " POL to sit.")
                : "You need a little POL for the network fee - your wallet has none to pay it with.";
@@ -927,7 +930,7 @@
       var unread = !isFree && balanceUnread();
       var cls = "hall-tier-row" + (sheet.ctx && sheet.ctx.tierId === t.id ? " on" : "") + (unread ? " unread" : (aff ? "" : " unaffordable"));
       var right = isFree ? '<span class="hall-tier-note">no stake - human opponent</span>'
-        : unread ? '<span class="hall-tier-note">' + BALANCE_UNREAD + '</span>'
+        : unread ? '<span class="hall-tier-note">' + BALANCE_UNREAD + ' <span class="try-again" style="background:none;border:1px solid currentColor;color:var(--gold-burnished, #d9a84e);border-radius:6px;padding:2px 10px;margin-left:6px;font:inherit;font-size:.9em;cursor:pointer">' + TRY_AGAIN + '</span></span>'
         : (aff ? '<span class="hall-tier-usd">~' + t.usd + '</span>' : '<span class="hall-tier-note">not enough DYC</span>');
       rows += '<button class="' + cls + '" data-tier-row="' + t.id + '"' + (unread ? ' data-liquid-retry="1"' : (aff ? "" : " aria-disabled=\"true\"")) + '>' +
         medallionImg(t.medallion, "hall-medallion " + t.cls) + '<span class="hall-tier-label">' + t.label + '</span>' +

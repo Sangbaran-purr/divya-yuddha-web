@@ -410,13 +410,19 @@ window.DYTreasury = (function () {
 
   // --- RENDER: the cards hall ------------------------------------------------
   // mode: "cards" | "empty" | "busy"
+  // RPC-CLEANUP-1 (owner ruling 2026-10-30, docs/READ_ROAD_v1.md §2) — the ruled failure line + its Try again button,
+  // which re-runs the holdings read (force) for the same wallet, never a page reload.
+  var RR_CARDS = "We couldn't load your cards right now — try again.";
+  var TRY_AGAIN = "Try again";
+  var lastHoldingsRead = null;   // the arguments of the newest readHoldings, for the Try again button
   function renderHall(hall, mode, rows) {
     if (mode === "busy") {
       hall.className = "hall-empty";
       hall.innerHTML =
         '<div class="empty-plinth" aria-hidden="true"></div>' +
-        '<div class="display" style="font-size:1rem">The hall could not be read.</div>' +
-        '<div class="state-line bad">The chain is busy or unreachable — your cards are safe on-chain. Refresh to retry.</div>';
+        '<div class="state-line bad">' + RR_CARDS + ' <button type="button" class="try-again" id="tre-try-again" style="background:none;border:1px solid currentColor;color:var(--gold-burnished, #d9a84e);border-radius:6px;padding:2px 10px;margin-left:6px;font:inherit;font-size:.9em;cursor:pointer">' + TRY_AGAIN + '</button></div>';
+      var tb = hall.querySelector("#tre-try-again");
+      if (tb) tb.onclick = function () { if (lastHoldingsRead) readHoldings.apply(null, lastHoldingsRead.concat([true])); };
       return;
     }
     if (mode === "empty" || !rows || !rows.length) {
@@ -465,6 +471,7 @@ window.DYTreasury = (function () {
 
   // --- the connected read: mark + cards, read-once + refresh ------------------
   function readHoldings(addr, statusEl, markEl, hall, force) {
+    lastHoldingsRead = [addr, statusEl, markEl, hall];   // RPC-CLEANUP-1: the Try again button re-runs this read
     if (!force && cacheAddr === addr && cacheRows !== null && cacheMark !== undefined) {
       renderMark(markEl, cacheMark ? "held" : "none");
       renderHall(hall, "cards", filtered(cacheRows));

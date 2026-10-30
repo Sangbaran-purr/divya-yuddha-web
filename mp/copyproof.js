@@ -634,6 +634,39 @@ ok("WI6 · the cap is never written into the page: dashboard.js reads it from th
 ok("WI7 · the winnings desk's reserve line no longer asks for a smaller amount (the card has no amount field)",
    /ERR_WINNINGS = \{[\s\S]*?ReserveInsufficient: "The cash-out desk's reserve can't cover this right now\. Your winnings are safe; check back later\."/.test(DASH));
 
-const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length;
-console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across SIX pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
+// RPC-CLEANUP-1 — THE SEVENTH PAIR: docs/READ_ROAD_v1.md §2 (owner ruling 2026-10-30) → the page that shows each line.
+// With no free public RPC behind our proxy, these are the faces a buyer sees when a read fails — each with Try again.
+const RDOC = fs.readFileSync(path.resolve(__dirname, "..", "docs", "READ_ROAD_v1.md"), "utf8");
+const RR_DOC = (RDOC.split("## 2. The failure sentences")[1] || "").split("## 3.")[0];
+const rd = (f) => fs.readFileSync(path.resolve(__dirname, "..", f), "utf8");
+const RR_FILES = { dash: DASH, store: STORE, treasury: rd("js/treasury.js"), report: rd("js/report.js"), hall: HALL, rite: RITE, admin: rd("js/admin.js") };
+const RR_LAW = [
+  ["RR1 dashboard",  "We couldn't load this right now — try again.",            ["dash"]],
+  ["RR2 store",      "We couldn't load the store right now — try again.",       ["store"]],
+  ["RR3 market",     "We couldn't load the market right now — try again.",      ["store"]],
+  ["RR4 treasury",   "We couldn't load your cards right now — try again.",      ["treasury"]],
+  ["RR5 report",     "We couldn't load these figures right now — try again.",   ["report"]],
+  ["RR6 hall",       "We couldn't read your balance right now — try again.",    ["hall"]],
+  ["RR7 torana",     "We couldn't check your Torana right now — try again.",    ["store", "rite"]],
+  ["RR8 console",    "The site's read proxy is busy or unreachable — try again in a moment.", ["admin"]],
+  ["RR9 console-b",  "using the site's read proxy instead. A paid tier on your provider lifts this.", ["admin"],
+                     "using the site's read proxy instead[CHUNKS]. A paid tier on your provider lifts this."],   // the chunk count is a slot in the code
+  ["RR10 console-c", "The site's read proxy is busy or unreachable — retry in a minute, or set a dedicated Read RPC URL in Configuration.", ["admin"]],
+  ["RR11 console-d", "The history couldn't be read right now — retry in a minute.", ["admin"]],
+];
+console.log("\n── THE READ ROAD · READ_ROAD_v1 §2 ruled copy (doc → the page that shows it) ──");
+for (const [tag, line, files, codeForm] of RR_LAW) {
+  ok(tag + " — in §2 of the doc", norm(RR_DOC).indexOf(norm(line)) >= 0, line);
+  ok(tag + " — carried verbatim by " + files.join(" + "), files.every((f) => carriesIn(RR_FILES[f], codeForm || line, false)), codeForm || line);
+}
+ok("RR12 · every one of those faces carries its \"Try again\" control (the button's label is ruled too)",
+   ["dash", "store", "treasury", "report", "hall", "rite", "admin"].every((f) => /Try again/.test(RR_FILES[f])) && /\*\*Try again\*\*/.test(RDOC));
+ok("RR13 · the retired failure lines are GONE from the faces this ruling covers",
+   !/Network connection trouble/.test(DASH) && !/stock unavailable - refresh to retry/.test(STORE) && !/The Store is busy — refresh to retry/.test(STORE)
+   && !/The market is busy — refresh to retry/.test(STORE) && !/your Torana could not be read - refresh to retry/.test(STORE)
+   && !/The gate could not read your seal\./.test(RITE) && !/Couldn't read your balance - tap to retry/.test(HALL)
+   && !/The archive is busy or unreachable/.test(RR_FILES.admin) && !/Could not read the sale right now/.test(RR_FILES.report));
+
+const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length + RR_LAW.length;
+console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across SEVEN pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);

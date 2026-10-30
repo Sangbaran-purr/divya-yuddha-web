@@ -180,7 +180,7 @@ async function run() {
        T.violations.length === 0 && T.hosts.some((x) => x === PROXY_HOST) && !h.w.__fetches.some((u) => FREE_HOSTS.test(u)),
        JSON.stringify({ violations: T.violations, hosts: Array.from(new Set(T.hosts)) }));
     ok("DASH4 · control: on the healthy road the dashboard shows NO error line (so ERR1/ERR2 below are failure-specific)",
-       !/Network connection trouble/.test(txt(h.w, "#liq-note")) && txt(h.w, "#liq-amt") !== "—", txt(h.w, "#liq-note") + " / " + txt(h.w, "#liq-amt"));
+       !/We couldn't load this right now — try again\./.test(txt(h.w, "#liq-note")) && txt(h.w, "#liq-amt") !== "—", txt(h.w, "#liq-note") + " / " + txt(h.w, "#liq-amt"));
     H.teardown(h); dy.srv.close();
   }
 
@@ -240,7 +240,7 @@ async function run() {
     await h.w.DYWallet.connect();
     const t0 = Date.now();
     let shown = true;
-    try { await H.until(() => /Network connection trouble/.test(txt(h.w, "#liq-note")), 15000, "the plain error state"); } catch (e) { shown = false; }
+    try { await H.until(() => /We couldn't load this right now — try again\./.test(txt(h.w, "#liq-note")), 15000, "the plain error state"); } catch (e) { shown = false; }
     const out = { shown, secs: (Date.now() - t0) / 1000, note: txt(h.w, "#liq-note"), violations: T.violations.slice() };
     H.teardown(h);
     return out;
@@ -267,7 +267,7 @@ async function run() {
     const h = await H.storePage(c, c.player, { shippedRoads: true });
     const t0 = Date.now();
     let shown = true;
-    try { await H.until(() => /unavailable - refresh to retry/.test(txt(h.w, "#bundle-body")), 20000, "the store's plain error state"); } catch (e) { shown = false; }
+    try { await H.until(() => /We couldn't load the store right now — try again\./.test(txt(h.w, "#bundle-body")), 20000, "the store's plain error state"); } catch (e) { shown = false; }
     ok("ERR3 · dy-rpc refusing: the store's tile shows its plain 'unavailable - refresh to retry' within 20 s (" + ((Date.now() - t0) / 1000).toFixed(1) + " s)",
        shown && T.violations.length === 0, txt(h.w, "#bundle-body").slice(0, 160) + " " + JSON.stringify(T.violations));
     H.teardown(h); dy.srv.close();
@@ -283,7 +283,7 @@ async function run() {
     const t0 = Date.now();
     B.road.toranaFindEligible();
     let shown = true;
-    try { await H.until(() => /busy or unreachable/.test(txt(B.w, "#torana-status")), 30000, "the console's plain error state"); } catch (e) { shown = false; }
+    try { await H.until(() => /The site's read proxy is busy or unreachable — try again in a moment\./.test(txt(B.w, "#torana-status")), 30000, "the console's plain error state"); } catch (e) { shown = false; }
     ok("ERR4 · dy-rpc refusing: the console's Torana claims shows its plain 'busy or unreachable — try again' within 30 s (" + ((Date.now() - t0) / 1000).toFixed(1) + " s), the button re-enabled",
        shown && B.w.document.getElementById("torana-find").disabled === false && T.violations.length === 0, txt(B.w, "#torana-status"));
     B.dom.window.close(); dy.srv.close();
@@ -322,10 +322,10 @@ async function run() {
   {
     // the error state removed: the dashboard's plain line blanked — ERR1's check goes red
     const dsrc = fs.readFileSync(path.join(SITE, "js", "dashboard.js"), "utf8");
-    const a = '      ? "Network connection trouble — retrying…"\n      : "Network connection trouble. <a href=\'#\' class=\'read-retry\' style=\'color:var(--gold-burnished)\'>Tap to retry</a>";';
+    const a = "    return RR_DASH + \" <button type='button' class='read-retry try-again' style='";   // RPC-CLEANUP-1: the ruled line
     if (dsrc.split(a).length !== 2) ok("M3 · the error line was found exactly once", false);
     else {
-      const mut = dsrc.replace(a, '      ? ""\n      : "";');
+      const mut = dsrc.replace(a, "    return \"\"; \" <button type='button' class='read-retry try-again' style='");
       const dy = await startDyRpc("http://127.0.0.1:1", ["0x0000000000000000000000000000000000000001"]);
       const r = await dashboardFailing(dy.url, mut);
       ok("M3 · THE ERROR STATE REMOVED (the dashboard's plain line blanked) — CAUGHT: ERR1 goes red", !r.shown, r.note);

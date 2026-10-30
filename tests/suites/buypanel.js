@@ -93,12 +93,12 @@ async function typingSurvives(c, p) {
   await w.DYWallet.connect(); await H.sleep(600); await calc();
   const a = w.document.activeElement;
   out.connect = amt() === "250" && usdcOn() && a && a.id === "buy-amt" && a.selectionStart === 2;
-  // a failed read: every RPC refused → the page's own "Network connection trouble" → its retry recovers the calculator
+  // a failed read: every RPC refused → the page's own "We couldn't load this right now — try again" → its retry recovers the calculator
   const realGet = ethers.FetchRequest.createGetUrlFunc();
   ethers.FetchRequest.registerGetUrl(async () => { throw new Error("connect ECONNREFUSED (proof: the line is down)"); });
   eth.__switchTo(c.player);
   let sawTrouble = false;
-  try { await H.until(() => /Network connection trouble/.test(body(w)), 15000, "the network message"); sawTrouble = true; } catch (e) {}
+  try { await H.until(() => /We couldn't load this right now — try again/.test(body(w)), 15000, "the network message"); sawTrouble = true; } catch (e) {}
   ethers.FetchRequest.registerGetUrl(realGet);
   await H.until(() => !!w.document.getElementById("buy-go"), 30000, "the retry").catch(() => {});
   out.failedRead = sawTrouble && amt() === "250" && usdcOn();

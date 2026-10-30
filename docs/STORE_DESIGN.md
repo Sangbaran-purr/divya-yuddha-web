@@ -471,3 +471,5 @@ are not rediscovered later as if they were new.
    accurate about the money and wrong about the thing. PRE-EXISTING, not a
    STORE-READ-2 regression - the same call stood before the pre-cast read went in.
    Deferred by ruling; it needs either a second ruled line or a slot for the noun.
+
+> **Superseded (2026-10-30, RPC-CLEANUP-1):** the read-failure wording here ("stock unavailable - refresh to retry") is replaced by the ruled sentences in `docs/READ_ROAD_v1.md` §2, each with a Try again button.

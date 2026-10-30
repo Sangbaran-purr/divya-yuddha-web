@@ -217,7 +217,7 @@ async function run() {
        R("js/store.js").indexOf("No wallet in this browser — you may still browse. Install a wallet to buy.") >= 0);
     const rj = R("js/report.js");
     ok("TX5 · report: redeemed DYC 'returned to the pool'; a failed read says refresh, not 'the contract address may be wrong'",
-       rj.indexOf("Total redeemed — DYC returned to the pool") >= 0 && rj.indexOf("Could not read the sale right now — refresh to retry.") >= 0);
+       rj.indexOf("Total redeemed — DYC returned to the pool") >= 0 && rj.indexOf("We couldn't load these figures right now — try again.") >= 0);
     const g = R("register.html");
     // ICO-SIMPLE-1 (owner rulings 2026-10-25): the presale form is retired; register.html only forwards to the buy panel
     ok("TX6 · register: a redirect to the dashboard's buy panel — no form, no email step, none of the old registration copy",

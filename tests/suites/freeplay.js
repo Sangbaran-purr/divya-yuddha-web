@@ -130,8 +130,8 @@ async function run() {
     const w = r.w;
     await settle(w, () => /could not read your seal/.test(txt($(w, "rite-msg"))), 20000, "the busy state");
     ok("RT16 · Torana read FAILING on Polygon (busy): the busy line stays AND Enter 'play solo — free' stands",
-       txt($(w, "rite-msg")) === "The gate could not read your seal." && btnText(w) === "Enterplay solo — free" && shown($(w, "rite-action")) &&
-       /Read the seal again/.test(txt($(w, "rite-line"))) && !shown($(w, "rite-doorline")), btnText(w) + " | " + txt($(w, "rite-line")));
+       txt($(w, "rite-msg")) === "We couldn't check your Torana right now — try again." && btnText(w) === "Enterplay solo — free" && shown($(w, "rite-action")) &&
+       /Try again/.test(txt($(w, "rite-line"))) && !shown($(w, "rite-doorline")), btnText(w) + " | " + txt($(w, "rite-line")));
     H.click(w, "#rite-action"); H.click(w, "#rite-action");
     const calls = plausibleCalls(w);
     ok("RT17 · …Enter takes the player in and fires NO solo_start (GUEST-PLAY-1: the first battle fires it); the visit's tags stay in the session",
@@ -315,7 +315,7 @@ async function run() {
   const rite = fs.readFileSync(path.join(SITE, "rite.html"), "utf8"), hallHtml = fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8");
   ok("ST1 · rite.html loads js/solotrack.js?v=t1 (after wallet.js, before the page's own script)",
      /<script src="js\/wallet\.js\?v=s1t"><\/script>\s*<script src="js\/solotrack\.js\?v=t1"><\/script>\s*<script>/.test(rite));
-  ok("ST2 · mp/hall.html loads hall.js?v=h37 (the gate screen moved, then the stake parse)", /<script src="hall\.js\?v=h37"><\/script>/.test(hallHtml));
+  ok("ST2 · mp/hall.html loads hall.js?v=h38 (the gate screen moved, then the stake parse)", /<script src="hall\.js\?v=h38"><\/script>/.test(hallHtml));
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));   // the runner's own format
   process.exit(fail ? 1 : 0);

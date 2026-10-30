@@ -115,13 +115,17 @@ const E_OTHER = { message: "could not coalesce error" };
   };
   const STAKE = (10n * 10n ** 18n).toString();
   const unread = renderRow(null, STAKE), poor = renderRow(0n, STAKE), rich = renderRow(500n * 10n ** 18n, STAKE);
-  ok("C1 · an UNREAD balance says so, and offers the retry", /Couldn't read your balance/.test(unread), unread.slice(0, 160));
+  ok("C1 · an UNREAD balance says so, and offers the retry", /We couldn't read your balance right now — try again\./.test(unread) && /Try again/.test(unread), unread.slice(0, 160));
   ok("C2 · and never says insufficient", !/insufficient/i.test(unread), unread.slice(0, 160));
   ok("C3 · and the row stays ACTIONABLE — no aria-disabled, and it carries the retry hook",
      !/aria-disabled/.test(unread) && /data-liquid-retry="1"/.test(unread), unread.slice(0, 200));
   ok("C4 · a balance we READ and that is short still says insufficient, and still disables",
      /not enough DYC/.test(poor) && /aria-disabled/.test(poor), poor.slice(0, 160));   // SITE-AUDIT-1 batch 2 wording
   ok("C5 · a wallet that can afford it is offered the table", !/insufficient|not enough DYC/i.test(rich) && !/aria-disabled/.test(rich));
+  // RPC-CLEANUP-1 (docs/READ_ROAD_v1.md §2) — the row IS the Try again button: its tap routes to the balance re-read
+  const hallSrc = fs.readFileSync(path.join(SITE, "mp", "hall.js"), "utf8");
+  ok("C6 · Try again RE-READS: the unread row's tap (data-liquid-retry) goes to readLiquidAgain → readLiquid on the proxy (E3 drives that read)",
+     /if \(b\.getAttribute\("data-liquid-retry"\)\) \{ readLiquidAgain\(\); return; \}/.test(hallSrc) && /function readLiquidAgain\(\) \{ loadEthers\(\)\.then\(function \(ethers\) \{ readLiquid\(ethers\)/.test(hallSrc));
   // MUTANT — collapse unknown back into short and C1/C3 go red
   const collapsed = rowSrc.replace("var unread = !isFree && balanceUnread();", "var unread = false;");
   const mut = new Function("CFG", "liquid", "stakeWei", [DEC_SRC, DYCOF, COPY_SRC,

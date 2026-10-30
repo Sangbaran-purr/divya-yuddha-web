@@ -76,6 +76,13 @@ window.DYReport = (function () {
     return "<a class='rep-verify' target='_blank' rel='noopener' href='" + explorer() + "/address/" + addr + "'>" +
       (label || "verify on-chain") + " ↗</a>";
   }
+  // RPC-CLEANUP-1 (owner ruling 2026-10-30, docs/READ_ROAD_v1.md §2) — the ruled failure line for every section + its Try
+  // again button (one delegated handler, wired in mount(), re-runs the whole report's reads).
+  var RR_REPORT = "We couldn't load these figures right now — try again.";
+  var TRY_AGAIN = "Try again";
+  function repFail() {
+    return "<div class='notlive'>" + RR_REPORT + " <button type='button' class='rep-retry try-again' style='background:none;border:1px solid currentColor;color:var(--gold-burnished, #d9a84e);border-radius:6px;padding:2px 10px;margin-left:6px;font:inherit;font-size:.9em;cursor:pointer'>" + TRY_AGAIN + "</button></div>";
+  }
   function notLive(label) {
     return "<div class='notlive'><b>Not yet live</b>" + label +
       " will appear here the moment the contract is deployed. Nothing is wrong — the raise simply hasn't opened yet.</div>";
@@ -162,7 +169,7 @@ window.DYReport = (function () {
           "<div class='rep-figrow'><span>Buyers <span class='rep-src'>from event logs</span></span><b>" + (buyers == null ? "—" : buyers) + "</b></div>" +
           "<div class='rep-verifyrow'>" + verify(c.dycoinSale, "Verify the sale contract") + "</div>";
       });
-    }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the sale right now — refresh to retry.</div>"; });
+    }).catch(function () { b.innerHTML = repFail(); });
   }
   function roundBlock(name, price, sold, cap) {
     var pct = pctOf(sold, cap);
@@ -196,7 +203,7 @@ window.DYReport = (function () {
         "<div class='rep-figrow'><span>Released &amp; claimed <span class='rep-src'>from event logs</span></span><b>" + (claimed == null ? "—" : fmtDyc(claimed) + " DYC") + "</b></div>" +
         "<div class='rep-note'>85% of every purchase vests linearly across the two years after exchange listing. Before listing, nothing has matured — released stays at zero.</div>" +
         "<div class='rep-verifyrow'>" + verify(c.vestingVault, "Verify the vault contract") + "</div>";
-    }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the vault.</div>"; });
+    }).catch(function () { b.innerHTML = repFail(); });
   }
   function sumClaimed(provider, c) {
     return provider.getBlockNumber().then(function (latest) {
@@ -229,7 +236,7 @@ window.DYReport = (function () {
           "<div class='rep-figrow'><span>Runway at the current pace</span><b>" + (runway == null ? "— (nothing earning yet)" : (runway.toString() + " days")) + "</b></div>" +
           "<div class='rep-note'>Runway is an estimate: pool remaining ÷ (0.4%/day on every ROI-earning position — direct stakes and vested-registered positions alike). It lengthens as ROI is redeemed back into the pool and shortens as more DYC starts earning.</div>" +
           "<div class='rep-verifyrow'>" + verify(c.holderStaking, "Verify the staking contract") + "</div>";
-      }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the reward pool.</div>"; });
+      }).catch(function () { b.innerHTML = repFail(); });
   }
 
   function renderDesk(provider) {
@@ -244,7 +251,7 @@ window.DYReport = (function () {
         "<div class='rep-figrow'><span>Total redeemed — DYC returned to the pool <span class='rep-src'>from event logs</span></span><b>" + (red == null ? "—" : fmtDyc(red.dyc) + " DYC") + "</b></div>" +
         "<div class='rep-note'>The desk holds only USDT and moves no DYC. Redeeming ROI returns that DYC to the reward pool, so redemptions extend the pool's runway rather than draining it.</div>" +
         "<div class='rep-verifyrow'>" + verify(c.roiRedemption, "Verify the desk contract") + "</div>";
-    }).catch(function () { b.innerHTML = "<div class='notlive'>Could not read the desk.</div>"; });
+    }).catch(function () { b.innerHTML = repFail(); });
   }
   function sumRedeemed(provider, c) {
     return provider.getBlockNumber().then(function (latest) {
@@ -287,11 +294,18 @@ window.DYReport = (function () {
     }).catch(function () {
       scheduleReportRetry();
       ["sale-body", "vault-body", "pool-body", "desk-body"].forEach(function (id) {
-        $(id).innerHTML = "<div class='notlive'>Network connection trouble — retrying…</div>";
+        $(id).innerHTML = repFail();
       });
     });
   }
 
-  function mount() { refresh(); }
+  function mount() {
+    document.addEventListener("click", function (e) {
+      var t = e.target && e.target.closest ? e.target.closest(".rep-retry") : null;
+      if (!t) return;
+      e.preventDefault(); reportRetry = 0; resetReadProvider(); refresh();
+    });
+    refresh();
+  }
   return { mount: mount, _refresh: refresh, _cfg: cfg };
 })();

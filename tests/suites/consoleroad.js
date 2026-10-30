@@ -370,7 +370,7 @@ async function main() {
     ok("F3 · a 5xx/429 is the RATE class — same endpoint, just busy", road.isRateLimited(rate) === true);
     ok("F4 · the deadline still carries its own mark through the funnel", dl.__deadline === true);
     const src = fs.readFileSync(path.join(SITE, "js/admin.js"), "utf8");
-    const funnel = src.indexOf('The archive is busy or unreachable');
+    const funnel = src.indexOf("The site's read proxy is busy or unreachable — try again in a moment.");   // RPC-CLEANUP-1: the ruled sentence
     const log = src.lastIndexOf('console.error("[DY admin] TORANA claims read failed:', funnel);   // TORANA-AUTO-1: the panel's read was renamed with it
     ok("F5 · THE TRUTH IS LOGGED — the underlying error reaches the console BEFORE the three-way funnel collapses it",
        log > 0 && log < funnel);

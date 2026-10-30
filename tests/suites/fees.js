@@ -249,8 +249,8 @@ async function run() {
     const carrying = pages.filter((p) => fs.readFileSync(path.join(SITE, p), "utf8").indexOf("wallet.js?v=") >= 0);
     ok("X1 · wallet.js is stamped s1t on every page that loads it (" + carrying.length + ")",
        carrying.length === 8 && carrying.every((p) => /wallet\.js\?v=s1t/.test(fs.readFileSync(path.join(SITE, p), "utf8"))));
-    ok("X2 · dashboard.js mf48 and hall.js h37",
-       /js\/dashboard\.js\?v=mf48/.test(fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8")) && /hall\.js\?v=h37/.test(fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8")));
+    ok("X2 · dashboard.js mf49 and hall.js h38",
+       /js\/dashboard\.js\?v=mf49/.test(fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8")) && /hall\.js\?v=h38/.test(fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8")));
   }
 
   console.log("──\n" + (fail === 0 ? "ALL GREEN — " + pass + "/" + (pass + fail) : "FAILURES — " + fail + " of " + (pass + fail)));

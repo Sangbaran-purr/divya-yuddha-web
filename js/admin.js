@@ -2194,7 +2194,7 @@ window.DYAdmin = (function () {
       if (find) find.disabled = false;
       console.error("[DY admin] TORANA claims read failed:", { deadline: !!(e && e.__deadline), rateLimited: isRateLimited(e), archive: isArchiveError(e),
         range: isRangeError(e), code: e && (e.code || (e.error && e.error.code)), shortMessage: e && e.shortMessage, message: e && e.message }, e);
-      if ((e && e.__deadline) || isRateLimited(e) || isArchiveError(e)) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>The archive is busy or unreachable</span> — try again in a moment."; }
+      if ((e && e.__deadline) || isRateLimited(e) || isArchiveError(e)) { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>The site's read proxy is busy or unreachable — try again in a moment.</span> <button type='button' class='try-again' id='torana-try-again' style='background:none;border:1px solid currentColor;color:var(--gold-burnished, #d9a84e);border-radius:6px;padding:2px 10px;margin-left:6px;font:inherit;font-size:.9em;cursor:pointer'>Try again</button>"; var tg = $("torana-try-again"); if (tg) tg.onclick = toranaFindEligible; }   // RPC-CLEANUP-1 (docs/READ_ROAD_v1.md §2)
       else { st.style.color = "var(--gold-aged)"; st.innerHTML = "<span class='bad'>Could not read purchases</span> — check the DYCoinSale address + network."; }
     });
   }

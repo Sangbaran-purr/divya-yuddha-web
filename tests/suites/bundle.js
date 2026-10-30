@@ -110,7 +110,7 @@ async function main() {
     // endpoints the tile reads P10, and "refresh to retry" is reached only after every endpoint has failed.
     ok("before the read lands it says it is READING — never a verdict, never a false Sold out (the first paint)",
        /Reading the store/.test(String(firstPaint))
-       && !/stock unavailable - refresh to retry/.test(String(firstPaint))
+       && !/We couldn't load the store right now — try again/.test(String(firstPaint))
        && !/sold out/i.test(String(firstPaint)), String(firstPaint).slice(0, 120));
 
     await connect(w);
@@ -483,9 +483,9 @@ async function main() {
     await deal(c, "usdc", c.player.address, 25n * DEC6);
     const h = await H.storePage(c, c.player, { ls: { "dy::readRpcUrl": "http://127.0.0.1:1" } });
     const w = h.w;
-    await waitFor("the sentinel", () => /stock unavailable/.test(tile(w)));
+    await waitFor("the sentinel", () => /We couldn't load the store right now/.test(tile(w)));
     ok("stock unavailable — refresh to retry (never Sold out)",
-       /stock unavailable - refresh to retry/.test(tile(w)) && tile(w).indexOf(P6B) < 0 && tile(w).indexOf(P6) < 0,
+       /We couldn't load the store right now — try again/.test(tile(w)) && tile(w).indexOf(P6B) < 0 && tile(w).indexOf(P6) < 0,
        tile(w).slice(0, 200));
     ok("and it never claims the wallet holds no Torana", !/buy the bundle first/.test(tile(w)));
     H.teardown(h);

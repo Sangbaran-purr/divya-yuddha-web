@@ -332,7 +332,8 @@ async function storePage(c, player, opts) {
     w.console.info = function () { w.__console.push(Array.prototype.join.call(arguments, " ")); if (keep && opts.echoConsole) keep.apply(null, arguments); };
   }
   w.DY_CONFIG.contracts.waveCardSale = opts.waveCardSale || null;   // the wave-card tabs are OUT of scope unless a suite brings its own sale
-  w.DY_CONFIG.contracts.waveCardMarket = null;
+  w.DY_CONFIG.contracts.waveCardMarket = opts.waveCardMarket || null;   // RPC-CLEANUP-1: a suite may bring its own market
+  if (opts.waveCardNFT) w.DY_CONFIG.contracts.waveCardNFT = opts.waveCardNFT;
   w.DY_CONFIG.contracts.cardUsdStore = opts.cardUsdStore || null;   // CARD-STORE-1 C3: hermetic — never the mainnet store on a local chain
   run(path.join(SITE, "js/wallet.js"));
   run(path.join(SITE, "js/cards.js"));
@@ -532,7 +533,7 @@ async function ritePage(c, player, opts) {
     if (/allowlist/.test(String(u))) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(opts.allowlist || []) });
     return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
   };
-  w.localStorage.setItem("dy::readRpcUrl", RPC);
+  if (!opts.shippedRoads) w.localStorage.setItem("dy::readRpcUrl", RPC);   // RPC-CLEANUP-1: see dashboardPage
   w.localStorage.setItem("dy_site_entered", "1");       // skip the one-time threshold notice: Enter goes straight to the door
   for (const [k, v] of Object.entries(opts.ls || {})) w.localStorage.setItem(k, v);
   const run = (code) => w.eval(code);

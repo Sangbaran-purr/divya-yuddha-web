@@ -19,7 +19,7 @@ const PICK = ARGS.filter(function (a) { return a.indexOf("--") !== 0; });
 
 // name → file. copyproof is already committed under mp/ and needs no chain; it runs first and fastest.
 const SUITES = [
-  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 441 },
+  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 465 },
   { name: "p4",            file: path.join(__dirname, "suites", "p4.js"), chain: true, expect: 7 },
   { name: "p8rig",         file: path.join(__dirname, "suites", "p8rig.js"), chain: true, expect: 7 },
   { name: "p7dom",         file: path.join(__dirname, "suites", "p7dom.js"), chain: true, expect: 4 },
@@ -62,6 +62,7 @@ const SUITES = [
   { name: "torana",        file: path.join(__dirname, "suites", "torana.js"), chain: true, expect: 15, capMs: 900000 },   // TORANA-AUTO-1
   { name: "winst",         file: path.join(__dirname, "suites", "winst.js"), chain: true, expect: 14, capMs: 900000 },    // WINNINGS-INSTANT-1
   { name: "rpcroad",       file: path.join(__dirname, "suites", "rpcroad.js"), chain: true, expect: 24 },   // RPC-CLEANUP-1: one road — no free public RPC in any site read, plain error states, the console in one press
+  { name: "readfail",      file: path.join(__dirname, "suites", "readfail.js"), chain: true, expect: 20 },   // RPC-CLEANUP-1: every failure face — the ruled sentence + Try again within its limit; Try again re-reads
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
   { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 34 },
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)
@@ -70,7 +71,7 @@ const SUITES = [
   { name: "hallframe",     file: path.join(__dirname, "suites", "hallframe.js"), chain: false, expect: 32 },
   // MP-FIX-3A: the Hall's stake refusals — one sentence per truth, an unread balance that says so, the chain guard,
   // the read failover and the pre-flight line (source + real ethers decode + mutants; no chain, no network).
-  { name: "hallstake",     file: path.join(__dirname, "suites", "hallstake.js"), chain: false, expect: 34 },
+  { name: "hallstake",     file: path.join(__dirname, "suites", "hallstake.js"), chain: false, expect: 35 },
   // MINI-GAMES-1 R1: the Daily Puzzle — 14 puzzles, each solved to EXACTLY ONE winning play by the offline solver over the
   // site's copy of the real engine; the solver's refusals (two wins, none, malformed, unknown card, luck) and mutants.
   // R4: the weekly job adds puzzles, and this suite checks each one (check P) — 34 fixed checks + one per puzzle

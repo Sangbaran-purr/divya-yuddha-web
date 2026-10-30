@@ -78,6 +78,21 @@ window.DYStore = (function () {
     e.textContent = s;
     return e;
   }
+  // RPC-CLEANUP-1 (owner ruling 2026-10-30, docs/READ_ROAD_v1.md §2) — the ruled failure lines; each carries a Try again
+  // button that re-runs ITS OWN read (never a page reload).
+  var RR_STORE = "We couldn't load the store right now — try again.";
+  var RR_MARKET = "We couldn't load the market right now — try again.";
+  var RR_TORANA = "We couldn't check your Torana right now — try again.";
+  var TRY_AGAIN = "Try again";
+  var TRY_STYLE = "background:none;border:1px solid currentColor;color:var(--gold-burnished, #d9a84e);border-radius:6px;padding:2px 10px;margin-left:6px;font:inherit;font-size:.9em;cursor:pointer";
+  function failLine(tag, cls, line, retry) {
+    var d = el(tag, cls);
+    d.appendChild(document.createTextNode(line + " "));
+    var b = el("button", "try-again"); b.type = "button"; b.textContent = TRY_AGAIN; b.setAttribute("style", TRY_STYLE);
+    b.onclick = function (e) { e.preventDefault(); retry(); };
+    d.appendChild(b);
+    return d;
+  }
   function saleAddr() { return CFG.contracts && CFG.contracts.waveCardSale; }
   function marketAddr() { return CFG.contracts && CFG.contracts.waveCardMarket; }
   function saleConfigured() { return !!saleAddr(); }
@@ -429,7 +444,8 @@ window.DYStore = (function () {
       ? shown.length + facWord + " cards for sale."
       : (openState === "closed"
         ? shown.length + facWord + " cards — the Store is configured but <b>not yet open</b> — prices show; buying wakes when the owner opens sales."
-        : "<span class='bad'>The Store is busy — refresh to retry.</span>");
+        : "");
+    if (openState === "busy") { statusEl.innerHTML = ""; statusEl.appendChild(failLine("span", "bad", RR_STORE, function () { loadBuy(statusEl, grid); })); }
     shown.forEach(function (row) {
       var card = resolveCard(row.card.cardId);
       var cf = cardFigure(card);
@@ -825,7 +841,8 @@ window.DYStore = (function () {
       ? active.length + " cards listed."
       : (openState === "closed"
         ? "Trading is <b>paused</b> — listings show; buying wakes when the owner reopens the market."
-        : "<span class='bad'>The market is busy — refresh to retry.</span>");
+        : "");
+    if (openState === "busy") { statusEl.innerHTML = ""; statusEl.appendChild(failLine("span", "bad", RR_MARKET, function () { loadMarket(statusEl, grid); })); }
     // one action-builder reused by the grid door AND the zoom door (identical market flow)
     function wireMarketAction(r, price, seller, mine, actionsEl, msgEl, refresh) {
       if (mine) {
@@ -1958,7 +1975,7 @@ window.DYStore = (function () {
   // "N bundles" a fiction. In stock / Sold out / unavailable, nothing more.
   function stockLine(st) {
     if (bReading) return { cls: "b-stock busy", text: B_P10 };   // still walking the endpoints — not a verdict
-    if (!st || st.stock == null || st.open == null) return { cls: "b-stock busy", text: "stock unavailable - refresh to retry" };
+    if (!st || st.stock == null || st.open == null) return { cls: "b-stock busy", text: RR_STORE, retry: true };   // RPC-CLEANUP-1
     if (st.open === false) return { cls: "b-stock bad", text: B_P6 };
     if (st.packSize != null && st.stock < st.packSize) return { cls: "b-stock bad", text: B_P6B };
     return { cls: "b-stock ok", text: "In stock" };
@@ -2007,7 +2024,8 @@ window.DYStore = (function () {
     //   connected non-holder); only the HOLDER's face drops it, and that face is priced by P3 + its own hero, never by
     //   a second price line — §11 says it once.
     var stk = stockLine(st);
-    var stockEl = txt("div", stk.cls, stk.text);   // appended by each face, UNDER its own price (S-BUNDLE-2)
+    var bRetry = function () { bReceipt = null; bFlash = null; if (bRefreshFn) bRefreshFn(); };   // RPC-CLEANUP-1: the tile's own refresh
+    var stockEl = stk.retry ? failLine("div", stk.cls, stk.text, bRetry) : txt("div", stk.cls, stk.text);   // appended by each face, UNDER its own price (S-BUNDLE-2)
     // P11 rides directly under the stock line on EVERY face, so a kept reading is never passed off as a fresh one.
     // A fresh element per face: one node cannot be appended to two parents.
     var staleLine = function () { return (!bReading && bStale) ? txt("div", "b-stock busy", B_P11) : null; };
@@ -2054,7 +2072,7 @@ window.DYStore = (function () {
       body.appendChild(txt("div", "b-title", BUNDLE_HEADING));
       body.appendChild(priceHero("USD 20"));
       body.appendChild(stockEl); (function(){ var sx = staleLine(); if (sx) body.appendChild(sx); })();
-      body.appendChild(txt("div", "b-stock busy", bReading ? B_P10 : "your Torana could not be read - refresh to retry"));
+      body.appendChild(bReading ? txt("div", "b-stock busy", B_P10) : failLine("div", "b-stock busy", RR_TORANA, bRetry));   // RPC-CLEANUP-1
       body.appendChild(msg); card.appendChild(body); host.appendChild(card); return;
     }
 

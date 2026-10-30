@@ -114,3 +114,5 @@ guard to suit the harness was the other option and would have been the wrong way
 
 **Scope note:** this put `tests/lib.js` in the diff, which the ruling's scope line did not list. It is test
 infrastructure, and the alternative was a hole in shipped code.
+
+> **Superseded (2026-10-30, RPC-CLEANUP-1):** the read-failure wording here ("Couldn't read your balance — tap to retry") is replaced by the ruled sentences in `docs/READ_ROAD_v1.md` §2, each with a Try again button.
