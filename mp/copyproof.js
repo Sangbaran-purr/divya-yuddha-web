@@ -667,6 +667,21 @@ ok("RR13 · the retired failure lines are GONE from the faces this ruling covers
    && !/The gate could not read your seal\./.test(RITE) && !/Couldn't read your balance - tap to retry/.test(HALL)
    && !/The archive is busy or unreachable/.test(RR_FILES.admin) && !/Could not read the sale right now/.test(RR_FILES.report));
 
-const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length + RR_LAW.length;
-console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across SEVEN pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
+// STORE-READS-1 — the purchase's fresh read: the ruled price-changed line (READ_ROAD_v1 §4 → js/store.js), and the sold-out
+// line it keeps. Both are carried by the store; the doc names them in its §4 table.
+const SR_DOC = (RDOC.split("## 4. The store's reads")[1] || "");
+const SR_LAW = [
+  ["SR1 price-changed", "The price just changed. Check the new price and try again."],
+  ["SR2 sold-out",      "This card is sold out."],
+];
+console.log("\n── THE STORE'S READS · READ_ROAD_v1 §4 ruled copy (doc → js/store.js) ──");
+for (const [tag, line] of SR_LAW) {
+  ok(tag + " — in §4 of the doc", norm(SR_DOC).indexOf(norm(line)) >= 0, line);
+  ok(tag + " — carried verbatim by store.js", carriesIn(STORE, line, false), line);
+}
+ok("SR3 · the purchase's fresh read is wired at every DYC entry point (approve and buy) and stops on a moved price",
+   (STORE.match(/freshCardThen\(btn, msg, row, function \(\) \{ do(ApproveThenSwap|Buy)\(/g) || []).length >= 3 && /stop = PRICE_CHANGED/.test(STORE));
+
+const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length + RR_LAW.length + SR_LAW.length;
+console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across EIGHT pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);

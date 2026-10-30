@@ -365,6 +365,34 @@ window.DYWallet = (function () {
     front.send = function (method, params) { return sendWalking(method, params); };
     return front;
   }
+  // --- STORE-READS-1 (owner rulings 2026-10-30) — ONE CALL FOR MANY READS. Multicall3.aggregate3 on the read road: the
+  //     store's whole catalog (87 cards × price + stock, plus its flags) and a wallet's own figures each become ONE
+  //     eth_call instead of hundreds — every one of which the upstream bills. Our proxy serves aggregate3 only when every
+  //     inner target is one of our contracts. `calls` = [{ target, iface (an ethers Interface), fn, args }]. Resolves to
+  //     one { ok, v } per call, in order: a call that reverts or does not decode is { ok:false } (the caller's busy face),
+  //     never a throw. The WHOLE call failing (proxy down / refused) REJECTS — the caller shows its ruled failure line;
+  //     it never falls back to single calls (owner ruling 5).
+  var MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+  var MC3_ABI = ["function aggregate3((address target, bool allowFailure, bytes callData)[] calls) view returns ((bool success, bytes returnData)[] returnData)"];
+  var MC_MAX = 400;   // dy-rpc's MAX_MULTICALL_INNER
+  function multicall(calls) {
+    var e = window.ethers;
+    if (!calls.length) return Promise.resolve([]);
+    if (calls.length > MC_MAX) {   // a catalog past the proxy's cap is several aggregate3s — still never single calls
+      var parts = [];
+      for (var i = 0; i < calls.length; i += MC_MAX) parts.push(multicall(calls.slice(i, i + MC_MAX)));
+      return Promise.all(parts).then(function (rs) { return [].concat.apply([], rs); });
+    }
+    var mc = new e.Contract((CFG.chain && CFG.chain.multicall3) || MULTICALL3, MC3_ABI, readProvider());
+    var enc = calls.map(function (c) { return { target: c.target, allowFailure: true, callData: c.iface.encodeFunctionData(c.fn, c.args || []) }; });
+    return mc.aggregate3(enc).then(function (res) {
+      return res.map(function (r, i) {
+        if (!r.success) return { ok: false };
+        try { var d = calls[i].iface.decodeFunctionResult(calls[i].fn, r.returnData); return { ok: true, v: d.length === 1 ? d[0] : d }; }
+        catch (x) { return { ok: false }; }   // empty/garbage return data (no code at the target) — unread, never a value
+      });
+    });
+  }
   // THE SCAN ROAD: a single tamed endpoint with maxAttempts 2. The 4 s load-read budget must never govern a getLogs walk.
   // RPC-CLEANUP-1: the endpoint is the read road's own (our proxy, or the anvil/proof override) — the keyless scan list
   // (publicnode/drpc/tenderly) and the drpc chunk failover are GONE. A range refusal now halves the chunk instead.
@@ -641,6 +669,7 @@ window.DYWallet = (function () {
     checkHolder: checkHolder,
     loadEthers: loadEthers,
     readProvider: readProvider, // RUNG4-FIX-3 / STORE-READ-1 — the shared read road, now WALKING readRpcUrls
+    multicall: multicall,       // STORE-READS-1 — many reads, one eth_call (Multicall3.aggregate3)
     scanProvider: scanProvider, // STORE-READ-1 — the getLogs road, unchanged at 10 s
     _resetReadRoad: _resetReadRoad, // tests only
     feeOverrides: feeOverrides, // FEE-1 — the ONE player-send fee rule (tip = max(suggested, 30), maxFee = max(2×base + tip, 45)); gasLimit stays wallet

@@ -52,8 +52,18 @@ function preflight() {
   return miss;
 }
 
+// STORE-READS-1 — the canonical Multicall3 (0xcA11…CA11) is on Polygon mainnet; a bare anvil chain has none. Every chain
+// builder places its REAL runtime bytecode (tests/fixtures/multicall3.runtime.hex, read from mainnet and cross-checked
+// against a second endpoint) at the canonical address, so the store's one-call catalog read runs against the real code.
+const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+const MULTICALL3_CODE = fs.readFileSync(path.join(__dirname, "fixtures", "multicall3.runtime.hex"), "utf8").trim();
+async function ensureMulticall3(provider) {
+  if ((await provider.getCode(MULTICALL3)).length > 2) return;
+  await provider.send("anvil_setCode", [MULTICALL3, MULTICALL3_CODE]);
+}
 async function chain() {
   const provider = new ethers.JsonRpcProvider(RPC);
+  await ensureMulticall3(provider);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
   const player = new ethers.Wallet(K.p1, provider);
   const treasuryAddr = new ethers.Wallet(K.treasury).address;
@@ -100,6 +110,7 @@ const DEC6 = 1000000n;
 async function chainStore(opts) {
   opts = opts || {};
   const provider = new ethers.JsonRpcProvider(RPC);
+  await ensureMulticall3(provider);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
   const player = new ethers.Wallet(K.p1, provider);
   const ownerAddr = await owner.getAddress();
@@ -142,6 +153,7 @@ async function chainStore(opts) {
 //    voucher key the sale trusts — the test signs instant vouchers with it exactly as the approval bot would.
 async function chainPresale() {
   const provider = new ethers.JsonRpcProvider(RPC);
+  await ensureMulticall3(provider);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
   const player = new ethers.Wallet(K.p1, provider);
   const ownerAddr = await owner.getAddress();
@@ -175,6 +187,7 @@ async function chainPresale() {
 async function chainWinnings(opts) {
   opts = opts || {};
   const provider = new ethers.JsonRpcProvider(RPC);
+  await ensureMulticall3(provider);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
   const player = new ethers.Wallet(K.p1, provider);
   const ownerAddr = await owner.getAddress();
@@ -276,7 +289,8 @@ async function storePage(c, player, opts) {
   const w = dom.window;
   w.ethers = ethers;
   const eth = makeEthereum(player, c.provider);
-  w.ethereum = eth;
+  if (opts.notConnected) eth.__wallet = null;            // STORE-READS-1: a wallet that has not connected yet (eth_accounts [])
+  if (!opts.noEthereum) w.ethereum = eth;                // STORE-READS-1: a browser with no wallet at all
   w.TextEncoder = TextEncoder;
   // AFFILIATE-1 rung 3 — every fetch is RECORDED (a dormant face must make none to the invite service); `opts.svc`
   // stands in for the bot's routes, and `opts.svcDown` makes every call to it fail as a dead host does.
@@ -575,4 +589,4 @@ function teardown(h) {
   // deliberately NOT window.close() — closing is the race itself. The window dies with the process.
 }
 
-module.exports = { chain, chainStore, chainWinnings, chainPresale, server, hall, storePage, dashboardPage, myInvitesPage, makeEthereum, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };
+module.exports = { ensureMulticall3, MULTICALL3, chain, chainStore, chainWinnings, chainPresale, server, hall, storePage, dashboardPage, myInvitesPage, makeEthereum, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };

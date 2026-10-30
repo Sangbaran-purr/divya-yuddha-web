@@ -256,6 +256,7 @@ async function run() {
     await H.until(() => /In stock/.test(bodyText(w)), 20000, "the good first read");
     const realRP = w.DYWallet.readProvider;
     w.DYWallet.readProvider = function () { throw new Error("no read road"); };
+    w.DYWallet.multicall = function () { return Promise.reject(new Error("no read road")); };   // STORE-READS-1: the tile reads through ONE multicall
     await w.DYStore._bundleRefresh();
     ok("K5a · when the ROAD ITSELF fails, the numbers are still kept",
        /In stock/.test(bodyText(w)) && !/We couldn't load the store right now/.test(bodyText(w)), bodyText(w).slice(0, 150));

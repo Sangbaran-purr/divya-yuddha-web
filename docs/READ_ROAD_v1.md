@@ -44,7 +44,25 @@ The button's label: **Try again**. (In the Hall the whole tier row is already th
 
 ## 3. Not covered by this ruling (unchanged, flagged for a future ruling)
 
-Faces that still carry their earlier wording: the store grid's whole-load failure ("The Store could not be read" / "The
-chain is busy or unreachable — nothing was bought or changed. Refresh to retry."), the same for the market, the Treasury's
+Faces that still carry their earlier wording: the market's whole-load failure ("The market could not be read" / "The
+chain is busy or unreachable — nothing was bought or changed. Refresh to retry."), the Treasury's
 listings panel and Access mark, the store tile's weekly-headroom line, the rite's DYC balance line, and the Hall's own
-entry gate ("Couldn't check your Torana just now").
+entry gate ("Couldn't check your Torana just now"). (The store grid's whole-load failure is now the ruled store line — §4.)
+
+## 4. The store's reads (STORE-READS-1, owner rulings 2026-10-30)
+
+A store visit reads the chain through **one call** to Multicall3 (`0xcA11bde05977b3631167028862bE2a173976CA11`,
+`aggregate3`): the card grid (every live card's price and stock, the sale's flags) in one, the bundle tile in one, and a
+connected wallet's own figures in one. Our proxy serves `aggregate3` only when every inner call targets one of our
+contracts. Budget: a wallet-less visit **≤ 3 chain calls in ≤ 3 HTTP requests**; a connected visit **≤ 6**. A wallet
+connect re-reads only that wallet's figures — never the grid. If the one call fails, the page says *We couldn't load the
+store right now — try again.* and never falls back to single per-card calls.
+
+Every purchase — a card for DYC, a card for USD, the bundle and the top-up — starts with a **fresh** read of its price and
+stock. If the price moved since the page showed it, the purchase stops before anything is signed and the tile shows the
+new price with the ruled sentence:
+
+| When | Sentence |
+|---|---|
+| The price changed between viewing and buying | The price just changed. Check the new price and try again. |
+| The card sold out between viewing and buying | This card is sold out. *(unchanged)* |

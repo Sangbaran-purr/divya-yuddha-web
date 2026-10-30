@@ -58,6 +58,7 @@ async function waitFor(label, fn, ms) {
 // ── THE COUNTING READ PROXY: the page's read road (readRpcUrls) points here; every JSON-RPC call it forwards is
 //    recorded (to, selector), so "no second full read of every card" is a count, not a claim. `fail` refuses all
 //    reads; `delayMs` holds every reply (the pen-switch-under-the-read proof). ──
+const MC3I = new ethers.Interface(["function aggregate3((address target, bool allowFailure, bytes callData)[] calls) view returns ((bool success, bytes returnData)[])"]);
 function readProxy() {
   const P = { calls: [], fail: false, delayMs: 0, srv: null, url: null };
   P.srv = http.createServer((req, res) => {
@@ -66,7 +67,15 @@ function readProxy() {
       (Array.isArray(j) ? j : [j]).forEach((m) => {
         if (!m) return;
         const p0 = (m.params && m.params[0]) || {};
-        P.calls.push({ method: m.method, to: (p0.to || "").toLowerCase(), sel: (p0.data || p0.input || "").slice(0, 10) });
+        const d = p0.data || p0.input || "";
+        // STORE-READS-1: a Multicall3.aggregate3 is EXPANDED into its inner calls (marked mc:true), so every check below
+        // still sees which contract + function was read — and that it rode the one call
+        if (m.method === "eth_call" && d.slice(0, 10) === "0x82ad56cb") {
+          const inner = MC3I.decodeFunctionData("aggregate3", d)[0];
+          for (const c of inner) P.calls.push({ method: "eth_call", to: String(c.target).toLowerCase(), sel: c.callData.slice(0, 10), mc: true });
+          return;
+        }
+        P.calls.push({ method: m.method, to: (p0.to || "").toLowerCase(), sel: d.slice(0, 10) });
       });
       if (P.delayMs) await H.sleep(P.delayMs);
       if (P.fail) { res.writeHead(503); res.end("down"); return; }

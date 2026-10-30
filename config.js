@@ -25,6 +25,8 @@ window.DY_CONFIG = {
     // is server-side (dy-rpc's optional UPSTREAM_RPC_URL_2). The history scans that READ-PROXY-2 kept off the proxy
     // (the old `scanRpcUrls`) now ride it too — one wide addressed getLogs instead of hundreds of 10k chunks.
     readRpcUrls: ["https://rpc.divyayuddha.games"],
+    // STORE-READS-1 — the canonical Multicall3 (deployed on Polygon): the store reads its catalog through it in one call.
+    multicall3: "0xcA11bde05977b3631167028862bE2a173976CA11",
     blockExplorerUrls: ["https://polygonscan.com"],
   },
 

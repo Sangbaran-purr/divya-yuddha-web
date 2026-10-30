@@ -374,6 +374,32 @@ window.DYStore = (function () {
   // =========================================================================
   var buyGen = 0;
   var buyAllowance = null; // BigInt allowance(me, sale), read once per session/refresh
+  var buyAllowanceFor = null; // the wallet that allowance belongs to (STORE-READS-1)
+  // STORE-READS-1 — a wallet change re-reads ONLY this wallet's DYC allowance (one call) and repaints the grid from what is
+  // already loaded. Prices and stock do not depend on the wallet, so the grid is never re-read for a connect.
+  var buyWalletGen = 0;
+  function refreshBuyWallet() {
+    var g = ++buyWalletGen;
+    var me = connectedOk() ? window.DYWallet.state.address : null;
+    var repaint = function () {
+      if (g !== buyWalletGen || !buyCache) return;
+      // never rebuild the grid under a purchase in flight (its button + message would be torn off the page mid-road):
+      // wait until no purchase carries data-busy, then repaint
+      if (document.querySelector('[data-busy="1"]')) { setTimeout(repaint, 500); return; }
+      // …and a purchase that just ENDED keeps its message (ok or refused) across the repaint — a buyer never sees the
+      // reason flash and vanish under a wallet-change repaint
+      Array.prototype.forEach.call(buyCache.grid.querySelectorAll("figure[data-card]"), function (f) {
+        var m = f.querySelector(".st-msg:not(.b-invite-note)");
+        if (m && /\b(ok|bad)\b/.test(m.className) && m.textContent) cardFlash[f.getAttribute("data-card")] = { text: m.textContent, cls: m.className };
+      });
+      renderBuy(buyCache.ethers, buyCache.statusEl, buyCache.grid, buyCache.open, buyCache.rows, buyCache.usdOpen);
+    };
+    if (!me) { buyAllowance = null; buyAllowanceFor = null; repaint(); return Promise.resolve(); }
+    return loadE().then(function (ethers) {
+      return new ethers.Contract(CFG.contracts.dycoin, DYC_ABI, readProvider(ethers)).allowance(me, saleAddr());
+    }).then(function (a) { if (g === buyWalletGen) { buyAllowance = a; buyAllowanceFor = me; } }, function () { if (g === buyWalletGen) { buyAllowance = null; buyAllowanceFor = null; } })
+      .then(repaint);
+  }
 
   function liveCards() {
     var reg = window.DY_WAVE_REGISTRY;
@@ -391,41 +417,42 @@ window.DYStore = (function () {
     var gen = ++buyGen;
     statusEl.textContent = "Reading the Store…";
     loadE().then(function (ethers) {
-      var provider = readProvider(ethers);
-      var sale = new ethers.Contract(saleAddr(), SALE_ABI, provider);
+      // STORE-READS-1 (owner rulings 2026-10-30) — THE WHOLE GRID IN ONE eth_call (Multicall3.aggregate3): the sale's flag,
+      // the coin's decimals (first time only), the USD store's flag (CARD-STORE-1 C3), this wallet's DYC allowance when
+      // connected, and every live card's price + stock. Was ~176 single calls, each billed upstream. A card whose read
+      // fails is null (its busy chip); the WHOLE call failing is the ruled store line + Try again (never single calls).
       var cards = liveCards();
       var s = window.DYWallet.state;
-      var allowanceP = connectedOk()
-        ? dycDecimals(ethers, provider).then(function () {
-            var dyc = new ethers.Contract(CFG.contracts.dycoin, DYC_ABI, provider);
-            return dyc.allowance(s.address, saleAddr()).catch(function () { return null; });
-          })
-        : Promise.resolve(null);
-      // CARD-STORE-1 C3 — ONE extra read beside the card reads: the USD store's own flag. Its prices and supply are the
-      // DYC sale's (priceOf / 1e14, the one shared cap), already read below, so no card is read twice.
-      var usdOpenP = cusAddr()
-        ? new ethers.Contract(cusAddr(), CUS_ABI, provider).open().catch(function () { return null; })
-        : Promise.resolve(null);
-      return Promise.all([
-        sale.salesOpen().catch(function () { return null; }),
-        dycDecimals(ethers, provider),
-        allowanceP,
-        Promise.all(cards.map(function (w) {
-          return Promise.all([
-            sale.priceOf(w.cardId).catch(function () { return null; }),
-            sale.remainingOf(w.cardId).catch(function () { return null; }),
-          ]).then(function (r) { return { card: w, price: r[0], remaining: r[1] }; });
-        })),
-        usdOpenP,
-      ]).then(function (all) { return { ethers: ethers, open: all[0], rows: all[3], allowance: all[2], usdOpen: all[4] }; });
+      var SI = new ethers.Interface(SALE_ABI), DI = new ethers.Interface(DYC_ABI), CI = new ethers.Interface(CUS_ABI);
+      var calls = [{ target: saleAddr(), iface: SI, fn: "salesOpen" }];
+      var decAt = -1, usdAt = -1, allowAt = -1;
+      if (_dec == null) { decAt = calls.length; calls.push({ target: CFG.contracts.dycoin, iface: DI, fn: "decimals" }); }
+      if (cusAddr()) { usdAt = calls.length; calls.push({ target: cusAddr(), iface: CI, fn: "open" }); }
+      if (connectedOk()) { allowAt = calls.length; calls.push({ target: CFG.contracts.dycoin, iface: DI, fn: "allowance", args: [s.address, saleAddr()] }); }
+      var first = calls.length;
+      cards.forEach(function (w) {
+        calls.push({ target: saleAddr(), iface: SI, fn: "priceOf", args: [w.cardId] });
+        calls.push({ target: saleAddr(), iface: SI, fn: "remainingOf", args: [w.cardId] });
+      });
+      return window.DYWallet.multicall(calls).then(function (r) {
+        var val = function (i) { return i >= 0 && r[i].ok ? r[i].v : null; };
+        if (decAt >= 0) _dec = r[decAt].ok ? Number(r[decAt].v) : 18;
+        var rows = cards.map(function (w, k) { return { card: w, price: val(first + 2 * k), remaining: val(first + 2 * k + 1) }; });
+        return { ethers: ethers, open: val(0), rows: rows, allowance: val(allowAt), usdOpen: val(usdAt), allowanceRead: allowAt >= 0, me: allowAt >= 0 ? s.address : null };
+      });
     }).then(function (res) {
       if (gen !== buyGen) return; // superseded
       buyAllowance = res.allowance;
+      buyAllowanceFor = res.me;
       renderBuy(res.ethers, statusEl, grid, res.open, res.rows, res.usdOpen);
+      // the wallet connected while this read was in flight: read ITS allowance now (one call) — never the grid again
+      if (connectedOk() && buyAllowanceFor !== window.DYWallet.state.address) refreshBuyWallet();
     }).catch(function () {
       if (gen !== buyGen) return;
       statusEl.textContent = "";
-      register(grid, "The Store could not be read", "The chain is busy or unreachable — nothing was bought or changed. Refresh to retry.", true);
+      // STORE-READS-1 (owner ruling 5) — the one call failed: the ruled store line + Try again, never a fall back to singles
+      grid.className = "ex-grid"; grid.innerHTML = "";
+      grid.appendChild(failLine("div", "st-msg bad", RR_STORE, function () { loadBuy(statusEl, grid); }));
     });
   }
 
@@ -470,6 +497,9 @@ window.DYStore = (function () {
       var priced = !priceBusy && row.price != null && row.price > 0n;
       buildBuyAction(ethers, actions, msg, row, card, openState, soldOut, priced, function () { loadBuy(statusEl, grid); });
       buildUsdAction(actions, msg, row, usdLive, soldOut, function () { loadBuy(statusEl, grid); });
+      var fl = cardFlash[row.card.cardId];
+      if (fl) { msg.className = typeof fl === "string" ? "st-msg bad" : fl.cls; msg.textContent = typeof fl === "string" ? fl : fl.text; delete cardFlash[row.card.cardId]; }
+      cf.fig.setAttribute("data-card", String(row.card.cardId));
       cf.fig.appendChild(actions);
       cf.fig.appendChild(msg);
       // ZOOM (second door): the art opens the lightbox; the SAME buy flow is wired inside it
@@ -499,11 +529,41 @@ window.DYStore = (function () {
     if (needApprove) {
       btn.textContent = "Approve DYC";
       btn.title = "Step 1 of 2 — approve exactly " + fmtPrice(ethers, row.price) + " DYC for this purchase";
-      btn.onclick = function () { doApproveThenSwap(ethers, btn, msg, row); };
+      btn.onclick = function () { freshCardThen(btn, msg, row, function () { doApproveThenSwap(ethers, btn, msg, row); }); };
     } else {
       btn.textContent = "Buy";
-      btn.onclick = function () { doBuy(ethers, btn, msg, row, refresh); };
+      btn.onclick = function () { freshCardThen(btn, msg, row, function () { doBuy(ethers, btn, msg, row, refresh); }); };
     }
+  }
+
+  // STORE-READS-1 (owner ruling 1) — the DYC card purchase starts with a FRESH read of what decides it: the sale's flag,
+  // this card's price and its stock (one call). Closed / sold out / a moved price stop HERE, before any wallet prompt;
+  // the tile repaints with the fresh numbers and says why. A failed read is the ruled store line, nothing signed.
+  function freshCardThen(btn, msg, row, go) {
+    btn.disabled = true; btn.setAttribute("data-busy", "1"); msg.className = "st-msg"; msg.textContent = "Checking the price…";
+    var SI = null;
+    loadE().then(function (ethers) {
+      SI = new ethers.Interface(SALE_ABI);
+      return window.DYWallet.multicall([
+        { target: saleAddr(), iface: SI, fn: "salesOpen" },
+        { target: saleAddr(), iface: SI, fn: "priceOf", args: [row.card.cardId] },
+        { target: saleAddr(), iface: SI, fn: "remainingOf", args: [row.card.cardId] },
+      ]);
+    }).then(function (r) {
+      if (!r[0].ok || !r[1].ok || !r[2].ok) throw new Error("fresh read");
+      var stop = null;
+      if (r[0].v !== true) stop = "The Store is not open.";
+      else if (r[2].v === 0n) { row.remaining = 0n; stop = U_SOLD; }
+      else if (row.price == null || r[1].v !== row.price) { row.price = r[1].v; row.remaining = r[2].v; stop = PRICE_CHANGED; }
+      if (!stop) { go(); return; }
+      btn.removeAttribute("data-busy");
+      cardFlash[row.card.cardId] = stop;
+      try { closeZoom(); } catch (x) {}
+      if (buyCache) renderBuy(buyCache.ethers, buyCache.statusEl, buyCache.grid, buyCache.open, buyCache.rows, buyCache.usdOpen);
+      else { btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = stop; }
+    }).catch(function () {
+      btn.removeAttribute("data-busy"); btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = RR_STORE;
+    });
   }
 
   function doApproveThenSwap(ethers, btn, msg, row) {
@@ -515,10 +575,12 @@ window.DYStore = (function () {
       }).then(function (tx) { msg.textContent = "Approving… waiting for confirmation."; return tx.wait(); });
     }).then(function () {
       buyAllowance = row.price; // now sufficient for this card
+      btn.removeAttribute("data-busy");
       msg.className = "st-msg ok"; msg.textContent = "Approved. Tap Buy to complete.";
       btn.disabled = false; btn.textContent = "Buy";
-      btn.onclick = function () { doBuy(ethers, btn, msg, row, function () {}); };
+      btn.onclick = function () { freshCardThen(btn, msg, row, function () { doBuy(ethers, btn, msg, row, function () {}); }); };
     }).catch(function (e) {
+      btn.removeAttribute("data-busy");
       btn.disabled = false; msg.className = "st-msg bad"; msg.textContent = revertMsg(e, "Approval failed or was rejected.");
     });
   }
@@ -532,10 +594,12 @@ window.DYStore = (function () {
         return window.DYWallet.feeOverrides().then(function (fee) { return sale.buy(row.card.cardId, fee); }); // RUNG4-FIX-6: fee-field floor (45/30), gasLimit stays wallet
       }).then(function (tx) { msg.textContent = "Buying… waiting for confirmation."; return tx.wait(); });
     }).then(function () {
+      btn.removeAttribute("data-busy");
       msg.className = "st-msg ok"; msg.textContent = "Bought — it is in your Treasury.";
       btn.textContent = "Bought"; buyAllowance = 0n;
       if (refresh) setTimeout(refresh, 1200);
     }).catch(function (e) {
+      btn.removeAttribute("data-busy");
       btn.disabled = false; btn.textContent = "Buy"; msg.className = "st-msg bad";
       sayReason(msg, revertMsg(e, "Purchase failed or was rejected."), "Purchase failed or was rejected.", "card-dyc", { cardId: row.card.cardId });   // STORE-LOAD-1
     });
@@ -560,6 +624,10 @@ window.DYStore = (function () {
   // card store's POL check and the bundle's (a wallet with no POL fails the approve with "insufficient funds").
   var U_POL = "Not enough POL in this wallet for the network fee. Bridging to Polygon? Polygon Portal, Jumper and Relay can add a little POL to your bridge - look for the gas or Refuel option. Withdrawing from an exchange? Add a little POL on the Polygon network.";
   var U_SOLD = "This card is sold out.";
+  // STORE-READS-1 (owner ruling 2026-10-30, docs/READ_ROAD_v1.md §4) — a purchase starts with a FRESH price + stock read;
+  // if the price moved since the page showed it, the purchase stops here, nothing signed, the tile repaints the new price.
+  var PRICE_CHANGED = "The price just changed. Check the new price and try again.";
+  var cardFlash = {};   // cardId -> a sentence to show on that card's tile after a repaint (the fresh-read stops)
   var U_CLOSED = "The card store is closed for now.";
   var U_NET = "Switch your wallet to Polygon to buy.";
   var U_CANCEL = "Cancelled in your wallet.";
@@ -665,12 +733,16 @@ window.DYStore = (function () {
   function usdFresh(me, coinAddr, cardId) {
     return loadE().then(function (ethers) {
       var p = readProvider();
-      var store = new ethers.Contract(cusAddr(), CUS_ABI, p);
-      var sale = new ethers.Contract(saleAddr(), SALE_ABI, p);
-      var t = new ethers.Contract(coinAddr, STABLE_ABI, p);
-      return Promise.all([store.open(), sale.salesOpen(), sale.priceOf(cardId), store.remainingOf(cardId),
-                          t.balanceOf(me), t.allowance(me, cusAddr()), p.getBalance(me)]).then(function (r) {
-        return { open: r[0], salesOpen: r[1], price: r[2], remaining: r[3], balance: r[4], allowance: r[5], pol: r[6] };
+      // STORE-READS-1 — the six contract reads in ONE call (all must land: ALL OR NOTHING), plus the POL balance
+      var CI = new ethers.Interface(CUS_ABI), SI = new ethers.Interface(SALE_ABI), TI = new ethers.Interface(STABLE_ABI);
+      return Promise.all([window.DYWallet.multicall([
+        { target: cusAddr(), iface: CI, fn: "open" }, { target: saleAddr(), iface: SI, fn: "salesOpen" },
+        { target: saleAddr(), iface: SI, fn: "priceOf", args: [cardId] }, { target: cusAddr(), iface: CI, fn: "remainingOf", args: [cardId] },
+        { target: coinAddr, iface: TI, fn: "balanceOf", args: [me] }, { target: coinAddr, iface: TI, fn: "allowance", args: [me, cusAddr()] },
+      ]), p.getBalance(me)]).then(function (x) {
+        var r = x[0];
+        if (r.some(function (q) { return !q.ok; })) throw new Error("fresh read");
+        return { open: r[0].v, salesOpen: r[1].v, price: r[2].v, remaining: r[3].v, balance: r[4].v, allowance: r[5].v, pol: x[1] };
       });
     });
   }
@@ -679,6 +751,7 @@ window.DYStore = (function () {
     if (e && e.__usd === "precast") return B_P12;
     if (e && e.__usd === "closed") return U_CLOSED;
     if (e && e.__usd === "sold") return U_SOLD;
+    if (e && e.__usd === "changed") return PRICE_CHANGED;
     if (e && e.__usd === "short") return U_SHORT(ctx.sym, ctx.sum || "this price");
     if (e && e.__usd === "pol") return U_POL;
     if (e && e.__usd === "net") return U_NET;
@@ -709,6 +782,12 @@ window.DYStore = (function () {
       btn.removeAttribute("data-busy"); btn.disabled = false; btn.textContent = label; usdCoinRepaint(); msg.className = "st-msg bad";
       var said = usdErr(e, ctx);
       msg.textContent = said;
+      // STORE-READS-1 — the fresh read moved the price (or the stock): repaint the card with the FRESH numbers, saying why
+      if (e && (e.__usd === "changed" || e.__usd === "sold") && F) {
+        row.price = F.price; row.remaining = F.remaining; cardFlash[cardId] = said;
+        try { closeZoom(); } catch (x) {}
+        if (buyCache) renderBuy(buyCache.ethers, buyCache.statusEl, buyCache.grid, buyCache.open, buyCache.rows, buyCache.usdOpen);
+      }
       // STORE-LOAD-1: a generic (or POL-after-a-shortfall) failure that the chain explains → the chain's reason (sold out / closed)
       if (said === B_P8 || (said === U_POL && ctx.polShort)) raceReason("card-usd", { cardId: cardId }).then(function (why) { if (why) msg.textContent = why; });
     }
@@ -724,6 +803,7 @@ window.DYStore = (function () {
         if (F.usd == null) throw usdStop("price");
         ctx.sum = usd6(F.usd);
         if (F.remaining === 0n) throw usdStop("sold");
+        if (row.price == null || F.price !== row.price) throw usdStop("changed");   // STORE-READS-1: the button named another price
         if (F.balance < F.usd) throw usdStop("short");
         return window.DYWallet.feeOverrides();
       })
@@ -1227,10 +1307,12 @@ window.DYStore = (function () {
       // re-render the active tab when the connection state changes (enables buttons)
       var key = (s.connected && s.chainOk) ? s.address : (s.hasProvider ? "anon" : "none");
       if (key !== lastConnected) {
+        var firstReport = lastConnected === null;
         lastConnected = key;
-        buyAllowance = null;
-        if (tabMkt.getAttribute("aria-selected") === "true") loadMarket(mktStatus, mktGrid);
-        else loadBuy(buyStatus, buyGrid);
+        if (tabMkt.getAttribute("aria-selected") === "true") { if (!firstReport) loadMarket(mktStatus, mktGrid); }
+        // STORE-READS-1 (owner ruling 4) — a wallet change never re-reads the grid: only this wallet's allowance (if the
+        // grid is loaded; a load still in flight reads it itself, or calls refreshBuyWallet when it lands)
+        else if (buyCache) refreshBuyWallet();
       }
     });
 
@@ -1531,7 +1613,9 @@ window.DYStore = (function () {
   function carryForward(prev) {
     if (!prev) return null;
     var now = identOf(), was = bIdent || { me: null, chainId: null };
-    if (was.chainId !== now.chainId) return null;                       // chain changed: nothing carries
+    // STORE-READS-1: going from NO wallet (chainId null) to a wallet is a connect, not a chain switch — the catalog was
+    // read on the site's own Polygon road either way, so it carries (the wallet's own fields are dropped just below).
+    if (was.chainId !== null && was.chainId !== now.chainId) return null;   // chain changed: nothing carries
     if (was.me !== now.me) {                                            // account changed: wallet-specific fields go
       var kept = { ethers: prev.ethers, me: now.me, open: prev.open, stock: prev.stock, cap: prev.cap,
                    packSize: prev.packSize, torana: undefined, headroom: undefined, asset: {} };
@@ -1545,41 +1629,61 @@ window.DYStore = (function () {
     return prev;
   }
 
-  function readBundle() {
+  // STORE-READS-1 (owner rulings 2026-10-30) — the tile's reads are ONE eth_call (Multicall3.aggregate3): the catalog
+  // (flag, stock, cap, pack size, both coins' prices) and, when a wallet is connected, its own figures (Torana, headroom,
+  // both coins' balance + allowance). `walletOnly` (a wallet change) re-reads ONLY the wallet's figures and keeps the
+  // catalog it already holds — a connect never re-reads the store. Each field still answers {ok,v}; a field that fails
+  // keeps its last good value (STORE-READ-2); the WHOLE call failing is the road failing (the catch below).
+  function readBundle(walletOnly) {
     var gen = ++bGen;
     if (!bundleConfigured()) return Promise.resolve(null);
     // the carry-over is decided BEFORE the read, against the identity the old state belongs to
     var prev = carryForward(bState);
+    if (walletOnly && !(prev && prev.asset)) walletOnly = false;   // nothing kept to stand on: read it all
     return loadE().then(function (ethers) {
-      var p = readProvider();
-      var ps = new ethers.Contract(psAddr(), PS_ABI, p);
-      var nft = new ethers.Contract(accessAddr(), BNFT_ABI, p);
       var me = (window.DYWallet.state && window.DYWallet.state.address) || null;
-      // every job answers {ok:true,v} or {ok:false} — the value and the verdict, never conflated
-      var mark = function (pr) { return pr.then(function (v) { return { ok: true, v: v }; }, function () { return { ok: false }; }); };
-      var none = Promise.resolve({ ok: true, v: null });   // genuinely nothing to read (no wallet): a real answer
-      var jobs = [
-        mark(ps.saleOpen()),
-        mark(ps.inventory()),
-        mark(ps.capPerWallet()),
-        mark(ps.packSize()),
-        me ? mark(nft.balanceOf(me)) : none,
-        me ? mark(ps.topUpRemaining(me)) : none,
-      ];
+      var PI = new ethers.Interface(PS_ABI), NI = new ethers.Interface(BNFT_ABI), TI = new ethers.Interface(STABLE_ABI);
+      var calls = [], at = {};
+      var add = function (k, c) { at[k] = calls.length; calls.push(c); };
+      if (!walletOnly) {
+        add("open", { target: psAddr(), iface: PI, fn: "saleOpen" });
+        add("stock", { target: psAddr(), iface: PI, fn: "inventory" });
+        add("cap", { target: psAddr(), iface: PI, fn: "capPerWallet" });
+        add("pack", { target: psAddr(), iface: PI, fn: "packSize" });
+      }
+      if (me) {
+        add("torana", { target: accessAddr(), iface: NI, fn: "balanceOf", args: [me] });
+        add("headroom", { target: psAddr(), iface: PI, fn: "topUpRemaining", args: [me] });
+      }
       ASSETS.forEach(function (a) {
-        var t = new ethers.Contract(a.addr(), STABLE_ABI, p);
-        jobs.push(mark(ps.bundlePrice(a.addr())));
-        jobs.push(mark(ps.packPrice(a.addr())));
-        jobs.push(me ? mark(t.balanceOf(me)) : none);
-        jobs.push(me ? mark(t.allowance(me, psAddr())) : none);
+        if (!walletOnly) {
+          add(a.key + ".bp", { target: psAddr(), iface: PI, fn: "bundlePrice", args: [a.addr()] });
+          add(a.key + ".pp", { target: psAddr(), iface: PI, fn: "packPrice", args: [a.addr()] });
+        }
+        if (me) {
+          add(a.key + ".bal", { target: a.addr(), iface: TI, fn: "balanceOf", args: [me] });
+          add(a.key + ".alw", { target: a.addr(), iface: TI, fn: "allowance", args: [me, psAddr()] });
+        }
       });
-      return Promise.all(jobs).then(function (r) {
+      var NONE = { ok: true, v: null };                       // genuinely nothing to read (no wallet): a real answer
+      var KEPT = { ok: false, kept: true };                   // not read this time: pick() keeps the previous value
+      return (calls.length ? window.DYWallet.multicall(calls) : Promise.resolve([])).then(function (res) {
+        var get = function (k, wallet) {
+          if (at[k] !== undefined) return res[at[k]];
+          if (wallet) return me ? KEPT : NONE;               // a wallet field with no wallet is a real null
+          return KEPT;                                        // a catalog field on a wallet-only read: keep it
+        };
+        var r = [get("open"), get("stock"), get("cap"), get("pack"), get("torana", true), get("headroom", true)];
+        ASSETS.forEach(function (a) { r.push(get(a.key + ".bp"), get(a.key + ".pp"), get(a.key + ".bal", true), get(a.key + ".alw", true)); });
+        return r;
+      }).then(function (r) {
         if (gen !== bGen) return null;    // a newer read won
         var stale = false;
-        // a failed field keeps its previous value; only a field with no previous value falls to null
+        // a failed field keeps its previous value; only a field with no previous value falls to null.
+        // STORE-READS-1: a field simply not asked this time (a wallet-only read keeps the catalog) is NOT stale.
         var pick = function (res, old) {
           if (res.ok) return res.v;
-          if (old !== undefined && old !== null) { stale = true; return old; }
+          if (old !== undefined && old !== null) { if (!res.kept) stale = true; return old; }
           return null;
         };
         var pa = (prev && prev.asset) || {};
@@ -1707,16 +1811,30 @@ window.DYStore = (function () {
   //  the P4 refusal words, not the gate.
   function preCastRead(a, me, wantHeadroom) {
     return loadE().then(function (ethers) {
-      var p = readProvider();
-      var ps = new ethers.Contract(psAddr(), PS_ABI, p);
-      var t = new ethers.Contract(a.addr, STABLE_ABI, p);
-      var jobs = [t.balanceOf(me), t.allowance(me, psAddr()), ps.bundlePrice(a.addr), ps.packPrice(a.addr)];
-      if (wantHeadroom) jobs.push(ps.topUpRemaining(me));
-      return Promise.all(jobs).then(function (r) {
-        return { balance: r[0], allowance: r[1], bundlePrice: r[2], packPrice: r[3],
-                 headroom: wantHeadroom ? r[4] : undefined };
+      // STORE-READS-1 — ONE call, and it now carries the STOCK and the sale's flag too (owner ruling 1: a fresh price +
+      // stock read at the start of every bundle buy). ALL OR NOTHING: any unread field rejects → P12, nothing signed.
+      var PI = new ethers.Interface(PS_ABI), TI = new ethers.Interface(STABLE_ABI);
+      var calls = [
+        { target: a.addr, iface: TI, fn: "balanceOf", args: [me] }, { target: a.addr, iface: TI, fn: "allowance", args: [me, psAddr()] },
+        { target: psAddr(), iface: PI, fn: "bundlePrice", args: [a.addr] }, { target: psAddr(), iface: PI, fn: "packPrice", args: [a.addr] },
+        { target: psAddr(), iface: PI, fn: "saleOpen" }, { target: psAddr(), iface: PI, fn: "inventory" },
+      ];
+      if (wantHeadroom) calls.push({ target: psAddr(), iface: PI, fn: "topUpRemaining", args: [me] });
+      return window.DYWallet.multicall(calls).then(function (r) {
+        if (r.some(function (q) { return !q.ok; })) throw new Error("fresh read");
+        return { balance: r[0].v, allowance: r[1].v, bundlePrice: r[2].v, packPrice: r[3].v, open: r[4].v, stock: r[5].v,
+                 headroom: wantHeadroom ? r[6].v : undefined };
       });
     });
+  }
+  // STORE-READS-1 — what the fresh read says about a purchase BEFORE any prompt: closed, out of stock, or a price that moved
+  // from the one the tile showed (`shown`, captured before writeBackFresh repaints it). null = go on.
+  function freshStop(F, shown) {
+    if (F.open === false) return B_P6;
+    var pack = bState && bState.packSize != null ? bState.packSize : 1n;
+    if (F.stock < pack) return B_P6B;
+    if (shown == null || F.price !== shown) return PRICE_CHANGED;
+    return null;
   }
   // Did the pen change under the read? MetaMask can switch accounts mid-round-trip, and then F belongs to the wallet
   // that is no longer connected while signerRoad() would hand back the one that is.
@@ -1757,12 +1875,16 @@ window.DYStore = (function () {
     btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet can be served…";
     var me = (window.DYWallet.state && window.DYWallet.state.address) || null;
     var dycBefore = null, F = null, polShort = false, gasFallback = false;
+    var shownPrice = a.bundlePrice;   // STORE-READS-1: the price the tile showed, before the fresh read repaints it
     // STORE-READ-2 — the pre-cast read comes FIRST. Every decision below reads F, never `a` (the kept tile values).
     (me ? preCastRead(a, me, false) : Promise.reject(new Error("no wallet")))
       .then(function (f) { return f; }, function () { var e = new Error("precast"); e.__precast = true; throw e; })
       .then(function (f) {
         F = f;
         writeBackFresh(assetKey, me, f);
+        F.price = F.bundlePrice;
+        var why = freshStop(F, shownPrice);
+        if (why) { var fs = new Error("fresh"); fs.__stop = why; throw fs; }
         sum = usd6(F.bundlePrice);
         if (!sameWallet(me)) { var sw = new Error("precast"); sw.__precast = true; throw sw; }
         // P7 lands here, from the FRESH read, before any approval is offered
@@ -1823,6 +1945,7 @@ window.DYStore = (function () {
       return bundleReceipt(w.r, w.o.receipt, dycBefore, host);
     }).catch(function (e) {
       // STORE-READ-2 — the two ruled stops that are NOT chain errors, and must never be worded as one
+      if (e && e.__stop) { preCastStop(host, e.__stop); return; }   // STORE-READS-1: closed / out of stock / the price moved
       if (e && e.__precast) { preCastStop(host, B_P12); return; }
       if (e && e.__p7) { preCastStop(host, bP7(sym, sum)); return; }
       // GAS-HELP-1 R3: the wallet was short of POL and the send failed without a named reason → the POL line
@@ -1843,6 +1966,7 @@ window.DYStore = (function () {
     btn.disabled = true; msg.className = "st-msg"; msg.textContent = "Checking this wallet can be served…";
     var me = (window.DYWallet.state && window.DYWallet.state.address) || null;
     var F = null;
+    var shownPrice = a.packPrice;   // STORE-READS-1: the pack price the tile showed, before the fresh read repaints it
     // STORE-READ-2 — the pre-cast read comes FIRST (headroom included: topUpRemaining belongs to this path). Every
     // decision below reads F, never `a`.
     (me ? preCastRead(a, me, true) : Promise.reject(new Error("no wallet")))
@@ -1850,6 +1974,9 @@ window.DYStore = (function () {
       .then(function (f) {
         F = f;
         writeBackFresh(assetKey, me, f);
+        F.price = F.packPrice;
+        var why = freshStop(F, shownPrice);
+        if (why) { var fs = new Error("fresh"); fs.__stop = why; throw fs; }
         if (!sameWallet(me)) { var sw = new Error("precast"); sw.__precast = true; throw sw; }
         total = F.packPrice * BigInt(packs);
         sum = usd6(total);
@@ -1885,6 +2012,7 @@ window.DYStore = (function () {
       return readBundle().then(function () { paintBundle(host); });
     }).catch(function (e) {
       // STORE-READ-2 — the two ruled stops that are NOT chain errors, and must never be worded as one
+      if (e && e.__stop) { preCastStop(host, e.__stop); return; }   // STORE-READS-1: closed / out of stock / the price moved
       if (e && e.__precast) { preCastStop(host, B_P12); return; }
       if (e && e.__p7) { preCastStop(host, bP7(sym, sum)); return; }
       btn.disabled = false; msg.className = "st-msg bad";
@@ -2167,10 +2295,10 @@ window.DYStore = (function () {
     // clear `bReading` or repaint. Without this an older refresh completing would clear the reading state while a
     // newer read was still in flight — turning "Reading the store…" into a verdict early, which is the very thing
     // STORE-READ-1 removed.
-    function refresh() {
+    function refresh(walletOnly) {
       var myGen = bGen + 1;                                     // the generation readBundle is about to take
       bReading = true; inFlight++; setBtn(); paintBundle(host);  // say we are reading BEFORE we ask
-      return readBundle().then(function () {
+      return readBundle(walletOnly === true).then(function () {
         inFlight--; setBtn();
         if (myGen !== bGen) return;                             // superseded — leave the screen to the newer read
         bReading = false; paintBundle(host);
@@ -2180,7 +2308,17 @@ window.DYStore = (function () {
         bReading = false; paintBundle(host);
       });
     }
-    window.DYWallet.onChange(function () { bReceipt = null; bFlash = null; refresh(); });
+    // STORE-READS-1 (owner ruling 4) — a wallet event re-reads ONLY when the wallet's identity changed, and then ONLY its
+    // own figures (readBundle(true)); the catalog is never re-read for a connect. A same-identity event just repaints.
+    var lastWalletKey = null;
+    window.DYWallet.onChange(function (s) {
+      var key = (s && s.connected && s.address ? s.address.toLowerCase() : "-") + "|" + (s && s.chainOk ? 1 : 0);
+      if (key === lastWalletKey) { paintBundle(host); return; }
+      var firstReport = lastWalletKey === null;
+      lastWalletKey = key; bReceipt = null; bFlash = null;
+      if (firstReport && !(s && s.connected)) { paintBundle(host); return; }   // the mount's own read covers a wallet-less page
+      refresh(true);
+    });
     if (rb) rb.addEventListener("click", function () { if (rb.disabled) return; bReceipt = null; bFlash = null; refresh(); });
     bRefreshFn = refresh;
     paintBundle(host);   // opens on P10 (bReading starts true) — never on a verdict

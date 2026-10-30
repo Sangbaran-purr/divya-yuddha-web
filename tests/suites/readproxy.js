@@ -117,9 +117,9 @@ async function run() {
     // (ICO-SIMPLE-1: register.html is now a redirect to the dashboard's buy panel and loads no script)
     const pages = ["index.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html", "mint.html", "my-invites.html"];
     const read = (p) => fs.readFileSync(path.join(SITE, p), "utf8");
-    ok("X1 · config.js is stamped s23 on every page that loads it (10; RPC-CLEANUP-1)", pages.every((p) => /[" /]config\.js\?v=s23"/.test(read(p))) && pages.every((p) => !/[" /]config\.js\?v=s22"/.test(read(p))));
-    ok("X2 · wallet.js s1u, mf-config.js mf13, dashboard.js mf49, report.js mf4h, admin.js s41, hall.js h38 (RPC-CLEANUP-1)",
-       pages.filter((p) => /js\/wallet\.js\?v=/.test(read(p))).every((p) => /js\/wallet\.js\?v=s1u"/.test(read(p)))
+    ok("X1 · config.js is stamped s24 on every page that loads it (10; RPC-CLEANUP-1)", pages.every((p) => /[" /]config\.js\?v=s24"/.test(read(p))) && pages.every((p) => !/[" /]config\.js\?v=s23"/.test(read(p))));
+    ok("X2 · wallet.js s1v, mf-config.js mf13, dashboard.js mf49, report.js mf4h, admin.js s41, hall.js h38 (RPC-CLEANUP-1)",
+       pages.filter((p) => /js\/wallet\.js\?v=/.test(read(p))).every((p) => /js\/wallet\.js\?v=s1v"/.test(read(p)))
          && ["dashboard.html", "report.html", "store.html", "mint.html", "my-invites.html"].every((p) => /mf-config\.js\?v=mf13"/.test(read(p)))
          && /js\/dashboard\.js\?v=mf49"/.test(read("dashboard.html")) && /js\/report\.js\?v=mf4h"/.test(read("report.html"))
          && /js\/admin\.js\?v=s41"/.test(read("admin.html")) && /hall\.js\?v=h38"/.test(read("mp/hall.html")));

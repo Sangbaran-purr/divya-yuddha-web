@@ -35,6 +35,8 @@ function ok(name, cond, detail) { if (cond) { pass++; console.log("  ✓ " + nam
 const T = (w, sel) => { const e = w.document.querySelector(sel); return e ? e.textContent.replace(/\s+/g, " ") : ""; };
 const sel = (sig) => ethers.id(sig).slice(0, 10);
 
+const MC3I = new ethers.Interface(["function aggregate3((address target, bool allowFailure, bytes callData)[] calls) view returns ((bool success, bytes returnData)[])"]);
+const DEAD = "0x000000000000000000000000000000000000dEaD";
 // ── the stand-in proxy: forwards to anvil; DOWN answers dy-rpc's refusal to everything; failSel fails chosen eth_calls ──
 function standIn() {
   const P = { calls: 0, down: false, failSel: new Set(), srv: null, url: null };
@@ -44,6 +46,17 @@ function standIn() {
       let j = null; try { j = JSON.parse(b); } catch (e) {}
       const items = Array.isArray(j) ? j : [j];
       P.calls += items.length;
+      // STORE-READS-1: a Multicall3.aggregate3 carrying a failSel read has THAT inner call pointed at an address with no
+      // code — so exactly that read comes back unreadable (success, empty data) while the rest of the one call lands
+      for (const m of items) {
+        const p0 = (m && m.params && m.params[0]) || {};
+        const d = String(p0.data || "");
+        if (m && m.method === "eth_call" && d.slice(0, 10) === "0x82ad56cb" && P.failSel.size) {
+          const calls = MC3I.decodeFunctionData("aggregate3", d)[0].map((c) => ({ target: P.failSel.has(c.callData.slice(0, 10)) ? DEAD : c.target, allowFailure: c.allowFailure, callData: c.callData }));
+          p0.data = MC3I.encodeFunctionData("aggregate3", [calls]);
+        }
+      }
+      b = JSON.stringify(j);
       const failing = (m) => P.down || (m && m.method === "eth_call" && P.failSel.has(String(((m.params || [])[0] || {}).data || "").slice(0, 10)));
       if (items.every(failing)) { res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(Array.isArray(j) ? items.map(refuse) : refuse(j))); }
       const up = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: b }).then((x) => x.json()).catch(() => null);
