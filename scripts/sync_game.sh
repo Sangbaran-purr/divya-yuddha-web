@@ -355,7 +355,7 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - game/ in-repo size: ${GAME_BYTES} KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty-two site->game links (rite.html x5, index.html x3, treasury.html x2, demo/index.html x2, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2) are stamped game/index.html?v=$COPY_ID — the COPY ID (GUEST-PLAY-1): the first 7 hex of the sha-256 of this game/index.html, so they change exactly when the copy's BYTES change (a new source commit OR a changed injected block). The sync fails if the link count is not exactly 22.
+- The twenty-five site->game links (rite.html x5, index.html x3, treasury.html x2, demo/index.html x2, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2, play/daily/index.html x1, play/smriti/index.html x2 — LINK-HOME-1) are stamped game/index.html?v=$COPY_ID — the COPY ID (GUEST-PLAY-1): the first 7 hex of the sha-256 of this game/index.html, so they change exactly when the copy's BYTES change (a new source commit OR a changed injected block). The sync fails if the link count is not exactly 22.
 
 ## STAMP (S-HALL-WIRE-1 R4)
 - game/STAMP holds the copy id ($COPY_ID), plain text (the source commit is recorded above). The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
@@ -410,18 +410,21 @@ fi
 #  the game nowhere — it LEFT the ledger [-2]. Managed set now 9 pages / 20 links.)
 # (GUEST-PLAY-1, owner rulings 2026-10-26: the rite's "Play free" button [+1] and the demo's "Play free" [+1] now go to the
 #  game. Managed set now 9 pages / 22 links. The stamp is the COPY ID — it moves when the copy's bytes do.)
-ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html $SITE_REPO/store.html $SITE_REPO/explore.html $SITE_REPO/mint.html $SITE_REPO/dashboard.html $SITE_REPO/my-invites.html"
+# (LINK-HOME-1, 2026-11-02: the mini-games' "← Back to the game" went to the raw github.io address; it now goes to the
+#  site's /game/ copy — play/daily/index.html [+1] and play/smriti/index.html [+2] joined. Managed set now 11 pages / 25
+#  links. back.js reads each button's own href, so it carries no address of its own.)
+ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html $SITE_REPO/store.html $SITE_REPO/explore.html $SITE_REPO/mint.html $SITE_REPO/dashboard.html $SITE_REPO/my-invites.html $SITE_REPO/play/daily/index.html $SITE_REPO/play/smriti/index.html"
 LINKS_BEFORE="$(grep -oF 'game/index.html' $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_BEFORE" != "22" ]; then
-  echo "error: expected exactly 22 site->game entry links (rite.html x5 + index.html x3 + treasury.html x2 + demo/index.html x2 + store.html x2 + explore.html x2 + mint.html x2 + dashboard.html x2 + my-invites.html x2), found $LINKS_BEFORE (site nav changed)" >&2
+if [ "$LINKS_BEFORE" != "25" ]; then
+  echo "error: expected exactly 25 site->game entry links (rite.html x5 + index.html x3 + treasury.html x2 + demo/index.html x2 + store.html x2 + explore.html x2 + mint.html x2 + dashboard.html x2 + my-invites.html x2 + play/daily/index.html x1 + play/smriti/index.html x2), found $LINKS_BEFORE (site nav changed)" >&2
   exit 1
 fi
 SHA="$COPY_ID" perl -i -pe 's{game/index\.html(\?v=[0-9a-f]+)?}{game/index.html?v=$ENV{SHA}}g' $ENTRY_FILES
 LINKS_STAMPED="$(grep -oF "game/index.html?v=$COPY_ID" $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_STAMPED" != "22" ]; then
-  echo "error: entry-link stamping did not produce 22 stamped links (got $LINKS_STAMPED)" >&2
+if [ "$LINKS_STAMPED" != "25" ]; then
+  echo "error: entry-link stamping did not produce 25 stamped links (got $LINKS_STAMPED)" >&2
   exit 1
 fi
-echo "sync_game: stamped 22 entry links -> game/index.html?v=$COPY_ID"
+echo "sync_game: stamped 25 entry links -> game/index.html?v=$COPY_ID"
 
 echo "sync_game: done. game/ = ${GAME_BYTES} KB (video + vfx + heavy dirs + manifest cross-linked, not copied)."

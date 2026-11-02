@@ -37,7 +37,7 @@
 - game/ in-repo size: 2276 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty-two site->game links (rite.html x5, index.html x3, treasury.html x2, demo/index.html x2, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2) are stamped game/index.html?v=2b77c41 — the COPY ID (GUEST-PLAY-1): the first 7 hex of the sha-256 of this game/index.html, so they change exactly when the copy's BYTES change (a new source commit OR a changed injected block). The sync fails if the link count is not exactly 22.
+- The twenty-five site->game links (rite.html x5, index.html x3, treasury.html x2, demo/index.html x2, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2, play/daily/index.html x1, play/smriti/index.html x2 — LINK-HOME-1) are stamped game/index.html?v=2b77c41 — the COPY ID (GUEST-PLAY-1): the first 7 hex of the sha-256 of this game/index.html, so they change exactly when the copy's BYTES change (a new source commit OR a changed injected block). The sync fails if the link count is not exactly 22.
 
 ## STAMP (S-HALL-WIRE-1 R4)
 - game/STAMP holds the copy id (2b77c41), plain text (the source commit is recorded above). The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.

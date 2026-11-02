@@ -67,6 +67,7 @@ const SUITES = [
   { name: "dashreads",     file: path.join(__dirname, "suites", "dashreads.js"), chain: true, expect: 23, capMs: 600000 },   // DASH-READS-1: the dashboard's cards in ≤6 calls / ≤3 HTTP (was ~32/~32), 0 wallet-less, no re-read on a wallet event, a fresh read before every action
   { name: "halllimit",     file: path.join(__dirname, "suites", "halllimit.js"), chain: true, expect: 8 },
   { name: "siteaudit",     file: path.join(__dirname, "suites", "siteaudit.js"), chain: false, expect: 34 },
+  { name: "linkhome",      file: path.join(__dirname, "suites", "linkhome.js"), chain: false, expect: 11 },   // LINK-HOME-1: no shipped page links a player to *.github.io; the Back buttons go to the site's /game/
   { name: "gamelog",       file: path.join(__dirname, "suites", "gamelog.js"), chain: false, expect: 12 },   // SYNC-NARRATOR-1: the battle log through the synced game copy (no chain)
   // MP-FIX-2: the Hall steps back while a match is live — the frame's bands, the collapse, and the lobby's safety
   // (source + mutants; no chain and no network — the pixels are proven in a browser and written into the rung).

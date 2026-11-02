@@ -453,27 +453,28 @@ function checkBest(Sx) {
       /\.mg-plate \{[^}]*#070402 url\("mull-port-480\.webp"\)/.test(mini) && /\(min-width: 600px\), \(min-resolution: 1\.5dppx\) \{ \.mg-plate \{ background-image: url\("mull-port-853\.webp"\)/.test(mini)
         && /\(min-width: 1024px\) \{ \.mg-plate \{ background-image: url\("mull-wide-1024\.webp"\)/.test(mini) && /\.mg-stage \{[^}]*background: #070402/.test(mini));
     // the rule
-    const BK = require(path.join(SITE, "play", "shared", "back.js")), FREE = "https://sangbaran-purr.github.io/divya-yuddha/";
-    const here = "https://divyayuddha.games/play/smriti/", T = (r) => BK.target(r, here);
-    ok("G4 · THE WAY BACK: from the site's /game/ copy → that copy (its stamp kept); from the free game (a cross-site referrer is only its origin, or its full menu URL) → the free game's menu; from anywhere else, or nowhere (a direct link, a new tab) → the free game's menu",
-      BK.FREE === FREE && J(T("https://divyayuddha.games/game/index.html?v=ad978f0")) === J({ url: "https://divyayuddha.games/game/index.html?v=ad978f0", from: "site" })
+    // LINK-HOME-1: the home is OUR game — the site's free /game/ copy, from the button's own (sync-stamped) href; never *.github.io
+    const BK = require(path.join(SITE, "play", "shared", "back.js")), STAMP = R("game/STAMP").trim(), HREF = "../../game/index.html?v=" + STAMP;
+    const here = "https://divyayuddha.games/play/smriti/", FREE = "https://divyayuddha.games/game/index.html?v=" + STAMP, T = (r) => BK.target(r, here, HREF);
+    ok("G4 · THE WAY BACK (LINK-HOME-1): from the site's /game/ copy → that copy (its stamp kept); from anywhere else — the old github.io game, a direct link, a new tab — → the site's own /game/ menu (the button's stamped href); never a *.github.io address",
+      !/github\.io/.test(R("play/shared/back.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "")) && BK.target("", here).url === "https://divyayuddha.games/game/index.html" && J(T("https://divyayuddha.games/game/index.html?v=ad978f0")) === J({ url: "https://divyayuddha.games/game/index.html?v=ad978f0", from: "site" })
         && J(T("https://divyayuddha.games/game/")) === J({ url: "https://divyayuddha.games/game/", from: "site" })
-        && J(T("https://sangbaran-purr.github.io/")) === J({ url: FREE, from: "free" }) && J(T("https://sangbaran-purr.github.io/divya-yuddha/index.html")) === J({ url: FREE, from: "free" })
+        && J(T("https://sangbaran-purr.github.io/")) === J({ url: FREE, from: null }) && J(T("https://sangbaran-purr.github.io/divya-yuddha/index.html")) === J({ url: FREE, from: null })
         && J(T("")) === J({ url: FREE, from: null }) && J(T("https://www.google.com/")) === J({ url: FREE, from: null }) && J(T("https://divyayuddha.games/dashboard.html")) === J({ url: FREE, from: null })
         && J(T("https://divyayuddha.games/rite.html")) === J({ url: FREE, from: null }) && J(T("https://evil.example/game/index.html")) === J({ url: FREE, from: null }));
     const fakeWin = (ref, len, leaves) => { const w = { calls: [], location: { href: here }, history: { length: len, back() { w.calls.push("back"); if (leaves) w.hide && w.hide(); } },
-      addEventListener(ev, fn) { if (ev === "pagehide") w.hide = fn; }, setTimeout(fn) { w.calls.push("timer"); fn(); } }; BK.go({ referrer: ref }, w); return w; };
-    const a = fakeWin("https://divyayuddha.games/game/index.html?v=ad978f0", 3, true), b = fakeWin("https://sangbaran-purr.github.io/", 2, false), c = fakeWin("https://sangbaran-purr.github.io/", 1, false), d = fakeWin("", 4, false);
-    ok("G5 · …in the SAME tab: with the game menu in this tab's history it goes back through history (the menu as it was); if history can't go back it follows the link; arrived any other way it opens the free game's menu — never a new window",
-      J(a.calls) === J(["back", "timer"]) && a.location.href === here && J(b.calls) === J(["back", "timer"]) && b.location.href === FREE && J(c.calls) === J([]) && c.location.href === FREE
+      addEventListener(ev, fn) { if (ev === "pagehide") w.hide = fn; }, setTimeout(fn) { w.calls.push("timer"); fn(); } }; BK.go({ referrer: ref }, w, HREF); return w; };
+    const a = fakeWin("https://divyayuddha.games/game/index.html?v=ad978f0", 3, true), b = fakeWin("https://divyayuddha.games/game/", 2, false), c = fakeWin("https://sangbaran-purr.github.io/", 2, false), d = fakeWin("", 4, false);
+    ok("G5 · …in the SAME tab: with the site's game menu in this tab's history it goes back through history (the menu as it was); if history can't go back it follows the link; arrived any other way (incl. from the old github.io game) it opens the site's /game/ menu — never a new window",
+      J(a.calls) === J(["back", "timer"]) && a.location.href === here && J(b.calls) === J(["back", "timer"]) && b.location.href === "https://divyayuddha.games/game/" && J(c.calls) === J([]) && c.location.href === FREE
         && J(d.calls) === J([]) && d.location.href === FREE && !/window\.open|_blank/.test(R("play/shared/back.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "")));
     // the Smriti page
     const pg = pageAt({ store: { dy_smriti: JSON.stringify({ v: 1, best: { easy: 7, hard: 15 } }) } });
     const lvs = [...pg.w.document.querySelectorAll(".sm-lv")];
     const backs = (sel) => [...pg.w.document.querySelectorAll(sel + " [data-back-to-game]")];
-    ok("G6 · the level screen: the three levels are mulligan buttons, each with its name, pairs and best ('Best: 7 tries' / 'No best yet' / 'Best: 15 tries'); '← Back to the game' below them, a link to the free game's menu even without scripts; the mulligan background behind",
+    ok("G6 · the level screen: the three levels are mulligan buttons, each with its name, pairs and best ('Best: 7 tries' / 'No best yet' / 'Best: 15 tries'); '← Back to the game' below them, a link to the site's /game/ menu even without scripts; the mulligan background behind",
       lvs.length === 3 && lvs.every((b) => b.classList.contains("mg-btn")) && lvs.map((b) => b.querySelector(".sm-lvbest").textContent).join("|") === "Best: 7 tries|No best yet|Best: 15 tries"
-        && backs("#sm-choose").length === 1 && backs("#sm-choose")[0].textContent === "← Back to the game" && backs("#sm-choose")[0].getAttribute("href") === FREE
+        && backs("#sm-choose").length === 1 && backs("#sm-choose")[0].textContent === "← Back to the game" && backs("#sm-choose")[0].getAttribute("href") === HREF
         && !!pg.w.document.querySelector(".mg-stage .mg-plate") && /body\.sm-playing \.mg-stage \{ display: none; \}/.test(R("play/smriti/smriti.css")), J(lvs.map((b) => b.textContent)));
     const ev = new pg.w.MouseEvent("click", { bubbles: true, cancelable: true }); backs("#sm-choose")[0].dispatchEvent(ev);
     ok("G7 · tapping it is the shared rule (the click is taken by back.js, and the page navigates once)", ev.defaultPrevented === true && pg.navs.length === 1, J(pg.navs));
@@ -487,13 +488,13 @@ function checkBest(Sx) {
     ok("G10 · storage blocked: the level screen still says 'This browser isn't saving your best scores.' (hidden only during play)", sb.$("sm-store").textContent === "This browser isn't saving your best scores." && !sb.w.document.body.classList.contains("sm-playing"));
     // the Daily Puzzle: ONLY the back button
     const dNow = R("play/daily/index.html");
-    ok("G11 · THE DAILY PUZZLE carries the same '← Back to the game' (the mulligan button, under the logo, the shared rule and stylesheet) — the page's own mulligan restyle is checked in the daily suite (ML1–ML8)",
-      /<header class="dd-top">[\s\S]*<a class="mg-btn mg-back dd-home" href="https:\/\/sangbaran-purr\.github\.io\/divya-yuddha\/" data-back-to-game>← Back to the game<\/a>\n    <\/header>/.test(dNow)
-        && /<script src="\.\.\/shared\/back\.js\?v=g1"><\/script>/.test(dNow) && /<link rel="stylesheet" href="\.\.\/shared\/mini\.css\?v=g2" \/>/.test(dNow));
+    ok("G11 · THE DAILY PUZZLE carries the same '← Back to the game' (the mulligan button, under the logo, the shared rule and stylesheet; LINK-HOME-1: its href is the site's /game/ copy, stamped) — the page's own mulligan restyle is checked in the daily suite (ML1–ML8)",
+      dNow.indexOf('<a class="mg-btn mg-back dd-home" href="' + HREF + '" data-back-to-game>← Back to the game</a>\n    </header>') > 0 && /<header class="dd-top">/.test(dNow)
+        && /<script src="\.\.\/shared\/back\.js\?v=g2"><\/script>/.test(dNow) && /<link rel="stylesheet" href="\.\.\/shared\/mini\.css\?v=g2" \/>/.test(dNow));
     const dvc = []; const vc = new VirtualConsole(); vc.on("jsdomError", (e) => { if (/navigation/.test(e.message)) dvc.push(1); });
     const dd = new JSDOM(dNow.replace(/<script src="[^"]*"><\/script>/g, "") + "<script>" + R("play/shared/back.js") + "</script>", { url: "https://divyayuddha.games/play/daily/", runScripts: "dangerously", virtualConsole: vc });
     const db = dd.window.document.querySelector("[data-back-to-game]"), dev = new dd.window.MouseEvent("click", { bubbles: true, cancelable: true }); db.dispatchEvent(dev);
-    ok("G12 · …and on the Daily Puzzle page it is wired to the same rule (taken by back.js, one navigation)", dev.defaultPrevented === true && dvc.length === 1 && db.getAttribute("href") === FREE);
+    ok("G12 · …and on the Daily Puzzle page it is wired to the same rule (taken by back.js, one navigation)", dev.defaultPrevented === true && dvc.length === 1 && db.getAttribute("href") === HREF);
   });
 
   console.log("\n" + (fail ? "FAILURES" : "ALL GREEN") + " — " + pass + "/" + (pass + fail));
