@@ -226,7 +226,8 @@ async function dashboardPage(c, player, opts) {
   const w = dom.window;
   w.ethers = ethers;
   const eth = makeEthereum(player, c.provider);
-  w.ethereum = eth;
+  if (opts.notConnected) eth.__wallet = null;            // DASH-READS-1: a wallet that has not connected yet (eth_accounts [])
+  if (!opts.noEthereum) w.ethereum = eth;                // DASH-READS-1: a browser with no wallet at all
   w.TextEncoder = TextEncoder;
   w.__fetches = [];
   w.fetch = function (u, init) {
@@ -263,6 +264,7 @@ async function dashboardPage(c, player, opts) {
   w.DY_MF_CONFIG.winningsServiceUrl = (opts.winnings && opts.winnings.service) || null;
   w.DY_MF_CONFIG.inviteServiceUrl = opts.invite || null;            // set EXPLICITLY: the shipped config is live (WINNINGS-5); absent => the dormant face, and no test ever reaches the real bot
   if (c.addrs && c.addrs.nft) w.DY_CONFIG.contracts.accessNFT = c.addrs.nft;
+  w.DY_CONFIG.contracts.toranaClaim = null;   // DASH-READS-1: hermetic — the config.js fallback is the MAINNET claim; a test names its own (opts.contracts)
   w.DY_CONFIG.contracts.cardUsdStore = opts.cardUsdStore || null;   // hermetic: never the mainnet card store unless a test asks
   // ICO-SIMPLE-1 — hermetic presale road: the voucher door is OFF unless a test points it somewhere (never the real bot),
   // and a test may name its own sale/coins (opts.contracts) and swap in a mutated dashboard.js (opts.dashSrc)

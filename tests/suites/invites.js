@@ -497,7 +497,7 @@ async function run() {
        /Withdraw your winnings and your Torana Invites rewards here, as USDT\./.test(txt(w, "#winnings-body")) && /not yet open/.test(txt(w, "#winnings-body")));
     const dash = fs.readFileSync(path.join(SITE, "js", "dashboard.js"), "utf8");
     ok("DD4 · the Torana read is gated on the invite service being configured (no read while dormant)",
-       /if \(c\.inviteServiceUrl && c\.accessNFT\) \{/.test(dash));
+       /if \(c\.inviteServiceUrl && c\.accessNFT\) q\("torana", c\.accessNFT,/.test(dash));   // DASH-READS-1: the gated read now rides the one aggregate3
     ok("DD5 · the shipped config carries the LIVE invite service (WINNINGS-5 switch-on); the dormant face above is the harness with it unset",
        /inviteServiceUrl: "https:\/\/approval-bot-cxa2\.onrender\.com",/.test(fs.readFileSync(path.join(SITE, "mf-config.js"), "utf8")));
     H.teardown(h);
@@ -854,8 +854,8 @@ async function run() {
        !/plausible|track\(/.test((store.split("AFFILIATE-1 rung 3 · TORANA INVITES (the store's half)")[1] || "").split("function bLs(")[0]));
     ok("X4 · STAMPS: store.js s30, store.css s10 (CARD-STORE-1 C3 + review fix + C5 + C5-A), invite.js i2, mf-config mf13 on store.html",
        /js\/store\.js\?v=s30/.test(sh) && /css\/store\.css\?v=s10/.test(sh) && /js\/invite\.js\?v=i2/.test(sh) && /mf-config\.js\?v=mf13/.test(sh));
-    ok("X5 · STAMPS: dashboard.js mf49, dashboard.css mf7, invite.js i2, mf-config mf13 on dashboard.html",
-       /js\/dashboard\.js\?v=mf49/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf13/.test(dh));
+    ok("X5 · STAMPS: dashboard.js mf50, dashboard.css mf7, invite.js i2, mf-config mf13 on dashboard.html",
+       /js\/dashboard\.js\?v=mf50/.test(dh) && /css\/dashboard\.css\?v=mf7/.test(dh) && /js\/invite\.js\?v=i2/.test(dh) && /mf-config\.js\?v=mf13/.test(dh));
     ok("X6 · STAMPS: every other page carrying a moved file moved with it (treasury store.js s30, report mf-config mf13)",
        /js\/store\.js\?v=s30/.test(th) && /mf-config\.js\?v=mf13/.test(rh));
     ok("X7 · the Referrals link is untouched", /data-referrals>/.test(dh) && /Referrals<\/a>/.test(dh));

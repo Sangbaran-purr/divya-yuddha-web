@@ -620,7 +620,7 @@ window.DYDash = (function () {
     if ($("act-send")) $("act-send").onclick = function () { sendRevealed = true; renderLiquid(); if ($("send-to")) $("send-to").focus(); };
     if ($("send-cancel")) $("send-cancel").onclick = function () { sendRevealed = false; renderLiquid(); }; // collapse + clear (fresh re-render rebuilds empty fields)
     if ($("send-max")) $("send-max").onclick = function () { if ($("send-amt")) $("send-amt").value = ethersRef.formatUnits(data.liquid, data.dycDec); }; // exact full balance (round-trips via parseUnits)
-    if ($("send-go")) $("send-go").onclick = actSendDyc;
+    if ($("send-go")) $("send-go").onclick = freshThen(actSendDyc);
   }
 
   // S-P2P-1: validate then send liquid DYC peer-to-peer. Address checksum-normalized via getAddress; amount parsed to
@@ -672,7 +672,7 @@ window.DYDash = (function () {
       "<div class='stat-line'><span class='v' style='color:var(--gold-burnished)'>" + fmt(releasable) + "</span><span class='u'>DYC</span></div>" +
       "<div class='card-actions'><button class='btn-g btn-p' id='act-vclaim'" + (releasable > 0n ? "" : " disabled") + ">Claim</button></div>" +
       (pre ? "<div class='note pre'>⧗ Release begins at exchange listing</div>" : "");
-    if ($("act-vclaim")) $("act-vclaim").onclick = actClaimVesting;
+    if ($("act-vclaim")) $("act-vclaim").onclick = freshThen(actClaimVesting);
   }
 
   function renderStaked() {
@@ -705,8 +705,8 @@ window.DYDash = (function () {
       "</div>" +
       (stakeGateOpen ? "" : "<div class='note' style='margin-top:8px;line-height:1.5'>Staking opens at 10,000 DYC (about $100) for DYC acquired by transfer. ICO purchases stake at any amount. Your balance: " + fmt(data.liquid, data.dycDec) + " DYC.</div>") +
       "<div class='note'>ⓘ You've earned " + mult.toFixed(2) + "X of the " + cap + "X lifetime cap</div>";
-    if ($("act-activate")) $("act-activate").onclick = actActivate;
-    if ($("act-topup")) $("act-topup").onclick = actTopUp;
+    if ($("act-activate")) $("act-activate").onclick = freshThen(actActivate);
+    if ($("act-topup")) $("act-topup").onclick = freshThen(actTopUp);
   }
 
   function renderRewards() {
@@ -740,8 +740,8 @@ window.DYDash = (function () {
           "<div class='desk-status " + (deskFunded ? "funded" : "empty") + "'><span class='dot'></span>" +
           (deskFunded ? "Desk Funded <span style='opacity:.7'>(sufficient USDT reserve)</span>" : "Cash-out is closed for now — the USDT reserve is empty. Your collected rewards stay safe and playable.") + "</div>"
         : "<div class='note'>Cash-out desk not yet live.</div>");
-    if ($("act-rclaim")) $("act-rclaim").onclick = actClaimRewards;
-    if ($("act-cashout")) $("act-cashout").onclick = actCashOut;
+    if ($("act-rclaim")) $("act-rclaim").onclick = freshThen(actClaimRewards);
+    if ($("act-cashout")) $("act-cashout").onclick = freshThen(actCashOut);
   }
 
   // S-PROFILE-1 — the honest all-zero empty state. Shown ONLY when every holdings read SUCCEEDED and liquid,
@@ -765,158 +765,192 @@ window.DYDash = (function () {
   }
 
   // =========================================================================
-  //  READ
+  //  READ — DASH-READS-1 (owner rulings, carried over from STORE-READS-1 2026-10-30)
   // =========================================================================
-  function refresh() {
+  // A connected visit used to send ~32 single calls, one HTTP request each, and the whole set again on every wallet
+  // event (a reconnect read it all twice). Now:
+  //   · every eth_call the cards need is ONE Multicall3.aggregate3 (DYWallet.multicall, our allow-listed contracts
+  //     only), sent in ONE HTTP batch with the block (its timestamp) and the POL balance. Reads that depend on an
+  //     answer (the staking positions, the cash-out quote, a coupon's nonces) are a second aggregate3, made only when
+  //     there is something to read. The Torana self-claim simulation stays a single call: it must run FROM the
+  //     wallet, and inside aggregate3 the caller would be Multicall3.
+  //   · the wallet-independent figures (decimals, the desks' reserves and limits, the pool, the sale's round and
+  //     prices) are read with the first connected read and after a transaction — a wallet change reads only that
+  //     wallet's own figures, and a wallet event that changes nothing reads nothing.
+  //   · every purchase / stake / claim / withdrawal reads fresh (freshThen) before the wallet opens.
+  //   · if the one combined read fails, the cards show the ruled sentence with Try again — never single calls.
+  // The history feed (loadFeed: one combined eth_getLogs, RPC-CLEANUP-1) is not an eth_call and is untouched.
+  var globals = null;      // wallet-independent figures: { dycDec, vest:{dexDay,dur}, win:{…}, stake:{cap,remaining,staked}, deskReserve, sale:{round,pre,pub} }
+  var lastWalletKey = null;
+  var readDown = false;    // the last combined read failed: the buy panel shows the ruled sentence too, not a calculator from older figures
+  function walletKey() { return isConnected() ? String(W.state.address || "").toLowerCase() + "|" + (W.state.chainOk ? 1 : 0) : "none"; }
+
+  function readCore(withGlobals) {
+    var c = cfg(), addr = W.state.address, rp = W.readProvider(), I = function (abi) { return new ethersRef.Interface(abi); };
+    var iDy = I(DYCOIN_ABI), iVv = I(VEST_ABI), iWd = I(WIN_ABI), iHs = I(STAKE_ABI), iSale = I(SALE_ABI), iRd = I(DESK_ABI), iTk = I(TORANA_ABI),
+        iDd = I(DROP_ABI), iNft = I(["function balanceOf(address) view returns (uint256)"]);
+    var calls = [], at = {};
+    function q(key, target, iface, fn, args) { if (!target) return; at[key] = calls.length; calls.push({ target: target, iface: iface, fn: fn, args: args || [] }); }
+    // this wallet's own figures
+    q("liq", c.dycoin, iDy, "balanceOf", [addr]);
+    if (c.vestingVault) { q("vGranted", c.vestingVault, iVv, "grantedTo", [addr]); q("vVested", c.vestingVault, iVv, "vestedSoFar", [addr]); q("vRel", c.vestingVault, iVv, "releasable", [addr]); }
+    if (c.winningsDesk) { q("wRed", c.winningsDesk, iWd, "redeemed", [addr]); q("wLast", c.winningsDesk, iWd, "lastRedeem", [addr]); q("wInv", c.winningsDesk, iWd, "invitePaid", [addr]); }
+    if (c.inviteServiceUrl && c.accessNFT) q("torana", c.accessNFT, iNft, "balanceOf", [addr]);
+    if (c.toranaClaim) q("tSt", c.toranaClaim, iTk, "status", [addr]);
+    if (c.holderStaking) { q("hsN", c.holderStaking, iHs, "positionCount", [addr]); q("hsPend", c.holderStaking, iHs, "pendingRoi", [addr]); q("hsRoi", c.holderStaking, iHs, "roi", [addr]); q("hsReg", c.holderStaking, iHs, "vestedRegistered", [addr]); }
+    if (c.dycoinSale) q("ico", c.dycoinSale, iSale, "attributionLocked", [addr]);
+    // the wallet-independent figures — only on a full read
+    if (withGlobals) {
+      q("gDec", c.dycoin, iDy, "decimals");
+      if (c.vestingVault) { q("gDex", c.vestingVault, iVv, "dexDay"); q("gDur", c.vestingVault, iVv, "VEST_DURATION"); }
+      if (c.winningsDesk) { q("gWRes", c.winningsDesk, iWd, "reserve"); q("gWPau", c.winningsDesk, iWd, "paused"); q("gWMin", c.winningsDesk, iWd, "MIN_REDEEM"); q("gWCool", c.winningsDesk, iWd, "COOLDOWN"); }
+      if (c.holderStaking) { q("gCap", c.holderStaking, iHs, "CAP_MULTIPLE"); q("gPool", c.holderStaking, iHs, "poolRemaining"); q("gStaked", c.holderStaking, iHs, "totalStakedPrincipal"); }
+      if (c.roiRedemption) q("gDesk", c.roiRedemption, iRd, "reserve");
+      if (c.dycoinSale) { q("gRound", c.dycoinSale, iSale, "currentRound"); q("gPre", c.dycoinSale, iSale, "presalePriceE18"); q("gPub", c.dycoinSale, iSale, "publicPriceE18"); }
+    }
+    var couponsP = c.dropDesk ? loadCoupons() : Promise.resolve([]);   // the coupon file, alongside (a site file, not the chain)
+    // ONE HTTP batch: the block, the POL balance and the one aggregate3
+    return Promise.all([rp.getBlock("latest"), rp.getBalance(addr).catch(function () { return null; }), W.multicall(calls), loadAwaiting(), couponsP]).then(function (got) {
+      var blk = got[0], r = got[2], coupons = got[4];
+      var ok = function (k) { return at[k] != null && r[at[k]].ok; }, v = function (k) { return ok(k) ? r[at[k]].v : null; };
+      var g = withGlobals ? {
+        dycDec: ok("gDec") ? Number(v("gDec")) : 18,
+        vest: ok("gDex") && ok("gDur") ? { dexDay: v("gDex"), dur: v("gDur") } : null,
+        win: ok("gWRes") && ok("gWPau") && ok("gWMin") && ok("gWCool") ? { reserve: v("gWRes"), paused: v("gWPau"), min: v("gWMin"), cooldown: v("gWCool") } : null,
+        stake: ok("gCap") && ok("gPool") && ok("gStaked") ? { cap: v("gCap"), remaining: v("gPool"), staked: v("gStaked") } : null,
+        deskReserve: v("gDesk"),
+        sale: ok("gRound") ? { round: Number(v("gRound")), pre: ok("gPre") ? v("gPre") : 0n, pub: ok("gPub") ? v("gPub") : 0n } : null,
+      } : globals;
+      var d = {};
+      d.now = blk ? Number(blk.timestamp) : Math.floor(Date.now() / 1000);
+      if (got[1] != null) d.pol = got[1];
+      // LIQUID
+      if (!c.dycoin || !ok("liq")) d.liqErr = true; else { d.liquid = v("liq"); d.dycDec = g ? g.dycDec : 18; }
+      // VESTING — every figure, or the busy face
+      if (c.vestingVault) {
+        if (ok("vGranted") && ok("vVested") && ok("vRel") && g && g.vest) d.vest = { granted: v("vGranted"), vested: v("vVested"), releasable: v("vRel"), dexDay: g.vest.dexDay, dur: g.vest.dur };
+        else d.vestErr = true;
+      }
+      // WINNINGS (WINNINGS-4) — every figure, or "—" (the busy-sentinel law)
+      if (c.winningsDesk) {
+        if (ok("wRed") && ok("wLast") && ok("wInv") && g && g.win) d.win = { redeemed: v("wRed"), lastRedeem: v("wLast"), reserve: g.win.reserve, paused: g.win.paused, min: g.win.min, cooldown: g.win.cooldown, invitePaid: v("wInv") };
+        else d.winErr = true;
+      }
+      if (at.torana != null) { if (ok("torana")) d.torana = v("torana"); else d.toranaErr = true; }
+      if (c.toranaClaim) { var st = v("tSt"); d.toranaSt = st ? { s: Number(st[0]), spent: st[1], short: st[2] } : null; }
+      if (c.dycoinSale) { if (ok("ico")) d.isIcoBuyer = !!v("ico"); else { d.isIcoBuyer = null; console.warn("ICO-buyer provenance read failed — staking gate follows the 10,000 DYC floor rule this cycle"); } }
+      if (g && g.deskReserve != null) d.deskReserve = g.deskReserve;
+      // the second aggregate3 — only what depends on an answer above
+      var calls2 = [], at2 = {};
+      function q2(key, target, iface, fn, args) { at2[key] = calls2.length; calls2.push({ target: target, iface: iface, fn: fn, args: args || [] }); }
+      var nPos = ok("hsN") ? Number(v("hsN")) : 0;
+      for (var i = 0; i < nPos; i++) q2("pos" + i, c.holderStaking, iHs, "getPosition", [addr, i]);
+      if (c.roiRedemption && ok("hsRoi") && v("hsRoi") > 0n) q2("quote", c.roiRedemption, iRd, "quote", [v("hsRoi")]);
+      var mine = (coupons || []).filter(function (x) { return (x.wallet || "").toLowerCase() === String(addr).toLowerCase() && Number(x.deadline) >= d.now; });
+      mine.forEach(function (cp, j) { q2("cR" + j, c.dropDesk, iDd, "nonceRedeemed", [cp.nonce]); q2("cC" + j, c.dropDesk, iDd, "nonceCancelled", [cp.nonce]); });
+      var stage2 = calls2.length ? W.multicall(calls2) : Promise.resolve([]);
+      var sim = (d.toranaSt && d.toranaSt.s === 0) ? new ethersRef.Contract(c.toranaClaim, TORANA_ABI, rp).claimFor.staticCall(addr, { from: addr }).then(function () { d.toranaCant = false; }, function (e) {
+        var name = null;
+        try { name = iTk.parseError(e && (e.data || (e.info && e.info.error && e.info.error.data))).name; } catch (_) {}
+        d.toranaCant = name === "ERC721InvalidReceiver" || (name === null && !!(e && e.code === "CALL_EXCEPTION"));
+        if (name === "NotAuthorizedMinter") d.toranaOff = true;   // the master's off switch: offer no button
+      }) : Promise.resolve();
+      return Promise.all([stage2, sim]).then(function (got2) {
+        var r2 = got2[0], ok2 = function (k) { return at2[k] != null && r2[at2[k]].ok; }, v2 = function (k) { return ok2(k) ? r2[at2[k]].v : null; };
+        // STAKING + REWARDS — every figure, or the busy face for both cards
+        if (c.holderStaking) {
+          var posOk = true; for (var i2 = 0; i2 < nPos; i2++) if (!ok2("pos" + i2)) posOk = false;
+          if (ok("hsN") && posOk && ok("hsPend") && ok("hsRoi") && ok("hsReg") && g && g.stake) {
+            var principal = 0n, rewardClaimed = 0n, earliest = 0;
+            for (var i3 = 0; i3 < nPos; i3++) {
+              var p = v2("pos" + i3);
+              if (!p.principalReleased) principal += p.principal;
+              rewardClaimed += p.rewardClaimed;
+              var s = Number(p.startTime);
+              if (s && (!earliest || s < earliest)) earliest = s;
+            }
+            d.stake = { principal: principal, rewardClaimed: rewardClaimed, earliest: earliest, pending: v("hsPend"), roi: v("hsRoi"), cap: g.stake.cap, canActivate: !v("hsReg"), rewardTotal: rewardClaimed + v("hsPend") };
+            d.pool = { remaining: g.stake.remaining, staked: g.stake.staked };
+            // runway estimate: poolRemaining / (totalStakedPrincipal * 0.4%/day)  (disclosed)
+            var daily = (g.stake.staked * DAY) / DAY_DEN;
+            d.runwayDays = daily > 0n ? Number(g.stake.remaining / daily) : null;
+          } else { d.stakeErr = true; d.rewardErr = true; }
+        }
+        if (ok2("quote")) d.cashoutUsdt = v2("quote")[0];
+        // DROP DESK coupon (M-F6): the FIRST live coupon this wallet holds (unredeemed, uncancelled, unexpired)
+        d.coupon = null;
+        for (var j2 = 0; j2 < mine.length; j2++) if (ok2("cR" + j2) && ok2("cC" + j2) && !v2("cR" + j2) && !v2("cC" + j2)) { d.coupon = mine[j2]; break; }
+        if (withGlobals) globals = g;
+        if (g && g.sale) { buyState.round = g.sale.round; buyState.price = g.sale.round === 1 ? g.sale.pre : g.sale.pub; }
+        data = d; readDown = false;
+      });
+    });
+  }
+  function paintCards() {
+    // M-F4b: a configured read that threw is a NETWORK failure (not a bad address) → retry + honest message
+    var failed = !!(data.liqErr || data.vestErr || data.stakeErr || data.rewardErr);
+    if (failed) scheduleReadRetry(); else readSucceeded();
+    renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderRunway(); renderWinnings();
+    renderEmptyMint();
+    renderPolBanner();
+  }
+  function readFailed() {
+    // the one combined read failed → the whole line is down: retry + the ruled sentence (never single calls)
+    dimCards(false);
+    scheduleReadRetry();
+    readDown = true;
+    data = { liqErr: true, vestErr: true, stakeErr: true, rewardErr: true };
+    renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderWinnings();
+    renderEmptyMint();
+    renderBuy();
+    wireReadRetry();
+  }
+  // full: also the wallet-independent figures (first connected read, after a transaction, Try again)
+  function refresh(full) {
     renderWalletBar();
     // WINNINGS-4: paint the winnings card BEFORE the disconnected early-return. Its dormant face is static copy —
     // the rate, the floor, the cadence and "not yet open" — and a visitor with no wallet must still see it. Without
     // this the card renders an empty box to everyone who has not connected, which is what a browser run found.
     renderWinnings();
+    lastWalletKey = walletKey();
     if (!isConnected()) { dimCards(true); preConnectCards(); return; }
     dimCards(false);
     resumePendingTx(); // S-BUY-RESUME: on every connected load/cycle, reconcile any tx persisted before a drop/refresh
     withEthers().then(function () {
-      var c = cfg(), addr = W.state.address, provider = readProvider();
-      data = {};
-      return provider.getBlock("latest").then(function (blk) {
-        data.now = blk ? Number(blk.timestamp) : Math.floor(Date.now() / 1000);
-        var jobs = [];
-        // S-COLLECT-NOTICE: fetch the awaiting-collection list alongside the reads so renderRewards has it (never rejects).
-        jobs.push(loadAwaiting());
-        // POL balance → fee banner
-        jobs.push(provider.getBalance(addr).then(function (p) { data.pol = p; }).catch(function () {}));
-        // LIQUID
-        if (c.dycoin) {
-          var dy = new ethersRef.Contract(c.dycoin, DYCOIN_ABI, provider);
-          jobs.push(Promise.all([dy.balanceOf(addr), dy.decimals().catch(function () { return 18; })])
-            .then(function (r) { data.liquid = r[0]; data.dycDec = Number(r[1]); })
-            .catch(function () { data.liqErr = true; }));
-        } else { data.liqErr = true; }
-        // VESTING
-        if (c.vestingVault) {
-          var vv = new ethersRef.Contract(c.vestingVault, VEST_ABI, provider);
-          jobs.push(Promise.all([vv.grantedTo(addr), vv.vestedSoFar(addr), vv.releasable(addr), vv.dexDay(), vv.VEST_DURATION()])
-            .then(function (r) { data.vest = { granted: r[0], vested: r[1], releasable: r[2], dexDay: r[3], dur: r[4] }; })
-            .catch(function () { data.vestErr = true; }));
-        }
-        // WINNINGS (WINNINGS-4) — read ONLY when the desk exists. Dormant => not a single call is made.
-        if (c.winningsDesk) {
-          var wd = new ethersRef.Contract(c.winningsDesk, WIN_ABI, provider);
-          jobs.push(Promise.all([wd.redeemed(addr), wd.lastRedeem(addr), wd.reserve(), wd.paused(), wd.MIN_REDEEM(), wd.COOLDOWN(), wd.invitePaid(addr)])
-            .then(function (r) { data.win = { redeemed: r[0], lastRedeem: r[1], reserve: r[2], paused: r[3], min: r[4], cooldown: r[5], invitePaid: r[6] }; })
-            .catch(function () { data.winErr = true; })); // the busy-sentinel law: unknown renders "—", never a guess
-        }
-        // TORANA (AFFILIATE-1 rung 3) — read ONLY when the invite service is configured: the card it gates is for
-        // holders alone, and a dormant road makes no call at all.
-        if (c.inviteServiceUrl && c.accessNFT) {
-          var tn = new ethersRef.Contract(c.accessNFT, ["function balanceOf(address) view returns (uint256)"], provider);
-          jobs.push(tn.balanceOf(addr).then(function (b) { data.torana = b; }).catch(function () { data.toranaErr = true; }));
-        }
-        // TORANA-AUTO-1 — where this wallet stands with the automatic Torana: status(me), and — only when eligible — a
-        // simulation of claimFor(me) from the wallet itself, which is how "can't receive" (S5) is known before any fee.
-        // A failed read shows nothing (busy-sentinel law): the panel stays hidden rather than guess.
-        if (c.toranaClaim) {
-          var tk = new ethersRef.Contract(c.toranaClaim, TORANA_ABI, provider);
-          jobs.push(tk.status(addr).then(function (r) {
-            data.toranaSt = { s: Number(r[0]), spent: r[1], short: r[2] };
-            if (data.toranaSt.s !== 0) return;
-            return tk.claimFor.staticCall(addr, { from: addr }).then(function () { data.toranaCant = false; }, function (e) {
-              var name = null;
-              try { name = tk.interface.parseError(e && (e.data || (e.info && e.info.error && e.info.error.data))).name; } catch (_) {}
-              data.toranaCant = name === "ERC721InvalidReceiver" || (name === null && !!(e && e.code === "CALL_EXCEPTION"));
-              if (name === "NotAuthorizedMinter") data.toranaOff = true;   // the master's off switch: offer no button
-            });
-          }).catch(function () { data.toranaSt = null; }));
-        }
-        // STAKING + REWARDS
-        if (c.holderStaking) {
-          var hs = new ethersRef.Contract(c.holderStaking, STAKE_ABI, provider);
-          jobs.push(hs.positionCount(addr).then(function (n) {
-            var reads = [];
-            for (var i = 0; i < Number(n); i++) reads.push(hs.getPosition(addr, i));
-            return Promise.all(reads);
-          }).then(function (ps) {
-            var principal = 0n, rewardClaimed = 0n, earliest = 0;
-            ps.forEach(function (p) {
-              if (!p.principalReleased) principal += p.principal;
-              rewardClaimed += p.rewardClaimed;
-              var s = Number(p.startTime);
-              if (s && (!earliest || s < earliest)) earliest = s;
-            });
-            return Promise.all([hs.pendingRoi(addr), hs.roi(addr), hs.CAP_MULTIPLE(), hs.vestedRegistered(addr), hs.poolRemaining(), hs.totalStakedPrincipal()])
-              .then(function (r) {
-                data.stake = {
-                  principal: principal, rewardClaimed: rewardClaimed, earliest: earliest,
-                  pending: r[0], roi: r[1], cap: r[2], canActivate: !r[3], rewardTotal: rewardClaimed + r[0],
-                };
-                data.pool = { remaining: r[4], staked: r[5] };
-                // runway estimate: poolRemaining / (totalStakedPrincipal * 0.4%/day)  (disclosed)
-                var daily = (r[5] * DAY) / DAY_DEN;
-                data.runwayDays = daily > 0n ? Number(r[4] / daily) : null;
-              });
-          }).catch(function () { data.stakeErr = true; data.rewardErr = true; }));
-        }
-        // DESK reserve + cash-out quote
-        // S-STAKE-GATE-2: ICO-buyer provenance for the staking floor bypass. attributionLocked(addr) is the sale
-        // contract's per-wallet "has ever purchased" flag (set true on the first purchase, forever, unconditionally).
-        // BUSY-SENTINEL: a FAILED read is NOT boughtOf=0 — never demote a buyer on an RPC hiccup. On failure → null, so
-        // the gate falls back to the floor rule alone this cycle (self-heals next refresh); never a silent grant.
-        if (c.dycoinSale) {
-          var saleC = new ethersRef.Contract(c.dycoinSale, SALE_ABI, provider);
-          jobs.push(saleC.attributionLocked(addr).then(function (v) { data.isIcoBuyer = !!v; }).catch(function () { data.isIcoBuyer = null; console.warn("ICO-buyer provenance read failed — staking gate follows the 10,000 DYC floor rule this cycle"); }));
-        }
-        if (c.roiRedemption) {
-          var rd = new ethersRef.Contract(c.roiRedemption, DESK_ABI, provider);
-          jobs.push(rd.reserve().then(function (res) { data.deskReserve = res; }).catch(function () {}));
-        }
-        // DROP DESK coupon (M-F6): find the FIRST live coupon this wallet holds (unredeemed, uncancelled, unexpired).
-        if (c.dropDesk) {
-          var dd = new ethersRef.Contract(c.dropDesk, DROP_ABI, provider);
-          jobs.push(loadCoupons().then(function (list) {
-            var mine = list.filter(function (x) { return (x.wallet || "").toLowerCase() === addr.toLowerCase(); });
-            var chain = Promise.resolve(null);
-            mine.forEach(function (cp) {
-              chain = chain.then(function (found) {
-                if (found) return found;
-                if (Number(cp.deadline) < data.now) return null; // expired
-                return Promise.all([dd.nonceRedeemed(cp.nonce), dd.nonceCancelled(cp.nonce)]).then(function (r) {
-                  return (r[0] || r[1]) ? null : cp; // redeemed or cancelled → not live
-                }).catch(function () { return null; });
-              });
-            });
-            return chain.then(function (found) { data.coupon = found; });
-          }).catch(function () {}));
-        }
-        return Promise.all(jobs);
-      }).then(function () {
-        // cash-out quote needs roi + desk
-        if (c.roiRedemption && data.stake && data.stake.roi > 0n) {
-          var rd = new ethersRef.Contract(c.roiRedemption, DESK_ABI, provider);
-          return rd.quote(data.stake.roi).then(function (q) { data.cashoutUsdt = q[0]; }).catch(function () {});
-        }
-      }).then(function () {
-        // M-F4b: a configured read that threw is a NETWORK failure (not a bad address) → retry + honest message
-        var failed = !!(data.liqErr || data.vestErr || data.stakeErr || data.rewardErr);
-        if (failed) scheduleReadRetry(); else readSucceeded();
-        renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderRunway(); renderWinnings();
-        renderEmptyMint();
-        renderPolBanner();
-        loadFeed();
-        renderBuy();
-        renderRedeem();
-        wireReadRetry();
-      });
-    }).catch(function (e) {
-      // the very first read (getBlock) failed → the whole line is down: retry + show the honest message
-      dimCards(false);
-      scheduleReadRetry();
-      data.liqErr = data.vestErr = data.stakeErr = data.rewardErr = true;
-      renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderWinnings();
-      renderEmptyMint();
+      return readCore(full !== false || !globals);
+    }).then(function () {
+      paintCards();
+      loadFeed();
       renderBuy();
+      renderRedeem();
       wireReadRetry();
-    });
+    }, readFailed);
+  }
+  // a wallet event: re-read only when the wallet itself changed (connect, switch, network) — and then only its own figures
+  function onWalletEvent() {
+    if (walletKey() === lastWalletKey) { renderWalletBar(); return; }
+    refresh(false);
+  }
+  // DASH-READS-1 — every purchase / stake / claim / withdrawal reads FRESH before the wallet opens: the same one
+  // combined read (wallet + wallet-independent figures), the cards repainted from it, then the action — which takes its
+  // amounts from what was just read. If the read fails: the ruled sentence with Try again (which runs the read and
+  // the action again), and nothing opens.
+  function freshThen(fn) {
+    return function () {
+      var self = this, args = arguments;
+      if (!isConnected()) return fn.apply(self, args);
+      return withEthers().then(function () { return readCore(true); }).then(function () {
+        paintCards(); renderRedeem(); wireReadRetry();
+        return fn.apply(self, args);
+      }, function () {
+        failBox(RR_DASH);
+        var m = $("ov-fail-msg"), b = document.createElement("button");
+        b.type = "button"; b.className = "read-retry try-again"; b.textContent = TRY_AGAIN;
+        b.style.cssText = "background:none;border:1px solid currentColor;color:var(--gold-burnished, #d9a84e);border-radius:6px;padding:2px 10px;margin-left:6px;font:inherit;font-size:.9em;cursor:pointer";
+        b.onclick = function (e) { e.preventDefault(); $("ov-fail").classList.remove("show"); freshThen(fn).apply(self, args); };
+        m.appendChild(document.createTextNode(" ")); m.appendChild(b);
+      });
+    };
   }
 
   function renderPolBanner() {
@@ -1614,9 +1648,9 @@ window.DYDash = (function () {
       + "<p class='win-note'>" + esc(W_FACILITY) + " " + esc(W_FRESH) + "</p>";
 
     host.innerHTML = h;
-    if ($("win-coupon")) $("win-coupon").onclick = actWinningsCoupon;
+    if ($("win-coupon")) $("win-coupon").onclick = freshThen(actWinningsCoupon);
     // STEP 2 IS UNREACHABLE WITHOUT STEP 1: the handler is only attached when a coupon is actually held.
-    if ($("win-redeem") && winCoupon) $("win-redeem").onclick = actWinningsRedeem;
+    if ($("win-redeem") && winCoupon) $("win-redeem").onclick = freshThen(actWinningsRedeem);
   }
 
   // STEP 1 — prove the wallet, then ask the service for a signed cumulative. Nothing but the signed challenge
@@ -1812,7 +1846,7 @@ window.DYDash = (function () {
     if (!h) { panel.style.display = "none"; host.innerHTML = ""; return; }
     panel.style.display = "";
     host.innerHTML = h;
-    if ($("torana-claim")) $("torana-claim").onclick = actClaimTorana;
+    if ($("torana-claim")) $("torana-claim").onclick = freshThen(actClaimTorana);
   }
   function actClaimTorana() {
     var c = cfg(), me = W.state.address;
@@ -1997,7 +2031,7 @@ window.DYDash = (function () {
       + "<div class='redeem-sub'>A drop is waiting for your wallet — <b>" + daysLeft + " day" + (daysLeft === 1 ? "" : "s") + "</b> left to claim.</div>"
       + "<button class='rite-btn' id='redeem-btn'>Redeem my drop</button>"
       + "<div class='redeem-note'>One tap sends it straight to your wallet — no approval needed, just a little POL for the network fee.</div>";
-    $("redeem-btn").onclick = function () { actRedeem(cp); };
+    $("redeem-btn").onclick = freshThen(function () { if (data.coupon && String(data.coupon.nonce) === String(cp.nonce)) actRedeem(data.coupon); else renderRedeem(); });   // DASH-READS-1: redeemed or cancelled meanwhile → the card goes
   }
   function actRedeem(cp) {
     var c = cfg();
@@ -2116,10 +2150,10 @@ window.DYDash = (function () {
     var me = W.state.address;
     // just bought: the page's own refresh re-renders this panel — keep the after-purchase step until "Buy more"
     if (buyState.done && buyState.done === me) { renderAfterBuy(); return; }
+    // DASH-READS-1: the round and both prices ride the dashboard's one combined read (globals.sale) — no reads here
     withEthers().then(function () {
-      var p = readProvider();
-      var sale = new ethersRef.Contract(c.dycoinSale, SALE_ABI, p);
-      return Promise.all([sale.currentRound(), sale.presalePriceE18().catch(function () { return 0n; }), sale.publicPriceE18().catch(function () { return 0n; })])
+      if (readDown || !globals || !globals.sale) throw new Error("sale unread");
+      return Promise.resolve([globals.sale.round, globals.sale.pre, globals.sale.pub])
         .then(function (r) {
           var round = Number(r[0]);
           buyState.round = round;
@@ -2181,7 +2215,7 @@ window.DYDash = (function () {
     });
     var inp = $("buy-amt");
     inp.oninput = function () { buyState.amt = inp.value; updateCalc(); };
-    $("buy-go").onclick = buyFlow;
+    $("buy-go").onclick = freshThen(buyFlow);
     if (buyState.amt) inp.value = buyState.amt;
     if (typing) { try { inp.focus(); if (caret[0] != null) inp.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
     updateCalc();
@@ -2332,7 +2366,7 @@ window.DYDash = (function () {
         : "") +
       "<button class='btn-g btn-block' id='buy-again' style='margin-top:8px'>Buy more</button>";
     $("buy-again").onclick = function () { buyState.done = null; renderBuy(); };
-    if ($("buy-stake")) $("buy-stake").onclick = actStakeAfterBuy;
+    if ($("buy-stake")) $("buy-stake").onclick = freshThen(actStakeAfterBuy);
     // TORANA-AUTO-1 — the Torana line under the purchase: S1 when this buy qualified, S2 with the amount still missing
     if (c.toranaClaim && W.state && W.state.address) {
       var me = W.state.address;
@@ -2349,9 +2383,9 @@ window.DYDash = (function () {
   }
   function actStakeAfterBuy() {
     var c = cfg(), me = W.state.address;
-    withEthers().then(function () {
-      return new ethersRef.Contract(c.holderStaking, STAKE_ABI, readProvider()).vestedRegistered(me);
-    }).then(function (registered) {
+    // DASH-READS-1: freshThen has just read vestedRegistered with everything else — no single call of its own
+    if (!data.stake) { failBox(RR_DASH); return; }
+    Promise.resolve(!data.stake.canActivate).then(function (registered) {
       if (!registered) return actActivate();
       return runAction({
         contractAddr: c.holderStaking, abi: STAKE_ABI, gas: GAS.activate,
@@ -2416,7 +2450,7 @@ window.DYDash = (function () {
   //  and screenshots one box; the root cause reads itself off the screen. Renders ONLY with ?diag=1;
   //  zero effect on live behaviour otherwise. Inline-styled (immune to a stale CSS cache).
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
-  var DIAG_BUILD = "mf49"; // the version this diagnostic ships in — compare against the LOADED stamp below
+  var DIAG_BUILD = "mf50"; // the version this diagnostic ships in — compare against the LOADED stamp below
   function diagScriptVersion() {
     try {
       var s = [].slice.call(document.scripts).map(function (x) { return x.src || ""; }).filter(function (u) { return /js\/dashboard\.js/.test(u); })[0] || "";
@@ -2545,7 +2579,7 @@ window.DYDash = (function () {
     document.querySelectorAll("[data-soon]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Coming soon."); }; });
     document.querySelectorAll("[data-referrals]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Referrals live on the separate rewards platform."); }; });
     document.querySelectorAll("[data-help]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); toast("Support: email divyayuddha@gmail.com"); }; });
-    W.onChange(function () { refresh(); });
+    W.onChange(function () { onWalletEvent(); });   // DASH-READS-1: a wallet event reads only when the wallet changed
     W.init();
     refresh();
   }

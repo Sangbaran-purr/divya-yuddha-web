@@ -189,7 +189,8 @@ async function run() {
     H.click(w, "#win-coupon");
     const t0 = Date.now(); while (!(w.document.querySelector("#win-redeem") && !w.document.querySelector("#win-redeem").disabled) && Date.now() - t0 < 15000) await H.sleep(100);
     H.click(w, "#win-redeem");
-    const t1 = Date.now(); while (!w.document.querySelector("#ov-confirm-go") && Date.now() - t1 < 10000) await H.sleep(100);
+    // DASH-READS-1: the withdrawal reads fresh first, then opens its confirm — wait for the confirm to SHOW
+    const t1 = Date.now(); while (!w.document.getElementById("ov-confirm").classList.contains("show") && Date.now() - t1 < 10000) await H.sleep(100);
     H.click(w, "#ov-confirm-go");
     const t2 = Date.now(); while ((await c.desk.redeemed(c.player.address)) === 0n && Date.now() - t2 < 30000) await H.sleep(150);
     const txs = await sentTxs(c, h, 2);
@@ -249,8 +250,8 @@ async function run() {
     const carrying = pages.filter((p) => fs.readFileSync(path.join(SITE, p), "utf8").indexOf("wallet.js?v=") >= 0);
     ok("X1 · wallet.js is stamped s1v on every page that loads it (" + carrying.length + ")",
        carrying.length === 8 && carrying.every((p) => /wallet\.js\?v=s1v/.test(fs.readFileSync(path.join(SITE, p), "utf8"))));
-    ok("X2 · dashboard.js mf49 and hall.js h38",
-       /js\/dashboard\.js\?v=mf49/.test(fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8")) && /hall\.js\?v=h38/.test(fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8")));
+    ok("X2 · dashboard.js mf50 and hall.js h38",
+       /js\/dashboard\.js\?v=mf50/.test(fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8")) && /hall\.js\?v=h38/.test(fs.readFileSync(path.join(SITE, "mp/hall.html"), "utf8")));
   }
 
   console.log("──\n" + (fail === 0 ? "ALL GREEN — " + pass + "/" + (pass + fail) : "FAILURES — " + fail + " of " + (pass + fail)));

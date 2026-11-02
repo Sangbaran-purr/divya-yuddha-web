@@ -96,10 +96,13 @@ async function typingSurvives(c, p) {
   // a failed read: every RPC refused → the page's own "We couldn't load this right now — try again" → its retry recovers the calculator
   const realGet = ethers.FetchRequest.createGetUrlFunc();
   ethers.FetchRequest.registerGetUrl(async () => { throw new Error("connect ECONNREFUSED (proof: the line is down)"); });
-  eth.__switchTo(c.player);
+  // DASH-READS-1: a wallet event that changes nothing reads nothing, so the read is made to fail by a REAL change (another
+  // wallet, then back) — the line is down for both
+  eth.__switchTo(other);
   let sawTrouble = false;
   try { await H.until(() => /We couldn't load this right now — try again/.test(body(w)), 15000, "the network message"); sawTrouble = true; } catch (e) {}
   ethers.FetchRequest.registerGetUrl(realGet);
+  eth.__switchTo(c.player);
   await H.until(() => !!w.document.getElementById("buy-go"), 30000, "the retry").catch(() => {});
   out.failedRead = sawTrouble && amt() === "250" && usdcOn();
   // after a purchase: "Buy more" brings the calculator back with the same amount and coin
