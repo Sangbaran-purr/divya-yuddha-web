@@ -1248,14 +1248,22 @@ window.DYDash = (function () {
     // the `scan()` contract-shaped seam: queryFilter(filter, start, end) → decoded events (one combined getLogs)
     var combined = {
       queryFilter: function (_f, start, end) {
-        return provider.getLogs({ address: addresses, topics: [topic0, who], fromBlock: start, toBlock: end }).then(function (logs) {
+        // DASH-READS-1 follow-up: the RAW eth_getLogs answer, where the road allows it — it carries each log's
+        // blockTimestamp (our proxy's upstream sends it), which ethers' getLogs() drops; with it the feed needs no
+        // per-row block lookup to date a row. A road with no raw send (the owner's archive key + the proxy, a
+        // FallbackProvider) reads as before, and attachTimes looks the dates up.
+        var flt = { address: addresses, topics: [topic0, who], fromBlock: start, toBlock: end };
+        var raw = typeof provider.send === "function";
+        var ask = raw ? provider.send("eth_getLogs", [{ address: addresses, topics: [topic0, who], fromBlock: ethersRef.toQuantity(start), toBlock: ethersRef.toQuantity(end) }]) : provider.getLogs(flt);
+        return ask.then(function (logs) {
           var out = [];
-          logs.forEach(function (lg) {
+          (logs || []).forEach(function (lg) {
             var k = byKey[String(lg.address).toLowerCase() + ":" + lg.topics[0]];
             if (!k) return;
             var parsed; try { parsed = k.iface.parseLog({ topics: lg.topics, data: lg.data }); } catch (x) { return; }
             if (!parsed) return;
-            out.push({ blockNumber: lg.blockNumber, transactionHash: lg.transactionHash, args: parsed.args, __row: k.row });
+            var ts = null; try { if (lg.blockTimestamp != null) ts = Number(BigInt(lg.blockTimestamp)); } catch (x) { ts = null; }
+            out.push({ blockNumber: Number(lg.blockNumber), transactionHash: lg.transactionHash, args: parsed.args, __row: k.row, blockTimestamp: ts });
           });
           return out;
         });
@@ -1263,7 +1271,7 @@ window.DYDash = (function () {
     };
     return scan(combined, null, from, to, function (e) {
       var r = e.__row(e);
-      evs.push({ block: e.blockNumber, type: r.type, ic: r.ic, details: r.details, amt: r.amt, hash: e.transactionHash });
+      evs.push({ block: e.blockNumber, type: r.type, ic: r.ic, details: r.details, amt: r.amt, hash: e.transactionHash, ts: e.blockTimestamp != null ? e.blockTimestamp : undefined });
     });
   }
   function feedStatus(status) {
@@ -1483,11 +1491,12 @@ window.DYDash = (function () {
     }
     return step();
   }
+  // DASH-READS-1 follow-up: a row whose log carried its blockTimestamp is already dated — only the others are looked up
   function attachTimes(provider, evs) {
-    var blocks = {}; evs.forEach(function (e) { blocks[e.block] = true; });
+    var blocks = {}; evs.forEach(function (e) { if (e.ts == null) blocks[e.block] = true; });
     return Promise.all(Object.keys(blocks).map(function (b) {
       return provider.getBlock(Number(b)).then(function (blk) { blocks[b] = blk ? Number(blk.timestamp) : null; }).catch(function () { blocks[b] = null; });
-    })).then(function () { evs.forEach(function (e) { e.ts = blocks[e.block]; }); return evs; });
+    })).then(function () { evs.forEach(function (e) { if (e.ts == null) e.ts = blocks[e.block]; }); return evs; });
   }
   function feedIcon(k) {
     var src = { vesting: "icon_vesting", staked: "icon_staked", rewards: "icon_rewards" }[k] || "icon_liquid";
@@ -2450,7 +2459,7 @@ window.DYDash = (function () {
   //  and screenshots one box; the root cause reads itself off the screen. Renders ONLY with ?diag=1;
   //  zero effect on live behaviour otherwise. Inline-styled (immune to a stale CSS cache).
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
-  var DIAG_BUILD = "mf50"; // the version this diagnostic ships in — compare against the LOADED stamp below
+  var DIAG_BUILD = "mf51"; // the version this diagnostic ships in — compare against the LOADED stamp below
   function diagScriptVersion() {
     try {
       var s = [].slice.call(document.scripts).map(function (x) { return x.src || ""; }).filter(function (u) { return /js\/dashboard\.js/.test(u); })[0] || "";

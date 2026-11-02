@@ -17,8 +17,9 @@
 //   changes nothing reads nothing · D7 every action reads FRESH before the wallet opens · D8 the action takes the fresh
 //   amount (rewards credited after load) · D9 the fresh read refused → the ruled sentence + Try again, nothing opens, and
 //   Try again recovers · D10 the load's read refused → the ruled sentence on the cards, no single calls
-//   B1–B4 · breakages: single calls put back · a wallet event re-reads everything · the fresh read removed · a single-call
-//   fallback on failure
+//   D2c (follow-up) the feed dates its rows from each log's blockTimestamp: 0 block lookups · D12 a log without it is still dated
+//   B1–B5 · breakages: single calls put back · a wallet event re-reads everything · the fresh read removed · a single-call
+//   fallback on failure · per-row block lookups put back
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
@@ -55,7 +56,7 @@ function describe(item) {
 
 // ── A · the page → proxy counter (ethers' transport); ORDER also records the wallet's own requests (the prompts) ──
 const baseGetUrl = ethers.FetchRequest.createGetUrlFunc();
-const A = { proxyTo: null, http: 0, items: [] };
+const A = { proxyTo: null, http: 0, items: [], stripTs: false };
 let ORDER = [];
 ethers.FetchRequest.registerGetUrl(async (req, signal) => {
   const u = new URL(req.url);
@@ -64,7 +65,12 @@ ethers.FetchRequest.registerGetUrl(async (req, signal) => {
     A.http++;
     for (const it of (Array.isArray(j) ? j : [j])) { const d = describe(it); A.items.push(d); ORDER.push({ k: "read", d }); }
     const r2 = new ethers.FetchRequest(A.proxyTo); r2.method = req.method; r2.body = req.body; for (const [k, v] of req) r2.setHeader(k, v);
-    return baseGetUrl(r2, signal);
+    const res = await baseGetUrl(r2, signal);
+    // D12: a road whose logs carry no blockTimestamp — stripped from every eth_getLogs answer
+    if (A.stripTs && j && !Array.isArray(j) && j.method === "eth_getLogs" && res.body) {
+      try { const o = JSON.parse(Buffer.from(res.body).toString("utf8")); (o.result || []).forEach((lg) => { delete lg.blockTimestamp; }); res.body = Buffer.from(JSON.stringify(o)); } catch (e) {}
+    }
+    return res;
   }
   if (u.hostname === "127.0.0.1" || u.hostname === "localhost") return baseGetUrl(req, signal);
   throw new Error("refused by the suite: " + u.host);
@@ -215,8 +221,9 @@ async function run() {
     ok("D2 · CONNECTED (vesting, two staking positions, rewards + a cash-out quote, winnings, an eligible Torana, a live coupon): the cards in "
        + card + " chain calls / " + cardHttp + " HTTP requests (budget ≤ " + BUDGET.cardCalls + " / ≤ " + BUDGET.cardHttp + ") — was ~32 / ~32 on live",
        card <= BUDGET.cardCalls && cardHttp <= BUDGET.cardHttp, shape());
-    ok("D2c · the feed (the history scan, untouched): " + A.items.filter((d) => d.method === "eth_getLogs").length + " getLogs (≤ " + BUDGET.feedLogs + "), and one block per history row for its date ("
-       + feedBlocks + " for " + rows + " rows)", A.items.filter((d) => d.method === "eth_getLogs").length <= BUDGET.feedLogs && feedBlocks <= rows, shape());
+    const dated = Array.from(h.w.document.querySelectorAll("#tx-body tr")).filter((tr) => /\b20\d\d\b/.test(tr.textContent)).length;
+    ok("D2c · the feed: " + A.items.filter((d) => d.method === "eth_getLogs").length + " getLogs (≤ " + BUDGET.feedLogs + ") and 0 block lookups — every row dated from its log's blockTimestamp ("
+       + feedBlocks + " lookups; " + dated + " of " + rows + " rows dated)", A.items.filter((d) => d.method === "eth_getLogs").length <= BUDGET.feedLogs && feedBlocks === 0 && rows >= 2 && dated === rows, shape());
     ok("D2b · and every card read: liquid, vesting, staking, rewards, winnings, the Torana line, the coupon card",
        /\d/.test(T(h.w, "#liq-amt")) && !/couldn't load/.test(T(h.w, "#vest-body") + T(h.w, "#stake-body") + T(h.w, "#reward-body") + T(h.w, "#winnings-body"))
        && /2/.test(T(h.w, "#stake-body")) && !!h.w.document.querySelector("#redeem-btn"),
@@ -327,6 +334,18 @@ async function run() {
     H.teardown(h); dyNo.srv.close(); A.proxyTo = dy.url;
   }
 
+  // ═══ D12 · a log WITHOUT blockTimestamp still gets its date (the block lookup, for that row only) ═══
+  {
+    A.stripTs = true; resetA();
+    const h = await page(c, {});
+    await settled(h.w);
+    const rows = h.w.document.querySelectorAll("#tx-body tr").length;
+    const dated = Array.from(h.w.document.querySelectorAll("#tx-body tr")).filter((tr) => /\b20\d\d\b/.test(tr.textContent)).length;
+    const lookups = Math.max(0, A.items.filter((d) => d.method === "eth_getBlockByNumber").length - 1);
+    ok("D12 · LOGS WITHOUT blockTimestamp: every row still dated (" + dated + " of " + rows + ") by its block lookup (" + lookups + ")", rows >= 2 && dated === rows && lookups >= 1, shape());
+    H.teardown(h); A.stripTs = false;
+  }
+
   // ═══ B · deliberate breakages (each must be caught) ═══
   const SRC = fs.readFileSync(path.join(SITE, "js", "dashboard.js"), "utf8");
   const sub = (src, a, b) => { if (src.split(a).length !== 2) throw new Error("breakage target not found once: " + a.slice(0, 70)); return src.replace(a, b); };
@@ -368,6 +387,17 @@ async function run() {
     await H.sleep(9000);
     ok("B4 · A SINGLE-CALL FALLBACK when the read is refused — CAUGHT: " + singles().length + " single calls (D10 goes red)", singles().length > 0);
     H.teardown(h); dyNo.srv.close(); A.proxyTo = dy.url;
+  }
+
+  {
+    resetA();
+    let src = sub(SRC, "evs.forEach(function (e) { if (e.ts == null) blocks[e.block] = true; });", "evs.forEach(function (e) { blocks[e.block] = true; });");
+    src = sub(src, "evs.forEach(function (e) { if (e.ts == null) e.ts = blocks[e.block]; }); return evs;", "evs.forEach(function (e) { e.ts = blocks[e.block]; }); return evs;");
+    const h = await page(c, { dashSrc: src });
+    await settled(h.w);
+    const lookups = Math.max(0, A.items.filter((d) => d.method === "eth_getBlockByNumber").length - 1);
+    ok("B5 · PER-ROW BLOCK LOOKUPS put back — CAUGHT: " + lookups + " lookups with every timestamp present (D2c goes red)", lookups > 0);
+    H.teardown(h);
   }
 
   dy.srv.close(); B.srv.close();
