@@ -99,14 +99,44 @@ async function freshFees(provider) {
   }
 }
 const _chainStore = H.chainStore, _chainWinnings = H.chainWinnings;
-H.chainStore = async (o) => { await freshFees(new ethers.JsonRpcProvider(H.RPC)); return _chainStore(o); };
-H.chainWinnings = async (o) => { await freshFees(new ethers.JsonRpcProvider(H.RPC)); return _chainWinnings(o); };
+H.chainStore = async (o) => { await H.step("invites: freshFees before H.chainStore()", freshFees(H.chainProvider())); return _chainStore(o); };
+H.chainWinnings = async (o) => { await H.step("invites: freshFees before H.chainWinnings()", freshFees(H.chainProvider())); return _chainWinnings(o); };
 
 async function run() {
   console.log("\n── AFFILIATE-1 rung 3 · Torana Invites + the Withdraw card ──");
   const miss = H.preflight();
   if (!fs.existsSync(path.join(BOT, "invites", "codes.js"))) miss.push("  MISSING: the approval bot's invites module at " + BOT);
   if (miss.length) { console.log("PREFLIGHT FAILED:\n" + miss.join("\n")); process.exit(1); }
+
+  // ═══════════════ TW · THE TEST-CHAIN WATCHDOG (DASH-READS-1 follow-up): a stalled chain call fails FAST, by name ═══════════════
+  {
+    // TW1 — a chain that takes the connection and never answers (a wedged anvil): the request's own watchdog fires
+    const net = require("net");
+    const socks = [];
+    const dead = net.createServer((sk) => { socks.push(sk); sk.on("data", () => {}); }).listen(0, "127.0.0.1");
+    await new Promise((r) => dead.once("listening", r));
+    const t0 = Date.now();
+    let msg = "";
+    try { await H.step("TW1 · a wedged chain", () => H.chainProvider("http://127.0.0.1:" + dead.address().port, 1500).send("eth_blockNumber", []), 10000); } catch (e) { msg = String(e && e.message); }
+    const secs = (Date.now() - t0) / 1000;
+    ok("TW1 · A WEDGED CHAIN: the call fails in " + secs.toFixed(1) + " s (not at the suite cap) with a plain message naming the method and the step: '" + msg.slice(0, 120) + "'",
+       secs < 5 && /^TEST-CHAIN STALL/.test(msg) && /eth_blockNumber/.test(msg) && /TW1 · a wedged chain/.test(msg), msg);
+    socks.forEach((sk) => sk.destroy()); dead.close();
+    // TW2 — a deploy that is never mined (the real anvil, automine off): the deploy's own watchdog fires, naming the contract
+    const P = H.chainProvider();
+    const w = ethers.Wallet.createRandom().connect(P);
+    await P.send("anvil_setBalance", [w.address, "0x" + (10n * DEC).toString(16)]);
+    await P.send("evm_setAutomine", [false]);
+    const a = JSON.parse(fs.readFileSync(path.join(H.OUT, "MockDYC.sol", "MockDYC.json"), "utf8"));
+    const f = new ethers.ContractFactory(a.abi, a.bytecode.object, w); f.__ms = 1500;
+    const t1 = Date.now();
+    let msg2 = "";
+    try { await H.step("TW2 · a deploy never mined", () => f.deploy(), 10000); } catch (e) { msg2 = String(e && e.message); }
+    const secs2 = (Date.now() - t1) / 1000;
+    await P.send("anvil_dropAllTransactions", []); await P.send("evm_setAutomine", [true]);
+    ok("TW2 · A DEPLOY NEVER MINED: fails in " + secs2.toFixed(1) + " s with '" + msg2.slice(0, 120) + "'",
+       secs2 < 5 && /^TEST-CHAIN STALL/.test(msg2) && /deploy/.test(msg2) && /TW2 · a deploy never mined/.test(msg2), msg2);
+  }
 
   // ═══════════════ F · THE SHARED FIXTURE — the site's struct IS the bot's ═══════════════
   {
@@ -730,6 +760,9 @@ async function run() {
 
   // ═══════════════ WD · THE WITHDRAW CARD, END TO END ON THE REAL DESK ═══════════════
   async function withdraw(label, cumW, cumI, opts) {
+    return H.step("WD withdraw (" + label + ")", () => withdraw0(label, cumW, cumI, opts), 240000);   // names any stall inside
+  }
+  async function withdraw0(label, cumW, cumI, opts) {
     opts = opts || {};
     const c = await H.chainWinnings({ torana: true });
     const chainId = await chainIdOf(c);

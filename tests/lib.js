@@ -20,7 +20,47 @@ const K = {
   p1: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
   treasury: "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
 };
-function art(n) { const j = JSON.parse(fs.readFileSync(path.join(OUT, n + ".sol", n + ".json"), "utf8")); return { abi: j.abi, bytecode: j.bytecode.object }; }
+function art(n) { const j = JSON.parse(fs.readFileSync(path.join(OUT, n + ".sol", n + ".json"), "utf8")); ART_NAME[j.bytecode.object] = n; return { abi: j.abi, bytecode: j.bytecode.object }; }
+
+// ── DASH-READS-1 follow-up — THE TEST-CHAIN WATCHDOG. A test-chain call that never answers (anvil wedged) or a deploy that
+//    is never mined used to hang until the RUNNER's suite cap (minutes), with the last check line as the only clue. Now:
+//    · step(label, p, ms)  — a step that does not settle in ms (default 60 s, DY_STEP_MS) REJECTS with a plain message
+//      naming it: "TEST-CHAIN STALL — no answer in 60 s at: <label>". It also becomes the CURRENT step, named below.
+//    · every request a test chain's provider sends (chainProvider(): every builder here, and any suite that asks for one)
+//      has its own watchdog, naming the JSON-RPC method and the current step
+//    · every contract deploy (ethers.ContractFactory#deploy, patched once here, tests only) has its own watchdog until it is
+//      MINED, naming the contract (when built by art()) and the current step
+//    The losing promise is left behind; the step's rejection fails the suite at once (it never waits for the cap).
+const STEP_MS = Number(process.env.DY_STEP_MS) || 60000;
+const ART_NAME = {};
+const STEP = { now: "setup" };
+function step(label, p, ms) {
+  const prev = STEP.now; STEP.now = label;
+  const lim = ms || STEP_MS;
+  let t = null;
+  const timer = new Promise((_, rej) => { t = setTimeout(() => rej(new Error("TEST-CHAIN STALL — no answer in " + +(lim / 1000).toFixed(lim < 10000 ? 1 : 0) + " s at: " + label)), lim); });
+  return Promise.race([Promise.resolve().then(() => (typeof p === "function" ? p() : p)), timer]).finally(() => { clearTimeout(t); if (STEP.now === label) STEP.now = prev; });
+}
+class ChainProvider extends ethers.JsonRpcProvider {
+  constructor(url, ms) { super(url); this.__ms = ms || STEP_MS; }
+  _send(payload) {
+    const methods = (Array.isArray(payload) ? payload : [payload]).map((x) => x.method).join("+");
+    const lim = this.__ms, at = STEP.now;
+    let t = null;
+    const timer = new Promise((_, rej) => { t = setTimeout(() => rej(new Error("TEST-CHAIN STALL — the chain did not answer " + methods + " in " + +(lim / 1000).toFixed(lim < 10000 ? 1 : 0) + " s (step: " + at + ")")), lim); });
+    return Promise.race([super._send(payload), timer]).finally(() => clearTimeout(t));
+  }
+}
+function chainProvider(url, ms) { return new ChainProvider(url || RPC, ms); }
+if (!ethers.ContractFactory.prototype.__watched) {
+  const realDeploy = ethers.ContractFactory.prototype.deploy;
+  ethers.ContractFactory.prototype.deploy = function () {
+    const name = ART_NAME[this.bytecode] || "a contract", label = "deploy " + name + " (step: " + STEP.now + ")";
+    const self = this, args = arguments;
+    return step(label, () => realDeploy.apply(self, args).then((c) => c.waitForDeployment().then(() => c)), this.__ms);
+  };
+  ethers.ContractFactory.prototype.__watched = true;
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // S-HALL-SUITE-1 (R3) — THE PREFLIGHT. The suite boots the REAL match server, whose source, its own node_modules,
@@ -62,7 +102,7 @@ async function ensureMulticall3(provider) {
   await provider.send("anvil_setCode", [MULTICALL3, MULTICALL3_CODE]);
 }
 async function chain() {
-  const provider = new ethers.JsonRpcProvider(RPC);
+  const provider = chainProvider();   // DASH-READS-1 follow-up: every request watched
   await ensureMulticall3(provider);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
   const player = new ethers.Wallet(K.p1, provider);
@@ -109,7 +149,7 @@ async function server(escAddr, dycAddr) {
 const DEC6 = 1000000n;
 async function chainStore(opts) {
   opts = opts || {};
-  const provider = new ethers.JsonRpcProvider(RPC);
+  const provider = chainProvider();   // DASH-READS-1 follow-up: every request watched
   await ensureMulticall3(provider);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
   const player = new ethers.Wallet(K.p1, provider);
@@ -152,7 +192,7 @@ async function chainStore(opts) {
 //    wallet), wired (vault.setSale), funded, and opened to the PRESALE round by its round controller. `signer` is the
 //    voucher key the sale trusts — the test signs instant vouchers with it exactly as the approval bot would.
 async function chainPresale() {
-  const provider = new ethers.JsonRpcProvider(RPC);
+  const provider = chainProvider();   // DASH-READS-1 follow-up: every request watched
   await ensureMulticall3(provider);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
   const player = new ethers.Wallet(K.p1, provider);
@@ -186,7 +226,7 @@ async function chainPresale() {
 //    a wallet would actually touch: the desk under test is the deployed bytecode, not a stub of it.
 async function chainWinnings(opts) {
   opts = opts || {};
-  const provider = new ethers.JsonRpcProvider(RPC);
+  const provider = chainProvider();   // DASH-READS-1 follow-up: every request watched
   await ensureMulticall3(provider);
   const owner = new ethers.NonceManager(new ethers.Wallet(K.owner, provider));
   const player = new ethers.Wallet(K.p1, provider);
@@ -591,4 +631,7 @@ function teardown(h) {
   // deliberately NOT window.close() — closing is the race itself. The window dies with the process.
 }
 
-module.exports = { ensureMulticall3, MULTICALL3, chain, chainStore, chainWinnings, chainPresale, server, hall, storePage, dashboardPage, myInvitesPage, makeEthereum, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };
+// every chain builder is a named step (its deploys and requests name it when they stall)
+const _builders = { chain, chainStore, chainPresale, chainWinnings };
+const wrapB = (n) => function (o) { return step("H." + n + "()", () => _builders[n](o), STEP_MS * 5); };
+module.exports = { step, chainProvider, STEP_MS, ensureMulticall3, MULTICALL3, chain: wrapB("chain"), chainStore: wrapB("chainStore"), chainWinnings: wrapB("chainWinnings"), chainPresale: wrapB("chainPresale"), server, hall, storePage, dashboardPage, myInvitesPage, makeEthereum, ritePage, click, text, until, sleep, teardown, preflight, DEC, DEC6, S10, RPC, SITE, W3, MS, OUT };
