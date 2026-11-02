@@ -82,7 +82,7 @@ const SUITES = [
   // MINI-GAMES-1 R2: the Daily Puzzle PAGE — the real page in jsdom (controlled clock and store): UTC dates incl. +5:30
   // and -8, win / wrong / draw / reveal / missed day, storage blocked, no future puzzle, in-page solver = offline solver,
   // no plain answer or explanation in any served file.
-  { name: "daily",         file: path.join(__dirname, "suites", "daily.js"), chain: false, expect: 86 },   // Daily Puzzle Effects R2: +19 (the battle frame) · R3 tag style +1 · N2b +1
+  { name: "daily",         file: path.join(__dirname, "suites", "daily.js"), chain: false, expect: 90 },   // Daily Puzzle Effects R2: +19 (the battle frame) · R3 tag style +1 · N2b +1 · DAILY-REVIEW-4 +4 (the discard strip DS1–DS4)
   // MINI-GAMES-2: SMRITI, the memory game — R1 rules (deal, animated-pair rule, tries, best, storage), R2 the animation player
   // (the game's manifest reader and Meghnad's pack pinned byte-for-byte; 256 px only; load/release), R3 the page (the board
   // waits on every Hero/Meghnad turn; reduced motion skips; layouts); every owner-named breakage applied and caught.
@@ -96,12 +96,12 @@ const SUITES = [
   { name: "guestplay",     file: path.join(__dirname, "suites", "guestplay.js"), chain: true, expect: 17 },   // GUEST-PLAY-1: free play needs no wallet
   { name: "forkmode",      file: path.join(__dirname, "suites", "forkmode.js"), chain: false, expect: 12 },   // STORE-LOAD-1: the local-only fork mode
   { name: "buypanel",      file: path.join(__dirname, "suites", "buypanel.js"), chain: true, expect: 35, capMs: 600000 },   // GAS-HELP-1 R3: its cases wait out real timeouts
-  { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 91 },   // +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24) · +1 bounded chooser (K25) · +2 the title rule (K26, M26) · +1 tests read only this branch (K27) · +13 the first batch review (K28–K32b, M28–M32)
+  { name: "dailygen",      file: path.join(__dirname, "suites", "dailygen.js"), chain: false, expect: 97 },   // DAILY-REVIEW-4 +6 (say why K33/M33/M33b/K33c, the discard rule K34/M34) · +3 the Astra loophole (K20, K20b, M20) · +5 untold effects (K21, M21, K22, K22b, M22) · +5 wording (K23, M23, K23b, K24, M24) · +1 bounded chooser (K25) · +2 the title rule (K26, M26) · +1 tests read only this branch (K27) · +13 the first batch review (K28–K32b, M28–M32)
   // MINI-GAMES-1 · DAILY PUZZLE AUTOMATION R4: the weekly job, watchdog and veto (scripts/daily-gen/job.js + the three
   // workflows), run for real in throwaway clones pushing to a throwaway bare repo: 28 days ready, the digest-commit clash
   // retried (never forced), exactly the vetoed day replaced, the watchdog's gap email, every rule in the job path, a log of
   // dates/counts/ids only; four owner-named breakages, each caught.
-  { name: "dailyjob",      file: path.join(__dirname, "suites", "dailyjob.js"), chain: false, expect: 24 },
+  { name: "dailyjob",      file: path.join(__dirname, "suites", "dailyjob.js"), chain: false, expect: 25 },   // DAILY-REVIEW-4 +1 (J3b: the preview lists the discard piles)
 ];
 
 function freePort() {

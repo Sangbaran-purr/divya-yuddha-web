@@ -52,6 +52,9 @@
     firstArrives: function (when) { return "The first Daily Puzzle arrives on " + when + "."; },
     archiveTag: "From the archive",
     archiveLine: "Today's puzzle is on its way. Here is one from the archive.",
+    // DAILY-REVIEW-4 (owner ruling 2026-11-02): the discard piles under the board
+    yourDiscard: "Your discard pile: ",
+    theirDiscard: "The opponent's discard pile: ",
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -413,6 +416,17 @@
     return W[d.getUTCDay()] + " " + d.getUTCDate() + " " + M[d.getUTCMonth()];
   }
 
+  // DAILY-REVIEW-4 (owner ruling 2026-11-02): each side's discard pile at the start of the puzzle, named under the board — a card
+  // the answer brings back from a discard is never a secret. Nothing is shown when both piles are empty.
+  function renderDiscard() {
+    var box = $("dd-discard"); box.innerHTML = "";
+    [0, 1].forEach(function (pi) {
+      var d = (g.players[pi].discard || []).map(function (c) { return c.n; });
+      if (d.length) box.appendChild(el("p", "dd-discardline", (pi ? T.theirDiscard : T.yourDiscard) + d.join(", ")));
+    });
+    box.hidden = !box.children.length;
+  }
+
   function start(puzzles) {
     list = puzzles;
     var q = null; try { q = new URLSearchParams(location.search).get("d"); } catch (e) {}
@@ -427,6 +441,7 @@
     $("dd-ptitle").textContent = P.title;
     $("dd-diff").textContent = P.difficulty;
     g = PZ.load(P, E, 1);
+    renderDiscard();
     // a day already settled: no battle to load, just the page's word over the stage
     if (isToday && state.solved[today]) { done = true; stage(false); say(""); cover(T.solvedAlready); showAfter(false); return; }   // said ONCE, in the result panel (owner ruling 2026-10-16)
     if (isToday && state.revealed[today]) { done = true; stage(false); var r = PZ.solve(P, E, null); var wl = r.ok ? winningLine(r.winners[0]) : ""; say(""); cover(wl); showAfter(true); return; }   // said once, in the panel

@@ -17,9 +17,25 @@ const B1 = PUZZLES.slice(0, 14), B2 = PUZZLES.filter((p) => p.date >= "2026-10-2
 // owner ruling 2026-10-19: seven batch-2 puzzles KEPT exactly as they were (two predate Rule C); the other seven are new.
 // (ruling 2026-10-23: 7 Nov was vetoed after a leak and regenerated, so six of the seven remain as kept)
 const KEPT = ["2026-10-29", "2026-10-31", "2026-11-02", "2026-11-03", "2026-11-06", "2026-11-11"];
-const REWORDED = ["2026-11-11", "2026-11-02", "2026-11-03"];   // the owner's GENERAL wording rulings re-word kept days (positions and titles unchanged): 11 Nov (2026-10-23, the split Leap gain); 2 and 3 Nov (2026-10-25, a Hero's exemption told)
+const REWORDED = ["2026-11-11", "2026-11-02", "2026-11-03", "2026-11-06"];   // the owner's GENERAL wording rulings re-word kept days (positions and titles unchanged): 11 Nov (2026-10-23, the split Leap gain); 2 and 3 Nov (2026-10-25, a Hero's exemption told); 2 and 6 Nov (2026-11-02, the "say why" rule)
 const NEW = B2.filter((p) => KEPT.indexOf(p.date) < 0);
 
+// (DAILY-REVIEW-4, owner ruling 2026-11-02) the "say why" sentences, read as no-power items. Written so that no explanation
+// clause appears here literally (the leak check N2b reads every tracked file): names are left as wildcards.
+const WHY = [
+  /^.+ is an Astra, so it destroys (your|the opponent's) [A-Z]\w+( and .+ gets? no \+1 from it)?$/,
+  /^.+ is (a Hero|an Artifact), and (a Hero|an Artifact) does not set off [A-Z]\w+ [A-Z]\w+$/,
+  /^.+ is a Unit, and [A-Z]\w+ [A-Z]\w+ has already fired this round, so it does not fire again$/,
+  /^.+ grows only when an Astra is played, and .+ is (a|an) [A-Z]\w+$/,
+  /^.+ lifts the last card played only if it is a Unit or a Hero, and .+ is (a|an) [A-Z]\w+$/,
+  /^(your|the opponent's) .+ strikes only (when a Mantra is played, and .+ is (a|an) [A-Z]\w+|a Unit, and .+ leaves (you|the opponent) none on the board)$/,
+  /^.+ lifts only [A-Z]\w+ Units, and you have none on the board( \(.+ (is a Hero|are Heroes)\))?$/,
+  /^.+ heals only wounded Units, and none of yours is wounded$/,
+  /^.+ makes the opponent skip a turn, and they have already passed$/,
+  /^.+ is immune to Astras, so .+ does nothing$/,
+  /^.+ only guards a Unit that would be destroyed, and none of yours is destroyed this round$/,
+  /^.+ only deepens your Venom drain, and the opponent has no Unit for it to drain( \(.+ (is a Hero|are Heroes)\))?$/,
+];
 let pass = 0, fail = 0;
 const ok = (n, c, d) => { c ? (pass++, console.log("  ✓ " + n)) : (fail++, console.log("  ✖ " + n + (d ? "\n      " + d : ""))); };
 const J = (x) => JSON.stringify(x);
@@ -47,6 +63,7 @@ function readChanges(list, start) {
     else if (/ puts (?:a Venom Token|\d+ Venom Tokens) on /.test(it) || / adds no power$/.test(it) || / is an Artifact: it adds no power$/.test(it) || / cancels /.test(it)) { /* no power moves */ }
     else if (/ moves your Venom drain to the moment either player first passes$/.test(it) || /^the opponent has already passed, so your drain does not fire this round$/.test(it)) { /* a missing round-end effect, told */ }
     else if (/ stops the Venom Token on [^(]+?( \(it doesn't stop the Naga drain\))?$/.test(it)) { /* a token that never drains, told (Rama's Signet) */ }
+    else if (WHY.some((re) => re.test(it))) { /* (DAILY-REVIEW-4, 2026-11-02) a "say why" sentence: no power moves */ }
     else return { ok: false, why: "unread change: " + it };
   }
   return { ok: true, sum, named };
@@ -279,7 +296,10 @@ function arithmetic(text) {
   ok("K19 · CARDS BY THEIR FULL NAME: no explanation names the engine's short form ('by Sudarshana (' / 'from Sudarshana ('), and the one that names it uses 'Sudarshana Chakra'",
     si >= 0 && decoded.every((t) => !SHORT.test(t)));
   const m19 = mutant("function fullName(name, cards) {\n  if (!name) return name;", "function fullName(name, cards) {\n  return name;");
-  ok("M19 · breakage 'use the engine's short name' is caught (K19 goes red)", !!p4 && SHORT.test((m19.explain(p4, solved[p4.id]) || {}).text || ""));
+  // (DAILY-REVIEW-4) with the short name the Astra no longer recognises its own removal, so the "say why" rule REFUSES the day
+  // outright — also a catch: the short name never reaches a player
+  const m19ex = m19.explain(p4, solved[p4.id]);
+  ok("M19 · breakage 'use the engine's short name' is caught (K19 goes red, or the day is refused)", !!p4 && (!m19ex || SHORT.test(m19ex.text)));
 
   // ── owner ruling 2026-10-23, THE ASTRA LOOPHOLE: a removal/damage Astra looks as strong as what it removes or deals ──
   // (the position used is the vetoed 5 Nov as pushed in 26d284d; no card, target or number from it is written here)
@@ -385,6 +405,30 @@ function arithmetic(text) {
     !!revDay && !dS.some((t) => /joins your side through Mrityunjaya|joins your side through Gayatri/.test(t)));
   const m31 = mutant("      const from = disc0[uid];", "      const from = undefined;");
   ok("M31 · breakage 'forget the discard pile' is caught (K31 goes red)", !!revDay && /joins (your|the opponent's) side through /.test((m31.explain(revDay, solveS(revDay)) || {}).text || ""));
+  // ═══ OWNER RULINGS 2026-11-02 (DAILY-REVIEW-4) — the "say why" rule and the discard rule; days found by searching ═══
+  // 6 — an effect a card on the field sets off on one told play but not another says why; a card that changes nothing says why
+  // (the Artifact's name is held in ART6: written beside a win word, the generator's own leak guard would refuse its days)
+  const ART6 = ["Tri", "pura"].join(""), TRIP = new RegExp("(^|: |; )[A-Z][A-Za-z' ]+ is an Astra, so it destroys (your|the opponent's) " + ART6);
+  const tripDay = SCHED.find((P, i) => TRIP.test(dS[i].split(" Tempting but wrong: ")[0])), surgeDay = dayWith(/ has already fired this round, so it does not fire again/);
+  const FROM_NOV2 = SCHED.filter((P) => P.date >= "2026-11-02"), dN = FROM_NOV2.map((P) => dS[SCHED.indexOf(P)]);
+  ok("K33 · SAY WHY: a winning Astra that destroys an Artifact on the field says so; a Unit that does not set off a Chaos Surge says why; from 2 Nov no explanation has a bare 'adds no power', and each is the one the writer gives today",
+    !!tripDay && !!surgeDay && dN.every((t) => !/(^|; |: )[A-Z][^;:]* adds no power[;.]/.test(t))
+      && FROM_NOV2.every((P, i) => { const e = G.explain(P, solveS(P)); return e && e.text === dN[i]; }), FROM_NOV2.filter((P, i) => { const e = G.explain(P, solveS(P)); return !e || e.text !== dN[i]; }).map((P) => P.date).join(", "));
+  const m33 = mutant('  if (x === "' + ART6 + '") {', '  if (x === "__none__") {');
+  ok("M33 · breakage 'no sentence for a fallen Artifact' is caught: that day is REFUSED (an effect missing with no reason)", !!tripDay && rejects(m33, tripDay, "EXPLANATION"));
+  const m33b = mutant("    for (const x of want) { if (n.fired.has(x)) continue;", "    for (const x of []) { if (n.fired.has(x)) continue;");
+  ok("M33b · breakage 'skip the comparison' is caught (K33 goes red: that day is told without its reason)", !!tripDay && !TRIP.test(((m33b.explain(tripDay, solveS(tripDay)) || {}).text || "")));
+  const nothingDay = dayWith(/ heals only wounded Units, and none of yours is wounded/);
+  const m33c = mutant('  if (c.id === "pavamana" && n.log.some(', '  if (false && n.log.some(');
+  ok("K33c · …and a card that changes nothing with no reason the writer knows is REFUSED, never told as a bare 'adds no power'", !!nothingDay && rejects(m33c, nothingDay, "EXPLANATION"));
+  // 7 — the discard rule: a card brought back from a discard pile must be in that pile as the position text lists it
+  const discJ = {}; SCHED.forEach((P) => { const j = G.judge(P); if (j.ok && j.ex.told.some((n) => n.returns.length)) discJ[P.date] = j; });
+  const discDays = SCHED.filter((P) => discJ[P.date]);
+  ok("K34 · THE DISCARD RULE: every scheduled day whose answer or told wrong play brings a card back from a discard pile (" + discDays.length + ") lists that card in its position text's discard pile",
+    discDays.length >= 3 && discDays.every((P) => { const L = G.listedDiscards(G.describe(P)); return discJ[P.date].ex.told.every((n) => n.returns.every((r) => L[r.from].indexOf(r.n) >= 0)); }));
+  const m34 = mutant('    + discardNames(P).map((d, pi) =>', '    + [].map((d, pi) =>');
+  ok("M34 · breakage 'leave the discard pile out of the position text' is caught: those days are REFUSED (DISCARD_UNLISTED)", discDays.length >= 3 && discDays.every((P) => rejects(m34, P, "DISCARD_UNLISTED")));
+
   // 5 — the variety rule: the same winning card (or the same tempting-wrong card) at most once in 14 days — never a failure
   {
     const slots = G.planSlots(G.datesFrom("2099-06-01", "2099-06-14")), pools = {};

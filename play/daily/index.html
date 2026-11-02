@@ -10,7 +10,7 @@
     <link rel="preload" href="../../assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="../../assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="../../css/threshold.css?v=s1g" />
-    <link rel="stylesheet" href="daily.css?v=d6" />
+    <link rel="stylesheet" href="daily.css?v=d7" />
     <link rel="stylesheet" href="../shared/mini.css?v=g2" />
   </head>
   <body class="daily">
@@ -37,6 +37,8 @@
         <p id="dd-archive" class="dd-archive" hidden></p>
         <p id="dd-msg" role="status" aria-live="polite"></p>
         <div id="dd-game"></div>
+        <!-- DAILY-REVIEW-4 (owner ruling 2026-11-02): each side's discard pile, under the board, for every puzzle; hidden when both are empty -->
+        <div id="dd-discard" class="dd-discard" hidden></div>
         <div id="dd-detail" class="dd-detail" hidden></div>
         <div id="dd-actions" class="dd-actions"></div>
 
@@ -79,9 +81,9 @@
     <script src="../../game/src/engine.js?v=33d0757"></script>
     <script src="puzzle-core.js?v=d1"></script>
     <script src="daily.js?v=d2"></script>
-    <script src="notes.js?v=d13"></script>
-    <script>window.DY_DAILY_V = "d13";</script>
-    <script src="page.js?v=d7"></script>
+    <script src="notes.js?v=d14"></script>
+    <script>window.DY_DAILY_V = "d14";</script>
+    <script src="page.js?v=d8"></script>
     <script src="../shared/back.js?v=g2"></script>
   </body>
 </html>

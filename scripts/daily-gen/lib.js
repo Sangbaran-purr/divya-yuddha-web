@@ -309,7 +309,14 @@ function narrate(P, play, opts) {
   const endSum = [0, 1].map((s) => endChanges.filter((c) => c.side === s).reduce((t, c) => t + c.amount, 0));
   if (T1[0] + endSum[0] !== T2[0] || T1[1] + endSum[1] !== T2[1]) return null;
   const names = changes.map((c) => c.text).join(" | ") + " | " + endChanges.map((c) => c.name).join(" | ");
-  return { T0, T1, T2, changes, endChanges, leaps, noPower, win: h.winner === 0, names, after: b1, exempt };
+  // (DAILY-REVIEW-4, owner ruling 2026-11-02) what this play set in motion, by name — the "say why" rule compares these
+  // across the told plays — and every card it brought back from a discard pile (that pile must be in the position text)
+  const fired = new Set();
+  evPlay.forEach((e) => { if (e.abilityName && ((POWER_EVENTS[e.type] && e.amount) || e.type === "destroy" || e.type === "token")) fired.add(e.abilityName); });
+  endChanges.forEach((c) => fired.add(c.name));
+  const returns = Object.keys(b1).filter((u) => !b0[u] && disc0[u] != null && !(played && +u === played.uid)).map((u) => ({ n: b1[u].n, from: disc0[u] }));
+  return { T0, T1, T2, changes, endChanges, leaps, noPower, win: h.winner === 0, names, after: b1, exempt, fired, returns, evPlay,
+    log: (g.log || []).slice(log0).map((x) => (typeof x === "string" ? x : (x && (x.msg || x.text)) || "")), played: played ? { n: played.n, t: played.t, id: played.id } : null };
 }
 
 // ── 3. THE EXPLANATION — one fixed plain pattern ──
@@ -389,6 +396,75 @@ function realmCheck(P, play, n, line) {
   return { ok: true, matters: decides, changes: true, without: nm ? nm.T2 : null, name };
 }
 const J = (x) => JSON.stringify(x);
+// (DAILY-REVIEW-4, owner ruling 2026-11-02) THE "SAY WHY" RULE. The told plays are compared with each other: an effect
+// a card already on the field (or the realm) sets off on one told play but not on another is a number the player would
+// count on — the play that misses it says why, in one plain sentence from the engine's own record or the card's printed
+// condition. A played card that changes nothing says why too (never a bare "adds no power"). No sentence → refused.
+const ARTICLE = { unit: "a Unit", hero: "a Hero", artifact: "an Artifact", astra: "an Astra", mantra: "a Mantra" };
+const listAnd = (a) => (a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]);
+function whyMissing(P, g0, n, x) {
+  const c = n.played; if (!c) return null;
+  if (x === "Tripura") {
+    // Tripura: "Ends the instant any Astra is played by either player" — the engine's record shows it fall
+    if (c.t !== "astra" || !n.evPlay.some((e) => e.type === "passive" && e.abilityName === "Tripura")) return null;
+    const side = [0, 1].find((s) => g0.players[s].artifact && g0.players[s].artifact.id === "tripura"); if (side == null) return null;
+    const us = Object.values(n.after).filter((u) => u.side === side && !u.hero).map((u) => u.n);
+    return c.n + " is an Astra, so it destroys " + whose(side) + "Tripura" + (us.length ? " and " + listAnd(us) + (us.length > 1 ? " get" : " gets") + " no +1 from it" : "");
+  }
+  if (x === "Chaos Surge" && P.you.faction === "asuras") {
+    // the engine: an Astra or a Mantra sets it off; a Unit only when none has fired this round; a Hero never; an Artifact
+    // only Chandrahas (its ON PLAY)
+    if (c.t === "hero" || (c.t === "artifact" && c.id !== "chandrahas")) return c.n + " is " + ARTICLE[c.t] + ", and " + ARTICLE[c.t] + " does not set off " + x;
+    if (c.t === "unit" && g0.players[0].chaosThisRound) return c.n + " is a Unit, and " + x + " has already fired this round, so it does not fire again";
+    return null;
+  }
+  if (x === "Bana Asura") return c.t !== "astra" ? x + " grows only when an Astra is played, and " + c.n + " is " + ARTICLE[c.t] : null;
+  if (x === "Agni") {
+    // Agni: "Whenever any Mantra is played, deal 1 damage to a random enemy Unit"
+    const side = [0, 1].find((sd) => g0.players[sd].heroes.some((h) => h.id === "agni")); if (side == null) return null;
+    if (c.t !== "mantra") return whose(side) + x + " strikes only when a Mantra is played, and " + c.n + " is " + ARTICLE[c.t];
+    if (!Object.values(n.after).some((u) => u.side === 1 - side && !u.hero)) return whose(side) + x + " strikes only a Unit, and " + c.n + " leaves " + (side ? "you" : "the opponent") + " none on the board";
+    return null;
+  }
+  if (x === "Kalki Kshetra" && P.realm === "kalki") return c.t !== "unit" && c.t !== "hero" ? x + " lifts the last card played only if it is a Unit or a Hero, and " + c.n + " is " + ARTICLE[c.t] : null;
+  return null;
+}
+function whyNothing(P, g0, n) {
+  const c = n.played;
+  if (c.id === "ramanaam" && !Object.values(n.after).some((u) => u.side === 0 && !u.hero)) {
+    const hs = Object.values(n.after).filter((u) => u.side === 0 && u.hero).map((u) => u.n);
+    return c.n + " lifts only Vanara Units, and you have none on the board" + (hs.length ? " (" + listAnd(hs) + (hs.length > 1 ? " are Heroes)" : " is a Hero)") : "");
+  }
+  if (c.id === "pavamana" && n.log.some((l) => /^Pavamana: nothing to purify/.test(l))) return c.n + " heals only wounded Units, and none of yours is wounded";
+  if (c.t === "astra") { const m = n.log.map((l) => /^(.+?) shrugs off the Astra — immune/.exec(l)).find(Boolean); if (m) return m[1] + " is immune to Astras, so " + c.n + " does nothing"; }
+  if (c.id === "venomstrike" && !Object.values(n.after).some((u) => u.side === 1 && !u.hero)) {
+    const hs = Object.values(n.after).filter((u) => u.side === 1 && u.hero).map((u) => u.n);
+    return c.n + " only deepens your Venom drain, and the opponent has no Unit for it to drain" + (hs.length ? " (" + listAnd(hs) + (hs.length > 1 ? " are Heroes)" : " is a Hero)") : "");
+  }
+  if (c.id === "kishkindhaoath" && !n.evPlay.some((e) => e.type === "destroy" && (e.targetUids || []).some((t) => n.after[t] && n.after[t].side === 0))) return c.n + " only guards a Unit that would be destroyed, and none of yours is destroyed this round";
+  if (c.id === "tamasa" && g0.players[1].passed) return c.n + " makes the opponent skip a turn, and they have already passed";
+  return null;
+}
+// → [[why sentences] per told play], with each bare "adds no power" replaced in place — or null (refused)
+function sayWhy(P, g0, told) {
+  const HAND = new Set(g0.players[0].hand.map((c) => c.n));
+  const counts = (x) => !HAND.has(x) && ![...HAND].some((h) => h.indexOf(x + " ") === 0) && x !== "Leap" && x !== "Venom" && x !== "the Naga Venom drain" && !/^its /.test(x);
+  const out = [];
+  for (let i = 0; i < told.length; i++) {
+    const n = told[i], whys = [];
+    if (n.played && n.noPower === n.played.n + " adds no power") { const w = whyNothing(P, g0, n); if (!w) return null; n.noPower = w; }
+    const want = new Set(); told.forEach((m, j) => { if (j !== i) m.fired.forEach((x) => { if (counts(x)) want.add(x); }); });
+    for (const x of want) { if (n.fired.has(x)) continue; const w = whyMissing(P, g0, n, x); if (!w) return null; if (whys.indexOf(w) < 0) whys.push(w); }
+    out.push(whys);
+  }
+  return out;
+}
+// (DAILY-REVIEW-4, owner ruling 2026-11-02) the discard piles, as the position text lists them and the page shows them
+function discardNames(P) { const g = PZ.load(P, E, PZ.SEEDS[0]); return [0, 1].map((pi) => (g.players[pi].discard || []).map((c) => c.n)); }
+function listedDiscards(text) {
+  const read = (re) => { const m = re.exec(text); return m ? m[1].split(", ") : []; };
+  return [read(/ Your discard pile: ([^.]+)\./), read(/ The opponent's discard pile: ([^.]+)\./)];
+}
 function explain(P, res) {
   const w = res.winners[0];
   const nw = narrate(P, w);
@@ -398,11 +474,6 @@ function explain(P, res) {
   const wMiss = missingEnd(P, base, nw, w.play); if (wMiss === null) return null;
   const realm = P.realm !== "mrityulok" ? " in " + REALM_NAME[P.realm] : "";
   const mustTell = [].concat(nw.exempt.play, nw.exempt.end);   // every Hero exemption the engine shows (ruling 2026-10-25)
-  let s = "Before your play the round stands " + nw.T0[0] + "–" + nw.T0[1] + realm + ". ";
-  s += "Play " + (w.play ? w.play + (w.target ? " on " + clean(w.target) : "") : "nothing") + ": " + sentenceOf(nw).concat(wMiss ? [wMiss] : []).join("; ") + " — " + nw.T1[0] + "–" + nw.T1[1] + ". ";
-  if (nw.endChanges.length) s += "At the round's end " + endText(nw) + ". ";
-  s += "You win " + nw.T2[0] + "–" + nw.T2[1] + ".";
-  if (rw.matters) s += " " + rw.name + " decides it: " + (rw.without ? "in Mrityulok the same play ends " + rw.without[0] + "–" + rw.without[1] + "." : "without it this play is not the answer.");
   // THE MOST TEMPTING WRONG PLAYS: the strongest-looking card, the closest score, and any Astra that is cancelled — each
   // told with every change named and the solver's own score. One that cannot be told that way refuses the puzzle.
   const g0 = PZ.load(P, E, PZ.SEEDS[0]), hand = g0.players[0].hand, cardOf = (n) => hand.find((c) => c.n === n) || {};
@@ -413,26 +484,33 @@ function explain(P, res) {
   // always told: the strongest-looking card, the closest score, and EVERY Hero in your hand that loses (a Hero trap)
   const heroes = lose.filter((p) => cardOf(p.play).t === "hero");
   const pick = [strongest, closest].concat(heroes).filter(Boolean).filter((p, i, a) => a.indexOf(p) === i);
-  const wrong = [];
+  const items = [], wrong = [];
   for (const p of pick.concat(lose.filter((p) => pick.indexOf(p) < 0))) {
     const must = pick.indexOf(p) >= 0;
-    if (!must && wrong.length >= 2 && !(cardOf(p.play).t === "astra")) continue;
+    if (!must && items.length + wrong.length >= 2 && !(cardOf(p.play).t === "astra")) continue;
     const L = lineFor(P, p); if (!L) return null;
     const nl = narrate(P, p, { line: L }); if (!nl || nl.T2[0] !== p.you || nl.T2[1] !== p.them) return null;
     if (!realmCheck(P, p, nl, L).ok) return null;
     const miss = missingEnd(P, base, nl, p.play); if (miss === null) return null;
     nl.exempt.play.concat(nl.exempt.end).forEach((t) => mustTell.push(t));
-    if (!must && wrong.length >= 2 && !nl.noPower) continue;   // an extra entry only for an Astra that is cancelled
-    const gap = p.them - p.you;
-    wrong.push(clean(p.key) + " falls short: " + sentenceOf(nl).concat(miss ? [miss] : []).join("; ") + (nl.endChanges.length ? "; at the round's end " + endText(nl) : "")
-      + "; the round ends " + p.you + "–" + p.them + (gap === 0 ? ", a draw, and a draw is not a win" : ", " + gap + " short"));
-    if (!must && wrong.length >= 3) break;
+    if (!must && items.length + wrong.length >= 2 && !nl.noPower) continue;   // an extra entry only for an Astra that is cancelled
+    items.push({ p, nl, miss });
+    if (!must && items.length + wrong.length >= 3) break;
   }
+  const whys = sayWhy(P, g0, [nw].concat(items.map((it) => it.nl))); if (!whys) return null;
+  let s = "Before your play the round stands " + nw.T0[0] + "–" + nw.T0[1] + realm + ". ";
+  s += "Play " + (w.play ? w.play + (w.target ? " on " + clean(w.target) : "") : "nothing") + ": " + sentenceOf(nw).concat(wMiss ? [wMiss] : [], whys[0]).join("; ") + " — " + nw.T1[0] + "–" + nw.T1[1] + ". ";
+  if (nw.endChanges.length) s += "At the round's end " + endText(nw) + ". ";
+  s += "You win " + nw.T2[0] + "–" + nw.T2[1] + ".";
+  if (rw.matters) s += " " + rw.name + " decides it: " + (rw.without ? "in Mrityulok the same play ends " + rw.without[0] + "–" + rw.without[1] + "." : "without it this play is not the answer.");
+  items.forEach((it, k) => { const p = it.p, nl = it.nl, gap = p.them - p.you;
+    wrong.push(clean(p.key) + " falls short: " + sentenceOf(nl).concat(it.miss ? [it.miss] : [], whys[k + 1]).join("; ") + (nl.endChanges.length ? "; at the round's end " + endText(nl) : "")
+      + "; the round ends " + p.you + "–" + p.them + (gap === 0 ? ", a draw, and a draw is not a win" : ", " + gap + " short")); });
   if (!wrong.length || pick.some((p) => wrong.every((t) => t.indexOf(clean(p.key) + " falls short") !== 0))) return null;
   s += " Tempting but wrong: " + wrong.join(". ") + ".";
   // RULE B (ruling 2026-10-25): a Hero's exemption the engine shows must be in the words — or the explanation is refused
   if (mustTell.some((t) => s.indexOf(t) < 0)) return null;
-  return { text: s, narration: nw, realm: rw };
+  return { text: s, narration: nw, realm: rw, told: [nw].concat(items.map((it) => it.nl)) };
 }
 
 // ── 4. GRADE, MECHANIC, OBVIOUS ──
@@ -614,6 +692,10 @@ function judge(P, opts) {
   // slot's line but the last slot's score — a puzzle where those differ is refused, so the reveal and the page agree)
   const w0 = res.winners[0];
   if (ex.narration.T2[0] !== w0.you || ex.narration.T2[1] !== w0.them) return { ok: false, reason: "LINE_SCORE", res, gr };
+  // (DAILY-REVIEW-4, owner ruling 2026-11-02) a card the answer or a told wrong play brings back from a discard pile must be
+  // in that pile as the position text lists it (the page shows the same piles under the board) — else refused
+  const listed = listedDiscards(describe(P));
+  if (ex.told.some((n) => n.returns.some((r) => listed[r.from].indexOf(r.n) < 0))) return { ok: false, reason: "DISCARD_UNLISTED", res, gr };
   const why = (opts.ruleC || ruleC)(P, res, ex.narration, ex.realm);
   if (why) return { ok: false, reason: "RULE_C", detail: why, res, gr };
   // a HERO TRAP must be told: every Hero in your hand that loses is listed with exactly why (explain() always picks it)
@@ -905,8 +987,9 @@ function describe(P) {
     return (items.join(", ") || "nothing") + (pl.artifact ? "; Artifact: " + pl.artifact.n : ""); };
   const t = totals(g);
   return "You (" + FAC_NAME[P.you.faction] + ") " + t[0] + " vs the opponent (" + FAC_NAME[P.them.faction] + ") " + t[1] + ", realm " + REALM_NAME[P.realm] + ", the opponent has passed. "
-    + "Your side: " + side(0) + ". Their side: " + side(1) + ". Your hand: " + g.players[0].hand.map((c) => c.n).join(", ") + ".";
+    + "Your side: " + side(0) + ". Their side: " + side(1) + ". Your hand: " + g.players[0].hand.map((c) => c.n).join(", ") + "."
+    + discardNames(P).map((d, pi) => (d.length ? (pi ? " The opponent's" : " Your") + " discard pile: " + d.join(", ") + "." : "")).join("");
 }
 
-module.exports = { VARIETY_DAYS, wrongCards, varietyClash, causeName, TITLE_GAP, titleClash, titleFor, builtTitles, TITLES, leaks, looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
+module.exports = { sayWhy, whyMissing, whyNothing, discardNames, listedDiscards, VARIETY_DAYS, wrongCards, varietyClash, causeName, TITLE_GAP, titleClash, titleFor, builtTitles, TITLES, leaks, looksOf, astraHit, missingEnd, fullName, heroTraps, looksAsStrong, MECH_CAP, construct, poolFor, choose, ruleC, swingOf, planOpponents, checkSpread, factionsTrue, venomSources, lineFor, realmCheck, noPowerReason, DP_FILES, WIN_WORD, leakyLines, realmMatters, E, PZ, SITE, FACTIONS, REALM_NAME, DIFF_BY_DAY, NEAR_DUP, hashStr, mulberry32, candidate, narrate, explain, grade, mechanicOf, titleFor, signature, similarity,
   judge, planSlots, datesFrom, generate, describe, clean, defOf };

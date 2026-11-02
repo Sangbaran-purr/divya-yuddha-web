@@ -47,7 +47,8 @@ function pageAt(iso, opts) {
   opts = opts || {};
   let html = HTML.replace(/<script src="([^"]+)"><\/script>/g, (m, src) => {
     const f = path.resolve(DIR, src.split("?")[0]);
-    return "<script>" + fs.readFileSync(f, "utf8").replace(/<\/script/g, "<\\/script") + "</script>";
+    const text = opts.patch ? opts.patch(path.relative(SITE, f), fs.readFileSync(f, "utf8")) : fs.readFileSync(f, "utf8");
+    return "<script>" + text.replace(/<\/script/g, "<\\/script") + "</script>";
   });
   const fixed = Date.parse(iso);
   const pre = "<script>(function(){var t=" + fixed + ";Date.now=function(){return t;};})();"
@@ -510,9 +511,35 @@ async function main() {
     ok("ML7 · THE FALLBACK BOARD: its buttons ('Play …', 'End my turn', 'Leap', 'Show me the answer') are plaque buttons too", allPlaque(fb, "#dd-actions button") && plaques(fb, "#dd-actions button").some((b) => /^Play /.test(b.textContent))
       && /function btn\(text, cls, fn\) \{ var b = el\("button", "dd-btn mg-btn "/.test(R("play/daily/page.js")));
     const css = R("play/daily/daily.css"), html = R("play/daily/index.html");
-    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d6, page.js d7, mini.css g2 — on both mini games)",
+    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d7, page.js d8, mini.css g2 — on both mini games)",
       !/\.dd-btn \{/.test(css) && !/\.dd-btn\.dd-go/.test(css) && /body\.daily \{[^}]*overflow-x: hidden/.test(css) && /body\.dd-framing \.mg-stage \{ opacity: \.35; \}/.test(css)
-        && /daily\.css\?v=d6/.test(html) && /page\.js\?v=d7/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
+        && /daily\.css\?v=d7/.test(html) && /page\.js\?v=d8/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
+  });
+
+  // ═══ DAILY-REVIEW-4 (owner ruling 2026-11-02): THE DISCARD PILES UNDER THE BOARD ═══
+  await section('THE DISCARD PILES UNDER THE BOARD', async () => {
+    // the card each day's answer brings back from a discard pile, found here by the referee (never named in this file)
+    // (the card is played on a fresh copy of the position and the board read before the round is scored)
+    const returning = (P) => { const g = PZ.load(P, E, PZ.SEEDS[0]), w = winnerOf(P), disc = new Set([0, 1].flatMap((pi) => g.players[pi].discard.map((c) => c.uid)));
+      const idx = g.players[0].hand.findIndex((c) => c.n === w.play), spec = E.targetSpec(g, 0, g.players[0].hand[idx]);
+      const t = w.target && spec ? spec.options.find((o) => o.n === String(w.target).replace(/#\d+$/, "")) : null;
+      E.playCard(g, 0, idx, t ? t.uid : null, null);
+      return [0, 1].flatMap((pi) => g.players[pi].units.filter((u) => disc.has(u.uid)).map((u) => u.n)); };
+    const strip = (dom) => { const b = doc(dom).getElementById("dd-discard"); return b && !b.hidden ? b.textContent : ""; };
+    const DAYS = ["2026-11-08", "2026-11-24", "2026-12-09"].map(byDate);
+    const seen = [];
+    for (const P of DAYS) { const dm = pageAt(P.date + "T09:00:00Z"); await tick(); const g0 = PZ.load(P, E, PZ.SEEDS[0]), back = returning(P);
+      seen.push(!!P && back.length > 0 && back.every((n) => strip(dm).indexOf(n) >= 0) && strip(dm).indexOf("Your discard pile: " + g0.players[0].discard.map((c) => c.n).join(", ")) >= 0); }
+    ok("DS1 · 8 Nov, 24 Nov and 9 Dec: the board's discard strip reads 'Your discard pile: …' and names the card the answer brings back", seen.length === 3 && seen.every(Boolean), JSON.stringify(seen));
+    const both = PUZZLES.find((P) => { const g0 = PZ.load(P, E, PZ.SEEDS[0]); return g0.players[1].discard.length && g0.players[0].discard.length; });
+    const bm = both && pageAt(both.date + "T09:00:00Z"); if (bm) await tick();
+    ok("DS2 · the opponent's pile is shown too when it is not empty ('The opponent's discard pile: …'), on its own line", !!bm && doc(bm).querySelectorAll("#dd-discard .dd-discardline").length === 2
+      && /^The opponent's discard pile: /.test(doc(bm).querySelectorAll("#dd-discard .dd-discardline")[1].textContent));
+    const empty = PUZZLES.find((P) => { const g0 = PZ.load(P, E, PZ.SEEDS[0]); return !g0.players[0].discard.length && !g0.players[1].discard.length; });
+    const em = empty && pageAt(empty.date + "T09:00:00Z"); if (em) await tick();
+    ok("DS3 · a puzzle with both piles empty shows no strip at all", !!em && doc(em).getElementById("dd-discard").hidden && strip(em) === "");
+    const broken = pageAt(DAYS[2].date + "T09:00:00Z", { patch: (f, t) => (f === "play/daily/page.js" ? t.replace("    renderDiscard();\n", "") : t) }); await tick();
+    ok("DS4 · breakage 'drop the strip' is caught (DS1 goes red: 9 Dec shows no discard pile)", R("play/daily/page.js").indexOf("    renderDiscard();\n") >= 0 && strip(broken) === "");
   });
 
   await section('THE RULES, DIRECTLY', async () => {

@@ -112,3 +112,7 @@ button.dd-card { cursor: pointer; }
 .dd-covertext { margin: 0; max-width: 34ch; font-family: var(--display); letter-spacing: .04em; font-size: 1.2rem; line-height: 1.4; color: #f4df9a; }
 .dd-cover .dd-actions { margin-top: 0; }
 .dd-stage-done .dd-frame { display: none; }
+
+/* DAILY-REVIEW-4 (owner ruling 2026-11-02): the discard piles under the board */
+.dd-discard { margin: 10px auto 0; max-width: 520px; text-align: center; }
+.dd-discardline { margin: 2px 0; font-size: 0.95rem; color: var(--gold-hairline); }

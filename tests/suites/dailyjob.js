@@ -129,6 +129,14 @@ const window28 = (t) => G.datesFrom(t, JOB.addDays(t, JOB.AHEAD - 1));
     wk.mails.length === 1 && m.to === ADDR && days.length === 28 && days.every((b, i) => b.indexOf(fxDates[i]) >= 0 && /\nTitle: .+/.test(b) && /\nDifficulty: (easy|medium|hard)/.test(b)
       && /\nMechanic: .+/.test(b) && /\nPosition: You \(/.test(b) && /\nWinning play: .+/.test(b) && /\nExplanation: Before your play/.test(b)
       && b.indexOf("Veto this puzzle: https://github.com/Sangbaran-purr/divya-yuddha-web/actions/workflows/daily-veto.yml") >= 0 && b.indexOf("enter the date " + fxDates[i]) >= 0));
+  // (DAILY-REVIEW-4, owner ruling 2026-11-02) the preview's position names each side's discard pile when it is not empty —
+  // exactly the piles the page shows under the board
+  const piles = fxDates.map((d) => { const P = FX.days.find((p) => p.date === d), g0 = require(path.join(SITE, "play", "daily", "puzzle-core.js")).load(Object.assign({ id: "dp-" + d }, P), G.E, 1);
+    return [0, 1].map((pi) => g0.players[pi].discard.map((c) => c.n)); });
+  const posOf = (b) => ((/\nPosition: (.+)/.exec(b) || [])[1] || "");
+  ok("J3b · THE PREVIEW'S POSITION LISTS THE DISCARD PILES: every day with a card in a discard pile names it ('Your discard pile: …' / 'The opponent's discard pile: …'), and a day with none says nothing of it (" + piles.filter((x) => x[0].length || x[1].length).length + " days with a pile)",
+    piles.some((x) => x[0].length || x[1].length) && days.length === 28 && days.every((b, i) => [0, 1].every((pi) => { const lab = (pi ? " The opponent's" : " Your") + " discard pile: ";
+      return piles[i][pi].length ? posOf(b).indexOf(lab + piles[i][pi].join(", ") + ".") >= 0 : posOf(b).indexOf(lab) < 0; })));
   const newTexts = textsOf(A, fxDates);
   const L1 = logLeaks(wk.log, newTexts);
   ok("J4 · THE PUBLIC LOG: every line is one of the job's messages (dates, counts, ids, hashes); no card, title, explanation or address (" + L1.lines + " lines)", clean(L1), JSON.stringify(L1));
