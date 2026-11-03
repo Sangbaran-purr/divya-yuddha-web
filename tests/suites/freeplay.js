@@ -292,16 +292,21 @@ async function run() {
     .replace('if (!dailyFrame && !sessionStorage.getItem("dyw_pass")) {', 'if (!sessionStorage.getItem("dyw_pass")) {')
     .replace('} catch (e) { if (!dailyFrame) { location.replace("../rite.html"); return; } }', '} catch (e) { location.replace("../rite.html"); return; }')
     .replace(/\n    if \(dailyFrame\) return; \/\* MINI-GAMES-1: nor inside the Daily Puzzle's frame[^\n]*/, "");
-  const nowCopy = withoutDailyFrame(withoutPuzzleMode(withoutGuestPlay(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8"))));
-  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle and Smriti doors (MINI-GAMES-1/-2), the Daily Puzzle's battle mode (?puzzle=1) and its gate road (MINI-GAMES-1), GUEST-PLAY-1's preamble (no redirect, the solo tag), and the stamp (now the copy id)",
+  // GROW-COUNT-1 (owner rulings 2026-11-03): the player counter's tag, first in the injected block, and the game's three
+  // guarded hooks (game 6b946e0) — each undone exactly (any other drift still turns red)
+  const withoutCounter = (t) => t
+    .replace(/<!-- GROW-COUNT-1 \(owner rulings 2026-11-03\): the site's player counter, loaded FIRST[^\n]*\n[^\n]*-->\n<script src="\.\.\/play\/shared\/count\.js\?v=\w+"><\/script>\n/, "")
+    .replace(/\n  try\{ window\.DY_COUNT && window\.DY_COUNT\.finished\('(match|story|hall)'\); \}catch\(e\)\{\}   \/\/ GROW-COUNT-1[^\n]*/g, "");
+  const nowCopy = withoutCounter(withoutDailyFrame(withoutPuzzleMode(withoutGuestPlay(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")))));
+  ok("DG1 · game/ is unchanged since before FREE-PLAY-1 outside the injected S3 block — except the ruled Daily Puzzle and Smriti doors (MINI-GAMES-1/-2), the Daily Puzzle's battle mode (?puzzle=1) and its gate road (MINI-GAMES-1), GUEST-PLAY-1's preamble (no redirect, the solo tag), the player counter's tag and three hooks (GROW-COUNT-1), and the stamp (now the copy id)",
      outsideS3(head("game/index.html")) === outsideS3(withoutDoor(nowCopy)) && withoutDoor(nowCopy) !== nowCopy &&
      withoutPuzzleMode(fs.readFileSync(path.join(SITE, "game/index.html"), "utf8")).indexOf("PUZZLE_MODE") < 0 &&
      head("game/STAMP").trim() === "07c3530" && fs.readFileSync(path.join(SITE, "game/STAMP"), "utf8").trim() === copyId());
   // SITE-AUDIT-1 grew the sync script (GAME_REF + the Store relink); the GATE it injects must not have moved
   const gateBlock = (t) => (t.match(/<!-- DYW-GATE-START[\s\S]*?<!-- DYW-S3-SUPPRESS-START/) || [""])[0];
   const shNow = fs.readFileSync(path.join(SITE, "scripts/sync_game.sh"), "utf8"), copyNow = fs.readFileSync(path.join(SITE, "game/index.html"), "utf8");
-  ok("DG2 · the sync script's gate preamble is unchanged since before FREE-PLAY-1 except the ruled roads (the Daily Puzzle's own frame; GUEST-PLAY-1: no redirect for anyone, the solo tag); a passless visit is NOT sent to the rite",
-     gateBlock(head("scripts/sync_game.sh")) === withoutDailyFrame(withoutGuestPlay(gateBlock(shNow))) && gateBlock(shNow) !== withoutGuestPlay(gateBlock(shNow)) && gateBlock(head("scripts/sync_game.sh")).length > 200 &&
+  ok("DG2 · the sync script's gate preamble is unchanged since before FREE-PLAY-1 except the ruled roads (the Daily Puzzle's own frame; GUEST-PLAY-1: no redirect for anyone, the solo tag; GROW-COUNT-1: the player counter's tag); a passless visit is NOT sent to the rite",
+     gateBlock(head("scripts/sync_game.sh")) === withoutCounter(withoutDailyFrame(withoutGuestPlay(gateBlock(shNow)))) && gateBlock(shNow) !== withoutGuestPlay(gateBlock(shNow)) && gateBlock(head("scripts/sync_game.sh")).length > 200 &&
      copyNow.indexOf('location.replace("../rite.html")') < 0 && copyNow.indexOf('sessionStorage.getItem("dyw_pass")') < 0 &&
      /dailyFrame = window\.top !== window && \/\[\?&\]puzzle=1\(&\|\$\)\/\.test\(location\.search\) && window\.parent\.location\.origin === location\.origin && \/\^\\\/play\\\/daily\\\/\/\.test\(window\.parent\.location\.pathname\)/.test(copyNow));
   const demo = fs.readFileSync(path.join(SITE, "demo/index.html"), "utf8"), demoHead = head("demo/index.html");
