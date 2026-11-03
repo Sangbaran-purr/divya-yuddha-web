@@ -58,9 +58,9 @@ function onceRules(C) {   // G4
     const keys = new Set(); a.c.outbox().forEach((e) => Object.keys(e).forEach((k) => keys.add(k)));
     ok("G6 · NOTHING PERSONAL leaves: every event carries only " + allowed.join(", ") + " — no address, no name, no email", [...keys].every((k) => allowed.indexOf(k) >= 0) && !/0x[0-9a-fA-F]{40}/.test(J(a.c.outbox())), [...keys].join(",")); }
   {
-    ok("G7 · SHIPPED SWITCHED OFF (owner ruling): ENDPOINT is empty — events wait in the outbox, nothing is sent", C.ENDPOINT === "" && /var ENDPOINT = "";/.test(COUNT_SRC));
+    ok("G7 · SWITCHED ON (owner, 2026-11-03): ENDPOINT is exactly the owner's counter, https only — nowhere else", C.ENDPOINT === "https://count.divyayuddha.games/v1/events" && /var ENDPOINT = "https:\/\/count\.divyayuddha\.games\/v1\/events";/.test(COUNT_SRC));
     const sent = []; const f = (code) => (u, o) => { sent.push(JSON.parse(o.body)); return code === "net" ? Promise.reject(new Error("offline")) : Promise.resolve({ status: code }); };
-    const off = counter(C, { fetch: f(200) }); off.c.finished("match");
+    const off = counter(C, { fetch: f(200), endpoint: "" }); off.c.finished("match");
     const s = memStore();
     const on = counter(C, { storage: s, fetch: f(503), endpoint: "https://count.example/v1/events" }); on.c.finished("match"); await on.c.flush();
     const kept503 = on.c.outbox().length === 2;
@@ -81,7 +81,7 @@ function onceRules(C) {   // G4
   console.log("\n── GROW-COUNT-1 · one id across /game/, /play/daily/ and /play/smriti/ ──");
   const GAME = R("game/index.html"), STAMP = R("game/STAMP").trim();
   const gate = (src) => src.slice(src.indexOf("<!-- DYW-GATE-START"), src.indexOf("<!-- DYW-GATE-END -->"));
-  const TAG = '<script src="../play/shared/count.js?v=c1"></script>';
+  const TAG = '<script src="../play/shared/count.js?v=c2"></script>';
   function copyId(gameSrc, seeded) {
     // the site's game copy's injected block, in a real DOM at /game/: the counter's tag replaced by its source
     const html = "<!doctype html><html><head><meta charset=\"utf-8\">" + gate(gameSrc).replace(TAG, "<script>" + COUNT_SRC.replace(/<\/script/g, "<\\/script") + "</script>") + "</head><body></body></html>";
@@ -128,7 +128,7 @@ function onceRules(C) {   // G4
   ok("G20 · round trip: a visit through a built link is counted under exactly that source, kind and campaign", viaLink.s === "pinoy-gamer-tv" && viaLink.m === "creator" && viaLink.c === "sea-launch");
   const pages = ["owner/growth.html", "owner/links.html"].map((f) => R(f));
   ok("G21 · the owner pages: not indexed, locked until the owner's wallet signs (their content hidden at load), no data of their own; the door asks dy-count at count.divyayuddha.games",
-    pages.every((h) => /<meta name="robots" content="noindex, nofollow"/.test(h) && /<section id="owner-locked"/.test(h) && /id="owner-open"[^>]* hidden/.test(h) && /owner\.js\?v=o1/.test(h) && /js\/wallet\.js\?v=s1w/.test(h))
+    pages.every((h) => /<meta name="robots" content="noindex, nofollow"/.test(h) && /<section id="owner-locked"/.test(h) && /id="owner-open"[^>]* hidden/.test(h) && /owner\.js\?v=o1/.test(h) && /js\/wallet\.js\?v=s1x/.test(h))
       && /var BASE = "https:\/\/count\.divyayuddha\.games";/.test(R("owner/owner.js")) && /personal_sign/.test(R("owner/owner.js")) && /Authorization|authorization/.test(R("owner/owner.js")));
   const tracked = require("child_process").execFileSync("git", ["ls-files", "-co", "--exclude-standard", "*.html"], { cwd: SITE, encoding: "utf8" }).split("\n").filter((f) => f && !/^tmp\//.test(f));
   ok("G22 · the draft Privacy sentence is on NO page yet (owner ruling 8: it waits for the owner's wording)", tracked.every((f) => R(f).indexOf("random anonymous ID") < 0));
@@ -140,8 +140,8 @@ function onceRules(C) {   // G4
   red("B3 · FIRST TOUCH overwritten by the next tagged visit (G1 goes red)", !firstTouch(countFrom(mutate(COUNT_SRC, "    function queue(e) {", "    st.src = sourceOf(env.search, env.portal); write(KEY, st);\n    function queue(e) {"))));
   { const moved = GAME.replace(TAG + "\n", "").replace("<!-- DYW-GATE-END -->", TAG + "\n<!-- DYW-GATE-END -->"); const r = copyId(moved, seeded);
     red("B4 · the counter loaded AFTER the storage shim in the game copy — two ids for one player (G12 goes red)", moved !== GAME && r.id !== daily.state().id); }
-  { const on = mutate(COUNT_SRC, 'var ENDPOINT = "";', 'var ENDPOINT = "https://count.divyayuddha.games/v1/events";');
-    red("B5 · the endpoint switched on before the owner says so (G7 goes red)", countFrom(on).ENDPOINT !== ""); }
+  { const away = mutate(COUNT_SRC, 'var ENDPOINT = "https://count.divyayuddha.games/v1/events";', 'var ENDPOINT = "https://count.example.net/v1/events";');
+    red("B5 · the endpoint pointed anywhere but the owner's counter (G7 goes red)", countFrom(away).ENDPOINT !== "https://count.divyayuddha.games/v1/events"); }
   red("B6 · the Daily reveal hook removed (G14 goes red)", !hooks(Object.assign({}, SRC, { daily: mutate(SRC.daily, "D.markRevealed(state, P.date, today); D.save(store, state); }\n      countFinish();", "D.markRevealed(state, P.date, today); D.save(store, state); }") })).daily);
   red("B7 · the wallet event made to carry the address (G6 goes red)", (() => { const M = countFrom(mutate(COUNT_SRC, 'queue({ ev: "wallet_connect", day: utcDay(now()) });', 'queue({ ev: "wallet_connect", day: utcDay(now()), addr: "0x" + "ab".repeat(20) });')); const a = counter(M, {}); a.c.walletConnected(); return /0x[0-9a-fA-F]{40}/.test(J(a.c.outbox())); })());
   red("B8 · the India word check emptied — a crypto name gets its links (G19 goes red)", (() => { const lsrc = R("owner/links.js"), lp = path.join(SITE, "owner", "links.js"); const m = new Module(lp, null); m.filename = lp; m._compile(mutate(lsrc, "function bannedIn(s) { var parts", "function bannedIn(s) { return []; var parts"), lp);

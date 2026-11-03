@@ -198,7 +198,7 @@ window.DYWallet = (function () {
       if (/(^|\/)(admin|treasury)\.html$|\/owner\//.test(location.pathname)) return;
       if (window.DY_COUNT) { window.DY_COUNT.walletConnected(); return; }
       var sc = document.createElement("script");
-      sc.src = "/play/shared/count.js?v=c1";
+      sc.src = "/play/shared/count.js?v=c2";
       sc.onload = function () { try { if (window.DY_COUNT) window.DY_COUNT.walletConnected(); } catch (e) {} };
       document.head.appendChild(sc);
     } catch (e) {}

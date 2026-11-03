@@ -9,7 +9,7 @@
    · THE EVENTS (UTC days): first_visit (once per id) · first_play (once per id, ever — the count) · return_play (once per
      id per UTC day after the first, with days since the first play) · wallet_connect (once per id; never the address) ·
      share (capped per day). Each is written to the OUTBOX first and leaves only when the server takes it.
-   · THE SERVER: ENDPOINT below. EMPTY = the counter is not switched on: events wait in the outbox (owner ruling). */
+   · THE SERVER: ENDPOINT below (switched on 2026-11-03). EMPTY = not switched on: events wait in the outbox. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
   else if (root && !root.DY_COUNT) {
@@ -20,7 +20,7 @@
   }
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
-  var ENDPOINT = "";   // the owner switches the counter on: "https://count.divyayuddha.games/v1/events"
+  var ENDPOINT = "https://count.divyayuddha.games/v1/events";   // SWITCHED ON by the owner 2026-11-03 (GROW-COUNT-1 · SWITCH-ON); "" = events wait in the outbox
   var KEY = "dy_player", BOX = "dy_player_outbox", BOX_MAX = 60, SHARES_PER_DAY = 5;
   var KINDS = { match: 1, story: 1, hall: 1, daily: 1, smriti: 1 };
   var ID_RE = /^[A-Za-z0-9_-]{22}$/;

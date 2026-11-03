@@ -13,14 +13,15 @@ Puzzle (solved or revealed, any date) or Smriti board — counted once, for life
 | The server | `divya-yuddha-web3/services/dy-count` (Render + Postgres at `count.divyayuddha.games`; its README has the owner's steps) |
 | Tests | `tests/suites/growcount.js` (30) · `divya-yuddha-web3/services/dy-count/test/proof.js` (41) · game repo `src/test_count_hook.js` (10) |
 
-## Switched off until the owner says so
+## Switched on (owner, 3 Nov 2026)
 
-`play/shared/count.js` ships with `ENDPOINT = ""`: every event waits in the browser's outbox. To switch on (after the
-server answers at `https://count.divyayuddha.games/health`): set `ENDPOINT` to
-`"https://count.divyayuddha.games/v1/events"` and move the counter's stamp `count.js?v=c1` → `c2` in all five places
-(`play/daily/index.html`, `play/smriti/index.html`, `scripts/sync_game.sh` — then re-sync — and `js/wallet.js`; the
-game copy picks it up from the sync). `tests/suites/growcount.js` G13 checks the stamps agree. Waiting events from
-the previous 45 days are accepted.
+`play/shared/count.js` sends to `ENDPOINT = "https://count.divyayuddha.games/v1/events"` (the counter's stamp is
+`count.js?v=c2` in all five places: `play/daily/index.html`, `play/smriti/index.html`, `scripts/sync_game.sh` → the game
+copy, and `js/wallet.js`). `tests/suites/growcount.js` G7 pins the address and G13 checks the stamps agree. To switch off
+again: set `ENDPOINT = ""` (events wait in the browser's outbox; up to 45 days of them are accepted later) and bump the stamp.
+
+**Test traffic:** rows with source `cc_test` (`utm_source=cc_test`, campaign `switchon`) are Claude's live checks — exclude
+them from every report.
 
 ## Draft Privacy sentence — for the owner's ruling (ruling 8: not on any page yet)
 
