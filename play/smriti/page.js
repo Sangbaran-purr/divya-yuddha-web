@@ -185,6 +185,7 @@
 
   // ── the end of a game: the best only improves, and the packs are let go ──
   function finish() {
+    try { if (window.DY_COUNT) window.DY_COUNT.finished("smriti"); } catch (e) {}   // GROW-COUNT-1 (owner ruling 2026-11-03): a finished board, for the site's player counter
     var improved = S.recordBest(rec, level, game.tries);
     if (improved) S.save(store, rec);
     player.release();

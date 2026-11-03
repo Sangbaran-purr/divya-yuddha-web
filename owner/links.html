@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Divya Yuddha — Tagged Links</title>
+    <meta name="description" content="Owner-only: build the tagged links for a creator or an ad." />
+    <link rel="icon" href="../assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="stylesheet" href="../css/threshold.css?v=s1g" />
+    <link rel="stylesheet" href="../css/admin.css?v=s11" />
+    <link rel="stylesheet" href="owner.css?v=o1" />
+    <script src="../config.js?v=s24"></script>
+  </head>
+  <body class="admin">
+    <!-- GROW-COUNT-1 (owner rulings 6 + 9, 2026-11-03): the tagged-link builder, behind the owner's wallet signature -->
+    <div id="admin-status" class="admin-status st-info">Checking…</div>
+    <div class="admin-wrap">
+      <header class="admin-head">
+        <h1>Tagged links</h1>
+        <div class="sub">One name in, three links out. Every player who arrives through them is counted under that name.</div>
+        <nav class="ow-nav"><a href="growth.html">Players</a> · <span aria-current="page">Tagged links</span></nav>
+      </header>
+
+      <section id="owner-locked" class="panel">
+        <h2>Owner only</h2>
+        <p class="hint">Sign in with the owner wallet. Nothing is sent from your wallet; the signature only proves it is you.</p>
+        <button class="btn" id="owner-signin" type="button">Connect and sign in</button>
+      </section>
+
+      <section id="owner-open" class="panel" hidden>
+        <h2>Build the links</h2>
+        <label class="fld" for="lk-name">Creator or ad name</label>
+        <input class="txt" id="lk-name" type="text" maxlength="60" placeholder="e.g. Pinoy Gamer TV" autocomplete="off" />
+        <label class="fld" for="lk-medium">Kind</label>
+        <select class="txt" id="lk-medium">
+          <option value="creator">Creator</option>
+          <option value="ad">Ad</option>
+          <option value="social">Social post</option>
+          <option value="community">Community</option>
+        </select>
+        <label class="fld" for="lk-market">Market</label>
+        <select class="txt" id="lk-market">
+          <option value="sea">Southeast Asia</option>
+          <option value="india">India (the game's name only)</option>
+        </select>
+        <div id="lk-campaign-row">
+          <label class="fld" for="lk-campaign">Campaign</label>
+          <input class="txt" id="lk-campaign" type="text" maxlength="40" value="sea-launch" autocomplete="off" />
+        </div>
+        <p id="lk-error" class="ow-error" role="alert" hidden></p>
+        <div id="lk-out" class="ow-links" hidden>
+          <p class="hint">Source <span class="mono" id="lk-slug"></span> · kind <span class="mono" id="lk-med"></span> · campaign <span class="mono" id="lk-camp"></span></p>
+          <div class="ow-link"><span class="ow-label">The game</span><input class="txt mono" id="lk-game" readonly /><button class="btn" type="button" data-copy="lk-game">Copy</button></div>
+          <div class="ow-link"><span class="ow-label">Daily Puzzle</span><input class="txt mono" id="lk-daily" readonly /><button class="btn" type="button" data-copy="lk-daily">Copy</button></div>
+          <div class="ow-link"><span class="ow-label">Smriti</span><input class="txt mono" id="lk-smriti" readonly /><button class="btn" type="button" data-copy="lk-smriti">Copy</button></div>
+        </div>
+      </section>
+    </div>
+    <script src="../js/wallet.js?v=s1w"></script>
+    <script src="owner.js?v=o1"></script>
+    <script src="links.js?v=o1"></script>
+    <script>
+      (function () {
+        var $ = function (id) { return document.getElementById(id); }, stamp = "";
+        function draw() {
+          var r = window.DY_LINKS.build({ name: $("lk-name").value, medium: $("lk-medium").value, market: $("lk-market").value, campaign: $("lk-campaign").value, stamp: stamp });
+          $("lk-campaign-row").hidden = $("lk-market").value === "india";
+          var err = $("lk-error"), out = $("lk-out");
+          if (r.error) { out.hidden = true; err.hidden = !$("lk-name").value.trim() && /Type the/.test(r.error); err.textContent = r.error; return; }
+          err.hidden = true; out.hidden = false;
+          $("lk-slug").textContent = r.slug; $("lk-med").textContent = r.medium; $("lk-camp").textContent = r.campaign;
+          $("lk-game").value = r.links.game; $("lk-daily").value = r.links.daily; $("lk-smriti").value = r.links.smriti;
+        }
+        window.DY_OWNER.gate(function () {
+          fetch("../game/STAMP", { cache: "no-store" }).then(function (r) { return r.text(); }).then(function (t) { stamp = t.trim(); draw(); }).catch(draw);
+          ["lk-name", "lk-medium", "lk-market", "lk-campaign"].forEach(function (id) { $(id).addEventListener("input", draw); $(id).addEventListener("change", draw); });
+          document.querySelectorAll("[data-copy]").forEach(function (b) {
+            b.addEventListener("click", function () { var v = $(b.getAttribute("data-copy")).value; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1200); }, function () { $(b.getAttribute("data-copy")).select(); }); });
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -186,8 +186,22 @@ window.DYWallet = (function () {
       .then(afterConnect)
       .then(function () {
         emit();
+        countWallet();
         return state;
       });
+  }
+
+  // GROW-COUNT-1 (owner ruling 2026-11-03): a wallet connect is reported to the site's player counter ONCE per player id —
+  // the event never carries the address. Owner instruments (admin, treasury, owner/) are not players: never counted.
+  function countWallet() {
+    try {
+      if (/(^|\/)(admin|treasury)\.html$|\/owner\//.test(location.pathname)) return;
+      if (window.DY_COUNT) { window.DY_COUNT.walletConnected(); return; }
+      var sc = document.createElement("script");
+      sc.src = "/play/shared/count.js?v=c1";
+      sc.onload = function () { try { if (window.DY_COUNT) window.DY_COUNT.walletConnected(); } catch (e) {} };
+      document.head.appendChild(sc);
+    } catch (e) {}
   }
 
   // --- cross to Amoy: switch, and add on 4902 (unknown chain) ---

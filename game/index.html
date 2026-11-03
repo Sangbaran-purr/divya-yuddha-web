@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <!-- DYW-GATE-START (injected by scripts/sync_game.sh; re-sync replaces this block) -->
+<!-- GROW-COUNT-1 (owner rulings 2026-11-03): the site's player counter, loaded FIRST — before the storage namespace
+     shim below — so it reads the real storage and keeps ONE player id across /game/, /play/daily/ and /play/smriti/. -->
+<script src="../play/shared/count.js?v=c1"></script>
 <script>
 (function(){
   var dailyFrame = false; /* MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle frames this copy in puzzle mode (?puzzle=1) from /play/daily/ on THIS origin. That frame alone skips the pass; nothing else does (a direct visit, any other frame, any other page). */
@@ -9804,6 +9807,7 @@ function cutVfxStop(){ if(CutVfx){ cancelAnimationFrame(CutVfx.raf); const c=$('
 /* --- result: evaluate predicates, persist, victory cutscene / loss+retry --- */
 function showStoryResult(){
   if(Story.resultShown) return; Story.resultShown=true;   // render() re-calls showGameOver each frame while G.over
+  try{ window.DY_COUNT && window.DY_COUNT.finished('story'); }catch(e){}   // GROW-COUNT-1 (owner ruling 2026-11-03): a finished story chapter for the site's player counter — DY_COUNT exists only in the site's copy (the standalone game counts nothing)
   lastStoryEarn=null;   // slice 4: cleared each result; markChapterComplete sets it only when something was newly granted
   const ch=Story.chapter, won=G.winner===ME;
   hideBrihaspati(); const oc=$('objchip'); if(oc){ oc.classList.add('hidden'); oc.classList.remove('expanded'); }   // clear the FREE objective chip on the result screen
@@ -12867,6 +12871,7 @@ function wireSend(action){
 function showWireResult(){
   const r = Wire && Wire.result, w = G.over ? G.winner : (r ? r.winner : null);
   blogClose(G, r);   // GL-2 — a forfeit never reaches G.over: its closing line is written here, once
+  try{ window.DY_COUNT && window.DY_COUNT.finished('hall'); }catch(e){}   // GROW-COUNT-1 (owner ruling 2026-11-03): a finished Hall match (free or staked) for the site's player counter — DY_COUNT exists only in the site's copy (the standalone game counts nothing)
   $('goh').textContent = w===ME ? '⚔ VICTORY ⚔' : w===OPP ? 'DEFEAT' : 'STALEMATE';
   const rw = G.over ? [G.players[ME].roundWins, G.players[OPP].roundWins] : (r && r.roundWins ? [r.roundWins[ME], r.roundWins[OPP]] : [0,0]);
   $('gop').textContent = (r && r.forfeit && !G.over) ? 'Your opponent left the table.' : `Final: ${rw[0]}–${rw[1]}.`;
@@ -13114,6 +13119,7 @@ function showGameOver(){
   if(PUZZLE_MODE) return;                   // MINI-GAMES-1: the puzzle page owns the result — no rewards, no result face
   if(Story){ showStoryResult(); return; }   // story matches: separate result screen, and NEVER touch PvAI telemetry
   recordMatchResult();   // one-shot: bump telemetry + capture lastEarn (guarded against re-render)
+  try{ window.DY_COUNT && window.DY_COUNT.finished('match'); }catch(e){}   // GROW-COUNT-1 (owner ruling 2026-11-03): a finished match vs AI for the site's player counter — DY_COUNT exists only in the site's copy (the standalone game counts nothing)
   const me=G.players[ME];
   $('goh').textContent = G.winner===ME?'⚔ VICTORY ⚔': G.winner===OPP?'DEFEAT':'STALEMATE';
   $('gop').textContent = `Final: ${me.roundWins}–${G.players[OPP].roundWins} across ${G.roundHistory.length} rounds.`;

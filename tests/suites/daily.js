@@ -511,9 +511,9 @@ async function main() {
     ok("ML7 · THE FALLBACK BOARD: its buttons ('Play …', 'End my turn', 'Leap', 'Show me the answer') are plaque buttons too", allPlaque(fb, "#dd-actions button") && plaques(fb, "#dd-actions button").some((b) => /^Play /.test(b.textContent))
       && /function btn\(text, cls, fn\) \{ var b = el\("button", "dd-btn mg-btn "/.test(R("play/daily/page.js")));
     const css = R("play/daily/daily.css"), html = R("play/daily/index.html");
-    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d7, page.js d8, mini.css g2 — on both mini games)",
+    ok("ML8 · the plaque wins every button (the page's old button paint is gone), the page never scrolls sideways, and the stamps moved (daily.css d7, page.js d9, mini.css g2 — on both mini games)",
       !/\.dd-btn \{/.test(css) && !/\.dd-btn\.dd-go/.test(css) && /body\.daily \{[^}]*overflow-x: hidden/.test(css) && /body\.dd-framing \.mg-stage \{ opacity: \.35; \}/.test(css)
-        && /daily\.css\?v=d7/.test(html) && /page\.js\?v=d8/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
+        && /daily\.css\?v=d7/.test(html) && /page\.js\?v=d9/.test(html) && /shared\/mini\.css\?v=g2/.test(html) && /shared\/mini\.css\?v=g2/.test(R("play/smriti/index.html")));
   });
 
   // ═══ DAILY-REVIEW-4 (owner ruling 2026-11-02): THE DISCARD PILES UNDER THE BOARD ═══

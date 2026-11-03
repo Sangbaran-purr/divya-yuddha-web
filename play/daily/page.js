@@ -251,8 +251,13 @@
     return gg;
   }
 
+  // GROW-COUNT-1 (owner ruling 2026-11-03): a finished puzzle — solved (framed or on the fallback board) or revealed, on
+  // any date the page offers — reports to the site's player counter (play/shared/count.js; once per day at most)
+  function countFinish() { try { if (window.DY_COUNT) window.DY_COUNT.finished("daily"); } catch (e) {} }
+
   function onWin(h) {
     done = true;
+    countFinish();
     say(T.win(h.t0, h.t1), "dd-good");
     if (isToday) { D.markSolved(state, P.date, today, list); D.save(store, state); }
     g = replay(actions);                        // show the board as your play left it, not the next round's empty field
@@ -273,6 +278,7 @@
       var r = PZ.solve(P, E, null);
       var w = r.ok ? r.winners[0] : null;
       if (isToday) { D.markRevealed(state, P.date, today); D.save(store, state); }
+      countFinish();
       if (FRAME.live && w) { done = true; revealInFrame(w); return; }
       done = true; fresh(); render();
       say(w ? winningLine(w) : "", "dd-good");
@@ -350,6 +356,7 @@
     if (done) return;
     if (m.win === true) {
       done = true;
+      countFinish();
       var t = T.win(m.you, m.them);
       say(""); cover(t); settle();   // said ONCE, in the result panel (owner ruling 2026-10-16)
       if (isToday) { D.markSolved(state, P.date, today, list); D.save(store, state); }

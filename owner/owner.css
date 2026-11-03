@@ -1,0 +1,27 @@
+/* GROW-COUNT-1 · the owner pages (growth.html, links.html) — on top of threshold.css + admin.css, like the admin page */
+.admin-status { position: sticky; top: 0; z-index: 100; padding: 0.55rem 1rem; font-size: 0.9rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  border-bottom: 1px solid rgba(232, 200, 116, 0.25); font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
+.admin-status.st-info { background: #14110b; color: #cdbb8f; }
+.admin-status.st-ok { background: #0e1a0e; color: #9fd39f; border-bottom-color: rgba(120, 200, 120, 0.35); }
+.admin-status.st-warn { background: #1a140b; color: #e8c874; }
+.admin-status.st-err { background: #1e0d0b; color: #ff9a86; border-bottom-color: rgba(220, 90, 60, 0.5); }
+.ow-nav { margin-top: 0.4rem; font-size: 0.9rem; }
+.ow-nav a { color: var(--gold-burnished); }
+.ow-error { color: #ff9a86; margin: 0.6rem 0 0; }
+.ow-links { margin-top: 1rem; }
+.ow-link { display: grid; grid-template-columns: 7.5rem 1fr auto; gap: 0.5rem; align-items: center; margin: 0.45rem 0; }
+.ow-link .txt { margin: 0; min-width: 0; font-size: 0.85rem; }
+.ow-label { color: var(--gold-burnished); font-size: 0.9rem; }
+@media (max-width: 560px) { .ow-link { grid-template-columns: 1fr auto; } .ow-label { grid-column: 1 / -1; } }
+.ow-range { display: flex; gap: 0.6rem; align-items: end; flex-wrap: wrap; }
+.ow-range .txt { width: auto; margin: 0; }
+.ow-total { font-family: var(--display); font-size: 2rem; color: var(--gold-burnished); margin: 0.2rem 0 0; font-variant-numeric: tabular-nums; }
+.ow-tablewrap { overflow-x: auto; margin: 0.5rem 0 0.3rem; }
+.ow-table { border-collapse: collapse; font-size: 0.85rem; min-width: 100%; font-variant-numeric: tabular-nums; }
+.ow-table th, .ow-table td { padding: 0.3rem 0.55rem; border-bottom: 1px solid rgba(232, 200, 116, 0.14); text-align: right; white-space: nowrap; }
+.ow-table th:first-child, .ow-table td:first-child { text-align: left; }
+.ow-table th { color: var(--gold-burnished); font-weight: 600; }
+.ow-table tr.ow-sum td { border-top: 1px solid rgba(232, 200, 116, 0.35); font-weight: 600; }
+.ow-flag { color: #ff9a86; }
+.ow-csv { font-size: 0.8rem; padding: 0.2rem 0.7rem; }
+.ow-empty { color: #9c8f73; font-style: italic; }

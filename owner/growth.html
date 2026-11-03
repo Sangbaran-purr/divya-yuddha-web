@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Divya Yuddha — Players</title>
+    <meta name="description" content="Owner-only: new players, return and sources, from the player counter." />
+    <link rel="icon" href="../assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="stylesheet" href="../css/threshold.css?v=s1g" />
+    <link rel="stylesheet" href="../css/admin.css?v=s11" />
+    <link rel="stylesheet" href="owner.css?v=o1" />
+    <script src="../config.js?v=s24"></script>
+  </head>
+  <body class="admin">
+    <!-- GROW-COUNT-1 (owner rulings 3–5, 2026-11-03): the owner's player view, behind the owner's wallet signature -->
+    <div id="admin-status" class="admin-status st-info">Checking…</div>
+    <div class="admin-wrap">
+      <header class="admin-head">
+        <h1>Players</h1>
+        <div class="sub">From the player counter. Every number is the counter's own; days are UTC.</div>
+        <nav class="ow-nav"><span aria-current="page">Players</span> · <a href="links.html">Tagged links</a></nav>
+      </header>
+
+      <section id="owner-locked" class="panel">
+        <h2>Owner only</h2>
+        <p class="hint">Sign in with the owner wallet. Nothing is sent from your wallet; the signature only proves it is you.</p>
+        <button class="btn" id="owner-signin" type="button">Connect and sign in</button>
+      </section>
+
+      <div id="owner-open" hidden>
+        <section class="panel">
+          <p class="ow-total" id="ow-lifetime">—</p>
+          <p class="hint" id="ow-asof"></p>
+          <div class="ow-range">
+            <div><label class="fld" for="ow-from">From</label><input class="txt" id="ow-from" type="date" /></div>
+            <div><label class="fld" for="ow-to">To</label><input class="txt" id="ow-to" type="date" /></div>
+            <button class="btn" id="ow-reload" type="button">Show</button>
+          </div>
+        </section>
+        <section class="panel" id="ow-day"></section>
+        <section class="panel" id="ow-week"></section>
+        <section class="panel" id="ow-conv"></section>
+        <section class="panel" id="ow-ret"></section>
+        <section class="panel" id="ow-flags"></section>
+        <section class="panel" id="ow-share"></section>
+        <section class="panel" id="ow-wallet"></section>
+      </div>
+    </div>
+    <script src="../js/wallet.js?v=s1w"></script>
+    <script src="owner.js?v=o1"></script>
+    <script src="growth.js?v=o1"></script>
+  </body>
+</html>
