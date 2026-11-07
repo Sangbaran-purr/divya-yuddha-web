@@ -17,10 +17,11 @@
     t.appendChild(tb); w.appendChild(t); return w;
   }
   // rows of {key, s, n} → a pivot: one row per key, one column per source, a total column and a total row
-  function pivot(list, keyName, label) {
+  // colName: what the columns are — the first-touch source ("s", the default), the medium ("m") or the share's kind ("kind")
+  function pivot(list, keyName, label, colName) {
     if (!list.length) return el("p", "ow-empty", "Nothing yet in this range.");
-    var keys = [], srcs = [], m = {};
-    list.forEach(function (x) { var k = x[keyName]; if (keys.indexOf(k) < 0) keys.push(k); if (srcs.indexOf(x.s) < 0) srcs.push(x.s); m[k + "|" + x.s] = (m[k + "|" + x.s] || 0) + x.n; });
+    var col = colName || "s", keys = [], srcs = [], m = {};
+    list.forEach(function (x) { var k = x[keyName], c = x[col]; if (keys.indexOf(k) < 0) keys.push(k); if (srcs.indexOf(c) < 0) srcs.push(c); m[k + "|" + c] = (m[k + "|" + c] || 0) + x.n; });
     keys.sort(); srcs.sort();
     var rows = keys.map(function (k) { var tot = 0; var r = [k].concat(srcs.map(function (s) { var v = m[k + "|" + s] || 0; tot += v; return String(v); })); r.push(String(tot)); return r; });
     var sum = ["Total"].concat(srcs.map(function (s) { return String(keys.reduce(function (a, k) { return a + (m[k + "|" + s] || 0); }, 0)); }));
@@ -34,17 +35,20 @@
     box.appendChild(body);
     if (csvTable) { var b = el("button", "btn ow-csv", "Download CSV"); b.type = "button"; b.addEventListener("click", function () { csv(csvTable); }); box.appendChild(b); }
   }
-  function range() { return "from=" + encodeURIComponent($("ow-from").value) + "&to=" + encodeURIComponent($("ow-to").value); }
+  // GROWTH-1 Stage 3 (ruling #12): test traffic (the counter's TEST_SOURCES, cc_test) is left out unless the box is ticked
+  var withTest = function () { return !!$("ow-test").checked; };
+  function range() { return "from=" + encodeURIComponent($("ow-from").value) + "&to=" + encodeURIComponent($("ow-to").value) + (withTest() ? "&test=1" : ""); }
   function csv(name) {
     O.api("/owner/csv?table=" + name + "&" + range()).then(function (r) {
       if (r.status === 401) { O.expired(); return; }
       if (!r.ok) throw new Error(String(r.status));
-      return r.blob().then(function (b) { var a = el("a"); a.href = URL.createObjectURL(b); a.download = "dy-count-" + name + "-" + $("ow-from").value + "-to-" + $("ow-to").value + ".csv"; document.body.appendChild(a); a.click(); a.remove(); });
+      return r.blob().then(function (b) { var a = el("a"); a.href = URL.createObjectURL(b); a.download = "dy-count-" + name + "-" + $("ow-from").value + "-to-" + $("ow-to").value + (withTest() ? "-with-test" : "") + ".csv"; document.body.appendChild(a); a.click(); a.remove(); });
     }).catch(function (e) { O.status("st-err", "The CSV did not download (" + e.message + ")."); });
   }
   function draw(R) {
     $("ow-lifetime").textContent = String(R.lifetime_players);
-    $("ow-asof").textContent = "Players counted, all time (UTC days; this range " + R.from + " to " + R.to + ").";
+    $("ow-asof").textContent = "Players counted, all time (UTC days; this range " + R.from + " to " + R.to + "). "
+      + (R.includes_test ? "Test traffic (" + (R.test_sources || []).join(", ") + ") is INCLUDED." : "Test traffic (" + (R.test_sources || []).join(", ") + ") is left out.");
     section("ow-day", "New players by day", "players_by_day", pivot(R.players_by_day, "day", "Day"), "A player is a browser that finished its first match, story chapter, Hall match, Daily Puzzle or Smriti board. Columns are first-touch sources.");
     section("ow-week", "New players by week", "players_by_week", pivot(R.players_by_week, "week", "Week of (Mon)"));
     section("ow-conv", "Visits → players, by source", "conversion", R.conversion.length ? table(["Source", "First visits", "Became players", "Rate"],
@@ -53,7 +57,14 @@
     section("ow-ret", "Return, by source", "returns", R.returns.length ? table(["Source", "Players", "Day 1", "Exactly day 7", "Any day 7–13"],
       R.returns.map(function (x) { return [x.s, String(x.players), pct(x.d1_rate) + " (" + x.d1 + "/" + x.d1_base + ")", pct(x.d7_rate) + " (" + x.d7 + "/" + x.d7_base + ")", pct(x.d7_13_rate) + " (" + x.d7_13 + "/" + x.d7_13_base + ")"]; })) : el("p", "ow-empty", "No players in this range."),
       "Counted over players old enough to have had the chance (a player from yesterday is not in the day-7 figures yet).");
-    section("ow-share", "Shares by day", "shares_by_day", pivot(R.shares_by_day, "day", "Day"));
+    section("ow-share", "Shares by day", "shares_by_day", pivot(R.shares_by_day, "day", "Day"), "Columns are the sharer's first-touch source.");
+    // GROWTH-1 Stage 3 (ruling #12): the same players by first-touch medium and campaign, and the shares by kind
+    section("ow-medium", "New players by day, by medium", "players_by_medium_day", pivot(R.players_by_medium_day || [], "day", "Day", "m"),
+      "Columns are the first-touch utm_medium (share, creator, ad, …). Untagged is (none); players older than two years are (folded).");
+    section("ow-camp", "Visits → players, by medium and campaign", "campaigns", (R.campaigns || []).length ? table(["Medium", "Campaign", "First visits", "Became players", "Rate", "New players in range"],
+      R.campaigns.map(function (x) { return [x.m, x.c, String(x.visits), String(x.visit_players), pct(x.rate), String(x.players)]; })) : el("p", "ow-empty", "Nothing yet in this range."),
+      "Share links arrive as medium share, campaign daily, smriti or challenge.");
+    section("ow-sharekind", "Shares by day, by kind", "shares_by_kind", pivot(R.shares_by_kind || [], "day", "Day", "kind"), "Daily Puzzle, Smriti and CHALLENGE A FRIEND shares, as players made them.");
     section("ow-wallet", "Wallet connects by day", "wallets_by_day", pivot(R.wallets_by_day, "day", "Day"), "Once per player. The counter never sees the address.");
     section("ow-flags", "Sources to look at", "flags", R.flags.length ? table(["Source", "Players", "Day 1", "Median secs to first finish", "Players with no visit", "Why"],
       R.flags.map(function (x) { return [x.s, String(x.players), pct(x.d1_rate), x.median_secs == null ? "—" : String(Math.round(x.median_secs)), String(x.no_visit), { t: x.why.join(", "), cls: "ow-flag" }]; })) : el("p", "ow-empty", "No source looks like bot traffic in this range."),
@@ -72,6 +83,7 @@
     var now = Date.now();
     $("ow-to").value = day(now); $("ow-from").value = day(now - 59 * 86400000);
     $("ow-reload").addEventListener("click", load);
+    $("ow-test").addEventListener("change", load);
     load();
   });
 })();
