@@ -22,7 +22,7 @@ const DDOC = fs.readFileSync(path.resolve(__dirname, "..", "docs", "DASHBOARD_DE
 const DASH = fs.readFileSync(path.resolve(__dirname, "..", "js", "dashboard.js"), "utf8");
 const RITE = fs.readFileSync(path.resolve(__dirname, "..", "rite.html"), "utf8");
 const RULINGS = fs.readFileSync(path.resolve(__dirname, "..", "docs", "RULINGS_2026-08-27.md"), "utf8");
-const INDEX = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
+const INDEX = fs.readFileSync(path.resolve(__dirname, "..", "world.html"), "utf8");   // GROWTH-1: the home page's content moved one click deeper (world.html); index.html is the landing
 const DEMO = fs.readFileSync(path.resolve(__dirname, "..", "demo", "index.html"), "utf8");   // FREE-PLAY-1
 
 let pass = 0, fail = 0;
@@ -368,7 +368,7 @@ console.log("\n── SITE-AUDIT-1 · the false statements stay gone (every play
   const R = (f) => { try { return fs.readFileSync(path.resolve(__dirname, "..", f), "utf8"); } catch (e) { return ""; } };
   // player-visible text only: HTML comments are stripped, so a comment may quote what it replaced
   const visible = (f) => R(f).replace(/<!--[\s\S]*?-->/g, "");
-  const PAGES = ["index.html", "rite.html", "store.html", "dashboard.html", "treasury.html", "report.html", "explore.html",
+  const PAGES = ["index.html", "world.html", "rite.html", "store.html", "dashboard.html", "treasury.html", "report.html", "explore.html",
                  "mint.html", "register.html", "demo/index.html", "mp/hall.html"];
   const SCRIPTS = ["js/store.js", "js/dashboard.js", "js/treasury.js", "js/report.js", "js/explore.js", "js/mintstatus.js", "mp/hall.js"];
   const stripJsComments = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");

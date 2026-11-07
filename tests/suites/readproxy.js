@@ -60,7 +60,7 @@ async function run() {
     ok("C3b · config.js rpcUrls (what MetaMask is offered when it adds Polygon — the wallet's own SEND road) is left as it was (owner ruling C)",
        JSON.stringify(chain.rpcUrls) === JSON.stringify(["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"]), JSON.stringify(chain.rpcUrls));
     const shipped = ["config.js", "mf-config.js", "admin-config.js"].concat(fs.readdirSync(path.join(SITE, "js")).filter((f) => /\.js$/.test(f)).map((f) => "js/" + f))
-      .concat(["index.html", "store.html", "dashboard.html", "report.html", "rite.html", "treasury.html", "mint.html", "register.html", "admin.html", "mp/hall.js"]);
+      .concat(["index.html", "world.html", "store.html", "dashboard.html", "report.html", "rite.html", "treasury.html", "mint.html", "register.html", "admin.html", "mp/hall.js"]);
     const with1rpc = shipped.filter((f) => { try { return /1rpc\.io/.test(fs.readFileSync(path.join(SITE, f), "utf8")); } catch (e) { return false; } });
     ok("C4 · 1rpc.io is GONE from every shipped file (it sends no CORS header — it could never serve the browser)", with1rpc.length === 0, with1rpc.join(", "));
   }
@@ -115,7 +115,7 @@ async function run() {
   // ════════ STAMPS ════════
   {
     // (ICO-SIMPLE-1: register.html is now a redirect to the dashboard's buy panel and loads no script)
-    const pages = ["index.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html", "mint.html", "my-invites.html"];
+    const pages = ["world.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html", "mint.html", "my-invites.html"];   // GROWTH-1: index.html is the landing (no config.js); the old home page is world.html
     const read = (p) => fs.readFileSync(path.join(SITE, p), "utf8");
     ok("X1 · config.js is stamped s24 on every page that loads it (10; RPC-CLEANUP-1)", pages.every((p) => /[" /]config\.js\?v=s24"/.test(read(p))) && pages.every((p) => !/[" /]config\.js\?v=s23"/.test(read(p))));
     ok("X2 · wallet.js s1x (GROW-COUNT-1 · SWITCH-ON), mf-config.js mf13, dashboard.js mf51, report.js mf4h, admin.js s41, hall.js h38 (RPC-CLEANUP-1)",

@@ -246,7 +246,7 @@ async function run() {
   // ═══════════ X · STAMPS ═══════════
   {
     // (ICO-SIMPLE-1: register.html is now a redirect to the dashboard's buy panel and loads no script)
-    const pages = ["index.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html"];
+    const pages = ["world.html", "admin.html", "store.html", "treasury.html", "dashboard.html", "report.html", "rite.html", "mp/hall.html"];   // GROWTH-1: index.html is the landing (no wallet.js); the old home page is world.html
     const carrying = pages.filter((p) => fs.readFileSync(path.join(SITE, p), "utf8").indexOf("wallet.js?v=") >= 0);
     ok("X1 · wallet.js is stamped s1x (GROW-COUNT-1 · SWITCH-ON) on every page that loads it (" + carrying.length + ")",
        carrying.length === 8 && carrying.every((p) => /wallet\.js\?v=s1x/.test(fs.readFileSync(path.join(SITE, p), "utf8"))));

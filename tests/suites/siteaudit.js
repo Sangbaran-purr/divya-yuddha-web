@@ -223,14 +223,14 @@ async function run() {
     ok("TX6 · register: a redirect to the dashboard's buy panel — no form, no email step, none of the old registration copy",
        /url=dashboard\.html#buy-panel/.test(g) && g.indexOf("Buy DYC in your dashboard →") >= 0 &&
        !/are required|confirmation email|presale approval shows|forms\.gle|<iframe/.test(g));
-    const ix = vis("index.html");
+    const ix = vis("world.html");   // GROWTH-1: the old home page, one click deeper
     ok("TX7 · index: 'Get a Torana' → the store bundle; the Rite card and meta no longer call it free; staking and cards are told true",
        /<h2 class="doorway-title">Get a Torana<\/h2>/.test(ix) && /href="store\.html#bundle"[^>]*>Get a Torana/.test(ix) &&
        ix.indexOf("Free, one per hand") < 0 && ix.indexOf("One free Access token") < 0 && ix.indexOf("staking when it opens") < 0 &&
        ix.indexOf("earn them at the table") < 0 && ix.indexOf("The play-token is reward alone") < 0 &&
        /content="Play Divya Yuddha free, solo\. Own the cards\. The Torana opens multiplayer\."/.test(ix));
     ok("TX8 · index: connected → 'Connected' + 'play solo — free' to the rite (no dead end)",
-       /<span class="declared">Connected<\/span>/.test(R("index.html")) && /doorwaySub\.innerHTML = '<a href="rite\.html">play solo — free<\/a>'/.test(R("index.html")));
+       /<span class="declared">Connected<\/span>/.test(R("world.html")) && /doorwaySub\.innerHTML = '<a href="rite\.html">play solo — free<\/a>'/.test(R("world.html")));
     const rt = vis("rite.html");
     ok("TX9 · rite meta/og: free solo + the Torana opens multiplayer (no 'free Access token')", rt.indexOf("free Access token") < 0 &&
        /<meta name="description" content="Play Divya Yuddha free in your browser — no wallet needed\. Connect a Polygon wallet to sit at the Hall's tables\."/.test(rt) && /<meta property="og:description" content="Play free, solo\. The Torana opens multiplayer\."/.test(rt));

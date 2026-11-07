@@ -243,6 +243,89 @@ cat > "$PRE" <<'PREAMBLE'
   else wrapStarts();
 })();
 </script>
+<!-- DYW-GROWTH1-START (GROWTH-1 Stage 1, owner rulings 2026-11-06; re-applied every sync). The share preview of /game/ (#15),
+     the Quests earning lines kept from strangers (#7), the Multiplayer door for players without a Torana (#18), the
+     once-per-browser nudge after the 3rd finished match vs AI (#19), and the player's FIRST-TOUCH tags on every road to the
+     store (#20). Copy law: every player-facing line here is owner-ruled verbatim; the game's own source is not edited. -->
+<meta name="description" content="A free card battle game inspired by Indian mythology. Play in your browser." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Divya Yuddha" />
+<meta property="og:url" content="https://divyayuddha.games/game/" />
+<meta property="og:title" content="Divya Yuddha — Battle of the Celestials" />
+<meta property="og:description" content="A free card battle game inspired by Indian mythology. Play in your browser." />
+<meta property="og:image" content="https://divyayuddha.games/assets/og/og_game.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://divyayuddha.games/assets/og/og_game.jpg" />
+<style id="dyw-growth1">
+  /* #7 — a stranger (no wallet ever connected on this site) sees the Quests, never what they pay out */
+  body.dyw-stranger #quests .q-intro, body.dyw-stranger #quests .q-reward, body.dyw-stranger #q-flourish { display: none !important; }
+  /* #19 — the nudge card, in the game's own dress */
+  #dyw-nudge { position: fixed; inset: 0; z-index: 2147482000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(6,4,1,.72); }
+  #dyw-nudge .box { max-width: 340px; width: 100%; padding: 22px 20px 18px; border-radius: 14px; text-align: center; background: #12100b; border: 1px solid rgba(217,168,78,.55); box-shadow: 0 18px 50px rgba(0,0,0,.7); }
+  #dyw-nudge p { font-family: "EB Garamond", Georgia, serif; font-size: 18px; line-height: 1.4; color: #e9dcc2; margin: 0 0 16px; }
+  #dyw-nudge a, #dyw-nudge button { display: block; width: 100%; margin-top: 10px; padding: 13px 16px; border-radius: 10px; font-family: Cinzel, Georgia, serif; font-size: 14px; letter-spacing: .08em; cursor: pointer; text-decoration: none; box-sizing: border-box; }
+  #dyw-nudge a { color: #1a1206; font-weight: 600; background: linear-gradient(180deg, #ffc96b, #d9a84e 55%, #b98a35); border: 1px solid #f3d79b; }
+  #dyw-nudge button { color: #e9dcc2; background: transparent; border: 1px solid rgba(138,111,58,.6); }
+</style>
+<script>
+(function(){
+  var C = window.DY_COUNT;
+  var inFrame = false; try { inFrame = window.top !== window; } catch (e) { inFrame = true; }   // the Hall's battle frame, the Daily Puzzle's, the demo's: none of this applies there
+  /* No Torana read exists in the game copy (the Hall and the store read it live, behind a wallet, and keep nothing), and the
+     session pass is no holder signal (the rite's Enter grants it to any wallet for free solo). So the copy keys on ONE thing it
+     knows: has a wallet ever been connected on this site (the counter's flag)? A browser that never connected one cannot hold
+     a Torana here — it gets the unlock door (#18) and the stranger's Quests (#7); one that has keeps today's door to the Hall,
+     whose own gate meets a non-holder. A holder flag written by the Hall would make #18 exact — an owner ruling, not built. */
+  function connected(){ try { var s = C && C.state(); return !!(s && s.wallet); } catch (e) { return false; } }
+  // #20 — the player's FIRST-TOUCH tags (the counter's memory); an untagged first visit carries none
+  function firstTouch(){ try { var s = C && C.state(); if (!s || !s.src || !s.src.s || s.src.s === "direct") return ""; var o = { utm_source: s.src.s, utm_medium: s.src.m, utm_campaign: s.src.c }, a = []; for (var k in o) if (o[k]) a.push(k + "=" + encodeURIComponent(o[k])); return a.join("&"); } catch (e) { return ""; } }
+  function storeUrl(hash){ var t = firstTouch(); return new URL("../store.html" + (t ? "?" + t : "") + (hash || ""), location.href).href; }
+  function go(url){ try { window.top.location.href = url; } catch (e) { location.href = url; } }
+  window.__dywStoreUrl = storeUrl;   // the Store roundel relink below shares it
+  function boot(){
+    if (!connected()){
+      document.body.classList.add("dyw-stranger");                                                     // #7
+      /* ruling A5 (2026-11-06): the difficulty picker's reward wording ("Rewards ×0.8" etc.) is kept from strangers too.
+         The game writes it in renderDiffSelector(); the copy re-reads the line after every write and drops the multiplier. */
+      var rd = window.renderDiffSelector;
+      if (typeof rd === "function" && !rd.__dywNoReward){
+        var scrubbed = function(){ var r = rd.apply(this, arguments); try { var el = document.getElementById("diffdisclose"); if (el) el.textContent = el.textContent.replace(/\s*Rewards\s*[×x]\s*[\d.]+\.?/gi, ""); } catch (e) {} return r; };
+        scrubbed.__dywNoReward = true; window.renderDiffSelector = scrubbed;
+      }
+    }
+    var mp = document.getElementById("mode-mp");                                                         // #18 — the game opened its Multiplayer door
+    if (mp && !connected() && !inFrame){
+      var cap = mp.querySelector(".cap"); if (cap) cap.textContent = "unlock with the Torana";
+      mp.setAttribute("aria-label", "Multiplayer: unlock with the Torana");
+      mp.dataset.href = storeUrl("#bundle");
+      mp.onclick = function(){ go(storeUrl("#bundle")); };
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+  // #19 — after the player's 3rd finished match vs AI, once per browser: the nudge card (never inside a frame)
+  function nudge(){
+    if (inFrame || document.getElementById("dyw-nudge")) return;
+    try { if (localStorage.getItem("dy_mp_nudge_shown")) return; localStorage.setItem("dy_mp_nudge_shown", "1"); } catch (e) { return; }
+    var d = document.createElement("div"); d.id = "dyw-nudge"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
+    d.innerHTML = '<div class="box"><p>Ready for real opponents? Multiplayer opens with the Torana: USD 20, once.</p><a id="dyw-nudge-go" href="#">See the Torana</a><button type="button" id="dyw-nudge-no">Not now</button></div>';
+    document.body.appendChild(d);
+    var a = document.getElementById("dyw-nudge-go"); a.href = storeUrl("#bundle");
+    a.onclick = function(e){ e.preventDefault(); go(storeUrl("#bundle")); };
+    document.getElementById("dyw-nudge-no").onclick = function(){ d.remove(); };
+  }
+  if (C && typeof C.finished === "function" && !C.finished.__dywNudge){
+    var fin = C.finished, wrapped = function(kind){
+      var r = fin.apply(this, arguments);
+      if (kind === "match"){ try { var n = (parseInt(localStorage.getItem("dy_ai_finished") || "0", 10) || 0) + 1; localStorage.setItem("dy_ai_finished", String(n)); if (n >= 3) setTimeout(nudge, 1800); } catch (e) {} }
+      return r;
+    };
+    wrapped.__dywNudge = true; C.finished = wrapped;
+  }
+})();
+</script>
+<!-- DYW-GROWTH1-END -->
 <!-- DYW-S3-SUPPRESS-START (S8 WORD 2; re-applied every sync). Hide the free-platform economy surfaces.
      Game logic stays byte-faithful: CSS display:none on ids/classes + a DOM currency scrubber, no source edit.
      KEPT VISIBLE (ruled): the Collection gallery as a viewer, and the XP + LEVEL progression lines. -->
@@ -283,7 +366,7 @@ cat > "$PRE" <<'PREAMBLE'
     var t = e.target && e.target.closest ? e.target.closest('.roundel[title^="Store"]') : null;
     if (!t) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    var to = new URL("../store.html", location.href).href;
+    var to = window.__dywStoreUrl ? window.__dywStoreUrl("") : new URL("../store.html", location.href).href;   // GROWTH-1 #20: first-touch tags ride along
     try { window.top.location.href = to; } catch (err) { location.href = to; }
   }, true);
   var pending = false;
@@ -304,6 +387,10 @@ rm -f "$PRE"
 
 if [ "$(grep -c "DYW-GATE-START" "$DEST/index.html")" != "1" ]; then
   echo "error: gate preamble injection failed" >&2
+  exit 1
+fi
+if [ "$(grep -c "DYW-GROWTH1-START" "$DEST/index.html")" != "1" ]; then
+  echo "error: GROWTH-1 block injection failed" >&2
   exit 1
 fi
 if [ "$(grep -c "DYW-S3-SUPPRESS-START" "$DEST/index.html")" != "1" ]; then
@@ -345,6 +432,13 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - CSS display:none: the Ratna Vault (#vault + #mode-vault + .vault-buy), buy/acquire entry points (.cc-pin) + #col-wallet, landing wallet rows (.lp-wallet) + #lp-sadhana + #sadhanapick.
 - DOM scrubber: coins/Amsha/Sadhana amounts removed from earn stamps (.earn-chip) and quest rewards (.q-reward); XP and LEVEL lines are kept (ruled progression). Game logic is byte-faithful — no source edit.
 - KEPT VISIBLE: the Collection gallery (as a card viewer).
+
+## GROWTH-1 block (marker: DYW-GROWTH1-START / -END; owner rulings 2026-11-06)
+- The /game/ share preview: meta description + og/twitter tags (the ruled sub-line; image assets/og/og_game.jpg).
+- #7: until a wallet has ever been connected on this site (the counter's wallet flag), the Quests intro line, reward lines and the level flourish are hidden — and (ruling A5) the difficulty picker's reward multiplier wording.
+- #18: for a browser that has never connected a wallet on this site (the counter's flag — the copy has no Torana read), the opened Multiplayer door reads "unlock with the Torana" and goes to ../store.html#bundle.
+- #19: after the 3rd finished match vs AI (the counter's 'match' finish), once per browser, never inside a frame: the ruled nudge card ("See the Torana" → ../store.html#bundle / "Not now").
+- #20: every road to the store from the copy (the door, the nudge, the Store roundel) carries the player's first-touch utm tags.
 
 ## Gate preamble (marker: DYW-GATE-START / DYW-GATE-END)
 - GUEST-PLAY-1 (owner ruling 2026-10-26): NO pass check and NO redirect - free play needs no wallet. (Until then: no site pass -> redirect to ../rite.html, a courtesy redirect, never security.) The Hall keeps its own gate (wallet + Torana) and the match server its own check.
@@ -416,18 +510,20 @@ fi
 # (LINK-HOME-1, 2026-11-02: the mini-games' "← Back to the game" went to the raw github.io address; it now goes to the
 #  site's /game/ copy — play/daily/index.html [+1] and play/smriti/index.html [+2] joined. Managed set now 11 pages / 25
 #  links. back.js reads each button's own href, so it carries no address of its own.)
-ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html $SITE_REPO/store.html $SITE_REPO/explore.html $SITE_REPO/mint.html $SITE_REPO/dashboard.html $SITE_REPO/my-invites.html $SITE_REPO/play/daily/index.html $SITE_REPO/play/smriti/index.html"
+# (GROWTH-1, owner rulings 2026-11-06: index.html became the landing — its ONE link is the "Play free" button
+#  (game/index.html?v=…&play=free); the previous home page moved to world.html and keeps its 3. Managed set now 12 pages / 26.)
+ENTRY_FILES="$SITE_REPO/rite.html $SITE_REPO/index.html $SITE_REPO/world.html $SITE_REPO/treasury.html $SITE_REPO/demo/index.html $SITE_REPO/store.html $SITE_REPO/explore.html $SITE_REPO/mint.html $SITE_REPO/dashboard.html $SITE_REPO/my-invites.html $SITE_REPO/play/daily/index.html $SITE_REPO/play/smriti/index.html"
 LINKS_BEFORE="$(grep -oF 'game/index.html' $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_BEFORE" != "25" ]; then
-  echo "error: expected exactly 25 site->game entry links (rite.html x5 + index.html x3 + treasury.html x2 + demo/index.html x2 + store.html x2 + explore.html x2 + mint.html x2 + dashboard.html x2 + my-invites.html x2 + play/daily/index.html x1 + play/smriti/index.html x2), found $LINKS_BEFORE (site nav changed)" >&2
+if [ "$LINKS_BEFORE" != "26" ]; then
+  echo "error: expected exactly 26 site->game entry links (rite.html x5 + index.html x1 + world.html x3 + treasury.html x2 + demo/index.html x2 + store.html x2 + explore.html x2 + mint.html x2 + dashboard.html x2 + my-invites.html x2 + play/daily/index.html x1 + play/smriti/index.html x2), found $LINKS_BEFORE (site nav changed)" >&2
   exit 1
 fi
 SHA="$COPY_ID" perl -i -pe 's{game/index\.html(\?v=[0-9a-f]+)?}{game/index.html?v=$ENV{SHA}}g' $ENTRY_FILES
 LINKS_STAMPED="$(grep -oF "game/index.html?v=$COPY_ID" $ENTRY_FILES | wc -l | tr -d ' ')"
-if [ "$LINKS_STAMPED" != "25" ]; then
-  echo "error: entry-link stamping did not produce 25 stamped links (got $LINKS_STAMPED)" >&2
+if [ "$LINKS_STAMPED" != "26" ]; then
+  echo "error: entry-link stamping did not produce 26 stamped links (got $LINKS_STAMPED)" >&2
   exit 1
 fi
-echo "sync_game: stamped 25 entry links -> game/index.html?v=$COPY_ID"
+echo "sync_game: stamped 26 entry links -> game/index.html?v=$COPY_ID"
 
 echo "sync_game: done. game/ = ${GAME_BYTES} KB (video + vfx + heavy dirs + manifest cross-linked, not copied)."

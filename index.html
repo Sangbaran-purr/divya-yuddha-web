@@ -2,393 +2,181 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Divya Yuddha — The Gate</title>
-    <meta name="description" content="Play Divya Yuddha free, solo. Own the cards. The Torana opens multiplayer." />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Divya Yuddha — Battle of the Celestials</title>
+    <meta name="description" content="A free card battle game inspired by Indian mythology. Play in your browser." />
+    <link rel="canonical" href="https://divyayuddha.games/" />
     <link rel="icon" href="assets/brand/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" sizes="512x512" href="assets/brand/icon-512.png" />
     <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Divya Yuddha" />
+    <meta property="og:url" content="https://divyayuddha.games/" />
     <meta property="og:title" content="Divya Yuddha — Battle of the Celestials" />
-    <meta property="og:description" content="Play Divya Yuddha free, solo. Own the cards. The Torana opens multiplayer." />
-    <meta property="og:image" content="https://divyayuddha.games/assets/plates/facade.jpg" />
+    <meta property="og:description" content="A free card battle game inspired by Indian mythology. Play in your browser." />
+    <meta property="og:image" content="https://divyayuddha.games/assets/og/og_home.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Divya Yuddha — Battle of the Celestials" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://divyayuddha.games/assets/og/og_home.jpg" />
     <link rel="preload" href="assets/fonts/Cinzel.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="assets/fonts/EBGaramond.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="css/threshold.css?v=s1g" />
-    <link rel="stylesheet" href="css/pages.css?v=s1i" />
-    <link rel="stylesheet" href="css/plates.css?v=s1h2" />
-    <link rel="preload" as="image" href="assets/plates/facade.webp" type="image/webp" media="(min-width:720px)" fetchpriority="high" />
-    <link rel="preload" as="image" href="assets/plates/facade_mobile.webp" type="image/webp" media="(max-width:719px)" fetchpriority="high" />
-    <script src="config.js?v=s24"></script>
+    <link rel="preload" as="image" href="assets/landing/bg_phone.webp" type="image/webp" media="(max-width:899px)" fetchpriority="high" />
+    <link rel="preload" as="image" href="assets/landing/bg_desk.webp" type="image/webp" media="(min-width:900px)" fetchpriority="high" />
+    <!-- GROWTH-1 #9 (owner ruling 2026-11-06): the player counter on the home page too — the first visit's utm tags are
+         remembered here, so a tagged link to the home page is credited like a tagged link to the game. -->
+    <script src="play/shared/count.js?v=c2" defer></script>
+    <!-- GROWTH-1 LANDING (owner design pick C2, 2026-11-06). Copy law: every player-facing word on this page is owner-ruled,
+         and tests/suites/landingcopy.js fails if a forbidden word reaches it. The previous home page lives one click deeper,
+         at world.html ("Explore the world of Divya Yuddha"). Layout and motion are DY's own; no reference code was copied. -->
+    <style>
+      @font-face { font-family: "Cinzel"; src: url("assets/fonts/Cinzel.woff2") format("woff2"); font-weight: 400 600; font-display: swap; }
+      @font-face { font-family: "EB Garamond"; src: url("assets/fonts/EBGaramond.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
+      :root { --void:#0b0a08; --gold:#d9a84e; --gold-aged:#6b5426; --hair:#8a6f3a; --flame:#ffc96b; --parch:#e9dcc2;
+              --display:"Cinzel", Georgia, serif; --text:"EB Garamond", Georgia, serif; --logo-w:min(80vw, 340px); --stage-h:min(40svh, 400px); }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      html, body { background:var(--void); color:var(--parch); font-family:var(--text); }
+      body { min-height:100svh; overflow-x:hidden; }
+      /* the game's home-screen plate (landing_plate_port / _wide), darkened only as far as legibility needs */
+      .bg { position:fixed; inset:0; z-index:0; background:var(--void) center/cover no-repeat;
+            background-image:url(assets/landing/bg_phone.jpg);
+            background-image:image-set(url(assets/landing/bg_phone.webp) type("image/webp"), url(assets/landing/bg_phone.jpg) type("image/jpeg")); }
+      .bg::after { content:""; position:absolute; inset:0;
+            background:radial-gradient(60% 42% at 50% 40%, rgba(11,10,8,.30), transparent 70%),
+                       linear-gradient(rgba(11,10,8,.62), rgba(11,10,8,.38) 30%, rgba(11,10,8,.55) 58%, rgba(11,10,8,.92) 82%); }
+      .bar { position:relative; z-index:3; display:flex; justify-content:space-between; align-items:center; max-width:1200px; margin:0 auto;
+             padding:calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px; }
+      .mark img { display:block; width:130px; height:auto; }
+      .store { font-family:var(--display); font-size:12px; letter-spacing:.16em; text-decoration:none; color:var(--parch);
+               border:1px solid var(--gold-aged); padding:6px 12px; border-radius:999px; background:rgba(11,10,8,.55); }
+      .hero { position:relative; z-index:2; max-width:1200px; margin:0 auto; padding:0 20px 28px; display:grid; justify-items:center; text-align:center; }
+      .stage { position:relative; width:min(92vw, 560px); height:var(--stage-h); perspective:1100px; }
+      .card { position:absolute; left:50%; bottom:-9%; width:40%; aspect-ratio:5/7; margin-left:-20%; transform-style:preserve-3d; transform:rotateX(62deg); }
+      .card::after { content:""; position:absolute; inset:-22%; border-radius:50%; background:radial-gradient(closest-side, rgba(255,201,107,.42), transparent); transform:translateZ(-1px); }
+      .card img { position:absolute; inset:0; width:100%; height:100%; border-radius:10px; box-shadow:0 18px 40px rgba(0,0,0,.7); }
+      .card .back { opacity:0; transform:scaleX(-1); }   /* the back shows only during the first half of the flip (keyframes below) — no backface culling, which WebKit drops */
+      .indra { position:absolute; left:50%; bottom:15%; height:90%; aspect-ratio:1; transform:translateX(-50%); filter:drop-shadow(0 0 18px rgba(0,0,0,.55)); }
+      .indra img, .indra video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+      .indra video { opacity:0; transition:opacity .25s; }   /* invisible until it is REALLY playing; the still stays under it */
+      .indra.live video { opacity:1; } .indra.live img { visibility:hidden; }
+      #land-debug { position:fixed; left:8px; right:8px; bottom:8px; z-index:9; font:12px/1.35 ui-monospace, Menlo, monospace; color:#9f9; background:rgba(0,0,0,.82); padding:8px; border-radius:8px; white-space:pre-wrap; word-break:break-all; }
+      .spark { position:absolute; left:25%; bottom:10%; width:50%; height:3px; border-radius:2px; background:linear-gradient(90deg, transparent, var(--flame), transparent); opacity:0; }
+      .copy { text-shadow:0 2px 12px rgba(0,0,0,.85); }
+      h1 { line-height:0; }
+      .logo-hero { display:block; margin:0 auto; width:var(--logo-w); height:auto; filter:drop-shadow(0 4px 14px rgba(0,0,0,.7)); }
+      .sub { margin:10px auto 0; font-size:clamp(17px, 4.4vw, 21px); line-height:1.38; max-width:32ch; }
+      .play { display:inline-block; margin-top:18px; font-family:var(--display); font-weight:600; font-size:clamp(16px, 4.4vw, 19px); letter-spacing:.08em;
+              color:#1a1206; text-decoration:none; padding:16px 28px; border-radius:12px; min-width:min(100%, 320px); text-shadow:none;
+              background:linear-gradient(180deg, var(--flame), var(--gold) 55%, #b98a35); box-shadow:0 0 0 1px #f3d79b inset, 0 10px 30px rgba(217,168,78,.35); }
+      .play:focus-visible, .store:focus-visible, .explore:focus-visible { outline:2px solid var(--flame); outline-offset:3px; }
+      .explore { display:inline-block; margin-top:14px; font-size:17px; color:var(--parch); text-decoration:none; border-bottom:1px solid var(--gold-aged); padding-bottom:2px; }
+      .clip { position:relative; z-index:2; margin:40px auto 72px; max-width:720px; width:calc(100% - 40px); aspect-ratio:16/9; border-radius:12px; overflow:hidden; background:rgba(11,10,8,.7); }
+      .clip:empty { display:none; }   /* the 15-second gameplay clip (ruling #4) is not yet captured: its slot stays empty, and empty is hidden */
+      @media (min-width:900px) {
+        :root { --logo-w:440px; --stage-h:min(76svh, 640px); }
+        .bg { background-image:url(assets/landing/bg_desk.jpg);
+              background-image:image-set(url(assets/landing/bg_desk.webp) type("image/webp"), url(assets/landing/bg_desk.jpg) type("image/jpeg")); }
+        .bg::after { background:radial-gradient(40% 60% at 30% 52%, rgba(11,10,8,.25), transparent 70%),
+                     linear-gradient(90deg, rgba(11,10,8,.50), rgba(11,10,8,.30) 35%, rgba(11,10,8,.62) 60%, rgba(11,10,8,.80)),
+                     linear-gradient(rgba(11,10,8,.45), transparent 25%, transparent 75%, rgba(11,10,8,.75)); }
+        .bar { padding:14px 20px; } .mark img { width:200px; }
+        .hero { grid-template-columns:1.1fr 1fr; align-items:center; text-align:left; min-height:calc(100svh - 140px); justify-items:start; }
+        .stage { width:100%; } .logo-hero { margin:0; } .sub { margin-left:0; }
+      }
+      /* THE OPENING (~1.7 s): the card flips face-up, a spark crosses it, Indra rises out of it */
+      @media (prefers-reduced-motion:no-preference) {
+        .card { animation:flip .8s cubic-bezier(.65,0,.35,1) .1s both; }
+        .spark { animation:spark .4s ease-out .8s both; }
+        .card .back { animation:backface .8s linear .1s both; }
+        .indra { animation:rise .8s cubic-bezier(.33,1,.68,1) .9s both; transform-origin:50% 100%; }
+        .play { animation:glow 3.2s ease-in-out 1.8s infinite; }
+      }
+      @keyframes flip { from { transform:rotateX(62deg) rotateY(180deg); } to { transform:rotateX(62deg) rotateY(0deg); } }
+      @keyframes spark { 0% { opacity:0; transform:scaleX(1); } 35% { opacity:1; transform:scaleX(1.6); } 100% { opacity:0; transform:scaleX(1.6); } }
+      @keyframes backface { 0%, 49.9% { opacity:1; } 50%, 100% { opacity:0; } }
+      @keyframes rise { from { opacity:0; transform:translateX(-50%) translateY(50px) scaleY(.6); } to { opacity:1; transform:translateX(-50%); } }
+      @keyframes glow { 0%, 100% { box-shadow:0 0 0 1px #f3d79b inset, 0 10px 30px rgba(217,168,78,.35); } 50% { box-shadow:0 0 0 1px #f3d79b inset, 0 10px 44px rgba(255,201,107,.6); } }
+    </style>
   </head>
-  <body class="gate">
-    <script src="js/ornament.js?v=s1j"></script>
-    <div id="carried-lamp" aria-hidden="true"></div>
-
-    <header id="top">
-      <nav class="gate-nav wrap" aria-label="Primary">
-        <a class="crest" href="index.html">
-          <img class="brand-logo" src="assets/brand/logo.webp" width="460" height="298" alt="Divya Yuddha — Battle of the Celestials" />
-        </a>
-        <div class="nav-right">
-          <div class="links">
-            <a href="index.html" aria-current="page">The Gate</a>
-            <a href="rite.html">The Rite</a>
-            <a href="explore.html">The Cards</a>
-            <a href="mint.html">The Mint</a>
-            <a href="store.html">The Store</a>
-            <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html?v=6931316">The Game</a>
-          </div>
-          <div id="nav-decl">
-            <button id="declare-top" class="rite-btn" type="button" style="padding:0.5rem 1.2rem">
-              Declare Yourself<span class="sub">connect wallet</span>
-            </button>
-            <a id="nameplate-top" class="nameplate hidden" href="dashboard.html"><span class="flame-dot"></span><span id="addr-top"></span></a>
-          </div>
-          <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu">
-            <span></span><span></span><span></span>
-          </button>
-          <nav id="nav-menu" class="nav-menu" aria-label="Primary menu">
-            <a href="index.html" aria-current="page">The Gate</a>
-            <a href="rite.html">The Rite</a>
-            <a href="explore.html">The Cards</a>
-            <a href="mint.html">The Mint</a>
-            <a href="store.html">The Store</a>
-            <a href="treasury.html">The Treasury</a>
-            <a href="game/index.html?v=6931316">The Game</a>
-          </nav>
-        </div>
-      </nav>
+  <body>
+    <div class="bg" aria-hidden="true"></div>
+    <header class="bar">
+      <a class="mark" href="index.html"><img src="assets/landing/logo_mark.webp" width="420" height="230" alt="Divya Yuddha" /></a>
+      <a class="store" id="land-store" href="store.html">Store</a>
     </header>
-
-    <main>
-      <!-- ===================== THE FACADE — the painted plate (§8.1, S1b) ===================== -->
-      <section class="facade" aria-label="The Gate">
-        <picture class="facade-plate">
-          <source media="(max-width:719px)" srcset="assets/plates/facade_mobile.webp" type="image/webp" />
-          <source media="(max-width:719px)" srcset="assets/plates/facade_mobile.jpg" />
-          <source srcset="assets/plates/facade.webp" type="image/webp" />
-          <img
-            src="assets/plates/facade.jpg"
-            fetchpriority="high"
-            decoding="async"
-            alt="The night gate — a carved temple doorway flanked by guardian statues and hanging lamps; through the arch the war's world burns on the horizon, a distant lit temple-city under a storm sky."
-          />
-        </picture>
-        <div class="facade-lamps" aria-hidden="true"></div>
-        <div class="facade-content">
-          <h1 class="sr-only">Divya Yuddha — Battle of the Celestials</h1>
-          <img class="hero-logo" src="assets/brand/hero-logo.webp" width="1000" height="648" fetchpriority="high" decoding="async" alt="Divya Yuddha — Battle of the Celestials" />
-          <p class="hero-copy">The war is visible to all. Solo play is free; the Torana opens the Hall.</p>
-          <div class="hero-cta" id="hero-declare-wrap">
-            <button id="hero-declare" class="plate-btn" type="button" aria-label="Declare yourself — connect wallet">
-              <img class="plate-face" src="assets/brand/ui/btn_declare.webp" width="960" height="272" alt="" aria-hidden="true" />
-              <span class="sr-only">Declare Yourself</span>
-            </button>
-            <span class="plate-sub">connect wallet</span>
-            <div id="hero-declare-line" class="state-line" aria-live="polite"></div>
-          </div>
-          <p class="promise">Own the cards. The game stays free.</p>
+    <main class="hero">
+      <div class="stage" aria-hidden="true">
+        <div class="card">
+          <img class="face" src="assets/landing/card_indra.webp" width="420" height="588" alt="" decoding="async" />
+          <img class="back" src="assets/landing/card_back_deva.webp" width="420" height="588" alt="" decoding="async" />
         </div>
-        <div class="scroll-cue" aria-hidden="true"><svg><use href="#dy-chev" /></svg></div>
-      </section>
-      <div class="facade-seam" aria-hidden="true"></div>
-
-      <!-- ===================== THE DUAL-CTA DOORWAY (mobile master §2, S1g) ===================== -->
-      <section class="doorway" aria-label="Declare yourself or claim your access">
-        <picture class="doorway-plate">
-          <source srcset="assets/plates/rite.webp" type="image/webp" />
-          <img src="assets/plates/rite.jpg" loading="lazy" decoding="async" alt="A carved temple gate opening onto the burning world beyond, braziers alight at its foot." />
-        </picture>
-        <div class="doorway-lamps" aria-hidden="true"></div>
-        <div class="doorway-cols wrap">
-          <div class="doorway-col">
-            <h2 class="doorway-title">Declare Yourself</h2>
-            <p class="doorway-copy">Play solo, free — no wallet needed. Declare yourself with a Polygon wallet when you want the Hall's tables.</p>
-            <button id="doorway-declare" class="plate-btn doorway-cta" type="button" aria-label="Connect wallet — declare yourself">
-              <img class="plate-face" src="assets/brand/ui/btn_connect_wallet.webp" width="560" height="232" alt="" aria-hidden="true" />
-              <span class="sr-only">Connect Wallet</span>
-            </button>
-            <span class="btn-sub" id="doorway-sub">your name at the gate</span>
-          </div>
-          <div class="doorway-col">
-            <!-- SITE-AUDIT-1 (owner-approved 2026-10-11): the Torana is no longer a free claim (the claim is closed) — it is
-                 bought in the store. The old "Claim Access" plate has those words baked into its image, so a plain gold
-                 text button stands here until a "Get a Torana" plate is exported. -->
-            <h2 class="doorway-title">Get a Torana</h2>
-            <p class="doorway-copy">The Torana opens the Hall — tables against other players. A Torana and 500 DYC for USD 20 in the store.</p>
-            <a class="rite-btn doorway-cta doorway-cta-text" href="store.html#bundle" aria-label="Get a Torana — in the store" style="display:block;text-decoration:none">Get a Torana<span class="sub">in the store</span></a>
-            <span class="btn-sub">USD 20 · with 500 DYC</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- THE LAW — the one parchment above the treasury (§8.1) -->
-      <section class="section tight dawn wrap" aria-label="The Law">
-        <div class="lintel"><span></span><span class="display">The Law</span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
-        <div style="max-width:640px;margin:0 auto">
-          <div class="parchment">
-            <h3>The Law of the Gate</h3>
-            <p>Solo play is free to everyone, no wallet needed. The Hall - play against people - is entered by the Torana.</p>
-            <ul>
-<!-- FREE-PLAY-1 / RULINGS_2026-08-27 amendment 2026-10-11 — rule 3 is SCOPED TO THE HALL: "this door" became "the Hall"
-                   (solo play is free; the Torana unlocks multiplayer). Its other two sentences and R7's clause stand unchanged.
-                   S-BUNDLE-1 / RULINGS_2026-08-27 amendment 2026-09-12 (R7) — the old closing clause became FALSE on 2026-09-12,
-                   when the Torana went on sale in the store. Rule 3's own two sentences are untouched; only that clause is replaced,
-                   by the smallest true words. The amendment quotes what it replaced. -->
-              <!-- SITE-AUDIT-1 / RULINGS_2026-08-27 amendment 2026-10-11b — the Torana bullet MERGED: the store road (the main one)
-                   first, the presale drop second, said once each. Rule 3's Hall-scoped sentences re-ruled in that amendment. -->
-              <li><strong>The Torana opens the Hall.</strong> It is sold in the store — a Torana and 500 DYC for USD 20 — and comes free to every wallet that buys USD 100 or more of DYC in the sale. It admits you; it buys no advantage. One per wallet, bound to you alone, yours to burn.</li>
-              <li><strong>The cards are owned.</strong> Every wave card is an NFT. Buy them in the Store, or trade them on the marketplace in DYCoin. Earning cards through play is planned — three a season.</li>
-              <li><strong>Two coins, one wall.</strong> DYCoin is money: the marketplace, the store, and the stakes at the Hall's tables. A play-reward token is planned; it will never become DYC.</li>
-              <li><strong>Rank is not for sale.</strong> XP measures the player, and sets the bots you face. Player-versus-player tables and staking are live in the Hall, for Torana holders.</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- ===================== FOUR FACTIONS band (§13.C) ===================== -->
-      <section id="factions" class="section dawn wrap" aria-label="Four factions">
-        <h2 class="faction-head">Four Factions. Four Destinies.</h2>
-        <div class="factions">
-          <div class="faction devas">
-            <img class="badge" src="assets/brand/ui/badge_devas.webp" width="258" height="420" loading="lazy" decoding="async" alt="Devas faction badge" />
-            <div class="fep">Guardians of Dharma. Bearers of light.</div>
-            <a class="explore" href="explore.html?f=devas" aria-label="Explore the Deva cards">Explore ›</a>
-          </div>
-          <div class="faction asuras">
-            <img class="badge" src="assets/brand/ui/badge_asuras.webp" width="242" height="420" loading="lazy" decoding="async" alt="Asuras faction badge" />
-            <div class="fep">Masters of Ambition. Driven by desire.</div>
-            <a class="explore" href="explore.html?f=asuras" aria-label="Explore the Asura cards">Explore ›</a>
-          </div>
-          <div class="faction vanaras">
-            <img class="badge" src="assets/brand/ui/badge_vanaras.webp" width="246" height="420" loading="lazy" decoding="async" alt="Vanaras faction badge" />
-            <div class="fep">Bound by Loyalty. Children of the wild.</div>
-            <a class="explore" href="explore.html?f=vanaras" aria-label="Explore the Vanara cards">Explore ›</a>
-          </div>
-          <div class="faction nagas">
-            <img class="badge" src="assets/brand/ui/badge_nagas.webp" width="237" height="420" loading="lazy" decoding="async" alt="Nagas faction badge" />
-            <div class="fep">Keepers of Mystery. From depths unknown.</div>
-            <a class="explore" href="explore.html?f=nagas" aria-label="Explore the Naga cards">Explore ›</a>
-          </div>
-        </div>
-        <div class="explore-foot">
-          <a class="plate-btn explore-cta" href="#panels" aria-label="Explore factions — see the game, the collection, the rite">
-            <img class="plate-face" src="assets/brand/ui/btn_explore_factions.webp" width="560" height="215" alt="" aria-hidden="true" />
-            <span class="sr-only">Explore Factions</span>
-          </a>
-        </div>
-      </section>
-
-      <!-- ===================== THREE CARD SECTIONS (mobile master §4, S1g) ===================== -->
-      <section id="panels" class="section tight dawn wrap" aria-label="The game, the collection, the rite">
-        <div class="scene-cards">
-          <article class="scene-card">
-            <div class="scene-frame">
-              <img src="assets/plates/card_game.webp" width="900" height="675" loading="lazy" decoding="async" alt="A lone warrior on a ridge overlooking a burning battlefield and a fortress-city under a fiery sky." />
-            </div>
-            <h3 class="scene-title">The Game</h3>
-            <p class="scene-copy">Strategic best-of-three duels where four factions clash.</p>
-            <a class="plate-btn scene-cta" href="game/index.html?v=6931316" aria-label="Enter the arena">
-              <img class="plate-face" src="assets/brand/ui/btn_enter_arena.webp" width="560" height="236" alt="" aria-hidden="true" />
-              <span class="sr-only">Enter the Arena</span>
-            </a>
-            <span class="btn-sub">free · solo</span>
-          </article>
-          <article class="scene-card">
-            <div class="scene-frame">
-              <img src="assets/plates/card_collection.webp" width="900" height="675" loading="lazy" decoding="async" alt="A winged Garuda statue rising in a lamplit temple hall of black stone and gold." />
-            </div>
-            <h3 class="scene-title">The Collection</h3>
-            <p class="scene-copy">Heroes, astras, mantras and artifacts — held in your name, traded by your hand.</p>
-            <a class="plate-btn scene-cta" href="treasury.html" aria-label="View collection — your cards">
-              <img class="plate-face" src="assets/brand/ui/btn_view_collection.webp" width="560" height="227" alt="" aria-hidden="true" />
-              <span class="sr-only">View Collection</span>
-            </a>
-            <span class="btn-sub">your cards</span>
-          </article>
-          <article class="scene-card">
-            <div class="scene-frame">
-              <img src="assets/plates/card_rite.webp" width="900" height="675" loading="lazy" decoding="async" alt="A robed figure raising a glowing light before a fiery gate, flanked by stone guardians." />
-            </div>
-            <h3 class="scene-title">The Rite</h3>
-            <p class="scene-copy">The Torana opens the Hall. One per wallet, bound to you alone — with 500 DYC for USD 20 in the store.</p>
-            <a class="plate-btn scene-cta" href="rite.html" aria-label="Learn the rite — get a Torana">
-              <img class="plate-face" src="assets/brand/ui/btn_learn_rite.webp" width="560" height="232" alt="" aria-hidden="true" />
-              <span class="sr-only">Learn the Rite</span>
-            </a>
-            <span class="btn-sub">get a Torana</span>
-          </article>
-        </div>
-      </section>
-
-      <!-- ===================== JOIN THE SAGA (dormant, §14.1) ===================== -->
-      <section class="section tight dawn wrap" aria-label="Join the saga">
-        <div class="lintel"><span></span><svg class="gem"><use href="#dy-gem" /></svg><span></span></div>
-        <div class="saga">
-          <div>
-            <h3 class="display" style="font-size:1rem;margin:0 0 .6rem">Join the Saga</h3>
-            <p class="prose" style="max-width:40ch">Be the first to witness new heroes, reveals, and drops.</p>
-          </div>
-          <div>
-            <form class="field" onsubmit="return false" aria-label="Email signup (not yet active)">
-              <input type="email" placeholder="enter your email" disabled aria-disabled="true" />
-              <button class="rite-btn sleeping" type="button" disabled aria-disabled="true" style="padding:0.55rem 1rem">Soon</button>
-            </form>
-            <p class="dormant-note">The saga's roll is not yet open. Nothing is collected here.</p>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <!-- ===================== THE FOOTER (mobile master §5, S1g) ===================== -->
-    <footer class="site-foot">
-      <div class="foot-top wrap">
-        <div class="foot-brand">
-          <img class="foot-logo" src="assets/brand/logo.webp" width="200" height="130" alt="" aria-hidden="true" />
-          <p class="foot-tag">Divya Yuddha<small>Battle of the Celestials</small></p>
-          <div class="foot-icons" role="group" aria-label="Community">
-            <a class="soc" href="https://www.instagram.com/divyayuddha" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on Instagram"><svg aria-hidden="true"><use href="#dy-instagram" /></svg></a>
-            <a class="soc" href="https://www.facebook.com/profile.php?id=61593444882631" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on Facebook"><svg aria-hidden="true"><use href="#dy-facebook" /></svg></a>
-            <a class="soc" href="https://x.com/divyayuddha" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on X"><svg aria-hidden="true"><use href="#dy-x" /></svg></a>
-            <a class="soc" href="https://www.youtube.com/@DivyaYuddha" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on YouTube"><svg aria-hidden="true"><use href="#dy-youtube" /></svg></a>
-            <a class="soc" href="https://t.me/divyayuddha" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on Telegram"><svg aria-hidden="true"><use href="#dy-telegram" /></svg></a>
-          </div>
-        </div>
-        <nav class="foot-col" aria-label="Explore">
-          <h4>Explore</h4>
-          <a href="index.html#top">The Gate</a>
-          <a href="index.html#factions">Factions</a>
-          <a href="explore.html">The Cards</a>
-          <a href="store.html">The Store</a>
-          <a href="index.html#panels">The Game</a>
-          <a href="rite.html">The Rite</a>
-          <a href="treasury.html">The Treasury</a>
-        </nav>
-        <div class="foot-col" aria-label="Support">
-          <h4>Support</h4>
-          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Help Center</span>
-          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Guides</span>
-          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Terms of Service</span>
-          <span class="foot-link sleeping" aria-disabled="true" title="coming soon">Privacy Policy</span>
-        </div>
-        <div class="foot-col" aria-label="Community">
-          <h4>Community</h4>
-          <a class="foot-soc" href="https://www.instagram.com/divyayuddha" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on Instagram"><svg aria-hidden="true"><use href="#dy-instagram" /></svg>Instagram</a>
-          <a class="foot-soc" href="https://www.facebook.com/profile.php?id=61593444882631" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on Facebook"><svg aria-hidden="true"><use href="#dy-facebook" /></svg>Facebook</a>
-          <a class="foot-soc" href="https://x.com/divyayuddha" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on X"><svg aria-hidden="true"><use href="#dy-x" /></svg>X</a>
-          <a class="foot-soc" href="https://www.youtube.com/@DivyaYuddha" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on YouTube"><svg aria-hidden="true"><use href="#dy-youtube" /></svg>YouTube</a>
-          <a class="foot-soc" href="https://t.me/divyayuddha" target="_blank" rel="noopener noreferrer" aria-label="Divya Yuddha on Telegram"><svg aria-hidden="true"><use href="#dy-telegram" /></svg>Telegram</a>
-        </div>
-        <div class="foot-plaque">
-          <svg class="foot-flame" aria-hidden="true"><use href="#dy-flame" /></svg>
-          <p>The gate remains open for those who dare.</p>
+        <div class="spark"></div>
+        <div class="indra" id="land-indra-wrap">
+          <img src="assets/landing/indra_poster.webp" width="640" height="640" alt="" decoding="async" />
+          <video id="land-indra" muted loop playsinline preload="none" disablepictureinpicture></video>
         </div>
       </div>
-    </footer>
-
-    <script src="js/light.js?v=s1e"></script>
-    <script src="js/wallet.js?v=s1x"></script>
+      <div class="copy">
+        <h1><img class="logo-hero" src="assets/landing/logo_hero.webp" width="880" height="570" fetchpriority="high" alt="Divya Yuddha — Battle of the Celestials" /></h1>
+        <p class="sub">A free card battle game inspired by Indian mythology. Play in your browser.</p>
+        <a class="play" id="land-play" href="game/index.html?v=5d6372e&amp;play=free">Play free — no download</a><br />
+        <a class="explore" href="world.html">Explore the world of Divya Yuddha →</a>
+      </div>
+    </main>
+    <section class="clip" id="land-clip" aria-hidden="true"></section>
     <script>
-      (function () {
-        // Two CTAs, one flow (S1e / owner ruling B): the ceremonial hero PLATE and
-        // the persistent header text button both connect; both are the disconnected
-        // face only — on connect the header nameplate carries identity and both hide.
-        var declTop = document.getElementById("declare-top");
-        var heroDecl = document.getElementById("hero-declare");
-        var heroWrap = document.getElementById("hero-declare-wrap");
-        var doorwayDecl = document.getElementById("doorway-declare");
-        var doorwaySub = document.getElementById("doorway-sub");
-        var npTop = document.getElementById("nameplate-top");
-        var addrTop = document.getElementById("addr-top");
-
-        function doConnect() {
-          var s = window.DYWallet.state;
-          if (s.hasProvider) { window.DYWallet.connect().catch(function () {}); return; }
-          // S-WALLET-DETECT: patient + honest. A mobile in-app wallet injects window.ethereum a beat late — never
-          // send anyone to a download page on the first instant. While still detecting, re-run detection; act only
-          // on a CONCLUDED absence, per context (in-app → refresh, mobile → deep link, desktop → install).
-          if (!s.absenceConcluded) {
-            if (doorwaySub) doorwaySub.textContent = "looking for your wallet…";
-            window.DYWallet.retry();
-            return;
-          }
-          if (s.inApp) {
-            if (doorwaySub) doorwaySub.textContent = "wallet not responding — pull to refresh this tab";
-            return;
-          }
-          if (s.isMobile) {
-            window.location.href = window.DYWallet.mmDeepLink("index.html"); // open this page in MetaMask's browser
-            return;
-          }
-          window.open("https://metamask.io/download/", "_blank", "noopener"); // desktop: install (unchanged substance)
+    (function () {
+      "use strict";
+      var UTM = ["utm_source", "utm_medium", "utm_campaign"];
+      function q(o) { var a = []; for (var k in o) if (o[k]) a.push(k + "=" + encodeURIComponent(o[k])); return a.join("&"); }
+      function addQuery(href, extra) { return extra ? href.replace(/(#.*)?$/, function (h) { return (/\?/.test(href) ? "&" : "?") + extra + (h || ""); }) : href; }
+      // #9 — the Play-free button carries the tags THIS visit arrived with into the game
+      var inc = {}; UTM.forEach(function (k) { var m = location.search.match(new RegExp("[?&]" + k + "=([^&#]*)")); if (m) { try { inc[k] = decodeURIComponent(m[1].replace(/\+/g, " ")); } catch (e) {} } });
+      var play = document.getElementById("land-play"); play.href = addQuery(play.getAttribute("href"), q(inc));
+      // #17/#20 — the Store link carries the player's FIRST-TOUCH tags (the counter remembers them; untagged = none)
+      function firstTouch() { try { var s = window.DY_COUNT && window.DY_COUNT.state(); if (s && s.src && s.src.s && s.src.s !== "direct") return { utm_source: s.src.s, utm_medium: s.src.m, utm_campaign: s.src.c }; } catch (e) {} return {}; }
+      document.addEventListener("DOMContentLoaded", function () { var st = document.getElementById("land-store"); st.href = addQuery(st.getAttribute("href"), q(firstTouch())); });
+      // ALWAYS above the fold: on a short phone the hero logo, then the stage, give way until the button fits whole
+      function fit() {
+        var root = document.documentElement, btn = play, h = window.innerHeight;
+        root.style.removeProperty("--logo-w"); root.style.removeProperty("--stage-h");
+        if (window.innerWidth >= 900) return;
+        var logo = document.querySelector(".logo-hero"), stage = document.querySelector(".stage");
+        var lw = logo.getBoundingClientRect().width, sh = stage.getBoundingClientRect().height, guard = 0;
+        while (btn.getBoundingClientRect().bottom > h - 8 && guard++ < 60) {
+          if (lw > 200) { lw -= 10; root.style.setProperty("--logo-w", lw + "px"); }
+          else if (sh > 120) { sh -= 10; root.style.setProperty("--stage-h", sh + "px"); }
+          else break;
         }
-        declTop.addEventListener("click", doConnect);
-        if (heroDecl) heroDecl.addEventListener("click", doConnect);
-        if (doorwayDecl) doorwayDecl.addEventListener("click", doConnect);
-
-        // S1h: the dual-CTA left is a carved image plate when disconnected; on connect
-        // the image hides and an aged-gold "Declared" text state shows (button disabled).
-        function setDoorway(connected) {
-          if (!doorwayDecl) return;
-          if (connected) {
-            // SITE-AUDIT-1 — no dead end: once connected, the next step is the free solo game (through the rite's Enter).
-            doorwayDecl.innerHTML = '<span class="declared">Connected</span>';
-            doorwayDecl.className = "plate-btn doorway-cta declared-state";
-            doorwayDecl.disabled = true;
-            if (doorwaySub) doorwaySub.innerHTML = '<a href="rite.html">play solo — free</a>';
-          } else {
-            doorwayDecl.innerHTML =
-              '<img class="plate-face" src="assets/brand/ui/btn_connect_wallet.webp" width="560" height="232" alt="" aria-hidden="true" /><span class="sr-only">Connect Wallet</span>';
-            doorwayDecl.className = "plate-btn doorway-cta";
-            doorwayDecl.disabled = false;
-            if (doorwaySub) doorwaySub.textContent = "your name at the gate";
-          }
-        }
-
-        window.DYWallet.onChange(function (s) {
-          if (!s.hasProvider) {
-            declTop.classList.remove("hidden");
-            if (heroWrap) heroWrap.classList.remove("hidden");
-            setDoorway(false);
-            return;
-          }
-          if (s.connected) {
-            npTop.classList.remove("hidden");
-            declTop.classList.add("hidden");
-            if (heroWrap) heroWrap.classList.add("hidden");
-            addrTop.textContent = window.DYWallet.shortAddr(s.address);
-            setDoorway(true);
-          } else {
-            npTop.classList.add("hidden");
-            declTop.classList.remove("hidden");
-            if (heroWrap) heroWrap.classList.remove("hidden");
-            setDoorway(false);
-          }
-        });
-        window.DYWallet.init();
-      })();
-    </script>
-    <script>
-      /* S-NAV-1 — mobile nav dropdown: toggle open/close, close on selection, outside tap, Escape. */
-      (function () {
-        var t = document.querySelector(".nav-toggle");
-        var m = document.getElementById("nav-menu");
-        if (!t || !m) return;
-        function closeMenu() { m.classList.remove("open"); t.setAttribute("aria-expanded", "false"); }
-        t.addEventListener("click", function (e) {
-          e.stopPropagation();
-          if (m.classList.contains("open")) { closeMenu(); }
-          else { m.classList.add("open"); t.setAttribute("aria-expanded", "true"); }
-        });
-        m.addEventListener("click", function (e) { if (e.target.closest("a")) closeMenu(); });
-        document.addEventListener("click", function (e) {
-          if (m.classList.contains("open") && !m.contains(e.target) && !t.contains(e.target)) closeMenu();
-        });
-        document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMenu(); });
-      })();
+      }
+      fit(); addEventListener("resize", fit); addEventListener("load", fit);   // the logo and the fonts can grow the column after first paint: fit again once they land
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+      // Indra with real transparency, loaded only after the page: WebKit (Safari, every iPhone browser) gets HEVC-with-alpha
+      // (Apple's own encoder — WebKit cannot decode ffmpeg's), everyone else VP9-with-alpha. THE STILL ALWAYS STANDS IN: the
+      // video is shown only once it is really playing, and if it never plays (reduced motion, Low Power Mode, an error) the
+      // still simply stays. A WebKit browser is never handed the WebM: it would play it with a black box.
+      var dbg = /[?&]debug=1(&|$)/.test(location.search), log = [];
+      function note(t) { if (!dbg) return; log.push(((performance.now() / 1000).toFixed(1)) + "s " + t); paint(); }
+      function paint() {
+        var v = document.getElementById("land-indra"), card = document.querySelector(".card"), el = document.getElementById("land-debug");
+        if (!el) { el = document.createElement("div"); el.id = "land-debug"; document.body.appendChild(el); }
+        el.textContent = "DEBUG · src: " + (v.currentSrc || v.getAttribute("src") || "(none)") + "\nreadyState " + v.readyState + " · paused " + v.paused + " · error " + (v.error ? v.error.code : "none")
+          + " · live " + document.getElementById("land-indra-wrap").classList.contains("live") + "\nreduced-motion " + !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)
+          + " · card " + getComputedStyle(card).transform.slice(0, 40) + "\n" + navigator.userAgent.slice(0, 90) + "\n" + log.slice(-6).join("\n");
+      }
+      if (dbg) { note("debug on"); setInterval(paint, 1000); }
+      addEventListener("load", function () {
+        if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) { note("reduced motion: still only"); return; }
+        var v = document.getElementById("land-indra"), wrap = document.getElementById("land-indra-wrap"), ua = navigator.userAgent;
+        var webkit = /iP(hone|ad|od)/.test(ua) || (/Safari\//.test(ua) && !/Chrome|Chromium|Android|Edg\//.test(ua)) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        ["loadedmetadata", "canplay", "playing", "pause", "stalled", "waiting"].forEach(function (e) { v.addEventListener(e, function () { note(e); }); });
+        v.addEventListener("playing", function () { wrap.classList.add("live"); });
+        v.addEventListener("error", function () { wrap.classList.remove("live"); note("error " + (v.error ? v.error.code : "?") + " — the still stays"); });
+        v.src = webkit ? "assets/landing/indra_hevc.mov" : "assets/landing/indra.webm";
+        note("chose " + (webkit ? "HEVC (WebKit)" : "WebM (VP9)"));
+        var p = v.play(); if (p && p.catch) p.catch(function (e) { note("play() refused: " + (e && e.name) + " — the still stays"); });
+      });
+    })();
     </script>
   </body>
 </html>

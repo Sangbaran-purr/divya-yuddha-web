@@ -477,7 +477,7 @@ async function main() {
     // js/store.js?v=s9 for a MONTH after the bytes moved — it drifted precisely because nothing watched it. So the
     // guard now walks EVERY page that stamps a script, and a new page joins the law by existing.
     {
-      const PAGES = ["index.html", "admin.html", "store.html", "treasury.html",
+      const PAGES = ["index.html", "world.html", "admin.html", "store.html", "treasury.html",
                      "dashboard.html", "report.html", "rite.html", "mp/hall.html",
                      "mint.html", "explore.html", "my-invites.html"];   // SITE-AUDIT-1: the two pages that gained scripts join the law; MY-INVITES-1 the third
       // (ICO-SIMPLE-1: register.html left the law — it is now a bare redirect to the dashboard's buy panel and loads no script)

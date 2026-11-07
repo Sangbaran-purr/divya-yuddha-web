@@ -97,6 +97,89 @@
   else wrapStarts();
 })();
 </script>
+<!-- DYW-GROWTH1-START (GROWTH-1 Stage 1, owner rulings 2026-11-06; re-applied every sync). The share preview of /game/ (#15),
+     the Quests earning lines kept from strangers (#7), the Multiplayer door for players without a Torana (#18), the
+     once-per-browser nudge after the 3rd finished match vs AI (#19), and the player's FIRST-TOUCH tags on every road to the
+     store (#20). Copy law: every player-facing line here is owner-ruled verbatim; the game's own source is not edited. -->
+<meta name="description" content="A free card battle game inspired by Indian mythology. Play in your browser." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Divya Yuddha" />
+<meta property="og:url" content="https://divyayuddha.games/game/" />
+<meta property="og:title" content="Divya Yuddha — Battle of the Celestials" />
+<meta property="og:description" content="A free card battle game inspired by Indian mythology. Play in your browser." />
+<meta property="og:image" content="https://divyayuddha.games/assets/og/og_game.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://divyayuddha.games/assets/og/og_game.jpg" />
+<style id="dyw-growth1">
+  /* #7 — a stranger (no wallet ever connected on this site) sees the Quests, never what they pay out */
+  body.dyw-stranger #quests .q-intro, body.dyw-stranger #quests .q-reward, body.dyw-stranger #q-flourish { display: none !important; }
+  /* #19 — the nudge card, in the game's own dress */
+  #dyw-nudge { position: fixed; inset: 0; z-index: 2147482000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(6,4,1,.72); }
+  #dyw-nudge .box { max-width: 340px; width: 100%; padding: 22px 20px 18px; border-radius: 14px; text-align: center; background: #12100b; border: 1px solid rgba(217,168,78,.55); box-shadow: 0 18px 50px rgba(0,0,0,.7); }
+  #dyw-nudge p { font-family: "EB Garamond", Georgia, serif; font-size: 18px; line-height: 1.4; color: #e9dcc2; margin: 0 0 16px; }
+  #dyw-nudge a, #dyw-nudge button { display: block; width: 100%; margin-top: 10px; padding: 13px 16px; border-radius: 10px; font-family: Cinzel, Georgia, serif; font-size: 14px; letter-spacing: .08em; cursor: pointer; text-decoration: none; box-sizing: border-box; }
+  #dyw-nudge a { color: #1a1206; font-weight: 600; background: linear-gradient(180deg, #ffc96b, #d9a84e 55%, #b98a35); border: 1px solid #f3d79b; }
+  #dyw-nudge button { color: #e9dcc2; background: transparent; border: 1px solid rgba(138,111,58,.6); }
+</style>
+<script>
+(function(){
+  var C = window.DY_COUNT;
+  var inFrame = false; try { inFrame = window.top !== window; } catch (e) { inFrame = true; }   // the Hall's battle frame, the Daily Puzzle's, the demo's: none of this applies there
+  /* No Torana read exists in the game copy (the Hall and the store read it live, behind a wallet, and keep nothing), and the
+     session pass is no holder signal (the rite's Enter grants it to any wallet for free solo). So the copy keys on ONE thing it
+     knows: has a wallet ever been connected on this site (the counter's flag)? A browser that never connected one cannot hold
+     a Torana here — it gets the unlock door (#18) and the stranger's Quests (#7); one that has keeps today's door to the Hall,
+     whose own gate meets a non-holder. A holder flag written by the Hall would make #18 exact — an owner ruling, not built. */
+  function connected(){ try { var s = C && C.state(); return !!(s && s.wallet); } catch (e) { return false; } }
+  // #20 — the player's FIRST-TOUCH tags (the counter's memory); an untagged first visit carries none
+  function firstTouch(){ try { var s = C && C.state(); if (!s || !s.src || !s.src.s || s.src.s === "direct") return ""; var o = { utm_source: s.src.s, utm_medium: s.src.m, utm_campaign: s.src.c }, a = []; for (var k in o) if (o[k]) a.push(k + "=" + encodeURIComponent(o[k])); return a.join("&"); } catch (e) { return ""; } }
+  function storeUrl(hash){ var t = firstTouch(); return new URL("../store.html" + (t ? "?" + t : "") + (hash || ""), location.href).href; }
+  function go(url){ try { window.top.location.href = url; } catch (e) { location.href = url; } }
+  window.__dywStoreUrl = storeUrl;   // the Store roundel relink below shares it
+  function boot(){
+    if (!connected()){
+      document.body.classList.add("dyw-stranger");                                                     // #7
+      /* ruling A5 (2026-11-06): the difficulty picker's reward wording ("Rewards ×0.8" etc.) is kept from strangers too.
+         The game writes it in renderDiffSelector(); the copy re-reads the line after every write and drops the multiplier. */
+      var rd = window.renderDiffSelector;
+      if (typeof rd === "function" && !rd.__dywNoReward){
+        var scrubbed = function(){ var r = rd.apply(this, arguments); try { var el = document.getElementById("diffdisclose"); if (el) el.textContent = el.textContent.replace(/\s*Rewards\s*[×x]\s*[\d.]+\.?/gi, ""); } catch (e) {} return r; };
+        scrubbed.__dywNoReward = true; window.renderDiffSelector = scrubbed;
+      }
+    }
+    var mp = document.getElementById("mode-mp");                                                         // #18 — the game opened its Multiplayer door
+    if (mp && !connected() && !inFrame){
+      var cap = mp.querySelector(".cap"); if (cap) cap.textContent = "unlock with the Torana";
+      mp.setAttribute("aria-label", "Multiplayer: unlock with the Torana");
+      mp.dataset.href = storeUrl("#bundle");
+      mp.onclick = function(){ go(storeUrl("#bundle")); };
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+  // #19 — after the player's 3rd finished match vs AI, once per browser: the nudge card (never inside a frame)
+  function nudge(){
+    if (inFrame || document.getElementById("dyw-nudge")) return;
+    try { if (localStorage.getItem("dy_mp_nudge_shown")) return; localStorage.setItem("dy_mp_nudge_shown", "1"); } catch (e) { return; }
+    var d = document.createElement("div"); d.id = "dyw-nudge"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
+    d.innerHTML = '<div class="box"><p>Ready for real opponents? Multiplayer opens with the Torana: USD 20, once.</p><a id="dyw-nudge-go" href="#">See the Torana</a><button type="button" id="dyw-nudge-no">Not now</button></div>';
+    document.body.appendChild(d);
+    var a = document.getElementById("dyw-nudge-go"); a.href = storeUrl("#bundle");
+    a.onclick = function(e){ e.preventDefault(); go(storeUrl("#bundle")); };
+    document.getElementById("dyw-nudge-no").onclick = function(){ d.remove(); };
+  }
+  if (C && typeof C.finished === "function" && !C.finished.__dywNudge){
+    var fin = C.finished, wrapped = function(kind){
+      var r = fin.apply(this, arguments);
+      if (kind === "match"){ try { var n = (parseInt(localStorage.getItem("dy_ai_finished") || "0", 10) || 0) + 1; localStorage.setItem("dy_ai_finished", String(n)); if (n >= 3) setTimeout(nudge, 1800); } catch (e) {} }
+      return r;
+    };
+    wrapped.__dywNudge = true; C.finished = wrapped;
+  }
+})();
+</script>
+<!-- DYW-GROWTH1-END -->
 <!-- DYW-S3-SUPPRESS-START (S8 WORD 2; re-applied every sync). Hide the free-platform economy surfaces.
      Game logic stays byte-faithful: CSS display:none on ids/classes + a DOM currency scrubber, no source edit.
      KEPT VISIBLE (ruled): the Collection gallery as a viewer, and the XP + LEVEL progression lines. -->
@@ -137,7 +220,7 @@
     var t = e.target && e.target.closest ? e.target.closest('.roundel[title^="Store"]') : null;
     if (!t) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    var to = new URL("../store.html", location.href).href;
+    var to = window.__dywStoreUrl ? window.__dywStoreUrl("") : new URL("../store.html", location.href).href;   // GROWTH-1 #20: first-touch tags ride along
     try { window.top.location.href = to; } catch (err) { location.href = to; }
   }, true);
   var pending = false;
@@ -6875,8 +6958,8 @@ function startGame(p0Faction, p1Faction){
   showRealmIntro();
   render();
   VFX.init(); VFX.resize();      // size the impact-VFX canvas to the now-visible board
-  VFX.preloadSprites();          // T67: load + tint the painted VFX kit at MATCH START (async, non-blocking; mulligan proceeds; procedural fallback covers the load gap)
   applyVfxQuality();   // T90: resolve the player's VFX-quality rung before the fetch
+  armVfxPreload();     // GROWTH-1 #16 (owner ruling 2026-11-06): the painted kit loads AFTER the first playable turn (pump), never ahead of it — the first match must be playable fast on 4G; the procedural fallback covers the gap (T67's own law)
   VFX.loadMatchSheets(currentFactions.p0, currentFactions.p1);   // T81: lazy — only THIS match's factions' landing sheets (+ the Deva row plates if a Deva is in the match). Loads during the mulligan window.
   beginMulligan();          // play begins when the player confirms their opening hand
 }
@@ -9476,7 +9559,7 @@ function startStoryChapter(id){
   $('logbody').innerHTML=''; $('loglast').textContent=''; $('logdrawer').classList.remove('open');
   applyFactionTheme(); applyRealmBoard(G.realm); makeEmbers(); battleStageStart();   // T42
   Audio2.musicDuck(false); Audio2.playTrack('battle'); conchPending=true;   // release the intro duck INTO the menu→battle crossfade (the crossfade + conch stay the hinge)
-  showRealmIntro(); render(); VFX.init(); VFX.resize(); VFX.preloadSprites(); applyVfxQuality(); VFX.loadMatchSheets(currentFactions.p0, currentFactions.p1);   // T67 sprite kit + T81 lazy match sheets at story-match start too
+  showRealmIntro(); render(); VFX.init(); VFX.resize(); applyVfxQuality(); armVfxPreload(); VFX.loadMatchSheets(currentFactions.p0, currentFactions.p1);   // T81 lazy match sheets at story-match start; the T67 sprite kit — GROWTH-1 #16: deferred to the first playable turn, as quick play
   if (G.mulliganCount>0) storyBeginMulligan();   // ch4/ch5: run the mulligan phase (teaches it) with the pre-match Brihaspati line
   else pump();                                   // ch1–3 (mulligan:0): straight into round 1 (player-first via storyRng)
 }
@@ -13081,6 +13164,12 @@ function pzPerformStep(){
   runAction(()=>pass(G,ME));
 }
 
+/* GROWTH-1 #16 — ONE deferred VFX preload per match: the painted kit (~1.75 MB) is armed at match start (quick play + story) and
+   fired by pump the first time the human may act (their first playable turn). The match's own lazy sheets (T81) still load at
+   match start. preloadSprites is idempotent (sprLoadN), so a re-arm costs nothing. */
+let vfxPreloadArmed=false;
+function armVfxPreload(){ vfxPreloadArmed=true; }
+function fireVfxPreload(){ if(!vfxPreloadArmed) return; vfxPreloadArmed=false; VFX.preloadSprites(); }
 function pump(){
   if (PUZZLE_MODE){ pzPump(); return; }   // MINI-GAMES-1 puzzle mode: no AI, no conch, no relay — close the action, drive the reveal or report
   if (G.over) return;
@@ -13088,6 +13177,7 @@ function pump(){
   fireConch();                                    // round-1 start = first pump of the match (mulligan resolved); guard makes it once-per-match, so rounds 2/3 are silent
   if (choreoActive) return;                       // don't schedule while a choreography is draining
   if (Wire){ wireDrain(); return; }               // BW1 — the relay drives every move; the AI is NEVER entered for a wire seat
+  if (G.turn===ME && !G.players[ME].passed) fireVfxPreload();   // GROWTH-1 #16: the first playable turn → now the painted kit loads
   if (Story && storyMidPending()){ storyShowMid(); return; }   // mid-round story panel (e.g. ch2 after R1) — pause, then re-pump
   Audio2.setRound3(G.round>=3);                   // Round 3 brings in the tabla-like pulse
   if (G.turn===OPP && !G.players[OPP].passed){
@@ -13149,10 +13239,20 @@ const VIDEO_BASE = (window.Capacitor || location.protocol==='capacitor:')   // m
   : 'https://sangbaran-purr.github.io/divya-yuddha/assets/video/';
 const INTRO_MP4 = VIDEO_BASE+'intro_trailer.mp4?v=1', INTRO_POSTER = VIDEO_BASE+'intro_poster.jpg?v=1';
 const INTRO_STALL_MS = 4000;
+/* GROWTH-1 #5/#6 (owner rulings 2026-11-06) — THE PLAY-FREE ROUTE. The site's landing button opens /game/ with ?play=free:
+   no trailer (R-A/R-B re-ruled for THIS route only — every other launch still meets it), straight to the faction pick,
+   the easiest level preselected (Beginner) for this visit only — the player's saved choice is not overwritten. The
+   faction pick's back arrow still leads to the game's home, so nothing else is hidden from them. */
+const PLAY_FREE = /[?&]play=free(&|$)/.test(location.search);
+function playFreeEntry(){
+  showFactionSelect();
+  selectedDifficulty='beginner'; renderDiffSelector();
+}
 function introLaunchCount(){ let n=0; try{ n=parseInt(localStorage.getItem('dy_intro_launches')||'0',10)||0; }catch(e){ n=0; }
   n++; try{ localStorage.setItem('dy_intro_launches', String(n)); }catch(e){} return n; }
 function playIntro(done){
   const ov=$('introv'); if(!ov){ done(); return; }                       // no overlay in the DOM → straight to home
+  if(PLAY_FREE){ ov.classList.add('hidden'); playFreeEntry(); return; }   // GROWTH-1 #5/#6: the play-free route skips the trailer → the faction pick
   let finished=false, vid=null, stall=null;
   const finish=()=>{ if(finished) return; finished=true;                 // ONE home entry, whatever the path
     if(stall){ clearTimeout(stall); stall=null; }
@@ -13178,7 +13278,9 @@ function playIntro(done){
   };
 }
 VFX.init();
-VFX.preloadSprites();   // T67b: preload the painted kit at PAGE LOAD (not match start) — sprites get the whole intro→landing→faction-select→mulligan window to load, so they're ready before the first play even on slow device connections (fixes the match-start race that made effects fire "occasionally/never" cold). Async, non-blocking; idempotent so the startGame call no-ops.
+/* GROWTH-1 #16 (owner ruling 2026-11-06) retired T67b's page-load preload: ~1.75 MB of painted kit no longer competes with the
+   first match on 4G. It loads after the first playable turn (armVfxPreload / pump); the wire and puzzle roads keep their own calls.
+   T67b's note, kept for the record: preload the painted kit at PAGE LOAD (not match start) — sprites get the whole intro→landing→faction-select→mulligan window to load, so they're ready before the first play even on slow device connections (fixes the match-start race that made effects fire "occasionally/never" cold). Async, non-blocking; idempotent so the startGame call no-ops. */
 if (WIRE_MODE) wireBoot(); else if (PUZZLE_MODE) puzzleBoot(); else playIntro(showLanding);   // R-A: the intro gates every launch; showLanding is the single home entry. BW1 (R5): ?wire=1 skips intro + landing and waits for the Hall
 </script>
 </body>
