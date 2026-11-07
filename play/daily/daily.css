@@ -116,3 +116,8 @@ button.dd-card { cursor: pointer; }
 /* DAILY-REVIEW-4 (owner ruling 2026-11-02): the discard piles under the board */
 .dd-discard { margin: 10px auto 0; max-width: 520px; text-align: center; }
 .dd-discardline { margin: 2px 0; font-size: 0.95rem; color: var(--gold-hairline); }
+/* GROWTH-1 Stage 2 — the result card (Wordle-style: the line you'd send, and the button that sends it) */
+.dd-sharecard { margin: 14px 0 6px; padding: 14px 14px 12px; border: 1px solid rgba(217,168,78,.45); border-radius: 12px; background: rgba(11,10,8,.55); text-align: center; }
+.dd-sharetext { margin: 0 0 12px; font-size: 17px; line-height: 1.4; color: #e9dcc2; }
+.dd-sharecard .dd-sharebtn { min-width: 160px; }
+.dd-shared { display: block; min-height: 1.2em; margin-top: 6px; font-size: 14px; color: #d9a84e; }

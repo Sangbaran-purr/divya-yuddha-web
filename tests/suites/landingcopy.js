@@ -47,6 +47,16 @@ const PAGES = { "index.html": R("index.html"), "game/index.html": R("game/index.
 // ruling A6 (2026-11-06): the pages whose search text carries wallet/crypto wording stay out of search
 const NOINDEX = ["dashboard.html", "mint.html", "my-invites.html", "register.html", "rite.html"];
 NOINDEX.forEach((f) => { PAGES[f] = R(f); });
+// GROWTH-1 Stage 2: the share texts and their labels live in these sources
+const SHARE_SRC = ["play/daily/page.js", "play/smriti/page.js"];
+SHARE_SRC.forEach((f) => { PAGES[f] = R(f); });
+// every share-text and share-label line: the Daily/Smriti T entries (share/shareBtn/copied) and the game's challenge lines
+function shareLines(P) {
+  const out = [];
+  SHARE_SRC.forEach((f) => P[f].split("\n").forEach((l) => { if (/^\s+(share|shareBtn|copied):/.test(l)) out.push(f + ": " + l.trim()); }));
+  P["game/index.html"].split("\n").forEach((l) => { if (/CHALLENGE_TEXT = |b\.id='go-challenge'|toastMute\('Link copied'\)/.test(l)) out.push("game: " + l.trim().slice(0, 160)); });
+  return out;
+}
 const URLS = { "index.html": "https://divyayuddha.games/", "game/index.html": "https://divyayuddha.games/game/", "play/daily/index.html": "https://divyayuddha.games/play/daily/",
                "play/smriti/index.html": "https://divyayuddha.games/play/smriti/", "store.html": "https://divyayuddha.games/store.html" };
 // the checks, as a function of the files — so each breakage can be run against a mutated copy
@@ -55,6 +65,7 @@ function law(P) {
   const prev = {}; for (const f in P) if (NOINDEX.indexOf(f) < 0) prev[f] = preview(P[f]).filter((x) => hits(x[1]).length).map((x) => x[0] + ": " + x[1]);
   return { landing, prev, previewsClean: Object.values(prev).every((a) => a.length === 0),
            noindex: ["play/daily/index.html", "play/smriti/index.html"].filter((f) => /<meta name="robots" content="[^"]*noindex/i.test(P[f])),
+           share: shareLines(P).filter((l) => hits(l.replace(/^[^:]+: /, "").replace(/\/\/.*$/, "")).length),
            indexed: NOINDEX.filter((f) => !/<meta name="robots" content="noindex[^"]*"/i.test(P[f])) };
 }
 
@@ -87,6 +98,16 @@ ok("LC2 · no share preview carries them — home, the game copy, the Daily Puzz
 }
 ok("LC8 · the Daily Puzzle and Smriti may be indexed — no noindex left (#14)", L.noindex.length === 0, J(L.noindex));
 ok("LC17 · ruling A6: dashboard, mint, my-invites, register and rite stay out of search (noindex)", L.indexed.length === 0, J(L.indexed));
+{
+  // the approved share texts, verbatim (the Daily and Smriti ones rendered from their own T functions)
+  const tOf = (f) => { const m = /var T = (\{[\s\S]*?\n  \});/.exec(PAGES[f]); return m ? new Function("return " + m[1])() : {}; };
+  const D = tOf("play/daily/page.js"), Sm = tOf("play/smriti/page.js");
+  const game = PAGES["game/index.html"], ct = /const CHALLENGE_TEXT = "([^"]*)";/.exec(game);
+  const texts = [D.share && D.share(23, 3), Sm.share && Sm.share("Easy", 14), ct && ct[1]];
+  ok("LC18 · the three approved share texts, verbatim, and no forbidden word in any share text or label (" + shareLines(PAGES).length + " lines)",
+    texts[0] === "Divya Yuddha Daily Puzzle #23 — solved in 3 tries. Can you find the winning play?" && texts[1] === "I cleared Smriti (Easy) in 14 tries. Beat me?"
+      && texts[2] === "I just won a battle in Divya Yuddha. Think you can beat the AI? Play free:" && L.share.length === 0 && texts.every((t) => t && hits(t).length === 0), J({ texts, bad: L.share }));
+}
 {
   const g = PAGES["game/index.html"], a = g.indexOf("<!-- DYW-GROWTH1-START"), b = g.indexOf("<!-- DYW-GROWTH1-END -->"), blk = a >= 0 && b > a ? g.slice(a, b) : "";
   const LINES = ["Ready for real opponents? Multiplayer opens with the Torana: USD 20, once.", ">See the Torana<", ">Not now<", '"unlock with the Torana"', '"Multiplayer: unlock with the Torana"'];
@@ -138,6 +159,27 @@ async function behaviour() {
   return out;
 }
 
+// ═══ THE SHARE LINK AND THE SHARE ITSELF (play/shared/share.js) ═══
+async function shareRoad() {
+  const SH = require(path.join(SITE, "play", "shared", "share.js"));
+  const counter = (src) => ({ state: () => ({ id: "AbCdEfGhIjKlMnOpQrStUv", src: src }) });
+  const tagged = counter({ s: "cc_test", m: "qa", c: "growth1" }), direct = counter({ s: "direct", m: null, c: null });
+  const links = ["daily", "smriti", "challenge"].map((k) => SH.link(k, tagged));
+  const out = {};
+  out.links = J(links) === J(["https://divyayuddha.games/play/daily/?utm_source=cc_test&utm_medium=share&utm_campaign=daily",
+                               "https://divyayuddha.games/play/smriti/?utm_source=cc_test&utm_medium=share&utm_campaign=smriti",
+                               "https://divyayuddha.games/?utm_source=cc_test&utm_medium=share&utm_campaign=challenge"])
+    && SH.link("daily", direct) === "https://divyayuddha.games/play/daily/?utm_source=direct&utm_medium=share&utm_campaign=daily"
+    && SH.link("challenge", null) === "https://divyayuddha.games/?utm_source=direct&utm_medium=share&utm_campaign=challenge"
+    && links.every((u) => u.indexOf("AbCdEfGhIjKlMnOpQrStUv") < 0 && !/[?&](id|player|uid)=/.test(u));
+  const o = { text: "t", url: "u" }, copied = [];
+  const sheet = { share: () => Promise.resolve() }, cancel = { share: () => Promise.reject(Object.assign(new Error("x"), { name: "AbortError" })) };
+  const clip = { clipboard: { writeText: (t) => { copied.push(t); return Promise.resolve(); } } };
+  out.road = (await SH.share(o, { navigator: sheet })) === "shared" && (await SH.share(o, { navigator: cancel })) === "cancelled"
+    && (await SH.share(o, { navigator: clip })) === "copied" && copied[0] === "t u";
+  return out;
+}
+
 // ═══ BREAKAGES — each must turn the law red ═══
 console.log("\n── the breakages (each must go red) ──");
 const BREAK = [
@@ -150,10 +192,12 @@ const BREAK = [
   ["B7 · world.html's preview says 'token'", "world.html", (s) => s.replace(/(og:title" content=")[^"]*/, "$1The token gate")],
   ["B8 · Smriti is hidden from search again", "play/smriti/index.html", (s) => s.replace("<title>", '<meta name="robots" content="noindex, nofollow" />\n    <title>')],
   ["B9 · the rite goes back into search", "rite.html", (s) => s.replace(/<meta name="robots" content="noindex" \/>[^\n]*\n/, "")],
+  ["B10 · the Smriti share text promises to earn something", "play/smriti/page.js", (s) => s.replace('". Beat me?"', '". Beat me and earn more?"')],
+  ["B11 · the game's challenge button says 'prize'", "game/index.html", (s) => s.replace("'CHALLENGE A FRIEND'", "'CHALLENGE A FRIEND FOR A PRIZE'")],
 ];
 for (const [name, file, mut] of BREAK) {
   const P2 = Object.assign({}, PAGES); P2[file] = mut(PAGES[file]);
-  const m = law(P2), red = m.landing.length > 0 || !m.previewsClean || m.noindex.length > 0 || m.indexed.length > 0;
+  const m = law(P2), red = m.landing.length > 0 || !m.previewsClean || m.noindex.length > 0 || m.indexed.length > 0 || m.share.length > 0;
   ok(name + " → red", P2[file] !== PAGES[file] && red);
 }
 
@@ -167,6 +211,10 @@ ok("LC13 · #19/#20 the 3rd finished match vs AI brings the ruled card, its butt
 ok("LC14 · #19 once per browser: dismissed, a 4th finish brings no second card", B.once);
 ok("LC15 · a browser that has connected a wallet keeps today's Hall door, the full Quests and the picker's full line", B.connected);
 ok("LC16 · ruling A5: a stranger's difficulty picker drops the reward multiplier ('Rewards ×0.8') and keeps the rest of the line", B.picker);
+console.log("\n── GROWTH-1 Stage 2 · the share road ──");
+const SR = await shareRoad();
+ok("LC19 · #10 every shared link carries the sharer's first-touch source + utm_medium=share + its campaign (daily, smriti, challenge → the home page); untagged = direct; no personal id", SR.links);
+ok("LC20 · the share: the phone's sheet → shared; a cancelled sheet → cancelled (not counted); no sheet → the clipboard gets the text and the link", SR.road);
 console.log("\n" + (fail ? "✖ " + fail + " FAILED / " + pass + " passed" : "✓ ALL " + pass + " CHECKS PASS (the landing copy law)"));
 process.exitCode = fail ? 1 : 0;
 })();

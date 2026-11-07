@@ -281,11 +281,15 @@ function checkBest(Sx) {
     const rmBusy = rm.P.busy;
     ok("RM1 · reduced motion: turning a Hero plays nothing and the board does not wait", rm.plays.length === 0 && rmBusy === false && rg.tiles[rh.i].up && rm.P.playing === null);
     // a missing pack: a plain turn, no wait
-    const np = pageAt({ block: (u) => /registry\.json$/.test(u) });
+    // GROWTH-1 Stage 2 (owner ruling, option 2): DETERMINISTIC — a fixed deal (seed 1, Medium; D1 proves every deal holds an
+    // animated pair) through the harness's own Math.random hook (P4's road), and a wait on the card's STATE (face-up and the
+    // board free), not on timing; a state never reached fails the check instead of slipping past it.
+    const np = pageAt({ block: (u) => /registry\.json$/.test(u), random: [(1 + 0.5) / 4294967296] });
     await startLevel(np, "medium");
     const nh = np.P.game.tiles.find((t) => S.isAnimated(t.card));
-    tapT(np, nh.i); await idle(np);
-    ok("FB1 · with no animation available the Hero just turns over and the board goes on (no error)", np.P.game.tiles[nh.i].up && np.draws.length === 0 && np.P.busy === false);
+    tapT(np, nh.i);
+    const settled = await until(() => np.P.game.tiles[nh.i].up && np.P.busy === false, 20000);
+    ok("FB1 · with no animation available the Hero just turns over and the board goes on (no error)", settled && np.P.game.tiles[nh.i].up && np.draws.length === 0 && np.P.busy === false);
     // storage blocked and corrupt
     const sb = pageAt({ blocked: true });
     await startLevel(sb, "easy"); await solveAll(sb);

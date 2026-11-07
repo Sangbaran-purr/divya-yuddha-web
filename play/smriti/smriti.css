@@ -85,3 +85,8 @@ body.sm-playing .sm-store { display: none; }   /* the storage note shows on the 
   .sm-how { font-size: 1.15rem; }
 }
 @media (prefers-reduced-motion: reduce) { .sm-inner { transition: none; } }
+
+/* GROWTH-1 Stage 2 — "beat my score" */
+.sm-sharebox { margin: 14px 0 4px; text-align: center; }
+.sm-sharebox .sm-sharebtn { min-width: 160px; }
+.sm-shared { display: block; min-height: 1.2em; margin-top: 6px; font-size: 14px; color: #d9a84e; }

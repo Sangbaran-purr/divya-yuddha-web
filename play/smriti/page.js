@@ -24,6 +24,10 @@
     yourBest: function (n) { return "Your best: " + n + " tries."; },
     noStore: "This browser isn't saving your best scores.",
     faceDown: "Face-down card",
+    // GROWTH-1 Stage 2 (owner rulings 2026-11-06, the approved Smriti share text)
+    share: function (lv, x) { return "I cleared Smriti (" + lv + ") in " + x + (x === 1 ? " try" : " tries") + ". Beat me?"; },
+    shareBtn: "Share",
+    copied: "Link copied",
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -191,7 +195,23 @@
     player.release();
     $("sm-result").textContent = T.result(game.pairs, game.tries);
     $("sm-bestline").textContent = improved ? T.newBest : T.yourBest(rec.best[level]);
+    renderShare(T.share(T.level[level], game.tries));
     show("sm-done");
+  }
+  // GROWTH-1 Stage 2 — "beat my score": the level and the tries, and a link that carries the sharer's own first-touch source
+  function renderShare(text) {
+    var old = $("sm-sharebox"); if (old) old.remove();
+    if (!window.DY_SHARE) return;
+    var box = el("div", "sm-sharebox"), b = el("button", "mg-btn sm-endbtn sm-sharebtn", T.shareBtn), st = el("span", "sm-shared");
+    box.id = "sm-sharebox"; b.type = "button"; st.setAttribute("role", "status");
+    b.addEventListener("click", function () {
+      window.DY_SHARE.share({ text: text, url: window.DY_SHARE.link("smriti") }).then(function (r) {
+        if (r === "shared" || r === "copied") { try { if (window.DY_COUNT) window.DY_COUNT.shared("smriti"); } catch (e) {} }
+        st.textContent = r === "copied" ? T.copied : "";
+      });
+    });
+    box.appendChild(b); box.appendChild(st);
+    var done = $("sm-done"); done.insertBefore(box, done.querySelector(".sm-actions"));
   }
 
   $("sm-back").addEventListener("click", choose);

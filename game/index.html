@@ -101,6 +101,7 @@
      the Quests earning lines kept from strangers (#7), the Multiplayer door for players without a Torana (#18), the
      once-per-browser nudge after the 3rd finished match vs AI (#19), and the player's FIRST-TOUCH tags on every road to the
      store (#20). Copy law: every player-facing line here is owner-ruled verbatim; the game's own source is not edited. -->
+<script src="../play/shared/share.js?v=s1"></script><!-- GROWTH-1 Stage 2: the share helper (DY_SHARE) — CHALLENGE A FRIEND's link carries the sharer's first-touch source -->
 <meta name="description" content="A free card battle game inspired by Indian mythology. Play in your browser." />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Divya Yuddha" />
@@ -13217,12 +13218,42 @@ function showGameOver(){
     if(lastEarn) renderEarnStamp($('go-earn'), $('go-extra'), lastEarn);
   }
   syncBattleLogButton();   // GL-3 — VIEW BATTLE LOG on the vs-AI face (story never reaches here: R3)
+  syncChallengeButton();   // GROWTH-1 Stage 2 — CHALLENGE A FRIEND, on a win vs AI only
   $('gameover').classList.remove('hidden');
   Audio2.setRound3(false);
   Audio2.stopMusic(2);   // fade battle music to SILENCE (no crossfade to menu) — result screen plays over silence; menu resumes on return to faction-select
   if(G.winner===ME) Audio2.fileSfx('sfx_victory');        // match-win stinger, immediately on reveal, over the music fade-out
   else if(G.winner===OPP) Audio2.fileSfx('sfx_defeat');    // match-loss stinger
   else Audio2.sfx('roundloss');                          // stalemate keeps the synth cue
+}
+
+/* GROWTH-1 Stage 2 (owner rulings 2026-11-06, #10/#11) — CHALLENGE A FRIEND after a win vs AI. The approved text and a link
+   to the site's home page carrying the sharer's own first-touch source (the site's share helper, DY_SHARE, in its copy of this
+   game) + utm_medium=share + utm_campaign=challenge — no personal id. Standalone (github.io) there is no helper and no counter:
+   the link still goes to the site, tagged as an untracked ("direct") share. The phone's share sheet, else the clipboard; a
+   cancelled share is not a share. Created once and re-synced, because render() re-runs showGameOver while the match is over. */
+const CHALLENGE_TEXT = "I just won a battle in Divya Yuddha. Think you can beat the AI? Play free:";
+function challengeLink(){ try{ if(window.DY_SHARE) return window.DY_SHARE.link('challenge'); }catch(e){}
+  return 'https://divyayuddha.games/?utm_source=direct&utm_medium=share&utm_campaign=challenge'; }
+function challengeShare(text, url){
+  if(window.DY_SHARE) return window.DY_SHARE.share({ text, url });
+  const both = text+' '+url, nav = navigator;
+  const copy = ()=> (nav.clipboard && nav.clipboard.writeText) ? nav.clipboard.writeText(both).then(()=>'copied', ()=>'failed') : Promise.resolve('failed');
+  if(typeof nav.share==='function') return nav.share({ text, url }).then(()=>'shared', e=> (e && e.name==='AbortError') ? 'cancelled' : copy());
+  return copy();
+}
+function challengeFriend(){
+  challengeShare(CHALLENGE_TEXT, challengeLink()).then(r=>{
+    if(r!=='shared' && r!=='copied') return;
+  try{ window.DY_COUNT && window.DY_COUNT.shared('challenge'); }catch(e){}   // GROWTH-1 #11 (owner ruling 2026-11-06): the fourth counter line — a share the player made (DY_COUNT exists only in the site's copy)
+    if(r==='copied') toastMute('Link copied');
+  });
+}
+function syncChallengeButton(){
+  let b=$('go-challenge');
+  if(!b){ b=document.createElement('button'); b.id='go-challenge'; b.type='button'; b.className='go-alt'; b.textContent='CHALLENGE A FRIEND'; b.onclick=challengeFriend;
+    const row=document.querySelector('#gameover .go-btns'); if(row) row.insertBefore(b, row.children[1]||null); }
+  b.classList.toggle('hidden', !(G && G.winner===ME));
 }
 
 /* ── T62 — INTRO TRAILER (R-A..R-E) ─────────────────────────────────────────────────────────────

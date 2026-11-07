@@ -247,6 +247,7 @@ cat > "$PRE" <<'PREAMBLE'
      the Quests earning lines kept from strangers (#7), the Multiplayer door for players without a Torana (#18), the
      once-per-browser nudge after the 3rd finished match vs AI (#19), and the player's FIRST-TOUCH tags on every road to the
      store (#20). Copy law: every player-facing line here is owner-ruled verbatim; the game's own source is not edited. -->
+<script src="../play/shared/share.js?v=s1"></script><!-- GROWTH-1 Stage 2: the share helper (DY_SHARE) — CHALLENGE A FRIEND's link carries the sharer's first-touch source -->
 <meta name="description" content="A free card battle game inspired by Indian mythology. Play in your browser." />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Divya Yuddha" />
@@ -439,6 +440,7 @@ cat > "$DEST/SNAPSHOT.md" <<SNAP
 - #18: for a browser that has never connected a wallet on this site (the counter's flag — the copy has no Torana read), the opened Multiplayer door reads "unlock with the Torana" and goes to ../store.html#bundle.
 - #19: after the 3rd finished match vs AI (the counter's 'match' finish), once per browser, never inside a frame: the ruled nudge card ("See the Torana" → ../store.html#bundle / "Not now").
 - #20: every road to the store from the copy (the door, the nudge, the Store roundel) carries the player's first-touch utm tags.
+- Stage 2 (#10/#11): ../play/shared/share.js (DY_SHARE) is loaded here, so the game's CHALLENGE A FRIEND (a win vs AI) links to the home page with the sharer's first-touch source + utm_medium=share + utm_campaign=challenge; the game itself reports the share (its fourth counter line).
 
 ## Gate preamble (marker: DYW-GATE-START / DYW-GATE-END)
 - GUEST-PLAY-1 (owner ruling 2026-10-26): NO pass check and NO redirect - free play needs no wallet. (Until then: no site pass -> redirect to ../rite.html, a courtesy redirect, never security.) The Hall keeps its own gate (wallet + Torana) and the match server its own check.

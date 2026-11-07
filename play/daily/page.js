@@ -55,6 +55,10 @@
     // DAILY-REVIEW-4 (owner ruling 2026-11-02): the discard piles under the board
     yourDiscard: "Your discard pile: ",
     theirDiscard: "The opponent's discard pile: ",
+    // GROWTH-1 Stage 2 (owner rulings 2026-11-06, the approved Daily share text; no spoiler — no card, no target)
+    share: function (n, x) { return "Divya Yuddha Daily Puzzle #" + n + " — solved in " + x + (x === 1 ? " try" : " tries") + ". Can you find the winning play?"; },
+    shareBtn: "Share",
+    copied: "Link copied",
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -63,7 +67,7 @@
 
   var state = D.load(store), now = Date.now();
   var list = [], P = null, isToday = false, today = D.utcDate(now);
-  var g = null, mode = "idle", sel = null, cardPlayed = false, leapA = null, tries = 0, done = false;
+  var g = null, mode = "idle", sel = null, cardPlayed = false, leapA = null, tries = 0, done = false, solvedNow = false;
   var actions = [];   // this try's moves (Leaps and the card), replayed to show the board as it stood before scoring
   // the framed battle: live once it has said it is ready; failed → the page's own board takes over
   var FRAME = { el: null, win: null, live: false, failed: false, revealing: false, revealText: "", timer: 0, safety: 0 };
@@ -258,6 +262,7 @@
   function onWin(h) {
     done = true;
     countFinish();
+    solvedNow = true;   // GROWTH-1 Stage 2: solved in this visit — the result card may show
     say(T.win(h.t0, h.t1), "dd-good");
     if (isToday) { D.markSolved(state, P.date, today, list); D.save(store, state); }
     g = replay(actions);                        // show the board as your play left it, not the next round's empty field
@@ -357,6 +362,7 @@
     if (m.win === true) {
       done = true;
       countFinish();
+      solvedNow = true;   // GROWTH-1 Stage 2: solved in this visit — the result card may show
       var t = T.win(m.you, m.them);
       say(""); cover(t); settle();   // said ONCE, in the result panel (owner ruling 2026-10-16)
       if (isToday) { D.markSolved(state, P.date, today, list); D.save(store, state); }
@@ -386,7 +392,27 @@
     if (byReveal && isToday) lines.push(T.revealToday);
     if (!isToday) lines.push(T.pastNote);
     $("dd-afternote").textContent = lines.join(" ");
+    renderShare(byReveal);
     renderStreak();
+  }
+  // GROWTH-1 Stage 2 — THE RESULT CARD: only for a puzzle solved in this visit (never a reveal, never a revisit), the
+  // puzzle's number and the tries it took, no spoiler. The link carries the sharer's own first-touch source (share.js).
+  var EPOCH = Date.UTC(2026, 9, 15);   // Daily Puzzle #1 is 2026-10-15; the number is the day, so it never shifts
+  function puzzleNo(date) { var p = date.split("-"); return Math.round((Date.UTC(+p[0], +p[1] - 1, +p[2]) - EPOCH) / 86400000) + 1; }
+  function renderShare(byReveal) {
+    var old = $("dd-sharecard"); if (old) old.remove();
+    if (byReveal || !solvedNow || !window.DY_SHARE) return;
+    var text = T.share(puzzleNo(P.date), tries + 1), card = el("div", "dd-sharecard"), st = el("span", "dd-shared");
+    card.id = "dd-sharecard"; st.setAttribute("role", "status");
+    card.appendChild(el("p", "dd-sharetext", text));
+    card.appendChild(btn(T.shareBtn, "dd-sharebtn", function () {
+      window.DY_SHARE.share({ text: text, url: window.DY_SHARE.link("daily") }).then(function (r) {
+        if (r === "shared" || r === "copied") { try { if (window.DY_COUNT) window.DY_COUNT.shared("daily"); } catch (e) {} }
+        st.textContent = r === "copied" ? T.copied : "";
+      });
+    }));
+    card.appendChild(st);
+    var a = $("dd-after"); a.insertBefore(card, $("dd-afternote").nextSibling);
   }
   function renderStreak() {
     $("dd-streak").textContent = String(D.streak(state, today, list));
