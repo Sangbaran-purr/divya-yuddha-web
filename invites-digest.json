@@ -204,5 +204,12 @@
     "bindings": 1,
     "sha256": "f519b895ef973e25082dae650eaf5364d66f18d9899d0447660f3cf492b2cdbb",
     "scheme": "v2"
+  },
+  {
+    "date": "2026-11-08",
+    "codes": 3,
+    "bindings": 1,
+    "sha256": "f519b895ef973e25082dae650eaf5364d66f18d9899d0447660f3cf492b2cdbb",
+    "scheme": "v2"
   }
 ]
