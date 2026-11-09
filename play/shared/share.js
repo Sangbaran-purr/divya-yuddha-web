@@ -10,7 +10,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
   var BASE = "https://divyayuddha.games/";
-  var PATHS = { daily: "play/daily/", smriti: "play/smriti/", challenge: "" };   // the challenge lands on the home page: its Play free button carries the tags on
+  var PATHS = { daily: "play/daily/", smriti: "play/smriti/", challenge: "challenge/" };   // SHARE-2 (owner rulings 2026-11-09): the challenge lands on /challenge/ — its own share preview — which forwards to the home page with every tag (its Play free button carries them on)
   function cleanTag(v) { v = String(v == null ? "" : v).toLowerCase().replace(/[^a-z0-9._:-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48); return v || null; }
   // the sharer's first-touch source, as the counter remembers it (a portal edition keeps its "portal:<name>")
   function source(counter) {
@@ -39,5 +39,7 @@
     }
     return copyText(both, nav, doc);
   }
-  return { link: link, share: share, source: source, BASE: BASE, PATHS: PATHS };
+  // SHARE-2: the game's Copy link button — the same clipboard road the share falls back to → Promise of "copied" | "failed"
+  function copy(t, env) { env = env || {}; return copyText(t, env.navigator || (typeof navigator !== "undefined" ? navigator : null), env.document || (typeof document !== "undefined" ? document : null)); }
+  return { link: link, share: share, copy: copy, source: source, BASE: BASE, PATHS: PATHS };
 });
