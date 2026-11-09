@@ -116,13 +116,14 @@ function onceRules(C) {   // G4
   console.log("\n── GROW-COUNT-1 · the owner pages and the tagged links ──");
   const L = require(path.join(SITE, "owner", "links.js"));
   const sea = L.build({ name: "Pinoy Gamer TV", medium: "creator", market: "sea", campaign: "", stamp: STAMP });
-  ok("G18 · SEA: three links (the game stamped with the copy id " + STAMP + ", Daily, Smriti), each tagged pinoy-gamer-tv / creator / sea-launch",
-    !sea.error && sea.links.game === "https://divyayuddha.games/game/index.html?v=" + STAMP + "&utm_source=pinoy-gamer-tv&utm_medium=creator&utm_campaign=sea-launch"
+  ok("G18 · SEA: three links (the landing page first — LINKS-1, never /game/ — then Daily, Smriti), each tagged pinoy-gamer-tv / creator / sea-launch",
+    !sea.error && Object.keys(sea.links).join(",") === "landing,daily,smriti" && Object.values(sea.links).every((u) => !/\/game\//.test(u))
+      && sea.links.landing === "https://divyayuddha.games/?utm_source=pinoy-gamer-tv&utm_medium=creator&utm_campaign=sea-launch"
       && sea.links.daily === "https://divyayuddha.games/play/daily/?utm_source=pinoy-gamer-tv&utm_medium=creator&utm_campaign=sea-launch" && /\/play\/smriti\/\?utm_source=pinoy-gamer-tv&/.test(sea.links.smriti), J(sea));
   const india = L.build({ name: "Desi Gaming", medium: "ad", market: "india", campaign: "crypto-push", stamp: STAMP });
   const badIndia = ["Crypto Kings", "Earn Daily", "Wallet Warrior", "NFT Hub"].map((n) => L.build({ name: n, medium: "creator", market: "india", stamp: STAMP }));
   ok("G19 · INDIA: the slug and the game's name only (campaign divya-yuddha, whatever was typed); a name carrying crypto / earn / wallet / NFT is refused",
-    !india.error && india.campaign === "divya-yuddha" && Object.values(india.links).every((u) => L.bannedIn(u.replace(/^https?:\/\/[^/]+/, "").replace(/\?v=[0-9a-f]+/, "")).length === 0) && badIndia.every((r) => !!r.error), J(badIndia.map((r) => r.error)));
+    !india.error && india.campaign === "divya-yuddha" && Object.values(india.links).every((u) => L.bannedIn(u.replace(/^https?:\/\/[^/]+/, "")).length === 0) && badIndia.every((r) => !!r.error), J(badIndia.map((r) => r.error)));
   // the counter reads a link the builder made exactly as it was meant
   const viaLink = counter(C, { search: new URL(sea.links.daily).search }).c.state().src;
   ok("G20 · round trip: a visit through a built link is counted under exactly that source, kind and campaign", viaLink.s === "pinoy-gamer-tv" && viaLink.m === "creator" && viaLink.c === "sea-launch");

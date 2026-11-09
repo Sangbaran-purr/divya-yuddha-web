@@ -166,7 +166,7 @@ async function run() {
     const listed = ((sh.match(/^ENTRY_FILES="([^"]*)"/m) || [])[1] || "").split(/\s+/).filter(Boolean).map((f) => f.replace("$SITE_REPO/", "")).sort();
     // every tracked page/script OUTSIDE the game copy, the tests and mp/ (the Hall reads game/STAMP — no stamped link of its own)
     const tracked = require("child_process").execFileSync("git", ["ls-files"], { cwd: SITE, encoding: "utf8" }).split("\n")
-      .filter((f) => /\.(html|js)$/.test(f) && !/^(game|tests|mp|tmp)\/|node_modules/.test(f) && f !== "play/daily/page.js" && f !== "play/shared/back.js" && f !== "owner/links.js");   // the Daily Puzzle frames the copy reading game/STAMP, as the Hall does — no stamped link of its own; back.js (LINK-HOME-1) follows each button's own stamped href; owner/links.js (GROW-COUNT-1) builds the owner's tagged links from game/STAMP at run time
+      .filter((f) => /\.(html|js)$/.test(f) && !/^(game|tests|mp|tmp)\/|node_modules/.test(f) && f !== "play/daily/page.js" && f !== "play/shared/back.js");   // the Daily Puzzle frames the copy reading game/STAMP, as the Hall does — no stamped link of its own; back.js (LINK-HOME-1) follows each button's own stamped href; owner/links.js no longer links the game at all (LINKS-1: its main link is the landing page)
     const linking = tracked.filter((f) => R(f).indexOf("game/index.html") >= 0).sort();   // 9 since ICO-SIMPLE-1: register.html is a redirect now
     const missing = linking.filter((f) => listed.indexOf(f) < 0), stale = listed.filter((f) => linking.indexOf(f) < 0);
     ok("SY1 · every site page that links the game (" + linking.length + ") is in sync_game.sh's ENTRY_FILES, and the list names no page that doesn't — a new page can't be left behind",
