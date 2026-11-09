@@ -596,6 +596,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 #gameover button{ background:#241a08; color:var(--gold); border:1.5px solid var(--gold-dim); border-radius:8px; padding:10px 22px; font-size:13px; cursor:pointer; }
 /* GL-3 — THE BATTLE-LOG PANEL over the result face: the .overlay/.modal shell (80vh), #logbody's line colours and thin
    scrollbar, one scrolling column under a fixed title and a fixed close control — readable at 390px, no motion. */
+#gameover{ z-index:96; }   /* SHARE-3: the result face sits above the battle HUD's score column (#hudwrap z-95) — the score pills covered the share card on a phone; #battlelog (next in the DOM) still opens on top at the same tier */
 #battlelog{ z-index:96; }   /* above the battle HUD's score column (#hudwrap z-95 — the story cutscene's precedent), so no score chip sits on a line */
 #battlelog .modal{ display:flex; flex-direction:column; overflow:hidden; padding:16px 14px 12px; }
 #battlelog h3{ text-align:center; margin-bottom:8px; }
@@ -1590,11 +1591,35 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 #diffchip.d-deathmatch{ color:#f0a090; border-color:#7a2f2a; background:linear-gradient(#241010,#140808); }
 .go-btns{ display:flex; flex-direction:column; gap:8px; align-items:center; }
 .go-alt{ background:none !important; border:1px solid #4a3a18 !important; color:var(--ink-dim) !important; font-size:11px !important; padding:8px 16px !important; }
-/* SHARE-2: the CHALLENGE A FRIEND row (a win vs AI) — the heading over five small plain-text buttons that wrap on a narrow phone */
-.go-share{ display:flex; flex-direction:column; align-items:center; gap:6px; }
-.go-share-h{ font-family:Cinzel,serif; font-size:11px; letter-spacing:1.5px; color:var(--gold); }
-.go-share-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; max-width:330px; }
-.go-share-row .go-alt{ padding:8px 11px !important; min-height:36px; }
+/* SHARE-3 (owner rulings 2026-11-09): the share panel after a win vs AI — Option B (postcard): the preview a friend sees, the
+   result heading, the official brand logos (unmodified files in https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/, no names beside them — screen-reader labels
+   only), then the smaller Copy link / More. Brand clear space: Facebook's logo is 40px, so every logo keeps >=20px (half its
+   width) from any other content — 2px button padding + an 18px gap between logos, 20px rows above and below. */
+.go-share{ width:100%; display:flex; flex-direction:column; align-items:center; }
+.go-share-2col{ width:100%; }
+.go-share-card{ width:100%; border-radius:10px; overflow:hidden; border:1px solid #6a5320; background:#0d0a05; text-align:left; box-shadow:0 6px 18px rgba(0,0,0,.5); }
+.go-share-card img{ width:100%; aspect-ratio:1200/630; display:block; object-fit:cover; background:#1a1308; }
+.go-share-meta{ padding:6px 9px 8px; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+.go-share-dom{ font-size:10px; color:#9a8a66; text-transform:uppercase; letter-spacing:.4px; }
+.go-share-tt{ font-size:12.5px; font-weight:600; color:#eee3c4; margin-top:2px; }
+.go-share-cap{ font-size:11px; color:var(--ink-dim); margin-top:5px; }
+.go-share-h{ font-family:Cinzel,serif; color:var(--hi); font-size:15px; letter-spacing:.6px; line-height:1.35; margin:12px 0 0; text-wrap:balance; }
+.go-share-h .go-share-score{ font-family:'Crimson Pro',Georgia,serif; letter-spacing:0; font-weight:600; }   /* the score in the body font: a Cinzel "1" reads as "I" */
+.go-share-net{ display:flex; justify-content:center; gap:18px; margin-top:18px; padding:2px 6px; border-radius:30px; }
+#gameover .go-share-net button{ all:unset; box-sizing:border-box; cursor:pointer; width:44px; height:44px; padding:2px; display:grid; place-items:center; border-radius:50%; }
+#gameover .go-share-net button img{ display:block; width:40px; height:40px; object-fit:contain; }
+#gameover .go-share-net button[data-via="x"] img{ width:34px; height:34px; }
+.go-share-util{ display:flex; justify-content:center; gap:12px; margin-top:20px; }
+#gameover .go-share-util button{ all:unset; box-sizing:border-box; cursor:pointer; width:38px; height:38px; display:grid; place-items:center; border-radius:50%; border:1px solid #4a3a18; color:var(--ink-dim); }
+#gameover .go-share-util button svg{ width:18px; height:18px; display:block; }
+#gameover .go-share-net button:focus-visible, #gameover .go-share-util button:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+.go-share-net.glow{ animation:goShareGlow 1.6s ease-out 1s 1; }   /* once, ~1s after the panel opens — the whole row, never one logo */
+@keyframes goShareGlow{ 0%{ box-shadow:0 0 0 0 rgba(240,208,128,0); } 35%{ box-shadow:0 0 0 6px rgba(240,208,128,.38), 0 0 22px rgba(240,208,128,.25); } 100%{ box-shadow:0 0 0 14px rgba(240,208,128,0); } }
+@media (prefers-reduced-motion:reduce){ .go-share-net.glow{ animation:none; } }
+@media (min-width:700px){
+  #gameover .modal:has(.go-share:not(.hidden)){ max-width:560px; }
+  .go-share-2col{ display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:center; width:100%; }
+}
 /* story-cleared dialog: a primary/secondary pair in the app's gold aesthetic (same width, stacked) */
 #storyresult .go-btns button{ font-family:Cinzel,serif; letter-spacing:1.5px; width:210px; max-width:82%; border-radius:9px; }
 #sr-primary{ background:rgba(232,200,116,.12); color:var(--gold); border:1.5px solid var(--gold); border-radius:9px; padding:12px 20px; font-size:13px; font-weight:700; cursor:pointer; text-shadow:0 1px 3px rgba(0,0,0,.6); }
@@ -10613,7 +10638,7 @@ function syncSettingsUI(){
 /* quick mute — with a music file: All on → Music muted → All muted → All on. Without one: SFX on ↔ off. */
 function muteState(){ return (Audio2.musicOn&&Audio2.sfxOn)?'all':(!Audio2.musicOn&&Audio2.sfxOn)?'musicoff':'alloff'; }
 function updateMuteIcon(){ const b=$('mutebtn'); if(!b) return; if(!Audio2.hasMusic){ b.textContent=Audio2.sfxOn?'🔊':'🔇'; return; } const s=muteState(); b.textContent = s==='all'?'🔊': s==='musicoff'?'🎵':'🔇'; }
-function toastMute(text){ const d=document.createElement('div'); d.className='mutetoast'; d.textContent=text; document.body.appendChild(d); setTimeout(()=>d.remove(),1200); }
+function toastMute(text, hi){ const d=document.createElement('div'); d.className='mutetoast'+(hi?' toast-hi':''); d.textContent=text; document.body.appendChild(d); setTimeout(()=>d.remove(),1200); }
 /* PRE-EXISTING BUG FIX (found by the TASK 33 BUY proof): toast() was called at four Task-30 meta sites (colBuy ×2,
    colPin, the sadhana picker) but DEFINED NOWHERE — so every SUCCESSFUL buy/pin threw ReferenceError *after* the
    purchase committed and *before* renderCollection(), leaving the card owned-but-still-sealed and the acquisition
@@ -13237,14 +13262,23 @@ function showGameOver(){
    utm_medium=share + utm_campaign=challenge — no personal id. Standalone (github.io) there is no helper and no counter:
    the link still goes to the site, tagged as an untracked ("direct") share.
    SHARE-2 (owner rulings 2026-11-09): the link goes to the site's /challenge/ page (its own share preview; it forwards to the
-   landing page with every tag), and the one button became a row under the heading CHALLENGE A FRIEND — Facebook · WhatsApp ·
-   X · Copy link · More (plain text, no brand logos). Facebook gets the link only (no pre-filled text — Facebook's policy);
-   WhatsApp and X get the approved text + the link; Copy link copies them as before ("Link copied"); More is the phone's share
-   sheet, shown only where there is one. A Facebook/WhatsApp/X window the player closes without posting cannot be seen, so
-   those count on the tap; Copy link counts a made copy, More a made share (a cancelled sheet is not a share). One counter
-   line for all: every way is one challenge share (per-network counting: not now). Created once and re-synced, because
-   render() re-runs showGameOver while the match is over. */
-const CHALLENGE_TEXT = "I just won a battle in Divya Yuddha. Think you can beat the AI? Play free:";
+   landing page with every tag), and the ways are Facebook · WhatsApp · X · Copy link · More. Facebook gets the link only (no
+   pre-filled text — Facebook's policy); WhatsApp and X get the text + the link; Copy link copies them ("Link copied"); More is
+   the phone's share sheet, shown only where there is one. A Facebook/WhatsApp/X window the player closes without posting cannot
+   be seen, so those count on the tap; Copy link counts a made copy, More a made share (a cancelled sheet is not a share). One
+   counter line for all (per-network counting: not now). No reward for sharing, ever.
+   SHARE-3 (owner rulings 2026-11-09): Option B (postcard). The heading and the shared text carry the match score (nothing
+   else); the preview of the og_challenge card ("Your friend will see this", the approved alt; one image for every score); the
+   official logos — Facebook's primary (blue), WhatsApp's green glyph, X's white mark for a dark background — unmodified, with
+   no names beside them (screen-reader labels only); Messenger out for now; Copy link and More as smaller icon buttons; a
+   one-time glow on the whole logo row ~1s after the panel opens (none for reduced motion). Created once and re-synced,
+   because render() re-runs showGameOver while the match is over. */
+const CHALLENGE_TEXT = "I beat the AI {score} in Divya Yuddha. Can you? Play free:";
+const CHALLENGE_HEADING = "You won {score}! Dare a friend to beat it.";
+const CHALLENGE_CAPTION = "Your friend will see this";
+const CHALLENGE_IMG = 'https://divyayuddha.games/assets/og/og_challenge.jpg';
+const CHALLENGE_ALT = 'Indra raising the Vajra beneath the Divya Yuddha logo, with the words "Can you beat the AI?"';
+function challengeText(score){ return CHALLENGE_TEXT.replace('{score}', score); }
 function challengeLink(){ try{ if(window.DY_SHARE) return window.DY_SHARE.link('challenge'); }catch(e){}
   return 'https://divyayuddha.games/challenge/?utm_source=direct&utm_medium=share&utm_campaign=challenge'; }
 function challengeCopy(text){
@@ -13260,31 +13294,61 @@ function challengeShare(text, url){
 }
 // a network's own share page, in a new window (opened inside the tap, so no pop-up blocker); a closed window can't be seen → 'shared'
 function challengeOpen(u){ try{ window.open(u, '_blank', 'noopener'); }catch(e){} return Promise.resolve('shared'); }
+// [way, screen-reader label, the official logo file (brand ways only)]
 const CHALLENGE_WAYS = [['facebook','Facebook'], ['whatsapp','WhatsApp'], ['x','X'], ['copy','Copy link'], ['more','More']];
-function challengeFriend(via){
-  const url = challengeLink(), t = encodeURIComponent(CHALLENGE_TEXT), u = encodeURIComponent(url);
+const CHALLENGE_LOGOS = { facebook:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/facebook_logo_primary.png', whatsapp:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/whatsapp_glyph_green.svg', x:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/x_logo_white.svg' };
+const CHALLENGE_ICONS = {
+  copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>',
+  more:'<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>' };
+function challengeFriend(via, score){
+  const text = challengeText(score), url = challengeLink(), t = encodeURIComponent(text), u = encodeURIComponent(url);
   const made = via==='facebook' ? challengeOpen('https://www.facebook.com/sharer/sharer.php?u='+u)
-    : via==='whatsapp' ? challengeOpen('https://wa.me/?text='+encodeURIComponent(CHALLENGE_TEXT+' '+url))
+    : via==='whatsapp' ? challengeOpen('https://wa.me/?text='+encodeURIComponent(text+' '+url))
     : via==='x' ? challengeOpen('https://twitter.com/intent/tweet?text='+t+'&url='+u)
-    : via==='copy' ? challengeCopy(CHALLENGE_TEXT+' '+url)
-    : challengeShare(CHALLENGE_TEXT, url);
+    : via==='copy' ? challengeCopy(text+' '+url)
+    : challengeShare(text, url);
   made.then(r=>{
     if(r!=='shared' && r!=='copied') return;
   try{ window.DY_COUNT && window.DY_COUNT.shared('challenge'); }catch(e){}   // GROWTH-1 #11 (owner ruling 2026-11-06): the fourth counter line — a share the player made (DY_COUNT exists only in the site's copy)
-    if(r==='copied') toastMute('Link copied');
+    if(r==='copied') toastMute('Link copied', true);   // SHARE-3: the high toast tier — the plain toast (z-73) sat under the result face and never showed
   });
 }
 function syncChallengeButton(){
   let b=$('go-challenge');
   if(!b){ b=document.createElement('div'); b.id='go-challenge'; b.className='go-share';
-    const h=document.createElement('div'); h.className='go-share-h'; h.textContent='CHALLENGE A FRIEND'; b.appendChild(h);
-    const row=document.createElement('div'); row.className='go-share-row'; b.appendChild(row);
+    const cols=document.createElement('div'); cols.className='go-share-2col'; b.appendChild(cols);
+    const left=document.createElement('div'), right=document.createElement('div'); cols.appendChild(left); cols.appendChild(right);
+    const card=document.createElement('div'); card.className='go-share-card';
+    const im=document.createElement('img'); im.alt=CHALLENGE_ALT; im.decoding='async'; card.appendChild(im);
+    const meta=document.createElement('div'); meta.className='go-share-meta';
+    const dom=document.createElement('div'); dom.className='go-share-dom'; dom.textContent='divyayuddha.games'; meta.appendChild(dom);
+    const tt=document.createElement('div'); tt.className='go-share-tt'; tt.textContent='Can you beat the AI?'; meta.appendChild(tt);
+    card.appendChild(meta); left.appendChild(card);
+    const cap=document.createElement('div'); cap.className='go-share-cap'; cap.textContent=CHALLENGE_CAPTION; left.appendChild(cap);
+    const h=document.createElement('div'); h.className='go-share-h'; right.appendChild(h);
+    const net=document.createElement('div'); net.className='go-share-net'; right.appendChild(net);
+    const util=document.createElement('div'); util.className='go-share-util'; right.appendChild(util);
     CHALLENGE_WAYS.forEach(([via, label])=>{
       if(via==='more' && typeof navigator.share!=='function') return;   // More = the phone's share sheet, only where there is one
-      const k=document.createElement('button'); k.type='button'; k.className='go-alt'; k.dataset.via=via; k.textContent=label; k.onclick=()=>challengeFriend(via); row.appendChild(k);
+      const k=document.createElement('button'); k.type='button'; k.dataset.via=via; k.setAttribute('aria-label', label);
+      if(CHALLENGE_LOGOS[via]){ const li=document.createElement('img'); li.src=CHALLENGE_LOGOS[via]; li.alt=''; k.appendChild(li); net.appendChild(k); }
+      else { k.innerHTML=CHALLENGE_ICONS[via]; util.appendChild(k); }
+      k.onclick=()=>challengeFriend(via, b.dataset.score);
     });
     const btns=document.querySelector('#gameover .go-btns'); if(btns) btns.insertBefore(b, btns.children[1]||null); }
-  b.classList.toggle('hidden', !(G && G.winner===ME));
+  const won = !!(G && G.winner===ME);
+  b.classList.toggle('hidden', !won);
+  if(!won) return;
+  const score = G.players[ME].roundWins+'–'+G.players[OPP].roundWins;   // the match result only — no faction or other detail
+  const fresh = b._match!==G;   // a new win face (render re-runs this while the match is over — once per match)
+  if(fresh || b.dataset.score!==score){
+    b.dataset.score=score;
+    const h=b.querySelector('.go-share-h'), [pre, post]=CHALLENGE_HEADING.split('{score}');
+    h.textContent=pre; const sc=document.createElement('span'); sc.className='go-share-score'; sc.textContent=score; h.appendChild(sc); h.appendChild(document.createTextNode(post));
+  }
+  const im=b.querySelector('.go-share-card img'); if(!im.getAttribute('src')) im.src=CHALLENGE_IMG;   // fetched only once a win shows the panel
+  if(fresh){ b._match=G;   // the one-time glow on the whole logo row (CSS drops it for reduced motion)
+    const net=b.querySelector('.go-share-net'); net.classList.remove('glow'); void net.offsetWidth; net.classList.add('glow'); }
 }
 
 /* ── T62 — INTRO TRAILER (R-A..R-E) ─────────────────────────────────────────────────────────────

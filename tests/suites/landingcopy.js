@@ -55,7 +55,7 @@ SHARE_SRC.forEach((f) => { PAGES[f] = R(f); });
 function shareLines(P) {
   const out = [];
   SHARE_SRC.forEach((f) => P[f].split("\n").forEach((l) => { if (/^\s+(share|shareBtn|copied):/.test(l)) out.push(f + ": " + l.trim()); }));
-  P["game/index.html"].split("\n").forEach((l) => { if (/CHALLENGE_TEXT = |h\.className='go-share-h'|const CHALLENGE_WAYS = |toastMute\('Link copied'\)/.test(l)) out.push("game: " + l.trim().slice(0, 160)); });
+  P["game/index.html"].split("\n").forEach((l) => { if (/const CHALLENGE_(TEXT|HEADING|CAPTION|ALT|WAYS) = |tt\.textContent='|toastMute\('Link copied'/.test(l)) out.push("game: " + l.trim().slice(0, 160)); });
   return out;
 }
 const URLS = { "index.html": "https://divyayuddha.games/", "game/index.html": "https://divyayuddha.games/game/", "play/daily/index.html": "https://divyayuddha.games/play/daily/",
@@ -108,7 +108,7 @@ ok("LC17 · ruling A6: dashboard, mint, my-invites, register and rite stay out o
   const texts = [D.share && D.share(23, 3), Sm.share && Sm.share("Easy", 14), ct && ct[1]];
   ok("LC18 · the three approved share texts, verbatim, and no forbidden word in any share text or label (" + shareLines(PAGES).length + " lines)",
     texts[0] === "Divya Yuddha Daily Puzzle #23 — solved in 3 tries. Can you find the winning play?" && texts[1] === "I cleared Smriti (Easy) in 14 tries. Beat me?"
-      && texts[2] === "I just won a battle in Divya Yuddha. Think you can beat the AI? Play free:" && L.share.length === 0 && texts.every((t) => t && hits(t).length === 0), J({ texts, bad: L.share }));
+      && texts[2] === "I beat the AI {score} in Divya Yuddha. Can you? Play free:" && L.share.length === 0 && texts.every((t) => t && hits(t).length === 0), J({ texts, bad: L.share }));
 }
 {
   const g = PAGES["game/index.html"], a = g.indexOf("<!-- DYW-GROWTH1-START"), b = g.indexOf("<!-- DYW-GROWTH1-END -->"), blk = a >= 0 && b > a ? g.slice(a, b) : "";
@@ -134,8 +134,16 @@ ok("LC17 · ruling A6: dashboard, mint, my-invites, register and rite stay out o
   const a = { href: "../" }; try { new Function("location", "document", scripts[1])(loc, { getElementById: (id) => id === "ch-go" ? a : null }); } catch (e) {}
   ok("LC22 · /challenge/ forwards to the landing page keeping every tag (" + went + "), and its fallback link carries them too", scripts.length === 2 && went === "../" + Q && a.href === "../" + Q);
   const g = PAGES["game/index.html"];
-  ok("LC23 · the game copy's CHALLENGE A FRIEND row: the heading and Facebook · WhatsApp · X · Copy link · More, verbatim (no brand logos — plain text)",
-    g.indexOf("h.textContent='CHALLENGE A FRIEND'") > 0 && g.indexOf("const CHALLENGE_WAYS = [['facebook','Facebook'], ['whatsapp','WhatsApp'], ['x','X'], ['copy','Copy link'], ['more','More']];") > 0
+  // SHARE-3 (owner rulings 2026-11-09): Option B — the approved heading (with the score), caption, preview alt, the official logos
+  // (cross-linked to the free game's Pages by the sync), no names beside them, Messenger out
+  const LOGO = "https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/";
+  ok("LC23 · the game copy's share panel: the approved heading and caption, the og_challenge preview with its approved alt, the three official logos (Facebook · WhatsApp · X, screen-reader labels only), Copy link and More, no Messenger; the link goes to /challenge/",
+    g.indexOf('const CHALLENGE_HEADING = "You won {score}! Dare a friend to beat it.";') > 0 && g.indexOf('const CHALLENGE_CAPTION = "Your friend will see this";') > 0
+      && g.indexOf("const CHALLENGE_ALT = 'Indra raising the Vajra beneath the Divya Yuddha logo, with the words \"Can you beat the AI?\"';") > 0
+      && g.indexOf("const CHALLENGE_IMG = 'https://divyayuddha.games/assets/og/og_challenge.jpg';") > 0
+      && g.indexOf("const CHALLENGE_WAYS = [['facebook','Facebook'], ['whatsapp','WhatsApp'], ['x','X'], ['copy','Copy link'], ['more','More']];") > 0
+      && g.indexOf("const CHALLENGE_LOGOS = { facebook:'" + LOGO + "facebook_logo_primary.png', whatsapp:'" + LOGO + "whatsapp_glyph_green.svg', x:'" + LOGO + "x_logo_white.svg' };") > 0
+      && g.indexOf("k.setAttribute('aria-label', label);") > 0 && !/messenger/i.test(g.slice(g.indexOf("const CHALLENGE_TEXT"), g.indexOf("function syncChallengeButton(")))
       && g.indexOf("https://divyayuddha.games/challenge/?utm_source=direct&utm_medium=share&utm_campaign=challenge") > 0);
 }
 
@@ -218,9 +226,10 @@ const BREAK = [
   ["B8 · Smriti is hidden from search again", "play/smriti/index.html", (s) => s.replace("<title>", '<meta name="robots" content="noindex, nofollow" />\n    <title>')],
   ["B9 · the rite goes back into search", "rite.html", (s) => s.replace(/<meta name="robots" content="noindex" \/>[^\n]*\n/, "")],
   ["B10 · the Smriti share text promises to earn something", "play/smriti/page.js", (s) => s.replace('". Beat me?"', '". Beat me and earn more?"')],
-  ["B11 · the game's challenge heading says 'prize'", "game/index.html", (s) => s.replace("h.textContent='CHALLENGE A FRIEND'", "h.textContent='CHALLENGE A FRIEND FOR A PRIZE'")],
+  ["B11 · the game's challenge heading says 'prize'", "game/index.html", (s) => s.replace('"You won {score}! Dare a friend to beat it."', '"You won {score}! Dare a friend to beat it for a prize."')],
   ["B12 · a share-row button says 'earn'", "game/index.html", (s) => s.replace("['copy','Copy link']", "['copy','Copy link and earn']")],
   ["B13 · the /challenge/ preview promises a prize", "challenge/index.html", (s) => s.replace('og:title" content="Can you beat the AI?"', 'og:title" content="Can you beat the AI? Win a prize"')],
+  ["B15 · the game's share text promises to earn", "game/index.html", (s) => s.replace('Can you? Play free:"', 'Can you? Play free and earn:"')],
   ["B14 · the /challenge/ image alt names the coin", "challenge/index.html", (s) => s.replace('og:image:alt" content="Indra', 'og:image:alt" content="DYC and Indra')],
 ];
 for (const [name, file, mut] of BREAK) {
