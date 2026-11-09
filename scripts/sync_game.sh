@@ -111,6 +111,29 @@ if [ "$(grep -c "'assets/vfx/" "$DEST/index.html")" != "0" ]; then
   exit 1
 fi
 
+# ── SHARE-3 LOGOS (owner ruling 2026-11-09): the three network logos of the share panel (Facebook · WhatsApp · X) are served
+# by THIS site from assets/share/ (byte-identical copies of the game's assets/img/brand/ files), never cross-linked to the free
+# game's Pages — its large deploy can time out and leave a winner with broken logos. Rewritten BEFORE the assets/img/ cross-link
+# below; exactly three refs, every one moved, else fail loudly.
+BRAND_REL="$(grep -oF "'assets/img/brand/" "$DEST/index.html" | wc -l | tr -d ' ')"
+if [ "$BRAND_REL" != "3" ]; then
+  echo "error: expected exactly three 'assets/img/brand/ logo refs, found $BRAND_REL (the game changed its share logos)" >&2
+  exit 1
+fi
+sed "s#'assets/img/brand/#'../assets/share/#g" "$DEST/index.html" > "$DEST/index.html.b"
+mv "$DEST/index.html.b" "$DEST/index.html"
+if [ "$(grep -cF "'assets/img/brand/" "$DEST/index.html")" != "0" ] || [ "$(grep -oF "'../assets/share/" "$DEST/index.html" | wc -l | tr -d ' ')" != "3" ]; then
+  echo "error: the share-logo rewrite left a game-hosted logo behind" >&2
+  exit 1
+fi
+for L in facebook_logo_primary.png whatsapp_glyph_green.svg x_logo_white.svg; do
+  if ! git -C "$GAME_REPO" show "$SRC_COMMIT:assets/img/brand/$L" | cmp -s - "$SITE_REPO/assets/share/$L"; then
+    echo "error: assets/share/$L is not byte-identical to the game's assets/img/brand/$L at $SRC_SHORT" >&2
+    exit 1
+  fi
+done
+echo "sync_game: share logos -> ../assets/share/ (3 refs, byte-identical to the game)"
+
 # ── M-F4e HEAVY-DIR CROSS-LINK (cards/img/audio/thumbs/board/story + manifest, HALL-SYNC-1) ──
 # These dirs are no longer archived; their base paths are rewritten to the free game's live Pages origin so they
 # stream same-origin. The bases appear in mixed contexts (single/double quotes AND backtick templates, e.g.

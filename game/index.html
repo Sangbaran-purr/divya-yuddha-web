@@ -13296,7 +13296,7 @@ function challengeShare(text, url){
 function challengeOpen(u){ try{ window.open(u, '_blank', 'noopener'); }catch(e){} return Promise.resolve('shared'); }
 // [way, screen-reader label, the official logo file (brand ways only)]
 const CHALLENGE_WAYS = [['facebook','Facebook'], ['whatsapp','WhatsApp'], ['x','X'], ['copy','Copy link'], ['more','More']];
-const CHALLENGE_LOGOS = { facebook:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/facebook_logo_primary.png', whatsapp:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/whatsapp_glyph_green.svg', x:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/x_logo_white.svg' };
+const CHALLENGE_LOGOS = { facebook:'../assets/share/facebook_logo_primary.png', whatsapp:'../assets/share/whatsapp_glyph_green.svg', x:'../assets/share/x_logo_white.svg' };
 const CHALLENGE_ICONS = {
   copy:'<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>',
   more:'<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>' };

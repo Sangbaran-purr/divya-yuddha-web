@@ -136,15 +136,19 @@ ok("LC17 · ruling A6: dashboard, mint, my-invites, register and rite stay out o
   const g = PAGES["game/index.html"];
   // SHARE-3 (owner rulings 2026-11-09): Option B — the approved heading (with the score), caption, preview alt, the official logos
   // (cross-linked to the free game's Pages by the sync), no names beside them, Messenger out
-  const LOGO = "https://sangbaran-purr.github.io/divya-yuddha/assets/img/brand/";
-  ok("LC23 · the game copy's share panel: the approved heading and caption, the og_challenge preview with its approved alt, the three official logos (Facebook · WhatsApp · X, screen-reader labels only), Copy link and More, no Messenger; the link goes to /challenge/",
+  // the logos are served by the site itself (assets/share/, byte-identical to the game's files) — never the free game's Pages
+  const LOGO = "../assets/share/", GAME = path.join(process.env.HOME, "Projects", "divya-yuddha");
+  const sameAsGame = ["facebook_logo_primary.png", "whatsapp_glyph_green.svg", "x_logo_white.svg"].every((f) => fs.existsSync(path.join(SITE, "assets/share", f))
+    && (!fs.existsSync(path.join(GAME, "assets/img/brand", f)) || fs.readFileSync(path.join(SITE, "assets/share", f)).equals(fs.readFileSync(path.join(GAME, "assets/img/brand", f)))));
+  ok("LC23 · the game copy's share panel: the approved heading and caption, the og_challenge preview with its approved alt, the three official logos served by the site (Facebook · WhatsApp · X, screen-reader labels only), Copy link and More, no Messenger; the link goes to /challenge/",
     g.indexOf('const CHALLENGE_HEADING = "You won {score}! Dare a friend to beat it.";') > 0 && g.indexOf('const CHALLENGE_CAPTION = "Your friend will see this";') > 0
       && g.indexOf("const CHALLENGE_ALT = 'Indra raising the Vajra beneath the Divya Yuddha logo, with the words \"Can you beat the AI?\"';") > 0
       && g.indexOf("const CHALLENGE_IMG = 'https://divyayuddha.games/assets/og/og_challenge.jpg';") > 0
       && g.indexOf("const CHALLENGE_WAYS = [['facebook','Facebook'], ['whatsapp','WhatsApp'], ['x','X'], ['copy','Copy link'], ['more','More']];") > 0
       && g.indexOf("const CHALLENGE_LOGOS = { facebook:'" + LOGO + "facebook_logo_primary.png', whatsapp:'" + LOGO + "whatsapp_glyph_green.svg', x:'" + LOGO + "x_logo_white.svg' };") > 0
       && g.indexOf("k.setAttribute('aria-label', label);") > 0 && !/messenger/i.test(g.slice(g.indexOf("const CHALLENGE_TEXT"), g.indexOf("function syncChallengeButton(")))
-      && g.indexOf("https://divyayuddha.games/challenge/?utm_source=direct&utm_medium=share&utm_campaign=challenge") > 0);
+      && g.indexOf("https://divyayuddha.games/challenge/?utm_source=direct&utm_medium=share&utm_campaign=challenge") > 0
+      && sameAsGame && g.indexOf("sangbaran-purr.github.io/divya-yuddha/assets/img/brand/facebook") < 0);
 }
 
 // ═══ THE GROWTH-1 BLOCK IN A REAL DOM (#7, #18, #19, #20) — the copy's injected block, its counter tag replaced by the source ═══
