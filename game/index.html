@@ -267,12 +267,16 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
+/* ANDROID-1: a SOLID dark root colour. body's background is only gradients, so the canvas colour it propagated was
+   transparent → white: Android Chrome showed white wherever its address bar uncovered the page. Now no white can show. */
+html{ background-color:#0a0603; }
 body{
   color:var(--ink); font-family:'Crimson Pro',Georgia,serif; display:flex; justify-content:center;
   background:
     radial-gradient(120% 78% at 50% 0%, rgba(74,52,16,.20), transparent 62%),
     linear-gradient(#16110a, #0a0603);
   background-attachment:fixed;
+  background-color:#0a0603;   /* ANDROID-1: after the shorthand (which would reset it) */
 }
 /* CSS-only mandala texture */
 body::before{
@@ -1056,6 +1060,21 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
    brightness(.84) plate is a difference of a few percent, not a design change. */
 @media not all and (hover:hover) and (pointer:fine){
   #landing .land-profile, #landing .lp-quests{ backdrop-filter:none; -webkit-backdrop-filter:none; }
+}
+/* ANDROID-1 — TOUCH: ONE SCROLL. The menu (logo included) scrolls as one page inside #landing; no fixed masthead, no
+   scroll box inside a fixed frame, no mask or roller, the footer in the flow below the last button. The plate stage is
+   sized to the LARGE viewport (100lvh, fallback 100vh) so Chrome's address bar never uncovers anything, and the JS
+   re-fits only on a WIDTH change (orientation), never on the address bar's height change. Desktop (fine pointer)
+   keeps the T34 masthead + roller unchanged — exactly the complementary query, so no viewport is both or neither. */
+@media not all and (hover:hover) and (pointer:fine){
+  #landing{ overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; background:var(--ds-ink); }
+  #landstage{ bottom:auto; height:100vh; height:100lvh; }
+  #landmast{ position:relative; top:auto; left:auto; right:auto; z-index:21; padding-top:calc(env(safe-area-inset-top,0px) + 24px); }
+  #landing .land-col{ position:relative; inset:auto; overflow:visible; padding:18px 20px 0; perspective:none;
+    -webkit-mask-image:none; mask-image:none; }
+  #landing .land-col>*, #landing .land-modes>*{ transform:none !important; }
+  #landing .land-foot{ position:relative; bottom:auto; padding:20px 0 calc(env(safe-area-inset-bottom,0px) + 60px); text-shadow:0 1px 6px rgba(0,0,0,.95); }   /* 60px: the last button clears the site's corner button */
+  #landing #landgear{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 14px); }   /* scrolls away with the logo instead of floating over the profile card */
 }
 
 #landgear{ position:fixed; top:14px; right:14px; z-index:30; width:44px; height:44px; border-radius:9px;
@@ -2530,7 +2549,7 @@ body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn, body.puzzl
       </button>
     </div>
   </div>
-  <footer class="land-foot">v0.1 · Season I</footer>
+  <footer class="land-foot">Season I</footer>
 </div>
 
 <!-- T62 — INTRO TRAILER (R-A: every launch, before home). Gate → play-with-sound → home. Fail-open: any error/stall goes straight to home.
@@ -7830,9 +7849,13 @@ function showLanding(){
 const LAND_PLATE={ port:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/landing_plate_port.jpg', w:1024, h:1536},
                    wide:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/landing_plate_wide.jpg', w:1536, h:1024} };
 function landCol(){ return document.querySelector('#landing .land-col'); }
-const LandFx={ raf:null, mode:null, mastB:180, px:0, py:0, tx:0, ty:0, parts:[], t0:0, ctx:null, density:1.0, desktop:null };   // desktop: T34c capability-split mode, set by landRoller
+const LandFx={ vw:0, vh:0, raf:null, mode:null, mastB:180, px:0, py:0, tx:0, ty:0, parts:[], t0:0, ctx:null, density:1.0, desktop:null };   // desktop: T34c capability-split mode, set by landRoller
+/* ANDROID-1: the stage size, measured ONCE per width (touch) — the plate, its Ken Burns frame and the ember canvas read
+   these, never innerHeight per frame, so Android Chrome's address bar (a height-only resize) re-lays out nothing. */
+function landMeasure(){ const st=$('landstage'), r=st && st.getBoundingClientRect();
+  LandFx.vw=innerWidth; LandFx.vh=(r && r.height) || innerHeight; }
 function landPickPlate(){                                   // orientation pick: portrait plate when clearly taller
-  const m=(innerHeight>innerWidth*1.05)?'port':'wide';
+  const m=(LandFx.vh>LandFx.vw*1.05)?'port':'wide';
   if(m===LandFx.mode) return;
   LandFx.mode=m; const p=LAND_PLATE[m], el=$('landplate');
   if(el) el.src=p.src;
@@ -7840,6 +7863,7 @@ function landPickPlate(){                                   // orientation pick:
 function landFitMast(){                                     // the roller line: masthead bottom (+8), from the DOM
   const mast=$('landmast'), col=landCol();
   if(!mast||!col) return LandFx.mastB;
+  if(!landDesktopPointer()){ col.style.paddingTop=''; return LandFx.mastB; }   // ANDROID-1: touch is one natural scroll — no roller line
   const mb=mast.getBoundingClientRect().bottom+8;
   col.style.paddingTop=(mb+76)+'px';                        // REST clearance: 76px below the line → outside the roll zone
   col.style.setProperty('--mt', mb+'px');                   // mask ramp starts at the line, opaque 56px later
@@ -7855,8 +7879,8 @@ function landRoller(){                    // curl within 64px of the line; rest 
   /* REDUCED MOTION: no transforms at all — the reference guards its roller the same way. (T34 hid the need for this
      because the rAF loop was the only caller and never started; T34b's scroll listener made the guard load-bearing.)
      Clear anything already written, in case the preference is toggled mid-session, then stay out. */
-  if(reducedMotion()){ for(let i=0;i<kids.length;i++) if(kids[i].style.transform) kids[i].style.transform=''; return; }
   const fine=landDesktopPointer(); LandFx.desktop=fine;   // exposed so the mode is readable, not inferred
+  if(reducedMotion() || !fine){ for(let i=0;i<kids.length;i++) if(kids[i].style.transform) kids[i].style.transform=''; return; }   // ANDROID-1: touch scrolls naturally — no roller
   for(let i=0;i<kids.length;i++){
     const r=kids[i].getBoundingClientRect();
     const t=Math.min(Math.max((r.top-LandFx.mastB)/64,0),1);   // 0 = at the roller line, 1 = clear of it
@@ -7962,9 +7986,10 @@ function renderBattleChrome(me, op){
   setScoreAvatar('score-av-o', op.faction);
   setScoreAvatar('score-av-p', me.faction);
 }
-function landResizeFx(){ const c=$('landfx'); if(c){ c.width=innerWidth; c.height=innerHeight; } }
+function landResizeFx(){ const c=$('landfx'); if(c){ c.width=LandFx.vw||innerWidth; c.height=LandFx.vh||innerHeight; } }
 function landStageStop(){ if(LandFx.raf!==null){ cancelAnimationFrame(LandFx.raf); LandFx.raf=null; } }
 function landStageStart(){
+  landMeasure();
   landPickPlate();
   const col=landCol(); if(col) col.style.opacity='';
   landFitMast();
@@ -7982,7 +8007,7 @@ function landStageStart(){
 }
 function landPlateFit(kb){                                  // cover-fit × Ken Burns; min scale ≥ cover ⇒ edges never show
   const el=$('landplate'), p=LAND_PLATE[LandFx.mode]; if(!el||!p) return;
-  const k=kb||1.045, s=Math.max(innerWidth/p.w, innerHeight/p.h)*k;
+  const k=kb||1.045, s=Math.max((LandFx.vw||innerWidth)/p.w, (LandFx.vh||innerHeight)/p.h)*k;
   el.style.width=(p.w*s)+'px'; el.style.height=(p.h*s)+'px';
   el.style.transform=`translate(-50%,-50%) translate3d(${-LandFx.px*16}px,${-LandFx.py*10}px,0)`;
 }
@@ -8002,7 +8027,8 @@ function landFrame(now){
 document.addEventListener('scroll', e=>{ if(e.target && e.target.classList && e.target.classList.contains('land-col')) landRoller(); }, {passive:true, capture:true});
 addEventListener('pointermove', e=>{ LandFx.tx=e.clientX/innerWidth-.5; LandFx.ty=e.clientY/innerHeight-.5; }, {passive:true});
 addEventListener('resize', ()=>{ if($('landing').classList.contains('hidden')) return;
-  landPickPlate(); landResizeFx(); landFitMast(); landPlateFit(); landRoller(); });
+  if(!landDesktopPointer() && innerWidth===LandFx.vw) return;   // ANDROID-1: a height-only resize on touch = the address bar → re-lay out NOTHING
+  landMeasure(); landPickPlate(); landResizeFx(); landFitMast(); landPlateFit(); landRoller(); });
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden) landStageStop();
   else if(!$('landing').classList.contains('hidden')) landStageStart(); });
 function maybeGlintRank(){   // slice 4: fire the rank-chip shimmer once after a promotion, then clear the persisted flag
