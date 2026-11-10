@@ -54,6 +54,11 @@
     section("ow-conv", "Visits → players, by source", "conversion", R.conversion.length ? table(["Source", "First visits", "Became players", "Rate"],
       R.conversion.map(function (x) { return [x.s, String(x.visits), String(x.players), pct(x.rate)]; })) : el("p", "ow-empty", "No first visits in this range."),
       "Of the browsers that first arrived in this range, how many went on to finish a game.");
+    // ONBOARD-1 (owner ruling 2026-11-10): of the browsers that first opened the game's faction screen in this range, how many tapped BEGIN BATTLE
+    section("ow-onboard", "Faction screen → battle started, by source", "onboarding", (R.onboarding || []).length ? table(["Source", "Saw the faction screen", "Started a battle", "Rate"],
+      R.onboarding.map(function (x) { return [x.s, String(x.seen), String(x.started), pct(x.rate)]; }),
+      ["All", String(R.onboarding.reduce(function (a, x) { return a + x.seen; }, 0)), String(R.onboarding.reduce(function (a, x) { return a + x.started; }, 0)), (function () { var se = R.onboarding.reduce(function (a, x) { return a + x.seen; }, 0), st = R.onboarding.reduce(function (a, x) { return a + x.started; }, 0); return pct(se ? st / se : null); })()])
+      : el("p", "ow-empty", "No one opened the faction screen in this range."), "Counted once per browser, from the day it first opened the faction screen.");
     section("ow-ret", "Return, by source", "returns", R.returns.length ? table(["Source", "Players", "Day 1", "Exactly day 7", "Any day 7–13"],
       R.returns.map(function (x) { return [x.s, String(x.players), pct(x.d1_rate) + " (" + x.d1 + "/" + x.d1_base + ")", pct(x.d7_rate) + " (" + x.d7 + "/" + x.d7_base + ")", pct(x.d7_13_rate) + " (" + x.d7_13 + "/" + x.d7_13_base + ")"]; })) : el("p", "ow-empty", "No players in this range."),
       "Counted over players old enough to have had the chance (a player from yesterday is not in the day-7 figures yet).");

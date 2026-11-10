@@ -8,7 +8,8 @@
      untagged = "direct". A portal edition sets window.DY_COUNT_PORTAL before this file → source "portal:<name>".
    · THE EVENTS (UTC days): first_visit (once per id) · first_play (once per id, ever — the count) · return_play (once per
      id per UTC day after the first, with days since the first play) · wallet_connect (once per id; never the address) ·
-     share (capped per day). Each is written to the OUTBOX first and leaves only when the server takes it.
+     share (capped per day) · ONBOARD-1 (owner ruling 2026-11-10): fsel_seen (the game's faction screen opened) and battle_start
+     (BEGIN BATTLE tapped), once per id each. Each is written to the OUTBOX first and leaves only when the server takes it.
    · THE SERVER: ENDPOINT below (switched on 2026-11-03). EMPTY = not switched on: events wait in the outbox. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -23,6 +24,7 @@
   var ENDPOINT = "https://count.divyayuddha.games/v1/events";   // SWITCHED ON by the owner 2026-11-03 (GROW-COUNT-1 · SWITCH-ON); "" = events wait in the outbox
   var KEY = "dy_player", BOX = "dy_player_outbox", BOX_MAX = 60, SHARES_PER_DAY = 5;
   var KINDS = { match: 1, story: 1, hall: 1, daily: 1, smriti: 1 };
+  var STEPS = { fsel_seen: 1, battle_start: 1 };   // ONBOARD-1: the faction screen → battle funnel, once per id each
   var ID_RE = /^[A-Za-z0-9_-]{22}$/;
 
   function utcDay(ms) { return new Date(ms).toISOString().slice(0, 10); }
@@ -45,7 +47,7 @@
     function read(k) { try { var v = S.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
     function write(k, v) { try { S.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
     // no storage → no counting at all (a browser we cannot remember could not be counted once)
-    if (!S) return { finished: noop, walletConnected: noop, shared: noop, flush: function () { return Promise.resolve(0); }, state: function () { return null; }, outbox: function () { return []; }, ENDPOINT: endpoint };
+    if (!S) return { finished: noop, walletConnected: noop, shared: noop, step: noop, flush: function () { return Promise.resolve(0); }, state: function () { return null; }, outbox: function () { return []; }, ENDPOINT: endpoint };
     function noop() {}
     var st = read(KEY);
     if (!st || !ID_RE.test(st.id || "")) {
@@ -83,6 +85,13 @@
       if (st.shares.n >= SHARES_PER_DAY) return;
       st.shares.n++; save(); queue({ ev: "share", day: day, kind: cleanTag(kind) || "link" }); flush();
     }
+    // ONBOARD-1: a funnel step, once per id ever (the event carries only the day, like every other)
+    function step(name) {
+      if (!STEPS[name]) return;
+      fresh(); st.steps = st.steps || {};
+      if (st.steps[name]) return;
+      st.steps[name] = utcDay(now()); save(); queue({ ev: name, day: st.steps[name] }); flush();
+    }
     // send what waits; a sent batch leaves the box only when the server took it (2xx) or refused it for good (400)
     function flush() {
       if (!endpoint || !env.fetch || inflight) return Promise.resolve(0);
@@ -97,7 +106,7 @@
         }, function () { inflight = false; return 0; });
     }
     if (endpoint) flush();
-    return { finished: finished, walletConnected: walletConnected, shared: shared, flush: flush, state: function () { return JSON.parse(JSON.stringify(st)); }, outbox: function () { return read(BOX) || []; }, ENDPOINT: endpoint };
+    return { finished: finished, walletConnected: walletConnected, shared: shared, step: step, flush: flush, state: function () { return JSON.parse(JSON.stringify(st)); }, outbox: function () { return read(BOX) || []; }, ENDPOINT: endpoint };
   }
   return { create: create, sourceOf: sourceOf, utcDay: utcDay, daysBetween: daysBetween, cleanTag: cleanTag, ENDPOINT: ENDPOINT, KEY: KEY, BOX: BOX, ID_RE: ID_RE };
 });

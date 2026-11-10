@@ -96,7 +96,7 @@ ok("LC2 · no share preview carries them — home, the game copy, the Daily Puzz
   const stamp = R("game/STAMP").trim();
   ok("LC6 · Play free goes to the stamped game copy on the play-free route; Explore goes to world.html (the old home page); Store goes to the store",
     new RegExp('<a class="play" id="land-play" href="game/index\\.html\\?v=' + stamp + '&amp;play=free">').test(h) && /<a class="explore" href="world\.html">/.test(h) && /<a class="store" id="land-store" href="store\.html">/.test(h));
-  ok("LC7 · the landing loads the player counter (#9), one stamp with the rest of the site", /<script src="play\/shared\/count\.js\?v=c2" defer><\/script>/.test(h));
+  ok("LC7 · the landing loads the player counter (#9), one stamp with the rest of the site", /<script src="play\/shared\/count\.js\?v=c3" defer><\/script>/.test(h));
 }
 ok("LC8 · the Daily Puzzle and Smriti may be indexed — no noindex left (#14)", L.noindex.length === 0, J(L.noindex));
 ok("LC17 · ruling A6: dashboard, mint, my-invites, register and rite stay out of search (noindex)", L.indexed.length === 0, J(L.indexed));
@@ -156,7 +156,7 @@ async function behaviour() {
   const { JSDOM } = require(path.join(SITE, "tests", "node_modules", "jsdom"));
   const g = PAGES["game/index.html"], gate = g.slice(g.indexOf("<!-- DYW-GATE-START"), g.indexOf("<!-- DYW-GATE-END -->"));
   const COUNT = R("play/shared/count.js").replace('var ENDPOINT = "https://count.divyayuddha.games/v1/events";', 'var ENDPOINT = "";');   // no network from the guard
-  const head = gate.replace('<script src="../play/shared/count.js?v=c2"></script>', "<script>" + COUNT.replace(/<\/script/g, "<\\/script") + "</script>");
+  const head = gate.replace('<script src="../play/shared/count.js?v=c3"></script>', "<script>" + COUNT.replace(/<\/script/g, "<\\/script") + "</script>");
   const body = '<div id="landing"><button class="mode plaque-lg active" id="mode-mp"><div class="frame"><div class="face">Multiplayer<small class="cap">The Hall</small></div></div></button></div>'
              + '<div id="quests"><div class="q-intro">intro</div><div class="q-reward">reward</div></div>'
              + '<div id="diffdisclose"></div><script>function renderDiffSelector(){ document.getElementById("diffdisclose").textContent = "The AI plays loosely — a gentler fight to learn the war. Rewards ×0.8."; }<\/script>';

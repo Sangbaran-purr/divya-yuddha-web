@@ -5,7 +5,7 @@
 <!-- DYW-GATE-START (injected by scripts/sync_game.sh; re-sync replaces this block) -->
 <!-- GROW-COUNT-1 (owner rulings 2026-11-03): the site's player counter, loaded FIRST — before the storage namespace
      shim below — so it reads the real storage and keeps ONE player id across /game/, /play/daily/ and /play/smriti/. -->
-<script src="../play/shared/count.js?v=c2"></script>
+<script src="../play/shared/count.js?v=c3"></script>
 <script>
 (function(){
   var dailyFrame = false; /* MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle frames this copy in puzzle mode (?puzzle=1) from /play/daily/ on THIS origin. That frame alone skips the pass; nothing else does (a direct visit, any other frame, any other page). */
@@ -1551,6 +1551,48 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
   text-shadow:0 1px 8px rgba(0,0,0,.95);
   text-align:center; text-transform:uppercase; line-height:1.5; }
 .diff-disclose.warn{ color:var(--crimson); opacity:1; }   /* renderDiffSelector toggles .warn ON this node, not a child */
+/* ONBOARD-1 (owner rulings 2026-11-10) — the ONE-STEP screen for a first-time player: four large army cards (the playstyle line
+   and difficulty badge from the Factions & Realms tab), the enemy picked for them ("Your enemy:" + Change → the existing
+   opponent picker), "Difficulty:" + Change → the existing selector, then the same BEGIN BATTLE. Returning players: today's screen. */
+#factionselect.first .fsel-title{ text-transform:uppercase; font-size:19px; }
+.fsel-first{ display:flex; flex-direction:column; gap:10px; }
+.fsel-army{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+.fsel-army .ftile{ min-height:178px; padding:10px 8px; justify-content:flex-start; gap:4px; }
+.fsel-army .ftile-crest{ flex:0 0 auto; height:78px; }
+.fsel-army .ftile-crest img{ height:74px; }
+.fsel-army .ftile-name{ font-size:14px; margin-top:2px; }
+.fsel-army .ftile-line{ font-family:'Crimson Pro',Georgia,serif; font-style:italic; font-size:13px; line-height:1.25; color:var(--ink); text-align:center; text-shadow:0 1px 4px #000; }
+.fsel-army .ftile-badge{ font-family:Cinzel,serif; font-size:8px; letter-spacing:.16em; color:var(--parchment); opacity:.75; text-transform:uppercase; text-align:center; margin-top:auto; }
+.fsel-hint{ font-family:'Crimson Pro',Georgia,serif; font-style:italic; font-size:15px; color:var(--gold-hi); text-align:center; text-shadow:0 1px 8px rgba(0,0,0,.95); }
+.fsel-enemy{ display:flex; align-items:center; justify-content:center; gap:9px; padding:10px 12px; border-radius:10px;
+  background:linear-gradient(180deg,rgba(24,15,6,.82),rgba(8,5,2,.82)); border:1px solid var(--gold-dim-25); }
+.fsel-enemy img{ height:30px; width:auto; }
+.fsel-enemy-lbl{ font-family:'Crimson Pro',Georgia,serif; font-size:15px; color:var(--ink); }
+.fsel-enemy b{ font-family:Cinzel,serif; letter-spacing:.14em; color:var(--gold-hi); font-size:13px; font-weight:700; }
+.fsel-link{ font-family:'Crimson Pro',Georgia,serif; font-size:14px; color:var(--gold-2); text-decoration:underline; text-underline-offset:3px;
+  background:none; border:0; padding:8px 4px; min-height:44px; cursor:pointer; }
+.fsel-link:hover{ color:var(--gold-bright); }
+.fsel-diffline{ text-align:center; font-family:'Crimson Pro',Georgia,serif; font-size:14px; color:var(--parchment); text-shadow:0 1px 6px #000; }
+@media(min-width:700px){ .fsel-army{ grid-template-columns:repeat(4,1fr); } .fsel-army .ftile{ min-height:200px; } }
+/* ONBOARD-1 — the site's corner star never covers anything: BEGIN BATTLE's tap area is the picture alone (it was the column's
+   full width, so the star sat inside it at 360px), and where the site's star is present the bottom-left roundels step right
+   of it (they sat exactly under it on desktop). Standalone (no star) the roundels keep their corner. */
+#factionselect .fsel-col > #fselstart{ width:min(272px, calc((100vw - 32px) * .74)); max-width:none; align-self:center; }
+#fselstart img{ width:100% !important; }
+@media(min-width:1024px){ #factionselect .fsel-col > #fselstart{ width:min(320px, calc(min(520px, 100vw - 32px) * .8)); } }
+@media (hover:hover) and (pointer:fine){ body:has(#dyw-gate-return) #factionselect .fsel-bl{ left:56px; } }   /* touch: the roundels sit in the page, centred */
+/* ONBOARD-1 — TOUCH: ONE SCROLL (the ANDROID-1 contract). The whole screen scrolls inside #factionselect: the top bar and its
+   roundels scroll away with it, the plate stage is the LARGE viewport, the Collection roundels and the tip sit in the page BELOW
+   BEGIN BATTLE, and 60px of floor keeps the site's corner star clear of the last row. Desktop (fine pointer) is unchanged. */
+@media not all and (hover:hover) and (pointer:fine){
+  #factionselect{ overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+  #fselstage{ bottom:auto; height:100vh; height:100lvh; }
+  #factionselect .fsel-head{ position:relative; padding-top:calc(env(safe-area-inset-top,0px) + 10px); padding-right:112px; }
+  #factionselect .fsel-tr{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 10px); }
+  #factionselect .fsel-col{ position:relative; inset:auto; overflow:visible; padding:8px 16px 0; }
+  #factionselect .fsel-bl{ position:relative; bottom:auto; left:auto; justify-content:center; margin:16px 0 0; }
+  #factionselect .fsel-tip{ position:relative; bottom:auto; right:auto; margin:12px auto calc(env(safe-area-inset-bottom,0px) + 60px); max-width:min(330px,88vw); width:max-content; }
+}
 
 /* BEGIN BATTLE — the game's ONE baked-text button (A3 recorded exception).
    ⚠ 36b: this rule is now ID-SCOPED. T36 repurposed the SHARED .fsel-start class (a text-button style) into this
@@ -2755,21 +2797,29 @@ body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn, body.puzzl
   </div>
 
   <div class="fsel-col">
-    <div class="ds-header fsel-title">CHOOSE YOUR BATTLE</div>
+    <div class="ds-header fsel-title" id="fsel-title">CHOOSE YOUR BATTLE</div>
 
-    <div class="fsel-sec">YOUR FACTION</div>
-    <div class="fsel-grid" id="fsel-p0"></div>
+    <!-- ONBOARD-1 (owner rulings 2026-11-10): the ONE-STEP screen for a first-time player (no finished match vs AI) -->
+    <div class="fsel-first hidden" id="fsel-first">
+      <div class="fsel-army" id="fsel-army"></div>
+      <div class="fsel-hint" id="fsel-hint">Tap an army to begin.</div>
+      <div class="fsel-enemy hidden" id="fsel-enemy"><span class="fsel-enemy-lbl">Your enemy:</span><img id="fsel-enemy-crest" alt=""><b id="fsel-enemy-name"></b><button type="button" class="fsel-link" id="fsel-enemy-change">Change</button></div>
+      <div class="fsel-diffline hidden" id="fsel-diffline">Difficulty: <span id="fsel-diff-name"></span> <button type="button" class="fsel-link" id="fsel-diff-change">Change</button></div>
+    </div>
 
-    <div class="fsel-sec">OPPONENT</div>
-    <div class="fsel-grid opp" id="fsel-p1"></div>
+    <div class="fsel-sec" data-part="p0">YOUR FACTION</div>
+    <div class="fsel-grid" id="fsel-p0" data-part="p0"></div>
 
-    <div class="fsel-sec">DIFFICULTY</div>
-    <div class="fsel-diff" id="diffopts">
+    <div class="fsel-sec" data-part="p1">OPPONENT</div>
+    <div class="fsel-grid opp" id="fsel-p1" data-part="p1"></div>
+
+    <div class="fsel-sec" data-part="diff">DIFFICULTY</div>
+    <div class="fsel-diff" id="diffopts" data-part="diff">
       <button class="plaque-sm dbtn" data-d="beginner"><b>BEGINNER</b><em>Learn the war</em></button>
       <button class="plaque-sm dbtn sel" data-d="advanced"><b>ADVANCED</b><em>Fight it</em></button>
       <button class="plaque-sm dbtn" data-d="deathmatch"><b>DEATH MATCH</b><em>No mercy</em></button>
     </div>
-    <div id="diffdisclose" class="diff-disclose"></div>
+    <div id="diffdisclose" class="diff-disclose" data-part="diff"></div>
 
     <button id="fselstart" aria-label="Begin Battle"><img src="https://sangbaran-purr.github.io/divya-yuddha/assets/img/begin_battle_btn.png" alt="Begin Battle"></button>
   </div>
@@ -7143,6 +7193,15 @@ function applyFactionTheme(){
 
 /* ---------- faction select ---------- */
 let fselChoice={ p0:'devas', p1:'devas' };
+/* ONBOARD-1 (owner rulings 2026-11-10): a FIRST-TIME player — no finished match vs AI (dy_profile.matches, the counter
+   recordMatchResult bumps) — gets the ONE-STEP screen; returning players keep today's. The enemy is picked for them at random
+   from the OTHER three factions (UI-layer Math.random, the RANDOM tile's precedent — g.rng untouched) until they choose one
+   in the opponent picker (Change). */
+let fselFirst=false, fselEnemyAuto=true, fselOpen={ p1:false, diff:false };
+const FSEL_DIFF_NAME={ beginner:'Beginner', advanced:'Advanced', deathmatch:'Death Match' };
+function fselIsFirstTimer(){ return !((loadProfile().matches|0) > 0); }
+let fselW=0, fselH=0;   // the stage size, measured once per width on touch (ANDROID-1): an address-bar resize re-fits nothing
+function fselMeasure(){ const st=$('fselstage'), r=st && st.getBoundingClientRect(); fselW=innerWidth; fselH=(r && r.height) || innerHeight; }
 /* ═══ T36 — FACTION SELECT (full screen). Same id, same callers, same startGame seam. ═══
    OPPONENT PICKER (A3, ruling b): the shipped screen ALREADY let the player choose the opponent (default DEVAS);
    T36 mirrors that and ADDS a RANDOM tile as a UI-layer convenience. RANDOM resolves with Math.random at BEGIN —
@@ -7157,13 +7216,13 @@ const FSEL_PLATE={ port:{src:'https://sangbaran-purr.github.io/divya-yuddha/asse
                    wide:{src:'https://sangbaran-purr.github.io/divya-yuddha/assets/img/factionselect_plate_wide.jpg', w:1536, h:1024} };
 let fselPlateMode=null;
 function fselPickPlate(){                                   // orientation pick — the landing's rule, ported
-  const m=(innerHeight>innerWidth*1.05)?'port':'wide';
+  const m=((fselH||innerHeight)>(fselW||innerWidth)*1.05)?'port':'wide';
   if(m===fselPlateMode) return;
   fselPlateMode=m; const el=$('fselplate'); if(el) el.src=FSEL_PLATE[m].src;
 }
 function fselFitPlate(){                                    // cover-fit; min scale ≥ cover ⇒ edges never show
   const el=$('fselplate'), p=FSEL_PLATE[fselPlateMode]; if(!el||!p) return;
-  const s=Math.max(innerWidth/p.w, innerHeight/p.h);
+  const s=Math.max((fselW||innerWidth)/p.w, (fselH||innerHeight)/p.h);
   el.style.width=(p.w*s)+'px'; el.style.height=(p.h*s)+'px';
 }
 function fselTile(t, side){
@@ -7186,6 +7245,40 @@ function renderFselTiles(){
 }
 function fselSyncStart(){                                   // BEGIN is gated on a PLAYER faction being chosen
   const b=$('fselstart'); if(b) b.disabled = !fselChoice.p0;
+  if(fselFirst) fselFirstSync();
+}
+/* ONBOARD-1 — the one-step screen: the four army cards, then the enemy line and the difficulty line once an army is chosen */
+function renderFselFirst(){
+  const g=$('fsel-army'); if(!g) return; g.innerHTML='';
+  FSEL_TILES.forEach(t=>{ const b=fselTile(t,'p0'), fc=FI_CONTENT[t.f]||{};
+    const w=b.querySelector('.ftile-word'); if(w) w.remove();
+    const l=document.createElement('div'); l.className='ftile-line'; l.textContent=fc.playstyle||'';
+    const d=document.createElement('div'); d.className='ftile-badge'; d.textContent=fc.difficulty||'';
+    b.appendChild(l); b.appendChild(d); g.appendChild(b); });
+}
+function fselFirstSync(){
+  const picked=!!fselChoice.p0;
+  if(picked && fselEnemyAuto && (!fselChoice.p1 || fselChoice.p1===fselChoice.p0)){
+    const others=FSEL_TILES.filter(t=>t.f!==fselChoice.p0); fselChoice.p1=others[Math.floor(Math.random()*others.length)].f;
+    document.querySelectorAll('#fsel-p1 .ftile').forEach(x=>x.classList.toggle('sel', x.dataset.f===fselChoice.p1));
+  }
+  $('fsel-hint').classList.toggle('hidden', picked);
+  $('fsel-enemy').classList.toggle('hidden', !picked);
+  $('fsel-diffline').classList.toggle('hidden', !picked || fselOpen.diff);
+  const e=FSEL_TILES.find(t=>t.f===fselChoice.p1), im=$('fsel-enemy-crest');
+  $('fsel-enemy-name').textContent = e ? e.name : 'RANDOM';
+  if(e){ im.src=`https://sangbaran-purr.github.io/divya-yuddha/assets/img/crest_${e.f}_tile.png`; im.classList.remove('hidden'); } else im.classList.add('hidden');
+  $('fsel-diff-name').textContent = FSEL_DIFF_NAME[selectedDifficulty] || 'Advanced';
+  document.querySelectorAll('#factionselect [data-part]').forEach(n=>{ const part=n.dataset.part;
+    n.classList.toggle('hidden', part==='p0' || (part==='p1' && !fselOpen.p1) || (part==='diff' && !fselOpen.diff)); });
+}
+function fselSetMode(first){
+  fselFirst=first; fselEnemyAuto=true; fselOpen={ p1:false, diff:false };
+  $('factionselect').classList.toggle('first', first);
+  $('fsel-first').classList.toggle('hidden', !first);
+  $('fsel-title').textContent = first ? 'Choose your army' : 'CHOOSE YOUR BATTLE';
+  if(first){ fselChoice.p1=null; renderFselFirst(); fselFirstSync(); }
+  else document.querySelectorAll('#factionselect [data-part]').forEach(n=> n.classList.remove('hidden'));
 }
 function showFactionSelect(){
   /* ⚠ DEVIATION FROM SHIPPED, ruled by item F + gate 3: the shipped screen pre-selected DEVAS for the PLAYER, so
@@ -7197,25 +7290,32 @@ function showFactionSelect(){
   renderProfile();            // T36: fills the fsel-* chip mirror through the shared writer
   selectedDifficulty = (loadMeta().settings.difficulty)||'advanced';   // D2: preselect the persisted last choice
   renderDiffSelector();
+  fselSetMode(fselIsFirstTimer());   // ONBOARD-1: one step for a first-time player, today's screen for everyone else
+  try{ window.DY_COUNT && window.DY_COUNT.step && window.DY_COUNT.step('fsel_seen'); }catch(e){}   // ONBOARD-1 (owner ruling 2026-11-10): the faction screen opened — once per browser (DY_COUNT exists only in the site's copy)
   $('hudwrap').classList.add('hidden');
   $('landing').classList.add('hidden');
   $('factionselect').classList.remove('hidden');
-  fselPickPlate(); fselFitPlate();
+  $('factionselect').scrollTop=0;
+  fselMeasure(); fselPickPlate(); fselFitPlate();
   Ember.start('factionselect', 0.35);   // DS §2 — narrative density; self-terminates when startGame hides the screen
   Audio2.playTrack('menu');   // menu music on the faction-select screen (crossfades back from battle)
 }
-addEventListener('resize', ()=>{ if(!$('factionselect').classList.contains('hidden')){ fselPickPlate(); fselFitPlate(); } });
+addEventListener('resize', ()=>{ if($('factionselect').classList.contains('hidden')) return;
+  if(!landDesktopPointer() && innerWidth===fselW) return;   // ANDROID-1/ONBOARD-1: a height-only resize on touch = the address bar → re-fit NOTHING
+  fselMeasure(); fselPickPlate(); fselFitPlate(); });
 $('factionselect').addEventListener('click', e=>{
   const b=e.target.closest('.ftile'); if(!b) return;
   const side=b.dataset.side;
   fselChoice[side]=b.dataset.f;
   b.parentElement.querySelectorAll('.ftile').forEach(x=>x.classList.toggle('sel', x===b));
+  if(side==='p1') fselEnemyAuto=false;   // ONBOARD-1: an enemy the player chose is never re-picked for them
   fselSyncStart();
 });
 $('fselstart').onclick=()=>{
   if(!fselChoice.p0) return;                                // gated: no player faction, no match
   // RANDOM resolves HERE, in the UI, exactly as an explicit pick would — startGame receives a concrete faction.
   const p1 = fselChoice.p1==='random' ? FSEL_TILES[Math.floor(Math.random()*FSEL_TILES.length)].f : fselChoice.p1;
+  try{ window.DY_COUNT && window.DY_COUNT.step && window.DY_COUNT.step('battle_start'); }catch(e){}   // ONBOARD-1 (owner ruling 2026-11-10): BEGIN BATTLE tapped — once per browser (DY_COUNT exists only in the site's copy)
   startGame(fselChoice.p0, p1);
 };
 /* T39 — the Collection roundel row. quests/settings live; journal/rewards/decks/store visible-locked (T36 pattern). */
@@ -7227,6 +7327,8 @@ $('fsel-settings').onclick=()=>{ syncSettingsUI(); $('settings').classList.remov
 $('fsel-collection').onclick=()=>showCollection();
 document.querySelectorAll('#factionselect [data-soon]').forEach(b=> b.onclick=()=>toastMute('Coming soon'));
 $('fsel-back').onclick=()=>showLanding();   // back to landing (fresh stats); showLanding→playTrack('menu') is a no-op while menu already plays, so music is uninterrupted
+$('fsel-enemy-change').onclick=()=>{ fselOpen.p1=true; fselFirstSync(); const g=$('fsel-p1'); if(g) g.scrollIntoView({block:'nearest', behavior:'smooth'}); };   // ONBOARD-1: the existing opponent picker
+$('fsel-diff-change').onclick=()=>{ fselOpen.diff=true; fselFirstSync(); const g=$('diffopts'); if(g) g.scrollIntoView({block:'nearest', behavior:'smooth'}); };   // ONBOARD-1: the existing difficulty selector
 
 /* ---------- D2 difficulty selector (PvAI quickplay ONLY — story never sets or reads this) ---------- */
 let selectedDifficulty='advanced';
@@ -7239,6 +7341,7 @@ function renderDiffSelector(){
   document.querySelectorAll('#diffopts .dbtn').forEach(b=> b.classList.toggle('sel', b.dataset.d===selectedDifficulty));
   const info=DIFF_META[selectedDifficulty]||DIFF_META.advanced, d=$('diffdisclose');
   d.textContent=info.disclose; d.classList.toggle('warn', !!info.warn);
+  if(fselFirst) fselFirstSync();   // ONBOARD-1: the "Difficulty:" line follows the selector
 }
 $('diffopts').addEventListener('click', e=>{
   const b=e.target.closest('.dbtn'); if(!b || !DIFF_META[b.dataset.d]) return;

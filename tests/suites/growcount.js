@@ -81,7 +81,7 @@ function onceRules(C) {   // G4
   console.log("\n── GROW-COUNT-1 · one id across /game/, /play/daily/ and /play/smriti/ ──");
   const GAME = R("game/index.html"), STAMP = R("game/STAMP").trim();
   const gate = (src) => src.slice(src.indexOf("<!-- DYW-GATE-START"), src.indexOf("<!-- DYW-GATE-END -->"));
-  const TAG = '<script src="../play/shared/count.js?v=c2"></script>';
+  const TAG = '<script src="../play/shared/count.js?v=c3"></script>';
   function copyId(gameSrc, seeded) {
     // the site's game copy's injected block, in a real DOM at /game/: the counter's tag replaced by its source
     const html = "<!doctype html><html><head><meta charset=\"utf-8\">" + gate(gameSrc).replace(TAG, "<script>" + COUNT_SRC.replace(/<\/script/g, "<\\/script") + "</script>") + "</head><body></body></html>";
@@ -134,6 +134,22 @@ function onceRules(C) {   // G4
   const tracked = require("child_process").execFileSync("git", ["ls-files", "-co", "--exclude-standard", "*.html"], { cwd: SITE, encoding: "utf8" }).split("\n").filter((f) => f && !/^tmp\//.test(f));
   ok("G22 · the draft Privacy sentence is on NO page yet (owner ruling 8: it waits for the owner's wording)", tracked.every((f) => R(f).indexOf("random anonymous ID") < 0));
 
+  // ═══ ONBOARD-1 (owner ruling 2026-11-10): the faction screen → battle funnel ═══
+  console.log("\n── ONBOARD-1 · the faction screen → battle steps ──");
+  function stepRules(C) {
+    const x = counter(C, { search: "?utm_source=cc_test" }), c = x.c;
+    c.step("fsel_seen"); c.step("fsel_seen"); x.clock.t += DAY; c.step("fsel_seen"); c.step("battle_start"); c.step("battle_start"); c.step("nope"); c.step("first_play");
+    const f = evs(c, "fsel_seen"), b = evs(c, "battle_start"), keys = new Set(); c.outbox().forEach((e) => Object.keys(e).forEach((k) => keys.add(k)));
+    return f.length === 1 && b.length === 1 && f[0].day === C.utcDay(T0) && b[0].day === C.utcDay(T0 + DAY) && evs(c, "first_play").length === 0 && evs(c, "nope").length === 0
+      && [...keys].every((k) => ["ev", "day", "k", "id", "s", "m", "c"].indexOf(k) >= 0) && f[0].s === "cc_test";
+  }
+  ok("G23 · step(): fsel_seen and battle_start once per browser each (a repeat, another day too, sends nothing); any other name sends nothing; the event carries only the day, the id and the first-touch tags", stepRules(C));
+  { const steps = ["fsel_seen", "battle_start"].map((k) => GAME.split("try{ window.DY_COUNT && window.DY_COUNT.step && window.DY_COUNT.step('" + k + "'); }catch(e){}").length - 1);
+    ok("G24 · the game copy carries the two guarded steps exactly once each (the faction screen opening; BEGIN BATTLE)", steps[0] === 1 && steps[1] === 1, J(steps)); }
+  { const gh = R("owner/growth.html"), gj = R("owner/growth.js");
+    ok("G25 · the owner page shows 'Faction screen → battle started, by source' from the counter's onboarding table (with its CSV)",
+      /<section class="panel" id="ow-onboard"><\/section>/.test(gh) && /growth\.js\?v=o3/.test(gh) && gj.indexOf('section("ow-onboard", "Faction screen → battle started, by source", "onboarding"') >= 0 && gj.indexOf("R.onboarding") >= 0); }
+
   console.log("\n── GROW-COUNT-1 · breakages: each must go red ──");
   const red = (name, cond) => ok(name + " → red", cond);
   red("B1 · DOUBLE FIRST_PLAY: the 'only the first finish' guard dropped (G4 goes red)", !onceRules(countFrom(mutate(COUNT_SRC, "      if (!st.firstPlayDay) {", "      if (true) {"))));
@@ -147,6 +163,7 @@ function onceRules(C) {   // G4
   red("B7 · the wallet event made to carry the address (G6 goes red)", (() => { const M = countFrom(mutate(COUNT_SRC, 'queue({ ev: "wallet_connect", day: utcDay(now()) });', 'queue({ ev: "wallet_connect", day: utcDay(now()), addr: "0x" + "ab".repeat(20) });')); const a = counter(M, {}); a.c.walletConnected(); return /0x[0-9a-fA-F]{40}/.test(J(a.c.outbox())); })());
   red("B8 · the India word check emptied — a crypto name gets its links (G19 goes red)", (() => { const lsrc = R("owner/links.js"), lp = path.join(SITE, "owner", "links.js"); const m = new Module(lp, null); m.filename = lp; m._compile(mutate(lsrc, "function bannedIn(s) { var parts", "function bannedIn(s) { return []; var parts"), lp);
     const r = m.exports.build({ name: "Crypto Kings", medium: "creator", market: "india", stamp: STAMP }); return !r.error; })());
+  red("B9 · ONBOARD-1: the once-per-browser guard on a step dropped — every faction-screen visit would count (G23 goes red)", !stepRules(countFrom(mutate(COUNT_SRC, "      if (st.steps[name]) return;\n", ""))));
 
   console.log("\n" + (fail ? "✖ " + fail + " FAILED of " + (pass + fail) : "ALL GREEN — " + pass + "/" + pass));
   process.exit(fail ? 1 : 0);

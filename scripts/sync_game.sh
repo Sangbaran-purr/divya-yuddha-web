@@ -174,7 +174,7 @@ cat > "$PRE" <<'PREAMBLE'
 <!-- DYW-GATE-START (injected by scripts/sync_game.sh; re-sync replaces this block) -->
 <!-- GROW-COUNT-1 (owner rulings 2026-11-03): the site's player counter, loaded FIRST — before the storage namespace
      shim below — so it reads the real storage and keeps ONE player id across /game/, /play/daily/ and /play/smriti/. -->
-<script src="../play/shared/count.js?v=c2"></script>
+<script src="../play/shared/count.js?v=c3"></script>
 <script>
 (function(){
   var dailyFrame = false; /* MINI-GAMES-1 Daily Puzzle Effects R2: the free Daily Puzzle frames this copy in puzzle mode (?puzzle=1) from /play/daily/ on THIS origin. That frame alone skips the pass; nothing else does (a direct visit, any other frame, any other page). */

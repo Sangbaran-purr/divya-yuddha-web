@@ -16,7 +16,7 @@ Puzzle (solved or revealed, any date) or Smriti board — counted once, for life
 ## Switched on (owner, 3 Nov 2026)
 
 `play/shared/count.js` sends to `ENDPOINT = "https://count.divyayuddha.games/v1/events"` (the counter's stamp is
-`count.js?v=c2` in all five places: `play/daily/index.html`, `play/smriti/index.html`, `scripts/sync_game.sh` → the game
+`count.js?v=c3` in all five places: `play/daily/index.html`, `play/smriti/index.html`, `scripts/sync_game.sh` → the game
 copy, and `js/wallet.js`). `tests/suites/growcount.js` G7 pins the address and G13 checks the stamps agree. To switch off
 again: set `ENDPOINT = ""` (events wait in the browser's outbox; up to 45 days of them are accepted later) and bump the stamp.
 
@@ -33,3 +33,12 @@ them from every report.
 
 `GET https://count.divyayuddha.games/count/public` → `{"players": N}`: lifetime players rounded **down** to the nearest
 10, cached 10 minutes. When the line is wired it reads this and hides itself if the call fails.
+
+## ONBOARD-1 — the faction screen → battle funnel (owner ruling 2026-11-10)
+
+Two more events, once per browser each, on the same rules (the random id, the first-touch utm tags, the UTC day — nothing
+else): `fsel_seen` when the game's faction screen opens (`DY_COUNT.step('fsel_seen')` in `showFactionSelect`) and
+`battle_start` when BEGIN BATTLE is tapped with a faction chosen (`step('battle_start')`). The counter's stamp moved to
+`count.js?v=c3`. dy-count stores their first days (`fsel_day`, `battle_day`) and reports "Faction screen → battle started,
+by source" (owner/growth.html, CSV `onboarding`). **Deploy dy-count before the site** — the running service refuses an
+event it does not know, and the browser then drops it.
