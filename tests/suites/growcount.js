@@ -129,7 +129,7 @@ function onceRules(C) {   // G4
   ok("G20 · round trip: a visit through a built link is counted under exactly that source, kind and campaign", viaLink.s === "pinoy-gamer-tv" && viaLink.m === "creator" && viaLink.c === "sea-launch");
   const pages = ["owner/growth.html", "owner/links.html"].map((f) => R(f));
   ok("G21 · the owner pages: not indexed, locked until the owner's wallet signs (their content hidden at load), no data of their own; the door asks dy-count at count.divyayuddha.games",
-    pages.every((h) => /<meta name="robots" content="noindex, nofollow"/.test(h) && /<section id="owner-locked"/.test(h) && /id="owner-open"[^>]* hidden/.test(h) && /owner\.js\?v=o1/.test(h) && /js\/wallet\.js\?v=s1x/.test(h))
+    pages.every((h) => /<meta name="robots" content="noindex, nofollow"/.test(h) && /<section id="owner-locked"/.test(h) && /id="owner-open"[^>]* hidden/.test(h) && /owner\.js\?v=o1/.test(h) && /js\/wallet\.js\?v=s1y/.test(h))
       && /var BASE = "https:\/\/count\.divyayuddha\.games";/.test(R("owner/owner.js")) && /personal_sign/.test(R("owner/owner.js")) && /Authorization|authorization/.test(R("owner/owner.js")));
   const tracked = require("child_process").execFileSync("git", ["ls-files", "-co", "--exclude-standard", "*.html"], { cwd: SITE, encoding: "utf8" }).split("\n").filter((f) => f && !/^tmp\//.test(f));
   ok("G22 · the draft Privacy sentence is on NO page yet (owner ruling 8: it waits for the owner's wording)", tracked.every((f) => R(f).indexOf("random anonymous ID") < 0));
