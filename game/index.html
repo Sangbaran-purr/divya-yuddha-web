@@ -1728,6 +1728,7 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 #realmpop{ position:fixed; z-index:71; max-width:230px; background:rgba(14,10,26,.97); border:1px solid #5a4a86; border-radius:10px; padding:9px 12px; font-size:11px; line-height:1.5; color:#e6dcff; box-shadow:0 8px 24px rgba(0,0,0,.6); }
 #realmpop .rn{ font-family:Cinzel,serif; font-size:12px; letter-spacing:1px; color:#c9b6f2; display:block; margin-bottom:3px; }
 #realmpop.hidden{ display:none; }
+#banner .txt .sub{ display:block; margin-top:5px; font-size:13px; letter-spacing:2px; color:var(--gold); }   /* RULES-FIX-1 1.1: the result banner's score line — YOU 21 · OPPONENT 14 */
 #banner .txt.realm{ color:#cbb9e8; border-color:#5a4a86; box-shadow:0 0 22px rgba(120,90,180,.55); }
 
 /* ===== mulligan overlay ===== */
@@ -7000,6 +7001,7 @@ const Q = {
 };
 let inspectContext=null, pendingFly=null, knownUids=new Set(), lastPowers={}, lastRoundLen=0, focusRaf=0;
 let leapMode=null, placeMode=null, shieldMode=false;   // Vanara Leap / unit-placement / Deva Dharma-Shield selection state
+let unbindMode=false;   // RULES-FIX-1 1.3 — picking which bound card to free, when more than one of yours is bound
 let lastTotals={o:null,p:null};
 const reducedMotion=()=> window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const rarClass=c=> RAR_CLASS[c.r]||'';
@@ -7045,7 +7047,7 @@ function startGame(p0Faction, p1Faction){
   applyDiffChip(selectedDifficulty); $('diffchip').classList.remove('hidden');   // in-match tier chip (PvAI); story hides it
   matchRecorded=false;              // arm the one-shot match-result counter for this new match
   goStampDone=false; lastEarn=null; // slice 4: re-arm the earnings-stamp one-shot for the new match
-  knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; hideBoardTargetBar();
+  knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; unbindMode=false; hideBoardTargetBar();
   ['gameover','battlelog','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','mulligan','realmpop'].forEach(id=>$(id).classList.add('hidden'));
   $('hudwrap').classList.remove('hidden');
   $('logbody').innerHTML=''; $('loglast').textContent=''; $('logdrawer').classList.remove('open');
@@ -7930,6 +7932,7 @@ document.addEventListener('visibilitychange', function(){
 });
 
 function showLanding(){
+  if (RE || reLive) resetChoreo();   // RULES-FIX-1 1.1: leaving while a round end shows — no held board, no lock, no banner left behind
   Story=null;   // leaving any story chapter
   ['hudwrap','gameover','factionselect','factionintro','fi-inspect','storyselect','cutscene','storyresult','brihaspati','objchip','settings','mulligan','bossvs','targeting','inspect','banner','realmpop','diffchip','collection','vault'].forEach(id=>{ const e=$(id); if(e) e.classList.add('hidden'); });   // TASK 30: + collection/vault
   renderProfile();
@@ -9713,7 +9716,7 @@ function startStoryChapter(id){
   currentFactions={ p0:ch.playerFaction, p1:ch.opponentFaction };
   G=newGame({ p0:'You', p1:'Opponent', p0Faction:ch.playerFaction, p1Faction:ch.opponentFaction, realm:ch.realm||undefined, rng:storyRng(storySeedN++), scenario:ch.scenario }); seenLog=0; blogStart('story', null, G);   // GL-2 (R3): story is out of the battle log's scope — the recorder is off
   G.players[ME].manualShield=true; matchRecorded=true;   // matchRecorded=true is belt-and-suspenders; showGameOver also early-returns for story (no PvAI telemetry)
-  knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; hideBoardTargetBar();
+  knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; unbindMode=false; hideBoardTargetBar();
   ['gameover','battlelog','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','storyselect','cutscene','storyresult','mulligan','bossvs','realmpop','diffchip'].forEach(id=>$(id).classList.add('hidden'));   // diffchip: story never shows the PvAI difficulty chip
   $('hudwrap').classList.remove('hidden');
   $('logbody').innerHTML=''; $('loglast').textContent=''; $('logdrawer').classList.remove('open');
@@ -10115,6 +10118,10 @@ const facClass = f => f==='asuras' ? 'fac-asura' : f==='vanaras' ? 'fac-vanara' 
 // board owner's — so a Maricha-copy (Deva unit now owned by an Asura) or a Mohini-steal loads the copied card's real art.
 const CARD_FACTION = (()=>{ const m={}; try{ for(const f in DECKS) for(const c of DECKS[f]){ m[c.id]=f; m['n:'+c.n]=f; } }catch(e){} return m; })();
 function cardHomeFaction(c){ return (c && (CARD_FACTION[c.id] || CARD_FACTION['n:'+c.n])) || null; }
+// RULES-FIX-1 1.2 — the printed power of a card, from its OWN definition in the engine decks (keyed by id). A Maricha copy has
+// already taken the copied card's id, so it reads the copied card's printed power; an id outside every deck (a ghost) keeps its base.
+const CARD_DEF_BY_ID = (()=>{ const m={}; try{ for(const f in DECKS) for(const c of DECKS[f]) m[c.id]=c; }catch(e){} return m; })();
+function printedPower(c){ const d=c && CARD_DEF_BY_ID[c.id]; return d ? d.p : c.base; }
 /* T64 — global card-art cache-buster. Appended to EVERY cardArtSrc path, so bumping it forces a one-time
    full refresh across all 177 card-art URLs. T64 full-canon sync: 126 derivatives replaced/added (whole
    launch + wave roster onto the new unified frame art), so every returning client must re-fetch — the
@@ -10134,8 +10141,9 @@ function cardArtSrc(c, faction){
   const type = c.t.charAt(0).toUpperCase()+c.t.slice(1);
   const stem = `https://sangbaran-purr.github.io/divya-yuddha/assets/cards/${factionToken(fac)}_${type}_${name}`;
   const rar = RARITY_NAME[c.r];
-  return (c.base > 0
-    ? `${stem}_P${c.base}_r${rar}.png`   // Units / Heroes
+  const pw = printedPower(c);           // RULES-FIX-1 1.2 — the file bakes the PRINTED power, so read it from the card's own definition (by id), never from a live base that a copy (Nala), a permanent cut or a growth has moved
+  return (pw > 0
+    ? `${stem}_P${pw}_r${rar}.png`       // Units / Heroes
     : `${stem}_r${rar}.png`)             // Astras / Mantras / Artifacts
     + v;
 }
@@ -10162,7 +10170,8 @@ function boardCard(c, pi, targetSet){
   d.dataset.uid=c.uid;
   if(c.t==='hero' && !c.ghost){ const tint=HERO_AURA_TINT[c.id]||HERO_AURA_TINT._default; d.style.setProperty('--aura-1',tint[0]); d.style.setProperty('--aura-2',tint[1]);   // T104 PART 1: CSS footlight aura + per-hero tint (lifecycle collapses into render() → reflow/Sudarshana/round-transition all handled by construction)
     if(materializingHeroes[c.uid]) d.classList.add('materializing'); else d.classList.add('aura'); }   // T104-B: a hero mid-entry-arrival renders HIDDEN (survives this render) — the footlight ignites only on reveal
-  const ep=Q.effPower(G,pi,c);
+  let ep=Q.effPower(G,pi,c);
+  if (RE && G===RE.g && (ep<0 || (!c.ghost && c.t==='unit' && c.power<=0))) ep=0;   // a held round end: a drained card shows 0 at the lowest (Stage 1 follow-up, item 2)
   const sh=!c.ghost && c.t==='unit' && Q.isShielded(G,pi,c);
   if(c.bound) d.classList.add('bound');
   if(c.ward && !c.ghost) d.classList.add('warded');   // KISHKINDHA OATH: jade border-glow marks the sealed unit from cast until fire/expiry (driven by the engine c.ward flag; re-emitted every render like the badges → persists across re-renders/unrelated actions, clears when the engine clears the flag)
@@ -10186,7 +10195,9 @@ function boardCard(c, pi, targetSet){
   const leapPick = pi===ME && leapMode && ((leapMode==='leaper') || (leapMode.leaper && leapMode.adj && leapMode.adj.has(c.uid)));
   // Dharma Shield designation (my own un-shielded Units, pi===ME).
   const shieldPick = pi===ME && shieldMode && !c.ghost && c.t==='unit' && !Q.isShielded(G,ME,c);
+  const unbindPick = pi===ME && unbindMode && c.bound && !c.ghost;   // RULES-FIX-1 1.3: any bound Unit or Hero of yours
   if (targetSet && targetSet.has(c.uid)){ d.classList.add('targetable'); d.onclick=()=>resolveTarget(c.uid); }
+  else if (unbindPick){ d.classList.add('targetable'); d.onclick=()=>unbindCard(c); }
   else if (shieldPick){ d.classList.add('targetable'); d.onclick=()=>shieldClick(c); }
   else if (leapPick){ d.classList.add('targetable'); d.onclick=()=>leapClick(c); }
   else d.onclick=()=>{ if(!pendingPlay && !leapMode && !placeMode && !shieldMode) openInspect(c, pi, null); };
@@ -10269,6 +10280,7 @@ function revealMaterializingHero(uid){ if(!materializingHeroes[uid]) return; del
   if(el){ el.classList.remove('materializing'); el.classList.add('materialize-in'); setTimeout(()=>{ if(el.isConnected) el.classList.add('aura'); }, 150*vfxT()); } }   // fade/scale-in, THEN the footlight ignites (~150ms later)
 function revealAllMaterializingHeroes(){ for(const uid in materializingHeroes) revealMaterializingHero(uid); }   // skip/reset safety: never leave a hero stuck hidden
 function render(targetSet){
+  if (RE){ if (choreoActive && reLive){ reDrawHeld(); return; } RE=null; reLive=null; }   // RULES-FIX-1 1.1: while a round end is shown, the board is the held copy; a watchdog release drops it
   const me=G.players[ME], op=G.players[OPP];
   try{ fxPrefetchHands(); }catch(e){} try{ mfPrefetchHands(); }catch(e){}   // EXPORT-1/2: hand-entry prefetch of a routed effect card's compressed atlas bytes (decode waits for the cast)
   $('rnum').textContent=G.round;
@@ -10317,11 +10329,11 @@ function render(targetSet){
   renderBattleChrome(me, op);   // T42: deck stacks + score-column avatars (additive; reads engine state, writes no engine)
 
   $('passbtn').disabled=!myTurn;
-  $('leapbtn').classList.toggle('hidden', !(myTurn && me.faction==='vanaras' && Q.canLeap(G,ME) && !leapMode && !placeMode && !pendingPlay));
+  $('leapbtn').classList.toggle('hidden', !(myTurn && me.faction==='vanaras' && Q.canLeap(G,ME) && !leapMode && !placeMode && !pendingPlay && !unbindMode));
   // Dharma Shield: Deva human, designations remaining (< cap), an un-shielded Unit to protect.
   const shieldable = me.faction==='devas' && me.shieldUids.length < Q.shieldCap(me) && me.units.some(u=>!u.ghost && u.t==='unit' && !Q.isShielded(G,ME,u));
-  $('shieldbtn').classList.toggle('hidden', !(myTurn && shieldable && !leapMode && !placeMode && !shieldMode && !pendingPlay));
-  $('unbindbtn').classList.toggle('hidden', !(myTurn && me.units.some(u=>u.bound && !u.ghost) && !leapMode && !placeMode && !pendingPlay));
+  $('shieldbtn').classList.toggle('hidden', !(myTurn && shieldable && !leapMode && !placeMode && !shieldMode && !pendingPlay && !unbindMode));
+  $('unbindbtn').classList.toggle('hidden', !(myTurn && myBoundCards().length && !leapMode && !placeMode && !shieldMode && !pendingPlay && !unbindMode));   // RULES-FIX-1 1.3: a bound Hero counts too
   $('turnind').textContent = G.over?'MATCH OVER': myTurn?'YOUR TURN': me.passed&&op.passed?'—': (G.turn===OPP?'OPPONENT…':'…');
   $('turnind').className = myTurn?'you':'';
   if(Story) applyStoryGuidance();   // story: mask the hand to the guided card/action + Brihaspati (after the normal hand/pass render)
@@ -10388,18 +10400,21 @@ function flyClone(rect, destEl){
 }
 // ---- center-screen banner QUEUE (shared #banner element): serializes the round-finish banner + the pass banner so they NEVER stack — a second announcement that fires while one is showing is queued and plays after. Reduced-motion is handled by the existing CSS (#banner .txt{ animation:none !important }), so this inherits static appear/disappear automatically.
 let bannerQ=[], bannerActive=false;
-function enqueueBanner(text, o={}){ bannerQ.push({ text, hold:o.hold||1800, animDur:o.animDur||1.8, sfx:o.sfx||null, cls:o.cls||'' }); if(!bannerActive) drainBanner(); }
+function enqueueBanner(text, o={}){ bannerQ.push({ text, hold:o.hold||1800, animDur:o.animDur||1.8, sfx:o.sfx||null, cls:o.cls||'', sub:o.sub||'', done:o.done||null, onShow:o.onShow||null }); if(!bannerActive) drainBanner(); }
 function drainBanner(){
   const b=$('banner'), t=b.querySelector('.txt');
   if(!bannerQ.length){ bannerActive=false; return; }
   bannerActive=true;
   const item=bannerQ.shift();
   t.textContent=item.text;
+  if(item.sub){ const sb=document.createElement('span'); sb.className='sub'; sb.textContent=item.sub; t.appendChild(sb); }   // RULES-FIX-1 1.1: the result banner's score line
   t.className='txt'+(item.cls?(' '+item.cls):'');
   b.classList.remove('hidden');
   t.style.animation='none'; void t.offsetWidth; t.style.animation='bannerSweep '+item.animDur+'s ease-out';   // under reduced-motion the CSS forces animation:none → static show/hide
   if(item.sfx){ try{ Audio2.fileSfx(item.sfx); }catch(e){} }
-  clearTimeout(b._t); b._t=setTimeout(()=>{ b.classList.add('hidden'); setTimeout(drainBanner, 180); }, item.hold);
+  const hide=()=>{ b.classList.add('hidden'); setTimeout(()=>{ if(item.done){ try{ item.done(); }catch(e){} } drainBanner(); }, 180); };
+  clearTimeout(b._t); b._t=setTimeout(hide, item.hold);
+  if(item.onShow){ try{ item.onShow((ms)=>{ clearTimeout(b._t); b._t=setTimeout(hide, ms); }); }catch(e){} }   // RULES-FIX-1 1.1: a tap-to-skip may SHORTEN a sequence banner (never drop it)
 }
 function showRoundBanner(){
   const h=G.roundHistory[G.roundHistory.length-1];
@@ -10941,8 +10956,9 @@ setInterval(()=>{ if(choreoActive && choreoStartedAt && (performance.now()-chore
 } }, 1500);
 // Defensive reset of ALL choreography globals — a new match must never inherit a stuck choreoActive from a prior match
 // whose choreo async was left pending (a hung rAF await) or rejected (an uncaught step exception, e.g. the drawImage race).
-function resetChoreo(){ try{ fxSkip(); }catch(e){} try{ mfSkip(); }catch(e){} try{ VS.cast=null; }catch(e){} choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
+function resetChoreo(){ try{ fxSkip(); }catch(e){} try{ mfSkip(); }catch(e){} try{ VS.cast=null; }catch(e){} RE=null; reLive=null; choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
   choreoTimers.forEach(([t])=>{ try{ clearTimeout(t); }catch(e){} }); choreoTimers=[]; pendingPlay=null; roundCountAtActionStart=0;
+  bannerQ=[]; bannerActive=false; { const b=$('banner'); if(b){ clearTimeout(b._t); b.classList.add('hidden'); } }   // RULES-FIX-1 1.1: a round-end banner still queued or showing never follows the player into the next screen
   const layer=$('choreolayer'); if(layer){ layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML=''; } }
 const FTOAST_CLASS = a => a==='Chaos Surge'?'f-chaos': a==='Dharma Shield'?'f-dharma': a==='Leap'?'f-leap': a==='Venom'?'f-venom':'f-other';
 function factionToast(ability, text){
@@ -12621,6 +12637,184 @@ async function mfManifest(c, ev, evs, tier){
 }
 mfBoot();
 
+/* ══ RULES-FIX-1 · 1.1 — THE END OF A ROUND, IN ORDER (owner ruling D, 12 Nov 2026) ══════════════════════════════════════════
+   An action that ends a round used to draw the post-reset board at once: the result banner showed over an empty board, the
+   plaques kept the old round's numbers (or jumped to the new round's), and the pass banner came after the result. Now, on every
+   road that runs its own engine (vs AI, Story, the free wire mirror):
+     1) the pass announcement, if a pass ended the round;
+     2) the round-end effects, played on a HELD board — a display copy of both boards taken BEFORE the action (each card's place,
+        power and marks as shown), moved forward event by event; a card that dies stays until its death is shown;
+     3) the plaques rest on the round's true final scores (roundHistory — always, whatever the held board reads);
+     4) the result banner, once, with the gong (rounds 1–2; on the last round the result screen follows step 3 instead);
+     5) only then the board clears to the live state, the plaques show the new round's totals, the round number and stars advance,
+        and the new round's arrivals (events of the next round, e.g. Shesha) play.
+   Reduced motion: the same order as still steps. Tap-to-skip shortens steps, never drops or reorders one. A Story panel between
+   rounds plays after step 4, before step 5. Puzzle mode rides the same sequence (its round end still plays before the report, still
+   without tap-to-skip). The staked road (a server view swap) keeps its current path: no display copy is taken of a view. */
+let RE_PACE={ passBanner:true, shortHolds:false, onSettled:null };   // the sequence's pace; puzzle mode sets its own at boot (puzzleBoot — owner ruling, Stage 1 item 2)
+let RE=null, reLive=null;   // RE: the held board while it shows ({ g: the display copy }); reLive: the token of the sequence that owns the lock
+// a new action under a held board (only a test harness can do this — the UI is locked) or a forced release: the old sequence stands down
+function reAbandon(){ if (!reLive && !RE) return; RE=null; reLive=null; choreoActive=false; choreoStartedAt=0; choreoForce=[]; const l=$('choreolayer'); if(l){ l.classList.remove('locked'); l.onclick=null; l.innerHTML=''; } if (G) lastRoundLen=G.roundHistory.length; }
+function reCopy(x, seen){
+  if (x===null || typeof x!=='object') return x;
+  if (seen.has(x)) return seen.get(x);
+  if (Array.isArray(x)){ const a=[]; seen.set(x,a); for(const v of x) a.push(reCopy(v,seen)); return a; }
+  if (x instanceof Set){ const o=new Set(); seen.set(x,o); for(const v of x) o.add(reCopy(v,seen)); return o; }
+  if (x instanceof Map){ const o=new Map(); seen.set(x,o); for(const [k,v] of x) o.set(k,reCopy(v,seen)); return o; }
+  const o={}; seen.set(x,o); for(const k in x) o[k]=reCopy(x[k],seen); return o;
+}
+// the display copy: everything the board, effPower and totalPower read; never the event stream or the log (they only grow)
+function heldCopyOf(g){
+  if (!g || isViewState(g)) return null;
+  const seen=new Map(), o={};
+  for (const k in g){ if (k==='events' || k==='log') continue; o[k]=reCopy(g[k], seen); }
+  return o;
+}
+function heldFind(g, uid){ for(const pi of [ME, OPP]){ const p=g.players[pi]; for(const z of ['units','heroes']){ const i=p[z].findIndex(c=>c && c.uid===uid); if(i>=0) return { pi, z, i, c:p[z][i] }; } } return null; }
+// move the held copy forward by ONE engine event (the event's own numbers). Four round-end changes carry no event of their own;
+// each is copied from the engine rule that makes it (engine.js destroyUnit / onUnitDeath / preDrainTokens / venomRoundEnd / doLeap):
+//   · Yama's 1-power ghost after a friendly death (no aegis): pushed once the death's own listener events have played;
+//   · Raktabija's two Rakta tokens: their uids are the live tokens of that side the copy does not hold yet (identity only);
+//   · Shankhapala's move: the token leaves the most-venomed Unit of the target's side (the event names only where it lands);
+//   · Uraga Colossus sheds one Venom after the drain: applied when the round-end events are done (heldFinish).
+function heldApply(g, ev, gone, live, next){
+  const T=ev.targetUids||[];
+  const tail = (ev.type==='token' && ev.abilityName==="Raktabija's Curse") || (ev.type==='buff' && ev.abilityName==='Vishalakshi the Pale') || ev.type==='revive' || (ev.type==='passive' && ev.abilityName==='Ananta Coil');
+  if (g.__ghost && !tail) heldFlushGhost(g);
+  if (ev.type==='destroy'){ for(const u of T){ const f=heldFind(g,u); if(f){ g.players[f.pi][f.z].splice(f.i,1); gone[u]=f; g.__lastDeath=f; if(f.z==='units' && !f.c.ghost && !f.c.aegis) g.__ghost={ pi:f.pi, n:f.c.n, uid:'ghost-'+u }; } } return; }
+  if (ev.type==='passive' && ev.abilityName==='Ananta Coil'){ const d=g.__lastDeath; if(d) g.players[d.pi].boardTokens=(g.players[d.pi].boardTokens||0)+1; return; }   // a fallen Naga's lingering coil (engine destroyUnit) — Naga Warrior counts it
+  if (ev.type==='revive'){ g.__ghost=null; for(const u of T){ const k=gone[u]; if(k && !heldFind(g,u)){ k.c.power=1; k.c.aegis=false; g.players[k.pi].units.push(k.c); } } return; }   // Amrita's aegis: back at 1, at the row's end (destroyUnit)
+  if (ev.type==='token' && ev.abilityName==="Raktabija's Curse"){
+    const d=g.__lastDeath; if(!d) return; const side=d.pi, have=reBoardUids(g), P=live && live.players[side];
+    const pool=P ? P.discard.concat(P.units).filter(c=>c && c.id==='rakta' && !have.has(c.uid)) : [];
+    for (let i=0;i<2;i++){ const lc=pool[i]; g.players[side].units.push({ uid: lc?lc.uid:('rakta-'+d.c.uid+'-'+i), id:'rakta', n:'Rakta', sub:'Blood-born', t:'unit', p:2, r:'C', txt:'A blood-born token.', token:true,
+      power:2, base:2, ghost:false, lockedRound:0, aegis:false, revivedShield:false, asleep:false, revealPending:false, venom:0, doomed:false, disguisedAs:null, ward:false, bound:false, astraImmuneRound:0, stolenBy:-1 }); }
+    return; }
+  for (const u of T){ const f=heldFind(g,u); if(!f) continue; const c=f.c;
+    if ((ev.type==='venom'||ev.type==='damage'||ev.type==='buff') && typeof ev.amount==='number') c.power+=ev.amount;
+    else if (ev.type==='buff' && ev.abilityName==='Mahishi'){ const m=/copies (\d+)/.exec(ev.text||''); if(m) c.power=+m[1]; }
+    else if (ev.type==='buff' && ev.abilityName==='Leap'){   // engine doLeap: the leaper takes the target's power as it reads NOW; the event names the target, the Crown's event (if it follows) gives its uid
+      const row=g.players[f.pi].units, nm=String(ev.text||'').replace(/^copies /,''), li=row.indexOf(c);
+      let t = (next && next.abilityName==='Kishkindha Crown' && next.targetUids && next.targetUids[1]!=null) ? row.find(x=>x.uid===next.targetUids[1]) : null;
+      if (!t) t = [row[li-1], row[li+1]].find(x=>x && !x.ghost && x.n===nm) || row.find(x=>x!==c && !x.ghost && x.n===nm);
+      if (t) c.power=Q.effPower(g, f.pi, t); }   // the copy's own read of the target's power (effPower, through Q)
+    else if (ev.type==='token' && ev.abilityName==='Shankhapala'){
+      const venomed=g.players[f.pi].units.filter(x=>!x.ghost && x!==c && (x.venom||0)>0);
+      if (venomed.length){ const src=venomed.reduce((a,b)=>(b.venom||0)>(a.venom||0)?b:a); src.venom-=1; }
+      c.venom=(c.venom||0)+1; }
+    else if (ev.type==='token') c.venom=(c.venom||0)+(typeof ev.amount==='number'?ev.amount:1);
+    else if (ev.type==='ward'){ c.power=1; c.ward=false; for(const w of g.players[f.pi].units) if(w!==c && !w.ghost) w.power+=1; }   // Kishkindha Oath: the witnesses rally +1 (no event of their own)
+    else if (ev.type==='passive' && ev.abilityName==='Vishwapasha') c.bound=false;
+  }
+}
+function heldFlushGhost(g){ const q=g.__ghost; g.__ghost=null; if(!q) return; const pl=g.players[q.pi];
+  if (pl.units.some(u=>u.id==='yama')) pl.units.push({ uid:q.uid, id:'ghost', n:`Ghost of ${q.n}`, sub:'Yama’s token', t:'unit', p:1, r:'C', power:1, base:1, ghost:true, txt:'' }); }
+function heldFinish(g, sawDrain){
+  heldFlushGhost(g);
+  if (sawDrain) for(const pi of [ME, OPP]) for(const u of g.players[pi].units) if(!u.ghost && u.id==='uraga' && u.venom>0) u.venom-=1;   // Uraga Colossus sheds a coil of venom (engine venomRoundEnd)
+  delete g.__lastDeath;
+}
+function reBoardUids(g){ const s=new Set(); for(const pi of [ME, OPP]){ const p=g.players[pi]; for(const c of p.units.concat(p.heroes)) if(c) s.add(c.uid); } return s; }
+// draw the four rows (and artifacts, PASSED tags) from the held copy — the same boardCard, read against the copy
+function reDrawHeld(){
+  if (!RE) return;
+  const live=G;
+  try{
+    G=RE.g; knownUids=reBoardUids(RE.g);
+    const me=G.players[ME], op=G.players[OPP];
+    $('opassed').textContent=op.passed?' · PASSED':''; $('ppassed').textContent=me.passed?' · PASSED':'';
+    fillRow($('oheroes'), op.heroes, OPP); fillRow($('ounits'), op.units, OPP); fillRow($('punits'), me.units, ME); fillRow($('pheroes'), me.heroes, ME);
+    setArtChip('oart', op.artifact); setArtChip('part', me.artifact);
+    sizeBoard();
+  } finally { G=live; }
+}
+// owner ruling (Stage 1 follow-up, item 2): during a round end a Unit drained to 0 or below counts 0 until its death is shown,
+// and no total reads below 0. Display only — set aside for the read, put back at once; the finals come from roundHistory.
+function reDoomed(g){ const d=[]; for(const pi of [ME, OPP]) for(const u of g.players[pi].units) if(u && !u.ghost && !u.bound && u.power<=0) d.push(u); return d; }
+function reSnapHeld(){ const d=reDoomed(RE.g); d.forEach(u=>u.bound=true);   // totalPower skips a bound card: the doomed count 0
+  try{ snapTo(Math.max(0, Q.totalPower(RE.g,ME)), Math.max(0, Q.totalPower(RE.g,OPP))); } finally { d.forEach(u=>u.bound=false); } }   // the plaques read the HELD board's totals
+// a sequence banner, awaited; a skip (now or while it shows) shortens it to a readable minimum, never drops it
+function reBanner(text, sub, hold, sfx){
+  return new Promise(res=>{
+    enqueueBanner(text, { hold: choreoSkip ? Math.min(hold, 700) : hold, animDur: hold/1000, sfx, sub, done: res,
+      onShow: (cut)=>{ if(choreoActive) choreoForce.push(()=>cut(400)); } });
+  });
+}
+function reWait(ms){ return new Promise(r=>{ const t=setTimeout(r, choreoSkip ? Math.min(ms, 250) : ms*speedMult*CHOREO_SPEED); choreoForce.push(()=>{ clearTimeout(t); setTimeout(r, 250); }); }); }
+function roundResultLine(h){
+  const res = h.winner==null?'ROUND DRAWN': h.winner===ME?'YOU WIN':'OPPONENT WINS';
+  const w0=G.players[ME].roundWins, w1=G.players[OPP].roundWins;
+  const lead = w0>w1?' · YOU LEAD': w1>w0?' · YOU TRAIL':'';
+  return { text:`ROUND ${h.round} — ${res}${lead}`, sub:`YOU ${h['t'+ME]} · OPPONENT ${h['t'+OPP]}` };   // owner ruling: first line exactly as today, second line the round's final scores, the player's own first
+}
+async function reRun(x, layer){
+  const tok={}; RE={ g:x.held }; reLive=tok;
+  const mine=()=>reLive===tok;
+  const reduce=reducedMotion(), h=G.roundHistory[G.roundHistory.length-1], over=!!G.over;
+  const LEAPS={ 'Leap':1, 'Kishkindha Crown':1, 'Kumuda':1, 'Rambha the Bold':1 };
+  let k0=0; while (k0<x.evs.length && x.evs[k0].round===x.round && LEAPS[x.evs[k0].abilityName]) k0++;   // an AI turn may Leap (free) before its round-ending pass: those beats come first
+  const preEvs=x.evs.slice(0,k0), endEvs=x.evs.slice(k0).filter(e=>e.round===x.round), newEvs=x.evs.filter(e=>e.round!==x.round), gone={};
+  try{
+    koePos={};
+    for (const pi of [ME, OPP]) if (passedInAction(G, pi, x.passedBefore, x.rhBefore, x.actor)) RE.g.players[pi].passed=true;
+    reDrawHeld(); $('passbtn').disabled=true; ['leapbtn','shieldbtn','unbindbtn'].forEach(id=>$(id).classList.add('hidden')); $('turnind').textContent='—'; $('turnind').className='';   // nothing to tap while the round end shows (both have passed: render's own '—')
+    // 0 · what the actor did before passing (a free Leap), as its own beat
+    for (let i=0;i<preEvs.length;i++){ const ev=preEvs[i]; if(!mine()) return;
+      if (!reduce && !choreoSkip){ choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; try{ await playEvent(ev, x.snap, x.evs); }catch(e){} }
+      heldApply(RE.g, ev, gone, G, preEvs[i+1]); if (!reduce && !choreoSkip){ reDrawHeld(); reSnapHeld(); } }
+    // 1 · the pass that ended the round
+    for (const pi of [ME, OPP]) if (mine() && RE_PACE.passBanner && passedInAction(G, pi, x.passedBefore, x.rhBefore, x.actor)){ choreoStartedAt=performance.now(); await reBanner(pi===ME?'YOU PASSED':'OPPONENT PASSED', '', 1500, null); }
+    if (!mine()) return;
+    // 2 · the round-end effects on the held board, the plaques moving with them
+    if (reduce){
+      const pe=endEvs.find(e=>e.type==='play'); if(pe) cardPlaySound(findCardByUid(pe.sourceUid));
+      for(const e of endEvs){ if(e.type==='buff') powerChangeSound('sfx_buff', e.abilityName); else if(e.type==='damage') powerChangeSound('sfx_debuff', e.abilityName); }
+      if (endEvs.some(e=>e.type==='destroy')) Audio2.fileSfx('sfx_unit_destroy');
+    }
+    for (let i=0;i<endEvs.length;i++){ const ev=endEvs[i];
+      if (!mine()) return;
+      if (!reduce && !choreoSkip){ choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; try{ await playEvent(ev, x.snap, x.evs); }catch(e){} }
+      if (!mine()) return;
+      heldApply(RE.g, ev, gone, G, endEvs[i+1]);
+      if (!reduce && !choreoSkip){ reDrawHeld(); reSnapHeld(); }
+    }
+    heldFinish(RE.g, true); reDrawHeld();
+    showResultSummary(x.evs);
+    // 3 · the plaques rest on the round's true final scores
+    choreoStartedAt=performance.now();
+    if (reduce) snapTo(h['t'+ME], h['t'+OPP]);
+    else { await reWait(endEvs.length && !RE_PACE.shortHolds ? 400 : 120); if(!mine()) return;
+      if (!choreoSkip){ const c0=performance.now(); try{ await choreoRace(animateTotals(h['t'+ME], h['t'+OPP]), ()=>snapTo(h['t'+ME], h['t'+OPP])); }catch(e){}
+        const left=650*speedMult+60-(performance.now()-c0); if (left>0) await new Promise(r=>setTimeout(r,left)); }   // a skip ends the wait but not the count's own frames: let them run out so the plaques READ the finals under the banner
+      snapTo(h['t'+ME], h['t'+OPP]); }
+    $('hud-p').classList.toggle('leading', h['t'+ME]>h['t'+OPP]); $('hud-o').classList.toggle('leading', h['t'+OPP]>h['t'+ME]);
+    if (RE_PACE.onSettled) try{ RE_PACE.onSettled(); }catch(e){}   // the finals have settled: puzzle mode reports here (Stage 1 follow-up, item 1); the hold and the banner still play
+    await reWait(RE_PACE.shortHolds ? 450 : reduce ? 900 : endEvs.length ? 700 : 450); if(!mine()) return;   // HOLD on the finals (×speed ×CHOREO_SPEED): 700 ms after effects, 450 ms when the round ended with none
+    // 4 · the result, once, with the gong — rounds 1 and 2 only; the last round goes to the result screen after step 3
+    if (!over){
+      choreoStartedAt=performance.now();
+      const r=roundResultLine(h); await reBanner(r.text, r.sub, 1800, 'sfx_round_end');
+      if (!mine()) return;
+      if (Story && storyMidEntry()){   // a Story panel between rounds: after the result, before the new round
+        const e=storyMidEntry(); Story.midFired[e.i]=true; Audio2.musicDuck(true); choreoStartedAt=0;
+        await new Promise(res=>playCutscenes(e.m.panels, ()=>{ Audio2.musicDuck(false); res(); }, 'mid', storyIntroFallback(Story.chapter)));
+        if (!mine()) return;
+      }
+    }
+    // 5 · the board clears: the live state, the new round's totals, round number and stars, then the new round's arrivals
+    RE=null; lastRoundLen=G.roundHistory.length;
+    render(); snapTotals(); { const t0=+$('ptotal').textContent, t1=+$('ototal').textContent; $('hud-p').classList.toggle('leading', t0>t1); $('hud-o').classList.toggle('leading', t1>t0); }   // the new round's true totals, before its arrivals
+    if (newEvs.length && !reduce && !choreoSkip){ for (const ev of newEvs){ choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; try{ await playEvent(ev, snapshotBoard(), newEvs); }catch(e){} } }
+  } finally {
+    if (reLive===tok){ reLive=null; RE=null;
+      clearVictims();
+      choreoActive=false; choreoStartedAt=0; choreoForce=[]; layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML='';
+      lastRoundLen=G.roundHistory.length;
+      try{ render(); }catch(e){}
+      pump();
+    }
+  }
+}
 function runAction(mutate, opts={}){
   const snap = snapshotBoard();
   const passedBefore=G.players.map(p=>!!p.passed);   // PASS ANNOUNCEMENT: detect a passed:false→true transition after this action resolves (pass emits no event). GL-2: ABSOLUTE seats — announcePassIfAny reads it back by absolute seat (the [ME, OPP] order it had misread every pass for seat 1)
@@ -12631,6 +12825,8 @@ function runAction(mutate, opts={}){
   actionActorSeat = (opts && opts.actor!=null) ? opts.actor : null;   // EXPORT-8: remote vs local, for the ready-anchored wait
   venomStrikeNpAtAction = vsStriker();   // EXPORT-6 (ruling C): the striker by ABSOLUTE seat — the engine flag, or the cast's own play event on the staked road   // VASUKI VENOM STRIKE: capture the striker BEFORE mutate (endRound wipes the flag + advances the round); the round-end drain plate reads this, not a post-mutate live peek.
   if (PUZZLE_MODE) pzActionStart(evStart);   // MINI-GAMES-1: time this action (start → its choreography released)
+  reAbandon();   // RULES-FIX-1 1.1: a new action never runs under a held board (the UI is locked while one shows; this only guards a harness)
+  const heldBefore = heldCopyOf(G), roundBefore = G.round;   // RULES-FIX-1 1.1: the display copy, BEFORE the action (null on the staked view road)
   mutate();
   const evs = G.events.slice(evStart);
   blogRecord(G, blogBefore, evs, opts.actor);   // GL-2 — record this batch NOW, names resolved at this instant (never at result time); before any choreography, on every road
@@ -12638,7 +12834,8 @@ function runAction(mutate, opts={}){
   if (Story && Story.mode==='FREE' && opts.actor!==OPP){ Story.holdLine=null; Story.holdInstruct=''; Story.shimmerDone=true; }   // FREE: dismiss the intro line + Artifact shimmer once the player acts
   try{ vsNoteCasts(evs, opts.actor); }catch(e){}   // EXPORT-6: record a Venom Strike cast (seat, round) — the staked view carries no venomStrike flag
   resetPowerBeat();   // new event beat — power-change blips coalesce within this batch
-  if (reducedMotion() || !evs.length){
+  const reSeq = (heldBefore && G.roundHistory.length>roundCountAtActionStart) ? { held:heldBefore, round:roundBefore, evs, snap, passedBefore, actor:opts.actor, rhBefore:roundCountAtActionStart } : null;   // RULES-FIX-1 1.1: this action ended a round → the ordered sequence
+  if (!reSeq && (reducedMotion() || !evs.length)){
     // reduced-motion keeps AUDIO (it's not motion): fire the key sounds, skip the visual choreography.
     const pe=evs.find(e=>e.type==='play'); if(pe) cardPlaySound(findCardByUid(pe.sourceUid));
     for(const e of evs){ if(e.type==='buff') powerChangeSound('sfx_buff', e.abilityName); else if(e.type==='damage') powerChangeSound('sfx_debuff', e.abilityName); }
@@ -12650,6 +12847,7 @@ function runAction(mutate, opts={}){
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=PUZZLE_MODE ? null : skipChoreo;   // MINI-GAMES-1: no tap-to-skip in a puzzle — every try plays in full
   (async()=>{
+    if (reSeq) return reRun(reSeq, layer);   // RULES-FIX-1 1.1
     try{
       const playEv = evs.find(e=>e.type==='play');
       koePos = {};   // T88b: reset the kill-on-entry position map for this action
@@ -12850,14 +13048,22 @@ function resolveTarget(uid){
 $('tgcancel').onclick=cancelTarget;
 $('leapbtn').onclick=startLeap;
 $('shieldbtn').onclick=startShield;
-// R20: Nagapasha unbind — spend the turn to free your most valuable bound Unit (one per turn).
+// R20: Nagapasha unbind — spend the turn to free one of your bound cards (one per turn).
+// RULES-FIX-1 1.3 (owner ruling): a bound HERO can be freed too — the round reset frees Units only, so a bound Hero was stuck at 0 for
+// the rest of the match. One bound card → the tap frees it; several → the board target bar picks which. vs-AI and Story only: the wire
+// refusal below is unchanged (Stage 2 brings the online word).
+function myBoundCards(){ const me=G.players[ME]; return me.units.concat(me.heroes).filter(u=>u && u.bound && !u.ghost); }
+function unbindCard(t){ unbindMode=false; hideBoardTargetBar();
+  if(!(G.turn===ME && !G.players[ME].passed && !G.over) || choreoActive || !t || !t.bound) { render(); return; }
+  runAction(()=>{ t.bound=false; log(G,`You wrench ${t.n} free of the Nagapasha noose.`); afterAction(G,ME); }); }
+function cancelUnbind(){ unbindMode=false; hideBoardTargetBar(); render(); }
 $('unbindbtn').onclick=()=>{
   if (Wire) { toast('Unbinding is not available at a wire table yet.'); return; }   // BW1 — no wire word exists for R20
-  if(!(G.turn===ME && !G.players[ME].passed && !G.over)) return;
-  const bound=G.players[ME].units.filter(u=>u.bound && !u.ghost);
+  if(!(G.turn===ME && !G.players[ME].passed && !G.over) || choreoActive) return;
+  const bound=myBoundCards();
   if(!bound.length) return;
-  const t=bound.reduce((a,b)=>Q.effPower(G,ME,a)>=Q.effPower(G,ME,b)?a:b);
-  runAction(()=>{ t.bound=false; log(G,`You wrench ${t.n} free of the Nagapasha noose.`); afterAction(G,ME); });
+  if(bound.length===1){ unbindCard(bound[0]); return; }
+  unbindMode=true; render(); showActionBar('Unbind: tap a glowing target', cancelUnbind);
 };
 $('passbtn').onclick=()=>{ if(G.turn===ME&&!G.players[ME].passed&&!G.over && !choreoActive){ if (Wire){ wireSend({ type:'pass' }); return; } runAction(()=>pass(G,ME)); } };
 $('loghead').onclick=()=>$('logdrawer').classList.toggle('open');
@@ -13067,7 +13273,7 @@ function startWireMatch(st){
   currentFactions = { p0: G.players[ME].faction, p1: G.players[OPP].faction };   // "p" = the half drawn below = ME
   matchRecorded = true;   // R7 — the second lock: even a stray showGameOver can never record a wire match
   goStampDone = true; lastEarn = null;
-  knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; hideBoardTargetBar();
+  knownUids=new Set(); lastPowers={}; lastRoundLen=0; pendingFly=null; inspectContext=null; lastTotals={o:null,p:null}; leapMode=null; placeMode=null; shieldMode=false; unbindMode=false; hideBoardTargetBar();
   ['gameover','battlelog','targeting','inspect','banner','factionselect','factionintro','fi-inspect','landing','mulligan','realmpop'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hidden'); });
   const ww=$('wirewait'); if(ww) ww.remove();
   $('diffchip').classList.add('hidden');
@@ -13166,6 +13372,7 @@ function puzzleBoot(){
   document.body.classList.add('puzzle');
   ['landing','introv','factionselect','factionintro','mulligan'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hidden'); });
   $('passbtn').textContent = 'END TURN';
+  RE_PACE = { passBanner:false, shortHolds:true, onSettled: pzSettled };   // owner rulings (RULES-FIX-1 Stage 1, item 2 + follow-up item 1): no pass banner, the short holds; the report goes once the finals settle — the result banner still shows, in its place, but no longer holds the report back
   $('passbtn').onclick = ()=>{ if(!pzMay('end')) return; runAction(()=>pass(G,ME)); };
   $('leapbtn').onclick = ()=>{ if(pzMay('leap')) startLeap(); };
   $('shieldbtn').onclick = ()=>{};   // not a puzzle move (hidden by body.puzzle too)
@@ -13269,6 +13476,17 @@ function pzActionStart(evStart){ if (!Pz) return; const t=performance.now(); if 
 // pump's puzzle seam: close the action that just finished, then either drive the reveal or report the round
 function pzPump(){
   if (!Pz || choreoActive) return;
+  pzClose();
+  if (Pz.reported) return;
+  if (G.roundHistory.length>Pz.roundsAtLoad || G.over){ pzReport(); return; }
+  if (Pz.performing) pzPerformStep();
+}
+// the round end's plaques have settled on the finals (reRun, step 3): close the action and report now, the banner still to come
+function pzSettled(){
+  if (!Pz || Pz.reported || !G || !(G.roundHistory.length>Pz.roundsAtLoad || G.over)) return;
+  pzClose(); pzReport();
+}
+function pzClose(){
   if (Pz.open){
     const o=Pz.open, evs=G.events.slice(o.evStart), me=G.players[ME];
     const kind = G.roundHistory.length>Pz.roundsAtLoad || G.over ? 'end' : evs.some(e=>e.type==='play' && Pz.handUids.has(e.sourceUid)) ? 'play' : 'leap';
@@ -13277,9 +13495,6 @@ function pzPump(){
     if (choreoSkip) Pz.cut = true;   // only the watchdog / a hidden tab can cut a puzzle choreography short
     Pz.open = null;
   }
-  if (Pz.reported) return;
-  if (G.roundHistory.length>Pz.roundsAtLoad || G.over){ pzReport(); return; }
-  if (Pz.performing) pzPerformStep();
 }
 function pzReport(){
   Pz.reported = true;

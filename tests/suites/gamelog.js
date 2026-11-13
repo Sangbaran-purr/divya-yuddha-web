@@ -50,7 +50,7 @@ function boot() {
   w.fetch = () => Promise.resolve({ ok: false, status: 404, arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)), json: () => Promise.resolve({}), text: () => Promise.resolve("") });
   w.scrollTo = () => {};
   w.postMessage = (m) => posted.push(JSON.parse(JSON.stringify(m)));   // the frame's wirePost → the Hall
-  w.eval(scripts.join("\n;\n") + "\n;window.__T = { get G(){ return G; }, get BLog(){ return BLog; }, get Wire(){ return Wire; }, get ME(){ return ME; } };");
+  w.eval(scripts.join("\n;\n") + "\n;window.__T = { get G(){ return G; }, get BLog(){ return BLog; }, get Wire(){ return Wire; }, get ME(){ return ME; }, get choreoActive(){ return choreoActive; } };");
   const say = (data) => w.onWireMessage({ origin: w.location.origin, source: w.parent, data: JSON.parse(JSON.stringify(data)) });
   return { w, T: w.__T, errs, posted, external, say, scripts: scripts.length };
 }
@@ -98,6 +98,7 @@ const freeStart = (P, M, seat) => P.say({ type: "wire:start", matchId: M.mid, se
 const freeMoves = (P, M) => M.moves.forEach((r) => P.say({ type: "wire:move", matchId: M.mid, seq: r.seq, move: r.move }));
 const stakedViews = (P, M, seat, from, upto) => { let seq = 0; M.views[seat].slice(from, upto).forEach((v) => P.say({ type: "wire:view", matchId: M.mid, seq: ++seq, view: v })); };
 
+(async () => { const until = async (fn, ms) => { const t = Date.now(); while (!fn()) { if (Date.now() - t > ms) return false; await new Promise((r) => setTimeout(r, 20)); } return true; };
 console.log("── SYNC-NARRATOR-1 · the battle log through the synced copy (game/ at " + fs.readFileSync(path.join(GAME, "STAMP"), "utf8").trim() + ") ──");
 
 // ═══ the page boots as the Hall's frame, the recorder on ═══
@@ -115,7 +116,7 @@ console.log("── SYNC-NARRATOR-1 · the battle log through the synced copy (g
   const F = boot(); const { w, T } = F;
   freeStart(F, M, 0);
   ok("G3 · the recorder is ON in the synced frame (it was off before this sync: no narrator file, no log)", !!T.BLog && T.BLog.road === "free");
-  freeMoves(F, M); F.say({ type: "wire:result", matchId: M.mid, winner: M.winner, roundWins: M.roundWins, forfeit: false });
+  freeMoves(F, M); await until(() => !T.choreoActive && !T.Wire.queue.length, 120000); F.say({ type: "wire:result", matchId: M.mid, winner: M.winner, roundWins: M.roundWins, forfeit: false });
   ok("G4 · a full relayed match (" + M.moves.length + " moves) ends on the real free face, and VIEW BATTLE LOG is on it beside RETURN TO THE HALL",
      M.over && T.G.over && !hidden(w, "gameover") && T.Wire.refused.length === 0 && J(btnTexts(w)) === J(["RETURN TO THE HALL", "VIEW BATTLE LOG"]), J(btnTexts(w)) + " " + J(T.Wire.refused));
   const up = openLog(w), got = shown(w), want = expected(T);
@@ -132,7 +133,7 @@ console.log("── SYNC-NARRATOR-1 · the battle log through the synced copy (g
   const last = [];
   for (const seat of [0, 1]) {
     const X = boot();
-    freeStart(X, MF, seat); freeMoves(X, MF); X.say({ type: "wire:result", matchId: MF.mid, winner: 0, roundWins: [0, 0], forfeit: true });
+    freeStart(X, MF, seat); freeMoves(X, MF); await until(() => !X.T.choreoActive && !X.T.Wire.queue.length, 120000); X.say({ type: "wire:result", matchId: MF.mid, winner: 0, roundWins: [0, 0], forfeit: true });
     const rows = !X.T.G.over && !hidden(X.w, "gameover") && J(btnTexts(X.w)) === J(["RETURN TO THE HALL", "VIEW BATTLE LOG"]) && openLog(X.w) ? shown(X.w) : [];
     last.push(rows.length && J(rows) === J(expected(X.T)) ? rows[rows.length - 1][1] : "face/rows mismatch");
     wallHits.push(...rows.filter((r) => SEATISH.test(r[1])).map((r) => r[1]));
@@ -174,3 +175,4 @@ ok("G12 · THE WALL through the synced copy: no wallet short form, address or {p
 
 console.log("\n" + (fail === 0 ? "✓ ALL " + pass + " CHECKS PASS" : "✖ " + fail + " FAILED / " + pass + " passed"));
 process.exit(fail === 0 ? 0 : 1);   // the page's own intervals would keep node alive
+})();
