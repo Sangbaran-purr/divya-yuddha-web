@@ -7,3 +7,6 @@
 tests/node_modules/
 tests/.anvil*
 tests/package-lock.json
+
+# TIDY-1 (owner rulings 2026-11-21): local scratch, never committed
+tmp/
