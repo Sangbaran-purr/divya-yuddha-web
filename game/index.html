@@ -10371,7 +10371,8 @@ function revealMaterializingHero(uid){ if(!materializingHeroes[uid]) return; del
   if(el){ el.classList.remove('materializing'); el.classList.add('materialize-in'); setTimeout(()=>{ if(el.isConnected) el.classList.add('aura'); }, 150*vfxT()); } }   // fade/scale-in, THEN the footlight ignites (~150ms later)
 function revealAllMaterializingHeroes(){ for(const uid in materializingHeroes) revealMaterializingHero(uid); }   // skip/reset safety: never leave a hero stuck hidden
 function render(targetSet){
-  if (RE){ if (choreoActive && reLive){ reDrawHeld(); return; } RE=null; reLive=null; }   // RULES-FIX-1 1.1: while a round end is shown, the board is the held copy; a watchdog release drops it
+  if (RE){ if (choreoActive && reLive){ if (!RE.mid){ reDrawHeld(); return; } } else { RE=null; reLive=null; } }   // RULES-FIX-1 1.1: while a round end is shown, the board is the held copy; a watchdog release drops it. PASHU-ORDER-1: a held PLAY (RE.mid) draws its rows from the copy below and the rest live
+  const heldMid = !!(RE && RE.mid);
   const me=G.players[ME], op=G.players[OPP];
   try{ fxPrefetchHands(); }catch(e){} try{ mfPrefetchHands(); }catch(e){}   // EXPORT-1/2: hand-entry prefetch of a routed effect card's compressed atlas bytes (decode waits for the cast)
   $('rnum').textContent=G.round;
@@ -10391,12 +10392,15 @@ function render(targetSet){
     if (lastTotals.p!=null && t0!==lastTotals.p) pulsePlaque(hudP);
     lastTotals={o:t1, p:t0};
   }
+  if (heldMid) reDrawHeld();   // PASHU-ORDER-1: the four rows, artifacts and PASSED tags from the held copy (R3)
+  else {
   fillRow($('oheroes'), op.heroes, OPP, targetSet);
   fillRow($('ounits'),  op.units,  OPP, targetSet);
   fillRow($('punits'),  me.units,  ME, targetSet);   // friendly targeting (Ahamkara) highlights here
   fillRow($('pheroes'), me.heroes, ME, targetSet);
   setArtChip('oart', op.artifact); setArtChip('part', me.artifact);
   sizeBoard();   // scale minis so nothing is ever clipped
+  }
 
   // hand carousel
   const hand=$('hand'); hand.innerHTML='';
@@ -10429,8 +10433,9 @@ function render(targetSet){
   $('turnind').className = myTurn?'you':'';
   if(Story) applyStoryGuidance();   // story: mask the hand to the guided card/action + Brihaspati (after the normal hand/pass render)
 
-  // log body + collapsed last line
+  // log body + collapsed last line — held while a held play shows (PASHU-ORDER-1 R4, as on the round-end road)
   const lb=$('logbody');
+  if (!heldMid){
   for (; seenLog<G.log.length; seenLog++){
     const l=G.log[seenLog]; const p=document.createElement('div');
     p.className = l.msg.startsWith('You')?'me': l.msg.startsWith('Opponent')?'foe':'sys';
@@ -10438,10 +10443,11 @@ function render(targetSet){
   }
   lb.scrollTop=lb.scrollHeight;
   if (G.log.length) $('loglast').textContent=fixLogGrammar(G.log[G.log.length-1].msg);
+  }
 
   // juice: floating combat text for power changes since last render
   spawnFloaters();
-  knownUids = boardUidSet();
+  if (!heldMid) knownUids = boardUidSet();
 
   // consume pending fly-to-slot (human play)
   if (pendingFly){ const el=$('field').querySelector(`.bc[data-uid="${pendingFly.uid}"]`); flyClone(pendingFly.rect, el); pendingFly=null; }
@@ -10994,7 +11000,7 @@ function animateTotals(ov0, ov1){   // ITEMS 2+3: optional target overrides — 
 }
 
 /* ---------- event choreography (sequential) ---------- */
-let choreoActive=false, choreoSkip=false, choreoTimers=[], roundCountAtActionStart=0;
+let choreoActive=false, choreoSkip=false, choreoTimers=[], roundCountAtActionStart=0, choreoCredit=0;
 let venomStrikeNpAtAction=-1;   // VASUKI VENOM STRIKE attribution: the striking player captured PRE-mutate each action (endRound resets pl.venomStrike=0 AND increments g.round before the choreo plays the round-end 'toast', so a live peek at choreo time would read the wiped flag / advanced round — capture it before mutate instead). -1 = no strike active this action.
 let choreoForce=[], choreoStartedAt=0;
 // EXPORT-2 · THE PLAN-AWARE WATCHDOG (owner ruling, built FIRST, before any actor route): a step's budget is the flat 8,000 ms unless the step
@@ -11020,7 +11026,7 @@ function posOf(uid, snap){
   if (s) return { el:null, cx:s.left+s.width/2, top:s.top+6, rect:s };
   return null;
 }
-function cDelay(ms){ return new Promise(r=>{ if(choreoSkip) return r(); const t=setTimeout(r, ms*speedMult*CHOREO_SPEED); choreoTimers.push([t,r]); }); }
+function cDelay(ms){ return new Promise(r=>{ if(choreoSkip) return r(); let d=ms*speedMult*CHOREO_SPEED; if(choreoCredit>0){ const k=Math.min(choreoCredit, d); d-=k; choreoCredit-=k; } const t=setTimeout(r, d); choreoTimers.push([t,r]); }); }   // PASHU-ORDER-1: a held play's redraw time is paid back from the next wait, so no beat drifts (R2); 0 on every other road
 function snapTotals(){ if(!G) return; $('ptotal').textContent=Q.totalPower(G,ME); $('ototal').textContent=Q.totalPower(G,OPP); ['ptotal','ototal'].forEach(id=>{ const e=$(id); if(e) e.classList.remove('counting'); }); }
 function snapTo(t0,t1){ if(!G) return; $('ptotal').textContent=t0; $('ototal').textContent=t1; ['ptotal','ototal'].forEach(id=>{ const e=$(id); if(e) e.classList.remove('counting'); }); }   // ITEMS 2+3: snap totals to explicit final scores (round-end settle target / rAF-starvation fallback)
 // (a) An rAF-based choreo await (animateTotals + siblings) can HANG if rAF is starved (iOS backgrounding). Race it against
@@ -11036,6 +11042,7 @@ function choreoRace(promise, snap){
 function fastForwardChoreo(){ if(!choreoActive) return; choreoSkip=true;
   choreoTimers.forEach(([t,r])=>{ try{ clearTimeout(t); }catch(e){} try{ r&&r(); }catch(e){} }); choreoTimers=[];
   const fs=choreoForce; choreoForce=[]; fs.forEach(fn=>{ try{ fn(); }catch(e){} });
+  if (RE && RE.mid && reLive){ RE=null; reLive=null; choreoCredit=0; try{ clearVictims(); }catch(e){} try{ render(); }catch(e){} }   // PASHU-ORDER-1 R8: a skip, a hidden tab or the watchdog drops a held play's copy and draws the live board at once
   try{ revealAllMaterializingHeroes(); }catch(e){} try{ fxSkip(); }catch(e){} }   // EXPORT-1: a skipped/backgrounded/watchdog'd action lands its effect clip too. T104-B: a skipped/backgrounded/watchdog'd entry must never leave a hero stuck hidden
 function skipChoreo(){ fastForwardChoreo(); }
 // (b) iOS backgrounding pauses rAF mid-await → fast-forward the choreo the moment the tab is hidden, so it can't stick.
@@ -11047,7 +11054,7 @@ setInterval(()=>{ if(choreoActive && choreoStartedAt && (performance.now()-chore
 } }, 1500);
 // Defensive reset of ALL choreography globals — a new match must never inherit a stuck choreoActive from a prior match
 // whose choreo async was left pending (a hung rAF await) or rejected (an uncaught step exception, e.g. the drawImage race).
-function resetChoreo(){ try{ fxSkip(); }catch(e){} try{ mfSkip(); }catch(e){} try{ VS.cast=null; }catch(e){} RE=null; reLive=null; choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
+function resetChoreo(){ try{ fxSkip(); }catch(e){} try{ mfSkip(); }catch(e){} try{ VS.cast=null; }catch(e){} RE=null; reLive=null; choreoCredit=0; choreoActive=false; choreoSkip=false; choreoStartedAt=0; choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[]; materializingHeroes={}; if(aiTimer){ try{ clearTimeout(aiTimer); }catch(e){} aiTimer=null; }
   choreoTimers.forEach(([t])=>{ try{ clearTimeout(t); }catch(e){} }); choreoTimers=[]; pendingPlay=null; roundCountAtActionStart=0;
   bannerQ=[]; bannerActive=false; { const b=$('banner'); if(b){ clearTimeout(b._t); b.classList.add('hidden'); } }   // RULES-FIX-1 1.1: a round-end banner still queued or showing never follows the player into the next screen
   const layer=$('choreolayer'); if(layer){ layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML=''; } }
@@ -11110,6 +11117,10 @@ function captureVictims(uids){
   uids.forEach(u=>{
     const el=document.querySelector(`#field .bc[data-uid="${u}"]`);
     if(!el) return;                                    // no live cell (e.g. a Vajra kill-on-entry) → helper no-ops, the existing koePos/dissolveAt path stands
+    captureOne(el, u);
+  });
+}
+function captureOne(el, u){   // PASHU-ORDER-1: one card's clone (the body captureVictims always ran, now also used by heldCrack)
     const r=el.getBoundingClientRect();
     const fr=$('field').getBoundingClientRect();       // T97b: position is now RELATIVE to #victimlayer (inset:0 in #field), not the fixed viewport
     const node=el.cloneNode(true); node.removeAttribute('id');
@@ -11118,7 +11129,6 @@ function captureVictims(uids){
     let color='#e0483c'; for(const k in FAC_COLOR) if(el.classList.contains(k)) color=FAC_COLOR[k];
     $('victimlayer').appendChild(node);                // SHOW now under #vfxcanvas — persists over the cell render() is about to empty, through the whole strike sequence; the strike renders OVER it (T97b)
     victimClones[u]={ node, rect:r, color };           // rect = VIEWPORT rect, kept for shardBurst (which draws in #choreolayer, fixed/viewport coords)
-  });
 }
 // exit the held victim card at the strike's contact beat.
 function showcaseVictim(uid, exitKind){
@@ -12057,7 +12067,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     if(ev.abilityName==='Gandiva' && dp) VFX.sprGandiva(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width);   // GANDIVA ARROW — the victim-anchored strike (Vajra class), keyed off the destroy RESOLUTION event's struck unit; strike-lands-first: fires BEFORE the showcaseVictim dissolve below, ON the captured+persisted card. A double-kill emits TWO 'Gandiva' destroy events in the same action's evs list → the choreo loop plays them SERIALLY (arrow 1 lands + dwells, THEN arrow 2), each with its own showcase — the queue serializes naturally, no new machinery.
     await cDelay(40);
     if(LEGACY_VFX && dp){ VFX.sprBloom(dp.cx, dp.rect.top+dp.rect.height/2, 'destroy', dp.rect.width); VFX.sprSmoke(dp.cx, dp.rect.top+dp.rect.height/2, 1, dp.rect.width); }   // E4 white-gold bloom + E5 smoke at death [T77-gated; the dissolve-beat below stays — it carries card identity + the death beat]
-    const shown = (ev.abilityName==='Vajra' || ev.abilityName==='Gandiva') ? showcaseVictim(u, 'kill') : false;   // T97: AT contact (post the 40ms impact hit-stop) the held REAL card cracks+dissolves (kill exit + faction shards). Vajra + Gandiva Arrow (both target-anchored destroy strikes) get the victim-showcase.
+    const shown = (ev.abilityName==='Vajra' || ev.abilityName==='Gandiva') ? showcaseVictim(u, 'kill') : (RE && RE.mid && reLive) ? heldCrack(u) : false;   // PASHU-ORDER-1: on a held play the death is the real held card cracking in its own place   // T97: AT contact (post the 40ms impact hit-stop) the held REAL card cracks+dissolves (kill exit + faction shards). Vajra + Gandiva Arrow (both target-anchored destroy strikes) get the victim-showcase.
     if(!shown){ const dcard=(!snap[u])?findCardByUid(u):null; dissolveAt(dp, (snap[u]&&snap[u].name)||(dcard&&dcard.n), (snap[u]&&snap[u].color)||(dcard?(FAC_HEX[cardHomeFaction(dcard)]||'#e0483c'):null)); }   // T97: the victim showcase owns the death dissolve when shown (real card, not the placeholder box); non-Vajra / no-live-cell → the placeholder dissolve at the snapshot/showcase position (unchanged). 40ms hit-stop → death reads as a beat, then crack + shards + dwell.
     await cDelay(600); return; }
   if (ev.type==='passive' && ev.abilityName==='Sudarshana'){ const u=ev.targetUids[0]; const dp=posOf(u, snap);   // T92: Sudarshana Chakra — the THROWN spinning discus. Anchor = the REMOVED hero's rect (posOf via snapshot — the hero was on board before the splice). It is a REMOVAL, not a kill → NO death dissolve (the hero returns next round); the strike + the hero's disappearance from the row carry the story. The callout names the cause AT the hero so the temporary removal isn't a silent vanishing (T88 principle).
@@ -12823,8 +12833,57 @@ function heldFinish(g, sawDrain){
   delete g.__lastDeath;
 }
 function reBoardUids(g){ const s=new Set(); for(const pi of [ME, OPP]){ const p=g.players[pi]; for(const c of p.units.concat(p.heroes)) if(c) s.add(c.uid); } return s; }
+// PASHU-ORDER-1 (owner rulings R1–R8, 22 Nov 2026) — THE HELD PLAY: Brahmastra and Pashupatastra only. The board from before the
+// play shows through the opponent's showcase and the cast, and moves forward one event at a time on each event's own beat (the
+// round-end road's held copy, reused). The engine is untouched; the copy is display only and the live board wins at the end.
+const HELD_PLAYS={ 'Brahmastra':1, 'Pashupatastra':1 };
+function heldPlayOf(evs){ const p=(evs||[]).find(e=>e.type==='play'); return (p && HELD_PLAYS[p.abilityName]) ? p : null; }
+// the display copy of ANY board, a staked view included (copied, never changed in place); never the events or the log
+function heldCopyAny(g){ if (!g) return null; const seen=new Map(), o={}; for (const k in g){ if (k==='events' || k==='log') continue; o[k]=reCopy(g[k], seen); } return o; }
+const HELD_PERM={ 'Kumuda':1, 'Rambha the Bold':1, 'Vishalakshi the Pale':1, 'Kartikeya':1, 'The Living Bridge':1 };   // their buff is permanent (engine: base AND power)
+// one event of a held play: heldApply, plus the shapes a play (not a round end) can carry
+function heldStep(g, ev, gone, live, next){
+  const T=ev.targetUids||[];
+  if (ev.type==='damage' && (ev.abilityName==='Kumbhakarna' || ev.abilityName==='Kalanemi')){   // engine onTurnStart: the waking card's own flag clears before its sweep (no event of its own)
+    const f=T.map(u=>heldFind(g,u)).find(Boolean);
+    if (f) for (const k of g.players[1-f.pi].units) if (!k.ghost){ if (ev.abilityName==='Kumbhakarna' && k.id==='kumbha') k.asleep=false; if (ev.abilityName==='Kalanemi' && k.id==='kalanemi') k.revealPending=false; }
+  }
+  heldApply(g, ev, gone, live, next);
+  if (ev.type==='block' && (ev.abilityName==="Rama's Signet" || /floors at 1$/.test(ev.text||''))){ for (const u of T){ const f=heldFind(g,u); if(f) f.c.power=1; } }   // engine damageUnit: the damage was shown, then the floor holds it at 1
+  else if (ev.type==='buff' && HELD_PERM[ev.abilityName] && typeof ev.amount==='number'){ for (const u of T){ const f=heldFind(g,u); if(f) f.c.base+=ev.amount; } }
+  else if (ev.type==='passive' && ev.abilityName==='Tripura'){ for (const pi of [ME, OPP]){ const p=g.players[pi]; if (p.artifact && p.artifact.uid===ev.sourceUid) p.artifact=null; } }   // engine onAstraResolved: an Astra shatters Tripura
+  heldAlignTokens(g, live);
+}
+// a ghost the copy raised carries a made-up uid: it takes the live ghost's (identity only — the same rule as the Rakta tokens)
+function heldAlignTokens(g, live){
+  if (!live) return;
+  for (const pi of [ME, OPP]){ const have=reBoardUids(g), L=live.players[pi].units;
+    for (const c of g.players[pi].units) if (c && c.ghost && typeof c.uid==='string' && c.uid.indexOf('ghost-')===0){
+      const lc=L.find(x=>x && x.ghost && !have.has(x.uid)); if (lc){ have.delete(c.uid); c.uid=lc.uid; c.n=lc.n; have.add(lc.uid); } } }
+}
+// the play's events are done: what the engine does with no event of its own at the next turn's start
+function heldMidFinish(g, live){
+  heldFinish(g, false);
+  const np=live.turn, P=g.players[np];
+  if (!live.over && P && live.players[np] && !live.players[np].passed && P.heroes.some(h=>h.id==='indra'))   // engine onTurnStart (R3): Deva Soldier steels +1 under Indra — a log line, no event
+    for (const u of P.units) if (!u.ghost && u.id==='soldier') u.power+=1;
+  heldAlignTokens(g, live);
+}
+// what a held board would draw: when an event leaves it unchanged nothing is redrawn; the scale is redone only when a row's count changes
+function heldSig(g){
+  return [ME, OPP].map(pi=>{ const p=g.players[pi]; return ['units','heroes'].map(z=>p[z].map(c=>[c.uid,c.n,c.power,c.base,c.venom||0,c.bound?1:0,c.ward?1:0,c.ghost?1:0,c.asleep?1:0,c.revealPending?1:0,c.aegis?1:0].join(':')).join(',')).join('/') +
+    '/a'+(p.artifact?p.artifact.uid:'-')+'/t'+(p.boardTokens||0)+'/p'+(p.passed?1:0); }).join('|');
+}
+function heldCounts(g){ return [ME, OPP].map(pi=>g.players[pi].units.length+'.'+g.players[pi].heroes.length).join('|'); }
+// the board as the held copy and the live board should agree on it when the play is done
+function heldKey(g){
+  const view=isViewState(g);
+  return [ME, OPP].map(pi=>{ const p=g.players[pi];
+    return ['units','heroes'].map(z=>p[z].map(c=>[c.uid, c.ghost?'g':'', c.power, c.base, c.venom||0, c.bound?'b':'', c.ward?'w':''].join(':')).join(',')).join('/') +
+      '/a' + (p.artifact ? p.artifact.uid : '-') + (view ? '' : '/t' + (p.boardTokens||0)); }).join(' | ');
+}
 // draw the four rows (and artifacts, PASSED tags) from the held copy — the same boardCard, read against the copy
-function reDrawHeld(){
+function reDrawHeld(noSize){
   if (!RE) return;
   const live=G;
   try{
@@ -12833,8 +12892,28 @@ function reDrawHeld(){
     $('opassed').textContent=op.passed?' · PASSED':''; $('ppassed').textContent=me.passed?' · PASSED':'';
     fillRow($('oheroes'), op.heroes, OPP); fillRow($('ounits'), op.units, OPP); fillRow($('punits'), me.units, ME); fillRow($('pheroes'), me.heroes, ME);
     setArtChip('oart', op.artifact); setArtChip('part', me.artifact);
-    sizeBoard();
+    if (RE.gaps) for (const id in RE.gaps){ const row=$(id); if(!row) continue; row.classList.remove('empty'); const se=row.querySelector(':scope > .slot-empty'); if(se) se.remove();
+      for (const gp of RE.gaps[id].slice().sort((a,b)=>a.index-b.index)){ const kids=[...row.children].filter(n=>n.classList.contains('bc')); row.insertBefore(gp.node, kids[gp.index]||null); } }   // PASHU-ORDER-1: a fallen card's space, kept (hidden) until no card of that row still waits for its own beat — no card moves before its beat (R3)
+    if (!noSize) sizeBoard();   // PASHU-ORDER-1: a held play skips the rescale when no row's count changed (it depends only on which rows hold cards)
   } finally { G=live; }
+}
+// PASHU-ORDER-1 — does a card shown in this row still wait for its own beat (an event after index i of the play names it)?
+function heldWaiting(row, i){ const evs=RE && RE.evs; if (!row || !evs) return false; const here=new Set([...row.querySelectorAll('.bc[data-uid]')].map(n=>n.dataset.uid));
+  for (let k=i+1;k<evs.length;k++) for (const u of (evs[k].targetUids||[])) if (here.has(String(u))) return true; return false; }
+// PASHU-ORDER-1 — a death on a held play: the real held card, cloned in its own place, cracks with today's kill exit and shards;
+// its cell stays (hidden, its space kept) until the death beat's dwell ends, when the copy drops it and the row closes up.
+function heldCrack(uid){
+  const el=document.querySelector(`#field .bc[data-uid="${uid}"]`); if (!el) return false;
+  captureOne(el, uid); el.style.visibility='hidden';
+  return showcaseVictim(uid, 'kill');
+}
+// the held play ends: drop the copy (R8: a skip, a leave, the watchdog or an error drops it at once); a copy that ran to the end
+// and does not equal the live board leaves a quiet note in the battle log's diagnostics — the live board wins either way
+function heldRelease(MH, why){
+  if (!MH || reLive!==MH.tok) return false;
+  if (MH.done && RE && heldKey(RE.g)!==heldKey(G)) { try{ fxNote('held-mismatch', { card: MH.card, held: heldKey(RE.g), live: heldKey(G) }); }catch(e){} }
+  else if (why) { try{ fxNote('held-dropped', { card: MH.card, why }); }catch(e){} }
+  RE=null; reLive=null; return true;
 }
 // owner ruling (Stage 1 follow-up, item 2): during a round end a Unit drained to 0 or below counts 0 until its death is shown,
 // and no total reads below 0. Display only — set aside for the read, put back at once; the finals come from roundHistory.
@@ -12935,6 +13014,7 @@ function runAction(mutate, opts={}){
   if (PUZZLE_MODE) pzActionStart(evStart);   // MINI-GAMES-1: time this action (start → its choreography released)
   reAbandon();   // RULES-FIX-1 1.1: a new action never runs under a held board (the UI is locked while one shows; this only guards a harness)
   const heldBefore = heldCopyOf(G), roundBefore = G.round;   // RULES-FIX-1 1.1: the display copy, BEFORE the action (null on the staked view road)
+  const viewBefore = isViewState(G) ? G : null;   // PASHU-ORDER-1 R5: the staked road's board before the swap (the swap builds a new object; this one is only ever read, and copied if a held play needs it)
   mutate();
   const evs = G.events.slice(evStart);
   blogRecord(G, blogBefore, evs, opts.actor);   // GL-2 — record this batch NOW, names resolved at this instant (never at result time); before any choreography, on every road
@@ -12943,6 +13023,10 @@ function runAction(mutate, opts={}){
   try{ vsNoteCasts(evs, opts.actor); }catch(e){}   // EXPORT-6: record a Venom Strike cast (seat, round) — the staked view carries no venomStrike flag
   resetPowerBeat();   // new event beat — power-change blips coalesce within this batch
   const reSeq = (heldBefore && G.roundHistory.length>roundCountAtActionStart) ? { held:heldBefore, round:roundBefore, evs, snap, passedBefore, actor:opts.actor, rhBefore:roundCountAtActionStart } : null;   // RULES-FIX-1 1.1: this action ended a round → the ordered sequence
+  // PASHU-ORDER-1: a Brahmastra or Pashupatastra play (motion on, mid-round) shows the board from before the play, moved one event at a time
+  let MH=null;
+  { const hp = (!reSeq && evs.length && !reducedMotion()) ? heldPlayOf(evs) : null;
+    if (hp){ try{ const g0 = heldBefore || (viewBefore ? heldCopyAny(viewBefore) : null); if (g0) MH={ g:g0, tok:{}, gone:{}, card:hp.abilityName, done:false }; }catch(e){ MH=null; } } }
   if (!reSeq && (reducedMotion() || !evs.length)){
     // reduced-motion keeps AUDIO (it's not motion): fire the key sounds, skip the visual choreography.
     const pe=evs.find(e=>e.type==='play'); if(pe) cardPlaySound(findCardByUid(pe.sourceUid));
@@ -12954,6 +13038,8 @@ function runAction(mutate, opts={}){
   }
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=PUZZLE_MODE ? null : skipChoreo;   // MINI-GAMES-1: no tap-to-skip in a puzzle — every try plays in full
+  if (MH){ RE={ g:MH.g, mid:true, evs, gaps:null }; reLive=MH.tok; }   // PASHU-ORDER-1: held from this moment — through the opponent's showcase, the cast and every beat
+  const heldLive=()=>!!(MH && reLive===MH.tok && RE && RE.mid);
   (async()=>{
     if (reSeq) return reRun(reSeq, layer);   // RULES-FIX-1 1.1
     try{
@@ -12964,7 +13050,18 @@ function runAction(mutate, opts={}){
       const victimUids=[]; for(const ev of evs){ if(ev.type==='destroy' && (ev.abilityName==='Vajra' || ev.abilityName==='Gandiva')) (ev.targetUids||[]).forEach(u=>victimUids.push(u)); else if(ev.type==='passive' && ev.abilityName==='Sudarshana') (ev.targetUids||[]).forEach(u=>victimUids.push(u)); }   // GANDIVA: clone BOTH kill victims pre-render (a double-kill has two 'Gandiva' destroy events) so each strike lands on its held card
       captureVictims(victimUids);            // T97: clone the struck cards WHILE still on board — the next render() empties their cells; the strike then lands on the held clone
       render();                              // final board; spawnFloaters + HUD totals held while choreoActive
-      for (const ev of evs){ if(choreoSkip) break; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; try{ await playEvent(ev, snap, evs); }catch(e){} }   // skip a broken step (e.g. a VFX drawImage race) — keep the match playable. HEARTBEAT (round-end venom fix): reset the watchdog clock BEFORE each event so the 8s watchdog (below, ~8126) measures STALL-since-last-beat, NOT total duration. A legitimately long round-end — a wide venomed board's per-unit ☠ ticks (~572ms each × 12+ units ≈ 7s+) — used to trip the absolute 8s cap, force-finishing the choreo so the round-end RESOLUTION BEAT (the totals count that shows the venom reducing the points) got snapped/skipped and the winner banner fired without the visible drop. With the heartbeat a PROGRESSING choreo never trips it (each event refreshes the budget); a genuinely STUCK one (no beat for 8s, or a hung single event) still does — and animateTotals stays double-protected by choreoRace's 3s cap. Mid-round choreos are short → the reset is a no-op there (nothing changes for mid-round totals).
+      const heldAt=(ev, i)=>{ try{ const c0=performance.now(), s0=heldSig(RE.g), n0=heldCounts(RE.g);
+          if (ev.type==='destroy') for (const u of (ev.targetUids||[])){ document.querySelectorAll(`#victimlayer .victim-showcase[data-uid="${u}"]`).forEach(n=>n.remove());   // the crack's dwell is over: it ends here
+            const el=document.querySelector(`#field .row .bc[data-uid="${u}"]`); if (el && heldWaiting(el.parentElement, i)){ const sp=el.cloneNode(true); sp.removeAttribute('data-uid'); sp.classList.add('held-gap'); sp.style.visibility='hidden'; sp.style.pointerEvents='none';
+              const kids=[...el.parentElement.children].filter(n=>n.classList.contains('bc')); ((RE.gaps=RE.gaps||{})[el.parentElement.id]=RE.gaps[el.parentElement.id]||[]).push({ index: kids.indexOf(el), node: sp }); } }   // its space stays while a card of its row still waits for its own beat
+          heldStep(RE.g, ev, MH.gone, G, evs[i+1]); if (heldSig(RE.g)!==s0) reDrawHeld(heldCounts(RE.g)===n0); choreoCredit+=performance.now()-c0;
+        }catch(e){ heldRelease(MH, 'error: '+(e&&e.message)); try{ clearVictims(); render(); }catch(e2){} } };
+      for (const ev of evs){ if(choreoSkip) break; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; const i=evs.indexOf(ev);
+        if (heldLive() && ev.type!=='destroy') heldAt(ev, i);   // PASHU-ORDER-1: the copy moves at the START of this event's own beat (R3) — its number turns at the impact, and the redraw's time is repaid inside the same beat (R2)
+        try{ await playEvent(ev, snap, evs); }catch(e){}
+        if (heldLive() && ev.type==='destroy') heldAt(ev, i);
+        if (heldLive() && RE.gaps){ try{ let closed=false; for (const id in RE.gaps) if (!heldWaiting($(id), i)){ delete RE.gaps[id]; closed=true; } if (closed){ const c0=performance.now(); reDrawHeld(); choreoCredit+=performance.now()-c0; } }catch(e){} } }   // a row whose every card has had its beat closes up now, once (R3)   // a death: the real card has cracked in its own place; the row closes up only now, when the dwell ends (R3). Any error in the held road → the live board at once (R8)
+      if (heldLive() && !choreoSkip){ try{ const s0=heldSig(RE.g), n0=heldCounts(RE.g), hadGaps=!!(RE.gaps && Object.keys(RE.gaps).length); RE.gaps=null; heldMidFinish(RE.g, G); MH.done=true; if (heldSig(RE.g)!==s0 || hadGaps) reDrawHeld(!hadGaps && heldCounts(RE.g)===n0); }catch(e){ heldRelease(MH, 'error: '+(e&&e.message)); try{ render(); }catch(e2){} } }   // skip a broken step (e.g. a VFX drawImage race) — keep the match playable. HEARTBEAT (round-end venom fix): reset the watchdog clock BEFORE each event so the 8s watchdog (below, ~8126) measures STALL-since-last-beat, NOT total duration. A legitimately long round-end — a wide venomed board's per-unit ☠ ticks (~572ms each × 12+ units ≈ 7s+) — used to trip the absolute 8s cap, force-finishing the choreo so the round-end RESOLUTION BEAT (the totals count that shows the venom reducing the points) got snapped/skipped and the winner banner fired without the visible drop. With the heartbeat a PROGRESSING choreo never trips it (each event refreshes the budget); a genuinely STUCK one (no beat for 8s, or a hung single event) still does — and animateTotals stays double-protected by choreoRace's 3s cap. Mid-round choreos are short → the reset is a no-op there (nothing changes for mid-round totals).
       const roundEnded = G.roundHistory.length>roundCountAtActionStart && !G.over;
       if (roundEnded && !choreoSkip){   // ITEMS 2+3 — round-end RESOLUTION BEAT: the round-end effects (venom/round-end tier) already choreographed above; now settle the totals to the ROUND'S TRUE FINAL scores (roundHistory[last] — post-venom, PRE board-reset) so the score flip that decided the winner is VISIBLE, then hold before the banner. (Was: animateTotals→live totalPower = the post-RESET board = the desync root.)
         const h=G.roundHistory[G.roundHistory.length-1];
@@ -12976,6 +13073,8 @@ function runAction(mutate, opts={}){
       }
     } finally {
       // GUARANTEE: no thrown/skipped/hung step can leave the choreo locked — always release the lock and resume the match
+      try{ heldRelease(MH, MH && !MH.done ? 'ended early' : null); }catch(e){ if (MH && reLive===MH.tok){ RE=null; reLive=null; } }
+      if (MH) choreoCredit=0;   // PASHU-ORDER-1: the copy goes; the live board is drawn below (R8)
       clearVictims();   // T97: drop any victim-showcase clone whose strike beat was skipped/broke, so it never persists past the action
       choreoActive=false; choreoStartedAt=0; choreoForce=[]; layer.classList.remove('locked'); layer.onclick=null; layer.innerHTML='';
       try{ render(); showResultSummary(evs); announcePassIfAny(passedBefore, opts.actor); if (G.roundHistory.length>roundCountAtActionStart && !G.over) showRoundBanner(); }catch(e){}
