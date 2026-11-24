@@ -483,6 +483,8 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
   padding:6px 12px calc(8px + env(safe-area-inset-bottom)); background:linear-gradient(#120d06,#0b0704); border-top:1px solid var(--line); }
 button{ font-family:Cinzel,serif; letter-spacing:1px; }
 #turnind{ font-size:11px; color:var(--ink-dim); font-family:Cinzel,serif; min-width:86px; text-align:center; }
+/* GUIDE-1 (ruling 4): the site's corner star (bottom-left, 10px + 34px) covered the turn indicator on phones — clear it */
+@media (max-width:600px){ body:has(#dyw-gate-return) #controls{ padding-left:52px; } }
 #turnind.you{ color:var(--hi); text-shadow:0 0 10px rgba(240,208,128,.6); }
 #passbtn{ flex:1; background:linear-gradient(#2a1e0a,#1d1507); color:var(--gold); border:1.5px solid var(--gold-dim); border-radius:10px; padding:13px; font-size:13px; font-weight:700; cursor:pointer; transition:transform .1s, box-shadow .15s, background .15s; }
 #passbtn:hover:not(:disabled){ background:linear-gradient(#3a2a0e,#241a08); box-shadow:0 0 12px rgba(201,168,76,.3); }
@@ -919,6 +921,25 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 .obj-win::before{ content:'Goal: '; color:var(--gold-2); }
 .obj-bonus{ font-size:11px; color:var(--gold-2); margin-top:4px; }
 .obj-bonus.hidden{ display:none; }
+/* GUIDE-1 (owner rulings, 24 Nov 2026) — the first-battle hand guide. The layer takes no taps (only "Skip guide" does) and sits
+   above the score column (z-95); it is hidden under every overlay by the guide itself. .still = reduced motion: no bob, no pulse. */
+#guide{ position:fixed; inset:0; z-index:97; pointer-events:none; }
+#guide.hidden, #guide .hidden{ display:none !important; }
+#guide-glow{ position:fixed; opacity:.8; animation:gdGlow 1.6s ease-in-out infinite; }
+#guide-hand{ position:fixed; width:0; height:0; transform-origin:0 0; }   /* the box IS the fingertip point; each frame is placed by its own fingertip */
+#guide-hand img{ position:absolute; display:block; filter:drop-shadow(0 3px 6px rgba(0,0,0,.6)); }
+#guide-pressimg{ opacity:0; animation:gdPress 1.6s step-end infinite; }
+#guide-handimg{ animation:gdLift 1.6s step-end infinite; }
+@keyframes gdPress{ 0%{ opacity:0; } 62%{ opacity:1; } 84%{ opacity:0; } }
+@keyframes gdLift{ 0%{ opacity:1; } 62%{ opacity:0; } 84%{ opacity:1; } }
+@keyframes gdGlow{ 0%,100%{ opacity:.5; transform:scale(.9); } 62%{ opacity:.95; transform:scale(1.08); } }
+#guide.still #guide-glow, #guide.still #guide-hand img{ animation:none; }
+#guide.still #guide-glow{ opacity:.8; } #guide.still #guide-handimg{ opacity:1; } #guide.still #guide-pressimg{ opacity:0; }
+@media (prefers-reduced-motion: reduce){ #guide-glow, #guide-hand img{ animation:none !important; } #guide-pressimg{ opacity:0 !important; } #guide-handimg{ opacity:1 !important; } }
+#guide-plate{ position:fixed; box-sizing:border-box; background:rgba(10,7,3,.95); border:1px solid var(--gold-dim); border-radius:12px; padding:10px 14px 4px; box-shadow:0 6px 24px rgba(0,0,0,.6); text-align:center; }
+#guide-line{ font-family:'Crimson Pro',Georgia,serif; font-weight:600; font-size:16px; line-height:1.36; color:var(--hi); }
+#guide-skip{ pointer-events:auto; background:none; border:none; color:var(--ink-dim); font-family:Cinzel,serif; font-size:11px; letter-spacing:1px; text-decoration:underline; cursor:pointer; padding:8px 12px; min-height:34px; }
+#guide-replay{ width:100%; }
 .hc.story-masked{ filter:grayscale(.7) brightness(.5); pointer-events:none; }
 .hc.story-hi{ box-shadow:0 0 0 2px var(--gold), 0 0 22px rgba(232,201,90,.75) !important; animation:storyGlow 1.4s ease-in-out infinite; }
 @keyframes storyGlow{ 0%,100%{ box-shadow:0 0 0 2px var(--gold), 0 0 12px rgba(232,201,90,.5); } 50%{ box-shadow:0 0 0 2px var(--gold), 0 0 26px rgba(232,201,90,.92); } }
@@ -1723,6 +1744,17 @@ button{ font-family:Cinzel,serif; letter-spacing:1px; }
 
 /* ===== cosmic realm chip + popover ===== */
 .hdr-right{ display:flex; align-items:center; gap:8px; }
+/* GUIDE-1 (ruling 4): on a phone the header row was wider than the screen (the realm chip alone ~126px) and pushed the ⚙ and
+   the round number off the right edge. Narrow screens: tighter chips and gaps, and the realm chip gives way first (ellipsis —
+   tapping it still opens the realm's full name and effect). */
+@media (max-width:430px){
+  header{ gap:6px; padding:8px 8px; }
+  header .title{ flex:0 0 auto; letter-spacing:1px; }
+  .hdr-right{ flex:1 1 auto; min-width:0; justify-content:flex-end; gap:5px; }
+  #realmchip{ flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; padding:5px 8px; }
+  #diffchip{ flex:0 0 auto; padding:5px 8px; }
+  #mutebtn, #gearbtn, .roundbox{ flex:0 0 auto; }
+}
 #realmchip{ font-family:Cinzel,serif; font-size:10px; letter-spacing:1px; color:#cbb9e8; background:linear-gradient(#241a3a,#140f22); border:1px solid #4a3a70; border-radius:20px; padding:5px 11px; cursor:pointer; white-space:nowrap; }
 #realmchip:active{ transform:scale(.96); } #realmchip.hidden{ display:none; }
 #realmpop{ position:fixed; z-index:71; max-width:230px; background:rgba(14,10,26,.97); border:1px solid #5a4a86; border-radius:10px; padding:9px 12px; font-size:11px; line-height:1.5; color:#e6dcff; box-shadow:0 8px 24px rgba(0,0,0,.6); }
@@ -2476,6 +2508,7 @@ body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn, body.puzzl
     </div>
     <div class="set-hint">Higher = crisper effects, more memory. Auto matches your device. Applies from your next match.</div>
   </div>
+  <div class="set-row"><button id="guide-replay" class="tgl">Show the beginner guide again</button></div>
   <button class="fsel-start" onclick="$('settings').classList.add('hidden')">DONE</button>
 </div></div>
 
@@ -2651,6 +2684,11 @@ body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn, body.puzzl
     <div class="obj-win" id="obj-win"></div>
     <div class="obj-bonus hidden" id="obj-bonus"></div>
   </div>
+</div>
+<div id="guide" class="hidden" aria-live="polite">
+  <img id="guide-glow" alt="">
+  <div id="guide-hand"><img id="guide-handimg" alt=""><img id="guide-pressimg" alt=""></div>
+  <div id="guide-plate"><div id="guide-line"></div><button type="button" id="guide-skip"></button></div>
 </div>
 <div id="brihaspati" class="hidden">
   <div class="bri-chip">ब</div>
@@ -7155,6 +7193,7 @@ function startGame(p0Faction, p1Faction){
   armVfxPreload();     // GROWTH-1 #16 (owner ruling 2026-11-06): the painted kit loads AFTER the first playable turn (pump), never ahead of it — the first match must be playable fast on 4G; the procedural fallback covers the gap (T67's own law)
   VFX.loadMatchSheets(currentFactions.p0, currentFactions.p1);   // T81: lazy — only THIS match's factions' landing sheets (+ the Deva row plates if a Deva is in the match). Loads during the mulligan window.
   beginMulligan();          // play begins when the player confirms their opening hand
+  try{ guideMatchStart(); }catch(e){}   // GUIDE-1
 }
 const FAC_LABEL = f => f==='asuras' ? 'ASURA' : f==='vanaras' ? 'VANARA' : f==='nagas' ? 'NAGA' : 'DEVA';
 /* ---------- per-realm battle boards ----------
@@ -7352,7 +7391,7 @@ function renderFselFirst(){
 function fselFirstSync(){
   const picked=!!fselChoice.p0;
   if(picked && fselEnemyAuto && (!fselChoice.p1 || fselChoice.p1===fselChoice.p0)){
-    const others=FSEL_TILES.filter(t=>t.f!==fselChoice.p0); fselChoice.p1=others[Math.floor(Math.random()*others.length)].f;
+    const others=FSEL_TILES.filter(t=>t.f!==fselChoice.p0 && t.f!=='nagas'); fselChoice.p1=others[Math.floor(Math.random()*others.length)].f;
     document.querySelectorAll('#fsel-p1 .ftile').forEach(x=>x.classList.toggle('sel', x.dataset.f===fselChoice.p1));
   }
   $('fsel-hint').classList.toggle('hidden', picked);
@@ -7407,7 +7446,8 @@ $('factionselect').addEventListener('click', e=>{
 $('fselstart').onclick=()=>{
   if(!fselChoice.p0) return;                                // gated: no player faction, no match
   // RANDOM resolves HERE, in the UI, exactly as an explicit pick would — startGame receives a concrete faction.
-  const p1 = fselChoice.p1==='random' ? FSEL_TILES[Math.floor(Math.random()*FSEL_TILES.length)].f : fselChoice.p1;
+  const pool = fselFirst ? FSEL_TILES.filter(t=>t.f!=='nagas') : FSEL_TILES;   // GUIDE-1 (ruling 4): a first-timer's random enemy is never the Nagas
+  const p1 = fselChoice.p1==='random' ? pool[Math.floor(Math.random()*pool.length)].f : fselChoice.p1;
   try{ window.DY_COUNT && window.DY_COUNT.step && window.DY_COUNT.step('battle_start'); }catch(e){}   // ONBOARD-1 (owner ruling 2026-11-10): BEGIN BATTLE tapped — once per browser (DY_COUNT exists only in the site's copy)
   startGame(fselChoice.p0, p1);
 };
@@ -13125,18 +13165,20 @@ function openInspect(c, pi, handIndex){
   attachArt(card, c, fac);
   const foot=$('inspectFooter');
   if (handIndex!=null && handIndex>=0){
-    foot.innerHTML='<div class="inspect-actions"><button class="ibtn-play">PLAY ⚔</button><button class="ibtn-cancel">CANCEL</button></div>';
+    foot.innerHTML='<div class="inspect-actions"><button class="ibtn-play">PLAY</button><button class="ibtn-cancel">CANCEL</button></div>';
     foot.querySelector('.ibtn-play').onclick=()=>{ const r=$('inspectCard').getBoundingClientRect(); closeInspect(); startPlay(handIndex, r); };
     foot.querySelector('.ibtn-cancel').onclick=closeInspect;
   } else {
     foot.innerHTML=`<div class="inspect-hint">${handIndex===-1?'not playable now · tap to dismiss':'tap anywhere to dismiss'}</div>`;
   }
   $('inspect').classList.remove('hidden');
+  try{ guideTick(); }catch(e){}   // GUIDE-1: point at PLAY at once
 }
-function closeInspect(){ $('inspect').classList.add('hidden'); inspectContext=null; }
+function closeInspect(){ $('inspect').classList.add('hidden'); inspectContext=null; try{ guideTick(); }catch(e){} }
 
 /* ---------- play flow ---------- */
 function doPlay(i, uid, srcRect, position){
+  try{ guideAct(); }catch(e){}   // GUIDE-1: the player played a card
   const c=G.players[ME].hand[i];
   pendingFly = (srcRect && c) ? { rect:srcRect, uid:c.uid } : null;   // on the wire this is HELD until the relay lands
   if (Wire){   // R2 — send, then apply on relay. The screen targets by uid; the wire takes the option INDEX.
@@ -13272,7 +13314,7 @@ $('unbindbtn').onclick=()=>{
   if(bound.length===1){ unbindCard(bound[0]); return; }
   unbindMode=true; render(); showActionBar('Unbind: tap a glowing target', cancelUnbind);
 };
-$('passbtn').onclick=()=>{ if(G.turn===ME&&!G.players[ME].passed&&!G.over && !choreoActive){ if (Wire){ wireSend({ type:'pass' }); return; } runAction(()=>pass(G,ME)); } };
+$('passbtn').onclick=()=>{ if(G.turn===ME&&!G.players[ME].passed&&!G.over && !choreoActive){ try{ guideActPass(); }catch(e){} if (Wire){ wireSend({ type:'pass' }); return; } runAction(()=>pass(G,ME)); } };
 $('loghead').onclick=()=>$('logdrawer').classList.toggle('open');
 $('inspect').onclick=e=>{ if(e.target.id==='inspect' || e.target.closest('.inspect-hint')) closeInspect(); };
 $('hand').addEventListener('scroll', ()=>{ if(focusRaf) return; focusRaf=requestAnimationFrame(()=>{ focusRaf=0; updateFocus(); }); });
@@ -13792,6 +13834,7 @@ function showGameOver(){
   if(Story){ showStoryResult(); return; }   // story matches: separate result screen, and NEVER touch PvAI telemetry
   recordMatchResult();   // one-shot: bump telemetry + capture lastEarn (guarded against re-render)
   try{ window.DY_COUNT && window.DY_COUNT.finished('match'); }catch(e){}   // GROW-COUNT-1 (owner ruling 2026-11-03): a finished match vs AI for the site's player counter — DY_COUNT exists only in the site's copy (the standalone game counts nothing)
+  try{ guideMatchEnd(); }catch(e){}   // GUIDE-1: the first battle is over — the guide is done
   const me=G.players[ME];
   $('goh').textContent = G.winner===ME?'⚔ VICTORY ⚔': G.winner===OPP?'DEFEAT':'STALEMATE';
   $('gop').textContent = `Final: ${me.roundWins}–${G.players[OPP].roundWins} across ${G.roundHistory.length} rounds.`;
@@ -13916,6 +13959,284 @@ const VIDEO_BASE = (window.Capacitor || location.protocol==='capacitor:')   // m
   : 'https://sangbaran-purr.github.io/divya-yuddha/assets/video/';
 const INTRO_MP4 = VIDEO_BASE+'intro_trailer.mp4?v=1', INTRO_POSTER = VIDEO_BASE+'intro_poster.jpg?v=1';
 const INTRO_STALL_MS = 4000;
+/* ═══ GUIDE-1 (owner rulings, 24 Nov 2026) — THE FIRST-BATTLE HAND GUIDE ═══
+   A pointing hand + one plain line, one step at a time, for a first-time player (no finished match vs AI) on the vs-AI road
+   ONLY — never on the Hall's wire, the Daily Puzzle, a Story chapter or the staked view. The layer (#guide) takes no taps
+   except its "Skip guide" button, so it can never stand between the player and a step; it hides under every overlay and
+   while a play is being shown, and it never covers the card zoom's PLAY/CANCEL or the "Visuals stuttering?" notice.
+   THE ART (the owner's, 24 Nov 2026): assets/guide/ hand (finger straight) · hand_pressed (finger bent, the tap) · glow — the
+   shipped files are 256px copies (*_256.webp, *_256.png fallback) of the owner's 1254px originals (assets/guide/<name>.png,
+   kept out of git and the build by .gitignore). ONE config value, assets/guide/guide.json:
+   {"frame","hand":[x,y],"pressed":[x,y],"box","finger","arm","approach"} — each frame's fingertip, the hand's extent, the
+   finger's angle and the arm's strip (length back from the fingertip, its two sides), all in the ORIGINAL frame's pixels, and
+   each step's approach (default from the lower right; from above for a target in the bottom band; then the fallbacks). Each frame is drawn so ITS fingertip lands on the target, so the tap (a frame swap) never moves the
+   touch point; the glow sits centred under the fingertip. New art drops in by replacing the files and that one value.
+   No guide.json → the line still shows, the hand does not.
+   STORAGE (dy_guide): { v:1, done, skipped, replay, seen:{step:1}, steps:{milestone:'YYYY-MM-DD' UTC} } — `steps` is the local
+   step log (arrived · army · kept · firstCard · round1 · matchEnd), on this device only; nothing is sent anywhere.
+   Reads the engine's state only (G, Q, playableIndices) — the engine is never touched. */
+const GUIDE_TEXT = {
+  story:   'New here? Start with Story — it teaches you as you play.',
+  army:    'Pick your army. Devas are the easiest to start with.',
+  begin:   'Now tap Begin Battle.',
+  keep:    'These are your 10 starting cards. You can swap up to 3. For your first battle, just tap Keep Destiny.',
+  wait:    'Your opponent goes first. Wait for your turn.',
+  card:    'Tap a card with a number. The number is its power.',
+  play:    'Now tap Play to send it into battle.',
+  total:   "This is your total power. Beat your opponent's total to win the round.",
+  special: 'Cards without a number are special powers. Tap one to read what it does.',
+  pass:    'Ahead? Tap Pass Round to save your cards for later. Your opponent can still play.',
+  won:     'Round won. One more and the battle is yours.',
+  lost:    'Round lost. You have more cards — win the next two.',
+  drawn:   'Round drawn. Win two rounds to take the battle.',
+  skip:    'Skip guide',
+};
+const GUIDE_ART = { dir:'assets/guide/', conf:'assets/guide/guide.json', armPx:[88, 100] };   // the hand's length, fingertip to wrist: phone · desktop — on a phone the hand stands 64–96 px tall whichever way it points (ruling)
+const GUIDE_INFO_MS = 5000;   // an information step (your total, the round result) stays this long, or until you act
+const GD = { art:null, cur:null, shownAt:0, visMs:0, lastT:0, acted:false, played:false, iv:0, raf:0, mullSet:false, landSeen:false };
+function guideLoad(){   // held in memory after the first read (the tick runs 4× a second); every change writes through (guideSave)
+  if(!GD.data){ try{ const d=JSON.parse(localStorage.getItem('dy_guide')||'null'); GD.data=(d && typeof d==='object') ? d : {}; }catch(e){ GD.data={}; } }
+  return JSON.parse(JSON.stringify(GD.data)); }
+function guideData(){ const d=guideLoad(); d.v=1; if(!d.seen||typeof d.seen!=='object') d.seen={}; if(!d.steps||typeof d.steps!=='object') d.steps={}; return d; }
+function guideSave(d){ GD.data=JSON.parse(JSON.stringify(d)); try{ localStorage.setItem('dy_guide', JSON.stringify(d)); }catch(e){} }
+function guideArmed(){ const d=guideLoad(); if(d.done) return false; if(d.replay) return true; return !((loadProfile().matches|0) > 0); }
+function guideLog(name){ const d=guideData(); if(d.steps[name]) return; d.steps[name]=new Date().toISOString().slice(0,10); guideSave(d); }
+function guideSeen(id){ const d=guideData(); if(d.seen[id]) return; d.seen[id]=1; guideSave(d); }
+function guideFinish(skipped){ const d=guideData(); d.done=true; d.replay=false; if(skipped) d.skipped=true; guideSave(d); guideHide(); guideStop(); }
+function guideReplay(){ const d=guideData(); d.done=false; d.skipped=false; d.replay=true; d.seen={}; guideSave(d); GD.cur=null; GD.landSeen=false; guideStart(); }
+function guideRoad(){ return GD.booted && !Wire && !document.body.classList.contains('puzzle') && !Story && !(G && isViewState(G)); }   // GD.booted: only the vs-AI boot (guideBoot) — the wire and puzzle boots never call it
+const guideVis = (id)=>{ const e=$(id); return !!e && !e.classList.contains('hidden'); };
+function guideIdle(){ return !choreoActive && !bannerActive && !RE && !pendingPlay && !placeMode && !leapMode && !shieldMode && !unbindMode && !targetBar; }
+function guideMyTurn(){ const me=G.players[ME]; return G.turn===ME && !me.passed && !G.over; }
+function guidePlayedAny(){ const me=G.players[ME]; return GD.played || me.units.some(u=>!u.ghost) || me.heroes.length>0 || me.discard.length>0; }
+// the first playable hand card matching `want`, preferring one already in view (the hand is a horizontal slider)
+function guideHandCard(withNumber){
+  const els=[...document.querySelectorAll('#hand .hc:not(.dead)')].filter(el=>!!el.querySelector('.hc-chip')===withNumber);   // what the player sees: playable = not dimmed; a number = the corner chip
+  if(!els.length) return null;
+  const box=$('hand').getBoundingClientRect();
+  return els.find(el=>{ const r=el.getBoundingClientRect(); return r.left>=box.left-1 && r.right<=box.right+1; }) || els[0];
+}
+const guideShown=(id)=>parseInt(($(id)||{}).textContent,10)||0;   // the total on screen (at rest it is the engine's total)
+// THE STEPS, in order. ready(): may show now · done(): the step's purpose is met (it is never shown again)
+const GUIDE_STEPS = [
+  { id:'story', screen:'landing', ready:()=>!document.getElementById('dyw-gate-return'),   /* GitHub Pages only: the site's copy carries the site's corner star, and the site's own landing has step 1 */ el:()=>$('mode-story'), text:()=>GUIDE_TEXT.story, done:()=>GD.landSeen && !guideVis('landing') },
+  { id:'army',  screen:'fsel', ready:()=>fselFirst && !fselChoice.p0, el:()=>document.querySelector('#fsel-army .ftile[data-f="devas"]'), text:()=>GUIDE_TEXT.army, done:()=>!!fselChoice.p0 },
+  { id:'begin', screen:'fsel', ready:()=>fselFirst && !!fselChoice.p0, el:()=>$('fselstart'), text:()=>GUIDE_TEXT.begin, done:()=>false },
+  { id:'keep',  screen:'mull', ready:()=>true, el:()=>$('mullconfirm'), text:()=>GUIDE_TEXT.keep, mull:true, done:()=>false },
+  { id:'wait',  screen:'battle', ready:()=>G.round===1 && G.firstThisRound===OPP && G.turn===OPP && !guidePlayedAny() && !choreoActive && !bannerActive && !RE,
+    el:()=>$('turnind'), text:()=>GUIDE_TEXT.wait, done:()=>G.turn===ME || guidePlayedAny() },
+  { id:'card',  screen:'battle', ready:()=>guideMyTurn() && guideIdle() && !guidePlayedAny(),
+    el:()=> guideVis('inspect') ? ($('inspectFooter').querySelector('.ibtn-play')) : guideHandCard(true),
+    text:()=> guideVis('inspect') ? GUIDE_TEXT.play : GUIDE_TEXT.card, zoom:true, done:()=>guidePlayedAny() },
+  { id:'total', screen:'battle', info:true, ready:()=>guidePlayedAny() && guideIdle() && !guideVis('inspect'), el:()=>$('hud-p'), text:()=>GUIDE_TEXT.total },
+  { id:'special', screen:'battle', ready:()=>guidePlayedAny() && guideMyTurn() && guideIdle() && !guideVis('inspect') && !!guideHandCard(false),
+    el:()=>guideHandCard(false), text:()=>GUIDE_TEXT.special, acts:true, done:()=>false },
+  { id:'pass',  screen:'battle', ready:()=>guidePlayedAny() && guideMyTurn() && guideIdle() && !guideVis('inspect') && guideShown('ptotal') > guideShown('ototal'),
+    el:()=>$('passbtn'), text:()=>GUIDE_TEXT.pass, acts:true, done:()=>false },
+  { id:'round', screen:'battle', info:true, ready:()=>G.roundHistory.length>=1 && !G.over && guideIdle() && !guideVis('inspect'), el:()=>$('pips'),
+    text:()=>{ const w=G.roundHistory[0].winner; return w===ME ? GUIDE_TEXT.won : w===OPP ? GUIDE_TEXT.lost : GUIDE_TEXT.drawn; } },
+];
+const GUIDE_BLOCKERS = ['settings','quests','battlelog','targeting','oppeek','collection','vault','gameover','cutscene','factionintro','storyselect','fi-inspect','sadhanapick','introv','bossvs','storyresult'];
+function guideScreen(){
+  if(guideVis('landing')) return 'landing';
+  if(guideVis('factionselect')) return 'fsel';
+  if(guideVis('mulligan')) return 'mull';
+  if(G && !G.over && !$('hudwrap').classList.contains('hidden')) return 'battle';
+  return null;
+}
+function guideSeeable(el){ let a=1; for(let e=el; e && e.nodeType===1; e=e.parentElement){ const cs=getComputedStyle(e); if(cs.display==='none' || cs.visibility==='hidden') return false; const o=parseFloat(cs.opacity); if(Number.isFinite(o)) a*=o; } return a>=0.6; }
+function guidePick(){
+  if(!guideRoad() || GUIDE_BLOCKERS.some(guideVis)) return null;
+  const scr=guideScreen(); if(!scr) return null;
+  const seen=guideData().seen;
+  for(const s of GUIDE_STEPS){
+    if(s.screen!==scr || seen[s.id]) continue;
+    if(s.done && s.done()){ guideSeen(s.id); continue; }
+    if(!s.ready()) continue;
+    if(guideVis('inspect') && !s.zoom) return null;   // the card zoom is open: only the Play pointer may show over it
+    const el=s.el(); if(!el || !guideSeeable(el)) continue;   // never point at a target that is not (yet) on show — the landing fades in
+    return { s, el };
+  }
+  return null;
+}
+function guideMilestones(){
+  const scr=guideScreen();
+  if(scr==='landing' || scr==='fsel') guideLog('arrived');
+  if(scr==='fsel' && fselChoice.p0) guideLog('army');
+  if(scr==='battle'){ if(G.players[ME].mulliganed){ guideLog('kept'); guideSeen('keep'); } if(guidePlayedAny()) guideLog('firstCard'); if(G.roundHistory.length>=1) guideLog('round1'); }
+}
+function guideTick(){
+  try{
+    if(choreoActive){ if(GD.cur) guideHide(); return; }   // a play is being shown: nothing to point at, and no work done (no layout reads)
+    if(!guideArmed()){ guideHide(); guideStop(); return; }
+    if(!guideRoad()){ guideHide(); return; }
+    if(guideVis('landing') && GD.cur==='story') GD.landSeen=true;
+    guideMilestones();
+    const now=performance.now();
+    if(GD.cur && GD.lastT) GD.visMs += now-GD.lastT;
+    GD.lastT = GD.cur ? now : 0;
+    const cs=GD.cur && GUIDE_STEPS.find(s=>s.id===GD.cur);
+    if(cs && cs.info && (GD.visMs>=GUIDE_INFO_MS || GD.acted)) guideSeen(cs.id);
+    if(cs && cs.acts && GD.acted) guideSeen(cs.id);
+    if(cs && cs.id==='special' && guideVis('inspect')) guideSeen('special');   // the player opened a card to read it: the step did its work
+    const p=guidePick();
+    if(!p){ guideHide(); return; }
+    if(p.s.id!==GD.cur || p.el!==GD.target){ if(p.s.id!==GD.cur){ GD.cur=p.s.id; GD.visMs=0; GD.acted=false; GD.lastT=now; } guideReveal(p.el); }
+    guideShow(p.s, p.el);
+  }catch(e){ guideHide(); }
+}
+function guideAct(){ GD.played=true; GD.acted=true; }               // the player played a card (doPlay)
+function guideActPass(){ GD.acted=true; }                            // the player passed
+function guideMatchStart(){ GD.played=false; GD.acted=false; GD.cur=null; GD.matchArmed = guideArmed() && guideRoad(); if(GD.matchArmed){ guideSeen('begin'); guideStart(); } }
+function guideMatchEnd(){ if(!GD.matchArmed || !guideRoad()) return; GD.matchArmed=false; guideLog('matchEnd'); guideFinish(false); }   // the match just counted itself (matches 1): what decides is that THIS match began with the guide on
+function guideSkip(e){ if(e){ e.preventDefault(); e.stopPropagation(); } guideFinish(true); }
+function guideStart(){ if(!GD.booted) return; if(!GD.iv) GD.iv=setInterval(guideTick, 250); guideTick(); }
+function guideStop(){ if(GD.iv){ clearInterval(GD.iv); GD.iv=0; } }
+function guideHide(){
+  GD.fit=null; GD.fitKey=null;
+  const g=$('guide'); if(g) g.classList.add('hidden');
+  if(GD.raf){ cancelAnimationFrame(GD.raf); GD.raf=0; }
+  if(GD.mullSet){ const m=$('mull-story'); if(m){ m.textContent=''; m.classList.add('hidden'); } GD.mullSet=false; }
+  GD.cur=null; GD.lastT=0; GD.target=null;
+}
+// bring a new target into view once (the menus are one scroll on a phone; the hand is a horizontal slider)
+function guideReveal(el){
+  try{
+    const hand=$('hand');
+    if(hand && hand.contains(el)){ const hb=hand.getBoundingClientRect(), r=el.getBoundingClientRect();
+      if(r.left<hb.left || r.right>hb.right) hand.scrollTo({ left: hand.scrollLeft + (r.left-hb.left) - (hb.width-r.width)/2, behavior: reducedMotion()?'auto':'smooth' }); return; }
+    const r=el.getBoundingClientRect();
+    if(r.top<60 || r.bottom>innerHeight-20) el.scrollIntoView({ block:'center', behavior: reducedMotion()?'auto':'smooth' });
+  }catch(e){}
+}
+function guideShow(s, el){
+  const g=$('guide'); if(!g) return;
+  GD.target=el; GD.step=s;
+  const text=s.text();
+  if(s.mull){ const m=$('mull-story'); if(m){ m.textContent=text; m.classList.remove('hidden'); GD.mullSet=true; } }
+  const line=$('guide-line'); line.textContent = s.mull ? '' : text; line.classList.toggle('hidden', !!s.mull);
+  g.classList.toggle('still', reducedMotion());
+  g.classList.remove('hidden');
+  guidePlace();
+  if(!GD.raf){ const loop=()=>{ GD.raf=0; if(!GD.target) return; guidePlace(); GD.raf=requestAnimationFrame(loop); }; GD.raf=requestAnimationFrame(loop); }
+}
+const guideHit = (a,b,pad)=>{ pad=pad||0; return a.left<b.right+pad && a.right>b.left-pad && a.top<b.bottom+pad && a.bottom>b.top-pad; };
+function guideProtected(){ const out=[]; const add=(e)=>{ if(e && e.offsetParent!==null){ const r=e.getBoundingClientRect(); if(r.width&&r.height) out.push(r); } };
+  if(guideVis('inspect')) document.querySelectorAll('#inspectFooter .inspect-actions button').forEach(b=>{ if(b!==GD.target) add(b); });   // the zoom's buttons — all but the one being pointed at
+  document.querySelectorAll('.jank-notice').forEach(add);
+  return out; }
+// GUIDE-1 — where the hand goes. Approach names → the finger's direction on screen (degrees, y down).
+const GUIDE_APPROACH = { lowerRight:null, lowerLeft:-46, above:90, below:-90, right:180, left:0 };   // lowerRight = the art as drawn
+const GUIDE_TAPPABLE = 'button, a[href], input, select, [role="button"], .hc, .bc, .ftile, .mull-card, .roundel, .mode, #loghead, #realmchip';
+// the hand-and-wrist strip on screen for a fingertip at (x,y) and a finger direction `ang`
+function guideStrip(A, k, x, y, ang){
+  const t=ang*Math.PI/180, ux=Math.cos(t), uy=Math.sin(t), vx=-uy, vy=ux, L=A.arm[0]*k, s0=A.arm[1]*k, s1=A.arm[2]*k;
+  return [[x+vx*s0, y+vy*s0],[x+vx*s1, y+vy*s1],[x-ux*L+vx*s1, y-uy*L+vy*s1],[x-ux*L+vx*s0, y-uy*L+vy*s0]];
+}
+function guidePolyHitsRect(P, R){   // separating axes: the rectangle's two, then the strip's two
+  const axes=[[1,0],[0,1]]; for(let i=0;i<2;i++){ const a=P[i], b=P[i+1]; axes.push([-(b[1]-a[1]), b[0]-a[0]]); }
+  const RP=[[R.left,R.top],[R.right,R.top],[R.right,R.bottom],[R.left,R.bottom]];
+  for(const [ax,ay] of axes){ let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;
+    for(const [px,py] of P){ const d=px*ax+py*ay; a0=Math.min(a0,d); a1=Math.max(a1,d); }
+    for(const [px,py] of RP){ const d=px*ax+py*ay; b0=Math.min(b0,d); b1=Math.max(b1,d); }
+    if(a1<=b0 || b1<=a0) return false; }
+  return true;
+}
+// every other control a player could tap, on show now (never the target, its parts or what holds it, nor the guide itself)
+function guideObstacles(el){
+  const out=[]; document.querySelectorAll(GUIDE_TAPPABLE).forEach(e=>{
+    if(e===el || e.contains(el) || el.contains(e) || e.closest('#guide')) return;
+    const r=e.getBoundingClientRect(); if(!(r.width>0 && r.height>0) || r.bottom<0 || r.top>innerHeight || r.right<0 || r.left>innerWidth) return;
+    if(e.checkVisibility && !e.checkVisibility({ opacityProperty:true, visibilityProperty:true })) return;
+    const px=Math.min(Math.max((r.left+r.right)/2, 1), innerWidth-1), py=Math.min(Math.max((r.top+r.bottom)/2, 1), innerHeight-1), top=document.elementFromPoint(px, py);
+    if(!top || !(top===e || e.contains(top))) return;   // under an overlay (the Divine Choice, the card zoom): not tappable now
+    out.push(r); });
+  return out;
+}
+function guideLabelRect(el){   // a button's (or link's) visible words — null when it has none (a picture button)
+  if(!(el.tagName==='BUTTON' || el.tagName==='A' || el.classList.contains('mode'))) return null;
+  try{   // the union of its WORDS only (a picture button such as Begin Battle has none: its label is baked into the picture)
+    const w=document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n, L=1e9, T=1e9, R=-1e9, B=-1e9;
+    while((n=w.nextNode())){ if(!n.nodeValue.trim()) continue; const rg=document.createRange(); rg.selectNodeContents(n); const q=rg.getBoundingClientRect();
+      if(q.width>0 && q.height>0){ L=Math.min(L,q.left); T=Math.min(T,q.top); R=Math.max(R,q.right); B=Math.max(B,q.bottom); } }
+    return (R-L>4 && B-T>4) ? { left:L, top:T, right:R, bottom:B, width:R-L, height:B-T } : null;
+  }catch(e){ return null; }
+}
+function guideFit(A, k, r, W, H, el, prot){
+  const ap=A.approach||{}, bottom=(r.top+r.bottom)/2 > H*(1-(ap.bottomBand||0.3));
+  const stepKey=(GD.cur==='card' && guideVis('inspect')) ? 'play' : GD.cur;   // the card step's zoom face has its own key: 'play'
+  const first=(ap.steps && ap.steps[stepKey]) || (bottom ? (ap.bottom||'above') : (ap.default||'lowerRight'));
+  const order=[first].concat(ap.fallback||[]).filter((n,i,a)=>a.indexOf(n)===i && n in GUIDE_APPROACH);
+  const obst=guideObstacles(el), soft=[...document.querySelectorAll('#mulligan .mull-help')].filter(e=>e.offsetWidth).map(e=>e.getBoundingClientRect());
+  let spots=[[.5,.5],[.5,.72],[.5,.28],[.72,.5],[.28,.5],[.72,.72],[.28,.28],[.72,.28],[.28,.72]];
+  // a BUTTON: the fingertip goes to its right end, between the end of its label and its edge (still inside), so the label stays
+  // readable — and covering the label is weighed against a spot (more than the help line, far less than another control)
+  const label=guideLabelRect(el);
+  if(label){ const fx=Math.min(0.95, Math.max(0.5, ((label.right+r.right)/2 - r.left)/r.width)); spots=[[fx,.5],[fx,.68],[fx,.32]].concat(spots); soft.push(label, label); }
+  else if(el.tagName==='BUTTON') spots=[[.9,.5],[.9,.68],[.9,.32]].concat(spots);   // a picture button (Begin Battle): its right end
+  let best=null;
+  for(const name of order){
+    const ang = GUIDE_APPROACH[name]==null ? A.finger : GUIDE_APPROACH[name];
+    for(const [fx,fy] of spots){
+      const x=r.left+fx*r.width, y=r.top+fy*r.height, P=guideStrip(A,k,x,y,ang);
+      // the fingertip end (the first 35% of the strip) must be on screen; the wrist may run off an edge
+      const t=ang*Math.PI/180, ex=x-Math.cos(t)*A.arm[0]*k*0.35, ey=y-Math.sin(t)*A.arm[0]*k*0.35;
+      let score = (ex<2||ex>W-2||ey<2||ey>H-2) ? 1e5 : 0;
+      for(const o of prot) if(guidePolyHitsRect(P,o)) score+=1e6;
+      for(const o of obst) if(guidePolyHitsRect(P,o)) score+=1000;
+      for(const o of soft) if(guidePolyHitsRect(P,o)) score+=1;   // the label sits in `soft` twice beside the help line's once: 2 vs 1
+      const xs=P.map(p=>p[0]), ys=P.map(p=>p[1]);
+      const c={ name, ang, x, y, score, box:{ left:Math.min(...xs), right:Math.max(...xs), top:Math.min(...ys), bottom:Math.max(...ys) }, poly:P };
+      if(!best || c.score<best.score) best=c;
+      if(!score) return c;
+    }
+  }
+  return best;
+}
+function guidePlace(){
+  const el=GD.target; if(!el || !el.isConnected){ return; }
+  const r=el.getBoundingClientRect(), W=innerWidth, H=innerHeight, prot=guideProtected();
+  // the hand (guide.json "approach"): each step comes from its configured direction — from the lower right by default, from ABOVE
+  // (finger pointing down, wrist up and away) for a target in the bottom band — then the fallbacks; the first approach and fingertip
+  // spot (always INSIDE the target) whose hand-and-wrist strip touches no other tappable control wins. The strip is the arm itself
+  // (guide.json "arm": its length back from the fingertip and its two sides, in the art's pixels), turned with the art.
+  const hand=$('guide-hand'), glow=$('guide-glow'), A=GD.art;
+  let handBox=null, tx=(r.left+r.right)/2, ty=(r.top+r.bottom)/2;
+  if(A){
+    const k=GUIDE_ART.armPx[W<600?0:1]/A.arm[0], S=A.frame*k;   // sized by the arm, so a hand pointing straight down is no taller than one on the diagonal is long
+    const key=[GD.cur, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height), W, H, guideVis('inspect')].join(',');
+    if(!GD.fit || GD.fitKey!==key){ GD.fitKey=key; GD.fit=guideFit(A, k, r, W, H, el, prot); }
+    const f=GD.fit; tx=f.x; ty=f.y; handBox=f.box; GD.fitInfo=f;
+    const place=(img,tip)=>{ img.style.width=S+'px'; img.style.height=S+'px'; img.style.left=(-tip[0]*k)+'px'; img.style.top=(-tip[1]*k)+'px'; };
+    place($('guide-handimg'), A.hand); place($('guide-pressimg'), A.pressed);
+    hand.style.left=tx+'px'; hand.style.top=ty+'px'; hand.style.transform='rotate('+(f.ang-A.finger)+'deg)';
+    hand.classList.toggle('hidden', f.score>=1e6);   // never over a protected control (the zoom's other button, the notice)
+  } else hand.classList.add('hidden');
+  const gs=Math.max(70, Math.min(160, Math.min(r.width, r.height)*1.4));   // the glow: centred under the fingertip
+  const gBox={ left:tx-gs/2, right:tx+gs/2, top:ty-gs/2, bottom:ty+gs/2 };
+  glow.style.width=gs+'px'; glow.style.height=gs+'px'; glow.style.left=gBox.left+'px'; glow.style.top=gBox.top+'px';
+  glow.classList.toggle('hidden', prot.some(p=>guideHit(gBox,p,0)));
+  // the plate: the first band (top · middle · bottom) that covers neither the target, the hand nor a protected control
+  const plate=$('guide-plate'), pw=GD.mullSet ? Math.min(200, W-32) : Math.min(340, W-32); plate.style.width=pw+'px';
+  const ph=plate.offsetHeight||64, avoid=[r].concat(handBox?[handBox]:[]).concat(prot);
+  if(GD.mullSet){ const mh=document.querySelector('#mulligan .mull-col'); if(mh){ [...mh.children].forEach(c=>{ if(c.id!=='mullconfirm' && c.offsetParent!==null) avoid.push(c.getBoundingClientRect()); }); } }   // the Divine Choice: never over its header, its line or the cards
+  const cx=(W-pw)/2, cands=[[cx,70],[cx,Math.round(H*0.40-ph/2)],[cx,Math.round(H-ph-120)],[cx,Math.round(H*0.22)],[cx,Math.round(H-ph-12)],[cx,12]];   // the bands, then the screen's edges
+  if(W>=900) cands.push([W-pw-24, Math.round(H*0.5-ph/2)], [24, Math.round(H*0.5-ph/2)]);   // a wide screen: its empty side margins
+  let best=cands[0], bestN=1e9;
+  for(const [x,t] of cands){ const b={left:x,right:x+pw,top:t,bottom:t+ph}; const n=avoid.filter(a=>guideHit(b,a,6)).length; if(n<bestN){ bestN=n; best=[x,t]; } if(!n) break; }
+  plate.style.left=best[0]+'px'; plate.style.top=best[1]+'px';
+}
+function guideBoot(){
+  GD.booted=true;
+  const pair=(a)=>Array.isArray(a) && a.length===2 && a.every(Number.isFinite);
+  try{ fetch(GUIDE_ART.conf).then(r=>r.ok?r.json():null).then(j=>{ if(j && j.frame>0 && pair(j.hand) && pair(j.pressed) && Array.isArray(j.box) && j.box.length===4 && j.box.every(Number.isFinite) && Number.isFinite(j.finger) && Array.isArray(j.arm) && j.arm.length===3 && j.arm.every(Number.isFinite)) GD.art=j; }).catch(()=>{}); }catch(e){}
+  const load=(id,name)=>{ const el=$(id); if(!el) return; el.onerror=()=>{ el.onerror=null; el.src=GUIDE_ART.dir+name+'.png'; }; el.src=GUIDE_ART.dir+name+'.webp'; };   // WebP, PNG fallback
+  load('guide-handimg','hand_256'); load('guide-pressimg','hand_pressed_256'); load('guide-glow','glow_256');
+  $('guide-skip').textContent=GUIDE_TEXT.skip; $('guide-skip').onclick=guideSkip;
+  $('guide-replay').onclick=()=>{ $('settings').classList.add('hidden'); guideReplay(); };
+  addEventListener('resize', ()=>{ if(GD.target) guidePlace(); });
+  if(guideArmed()) guideStart();
+}
 /* GROWTH-1 #5/#6 (owner rulings 2026-11-06) — THE PLAY-FREE ROUTE. The site's landing button opens /game/ with ?play=free:
    no trailer (R-A/R-B re-ruled for THIS route only — every other launch still meets it), straight to the faction pick,
    the easiest level preselected (Beginner) for this visit only — the player's saved choice is not overwritten. The
@@ -13928,6 +14249,7 @@ function playFreeEntry(){
 function introLaunchCount(){ let n=0; try{ n=parseInt(localStorage.getItem('dy_intro_launches')||'0',10)||0; }catch(e){ n=0; }
   n++; try{ localStorage.setItem('dy_intro_launches', String(n)); }catch(e){} return n; }
 function playIntro(done){
+  try{ guideBoot(); }catch(e){}   // GUIDE-1: the guide boots on the vs-AI road only — playIntro is that road's one entry (the wire and puzzle boots never reach it)
   const ov=$('introv'); if(!ov){ done(); return; }                       // no overlay in the DOM → straight to home
   if(PLAY_FREE){ ov.classList.add('hidden'); playFreeEntry(); return; }   // GROWTH-1 #5/#6: the play-free route skips the trailer → the faction pick
   let finished=false, vid=null, stall=null;

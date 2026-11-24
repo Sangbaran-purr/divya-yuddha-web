@@ -96,6 +96,21 @@
       @keyframes backface { 0%, 49.9% { opacity:1; } 50%, 100% { opacity:0; } }
       @keyframes rise { from { opacity:0; transform:translateX(-50%) translateY(50px) scaleY(.6); } to { opacity:1; transform:translateX(-50%); } }
       @keyframes glow { 0%, 100% { box-shadow:0 0 0 1px #f3d79b inset, 0 10px 30px rgba(217,168,78,.35); } 50% { box-shadow:0 0 0 1px #f3d79b inset, 0 10px 44px rgba(255,201,107,.6); } }
+      /* GUIDE-1 (owner rulings, 24 Nov 2026) — step 1 of the first-battle guide: a pointing hand on "Play free" for a first-time
+         player. The layer takes no taps; only "Skip guide" does. Art + its one config value come from the game copy (game/assets/guide/). */
+      #dyw-guide { position:fixed; inset:0; z-index:50; pointer-events:none; }
+      #dyw-guide .gd-glow { position:fixed; opacity:.8; animation:dygGlow 1.6s ease-in-out infinite; }
+      #dyw-guide .gd-hand { position:fixed; width:0; height:0; transform-origin:0 0; }
+      #dyw-guide .gd-hand img { position:absolute; display:block; filter:drop-shadow(0 3px 6px rgba(0,0,0,.6)); }
+      #dyw-guide .gd-press { opacity:0; animation:dygPress 1.6s step-end infinite; }
+      #dyw-guide .gd-lift { animation:dygLift 1.6s step-end infinite; }
+      @keyframes dygPress { 0% { opacity:0; } 62% { opacity:1; } 84% { opacity:0; } }
+      @keyframes dygLift { 0% { opacity:1; } 62% { opacity:0; } 84% { opacity:1; } }
+      @keyframes dygGlow { 0%, 100% { opacity:.5; transform:scale(.9); } 62% { opacity:.95; transform:scale(1.08); } }
+      @media (prefers-reduced-motion: reduce) { #dyw-guide .gd-glow, #dyw-guide .gd-hand img { animation:none !important; } #dyw-guide .gd-press { opacity:0 !important; } #dyw-guide .gd-lift { opacity:1 !important; } }
+      #dyw-guide .gd-plate { position:fixed; background:rgba(11,10,8,.95); border:1px solid var(--hair); border-radius:12px; padding:10px 14px 4px; text-align:center; box-shadow:0 6px 24px rgba(0,0,0,.6); }
+      #dyw-guide .gd-line { font-family:var(--text); font-weight:500; font-size:18px; line-height:1.35; color:var(--parch); }
+      #dyw-guide .gd-skip { pointer-events:auto; background:none; border:none; color:#b9a888; font-family:var(--display); font-size:12px; letter-spacing:.08em; text-decoration:underline; cursor:pointer; padding:8px 12px; min-height:34px; }
     </style>
   </head>
   <body>
@@ -119,7 +134,7 @@
       <div class="copy">
         <h1><img class="logo-hero" src="assets/landing/logo_hero.webp" width="880" height="570" fetchpriority="high" alt="Divya Yuddha — Battle of the Celestials" /></h1>
         <p class="sub">A free card battle game inspired by Indian mythology. Play in your browser.</p>
-        <a class="play" id="land-play" href="game/index.html?v=abee898&amp;play=free">Play free — no download</a><br />
+        <a class="play" id="land-play" href="game/index.html?v=1dd0d98&amp;play=free">Play free — no download</a><br />
         <a class="explore" href="world.html">Explore the world of Divya Yuddha →</a>
       </div>
     </main>
@@ -176,6 +191,83 @@
         note("chose " + (webkit ? "HEVC (WebKit)" : "WebM (VP9)"));
         var p = v.play(); if (p && p.catch) p.catch(function (e) { note("play() refused: " + (e && e.name) + " — the still stays"); });
       });
+    })();
+    </script>
+    <script>
+    /* GUIDE-1 (owner rulings, 24 Nov 2026) — step 1 of the first-battle guide, on this page only. A first-time player (the game copy's
+       records, read under its own "dyw::" prefix: no finished match vs AI, the guide not done) sees a pointing hand on "Play free"
+       and one line. The game copy carries steps 2-10; "Skip guide" here ends the whole guide (the same record the copy reads). */
+    (function () {
+      "use strict";
+      var NS = "dyw::", LINE = "Tap here to start your first battle.", SKIP = "Skip guide", BASE = "game/assets/guide/";
+      function get(k) { try { return JSON.parse(localStorage.getItem(NS + k) || "null"); } catch (e) { return null; } }
+      function put(k, v) { try { localStorage.setItem(NS + k, JSON.stringify(v)); } catch (e) {} }
+      var g = get("dy_guide") || {}, prof = get("dy_profile");
+      if (g.done || (!g.replay && prof && (prof.matches | 0) > 0)) return;
+      var target = document.getElementById("land-play"); if (!target) return;
+      g.v = 1; g.seen = g.seen || {}; g.steps = g.steps || {}; if (!g.steps.arrived) { g.steps.arrived = new Date().toISOString().slice(0, 10); put("dy_guide", g); }
+      var still = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+      var L = document.createElement("div"); L.id = "dyw-guide"; L.setAttribute("aria-live", "polite");
+      L.innerHTML = '<img class="gd-glow" alt=""><div class="gd-hand"><img class="gd-lift" alt=""><img class="gd-press" alt=""></div><div class="gd-plate"><div class="gd-line"></div><button type="button" class="gd-skip"></button></div>';
+      L.querySelector(".gd-line").textContent = LINE; L.querySelector(".gd-skip").textContent = SKIP;
+      var glow = L.querySelector(".gd-glow"), hand = L.querySelector(".gd-hand"), lift = L.querySelector(".gd-lift"), press = L.querySelector(".gd-press"), plate = L.querySelector(".gd-plate");
+      function load(el, name) { el.onerror = function () { el.onerror = null; el.src = BASE + name + ".png"; }; el.src = BASE + name + ".webp"; }
+      load(lift, "hand_256"); load(press, "hand_pressed_256"); load(glow, "glow_256");
+      var A = null, raf = 0, gone = false;
+      L.querySelector(".gd-skip").onclick = function (e) { e.preventDefault(); e.stopPropagation(); var d = get("dy_guide") || {}; d.v = 1; d.done = true; d.skipped = true; d.replay = false; put("dy_guide", d); gone = true; L.remove(); };
+      function seeable(el) { var a = 1; for (var e = el; e && e.nodeType === 1; e = e.parentElement) { var cs = getComputedStyle(e); if (cs.display === "none" || cs.visibility === "hidden") return false; var o = parseFloat(cs.opacity); if (isFinite(o)) a *= o; } return a >= 0.6; }
+      function hit(a, b, p) { return a.left < b.right + p && a.right > b.left - p && a.top < b.bottom + p && a.bottom > b.top - p; }
+      function place() {
+        if (gone) return;
+        if (!seeable(target)) { L.style.visibility = "hidden"; return; }
+        L.style.visibility = "";
+        var r = target.getBoundingClientRect(), W = innerWidth, H = innerHeight, tx = (r.left + r.right) / 2, ty = (r.top + r.bottom) / 2, box = null;
+        if (A) {
+          /* the game's placement: the configured approach first (from the lower right by default, from above in the bottom band),
+             then the fallbacks; the fingertip stays inside the button; the hand-and-wrist strip may touch no other link or button */
+          var k = (W < 600 ? 88 : 100) / A.arm[0], S = A.frame * k, ap = A.approach || {};
+          var DIRS = { lowerRight: A.finger, lowerLeft: -46, above: 90, below: -90, right: 180, left: 0 };
+          var first = (r.top + r.bottom) / 2 > H * (1 - (ap.bottomBand || 0.3)) ? (ap.bottom || "above") : (ap.default || "lowerRight");
+          var order = [first].concat(ap.fallback || []).filter(function (n, i, a) { return a.indexOf(n) === i && n in DIRS; });
+          var obst = []; Array.prototype.forEach.call(document.querySelectorAll("a[href], button"), function (e) { if (e === target || e.closest("#dyw-guide")) return; var q = e.getBoundingClientRect(); if (q.width > 0 && q.height > 0 && q.bottom > 0 && q.top < H) obst.push(q); });
+          function strip(x, y, ang) { var t = ang * Math.PI / 180, ux = Math.cos(t), uy = Math.sin(t), vx = -uy, vy = ux, L = A.arm[0] * k, s0 = A.arm[1] * k, s1 = A.arm[2] * k;
+            return [[x + vx * s0, y + vy * s0], [x + vx * s1, y + vy * s1], [x - ux * L + vx * s1, y - uy * L + vy * s1], [x - ux * L + vx * s0, y - uy * L + vy * s0]]; }
+          function polyHits(P, R) { var axes = [[1, 0], [0, 1]], i, j; for (i = 0; i < 2; i++) axes.push([-(P[i + 1][1] - P[i][1]), P[i + 1][0] - P[i][0]]);
+            var RP = [[R.left, R.top], [R.right, R.top], [R.right, R.bottom], [R.left, R.bottom]];
+            for (i = 0; i < axes.length; i++) { var ax = axes[i][0], ay = axes[i][1], a0 = 1e9, a1 = -1e9, b0 = 1e9, b1 = -1e9;
+              for (j = 0; j < 4; j++) { var d = P[j][0] * ax + P[j][1] * ay; a0 = Math.min(a0, d); a1 = Math.max(a1, d); d = RP[j][0] * ax + RP[j][1] * ay; b0 = Math.min(b0, d); b1 = Math.max(b1, d); }
+              if (a1 <= b0 || b1 <= a0) return false; }
+            return true; }
+          var spots = [[.5, .5], [.5, .72], [.5, .28], [.72, .5], [.28, .5], [.72, .72], [.28, .28]], best = null, label = null;
+          try { var rg = document.createRange(); rg.selectNodeContents(target); label = rg.getBoundingClientRect(); if (!(label.width > 4)) label = null; } catch (e) { label = null; }
+          if (label) { var fx = Math.min(0.95, Math.max(0.5, ((label.right + r.right) / 2 - r.left) / r.width)); spots = [[fx, .5], [fx, .68], [fx, .32]].concat(spots); }   /* the button's right end: its words stay readable */
+          outer: for (var oi = 0; oi < order.length; oi++) for (var si = 0; si < spots.length; si++) {
+            var ang = DIRS[order[oi]], x = r.left + spots[si][0] * r.width, y = r.top + spots[si][1] * r.height, P = strip(x, y, ang), t = ang * Math.PI / 180;
+            var ex = x - Math.cos(t) * A.arm[0] * k * 0.35, ey = y - Math.sin(t) * A.arm[0] * k * 0.35, score = (ex < 2 || ex > W - 2 || ey < 2 || ey > H - 2) ? 1e5 : 0;
+            obst.forEach(function (o) { if (polyHits(P, o)) score += 1000; }); if (label && polyHits(P, label)) score += 2;
+            var xs = P.map(function (p) { return p[0]; }), ys = P.map(function (p) { return p[1]; });
+            var c = { ang: ang, x: x, y: y, score: score, box: { left: Math.min.apply(0, xs), right: Math.max.apply(0, xs), top: Math.min.apply(0, ys), bottom: Math.max.apply(0, ys) } };
+            if (!best || c.score < best.score) best = c;
+            if (!score) break outer;
+          }
+          tx = best.x; ty = best.y; box = best.box; L.dataset.score = best.score;
+          [[lift, A.hand], [press, A.pressed]].forEach(function (f) { f[0].style.width = S + "px"; f[0].style.height = S + "px"; f[0].style.left = (-f[1][0] * k) + "px"; f[0].style.top = (-f[1][1] * k) + "px"; });
+          hand.style.left = tx + "px"; hand.style.top = ty + "px"; hand.style.transform = "rotate(" + (best.ang - A.finger) + "deg)"; hand.style.display = "";
+        } else hand.style.display = "none";
+        var gs = Math.max(70, Math.min(160, Math.min(r.width, r.height) * 1.4));
+        glow.style.width = gs + "px"; glow.style.height = gs + "px"; glow.style.left = (tx - gs / 2) + "px"; glow.style.top = (ty - gs / 2) + "px";
+        var pw = Math.min(340, W - 32); plate.style.width = pw + "px"; plate.style.left = ((W - pw) / 2) + "px";
+        var ph = plate.offsetHeight || 70, avoid = [r].concat(box ? [box] : []), tops = [Math.round(r.top - ph - 24), 70, Math.round(H * 0.4 - ph / 2), Math.round(H - ph - 24)], top = tops[1], n0 = 1e9;
+        tops.forEach(function (tp) { if (tp < 8 || tp + ph > H - 8) return; var bb = { left: (W - pw) / 2, right: (W + pw) / 2, top: tp, bottom: tp + ph }; var n = avoid.filter(function (a) { return hit(bb, a, 6); }).length; if (n < n0) { n0 = n; top = tp; } });
+        plate.style.top = top + "px";
+      }
+      function loop() { raf = 0; if (gone) return; place(); raf = requestAnimationFrame(loop); }
+      function start() {
+        if (still) { glow.style.animation = "none"; lift.style.animation = "none"; press.style.animation = "none"; press.style.opacity = "0"; }
+        document.body.appendChild(L); loop();
+        try { fetch(BASE + "guide.json").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.frame > 0 && j.hand && j.pressed && j.box && isFinite(j.finger) && j.arm) A = j; }).catch(function () {}); } catch (e) {}
+      }
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
     })();
     </script>
   </body>

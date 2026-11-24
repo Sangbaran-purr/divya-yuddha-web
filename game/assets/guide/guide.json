@@ -1,0 +1,1 @@
+{"frame":1254,"hand":[232,230],"pressed":[222,293],"box":[220,213,1117,1145],"finger":-134,"arm":[1181,-257,261],"approach":{"default":"lowerRight","bottom":"above","bottomBand":0.3,"steps":{"play":"below"},"fallback":["above","right","lowerRight","lowerLeft","left","below"]}}

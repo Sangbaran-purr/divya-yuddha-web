@@ -33,7 +33,11 @@ NS_PREFIX="dyw::"
 # (FX.base) via new URL(rel, base), so rewriting that base cross-links the whole tree; asserted exactly once below.
 # SYNC-NARRATOR-1: src/narrator.js is archived too — the battle-log narrator (game GL-1..3). index.html loads it; without it
 # the recorder switches itself off and the Hall's wire faces carry no VIEW BATTLE LOG. Guarded below, like the engine copy.
-ARCHIVE_PATHS="index.html src/chapters.js src/engine.js src/narrator.js assets/vendor"
+# GUIDE-1 (owner rulings, 24 Nov 2026): assets/guide/ (the first-battle guide's hand, pressed hand and glow — 256px WebP + PNG, and
+# guide.json, the art's one config value; ~140 KB) is archived like assets/vendor: the copy reads it same-origin, and the site's
+# landing (step 1) reads it from game/assets/guide/. The owner's 1254px originals sit beside them but are git-ignored, so the
+# archive (which reads git) never carries them.
+ARCHIVE_PATHS="index.html src/chapters.js src/engine.js src/narrator.js assets/vendor assets/guide"
 
 if [ ! -f "$GAME_REPO/index.html" ] || [ ! -d "$GAME_REPO/assets/cards" ]; then
   echo "error: GAME_REPO does not look like the game ($GAME_REPO)" >&2
