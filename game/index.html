@@ -5436,7 +5436,7 @@ if (typeof module!=='undefined'){
     }
     cues.forEach(function (c) { if (c.sound === null) delete c.sound; });
     cues.sort(function (x, y) { return x.t - y.t; });
-    return { mode: mode, chained: chained, clip: clip, strike: !!b.strike, arming: arming, drain: b.drain || null, targetUid: b.targetUid, casterSeat: opts.casterSeat != null ? opts.casterSeat : null,
+    return { mode: mode, chained: chained, clip: clip, strike: !!b.strike, arming: arming, drain: b.drain || null, targetUid: b.targetUid, struckUids: (b.strike && b.strike.targetUids) ? b.strike.targetUids.slice() : [], casterSeat: opts.casterSeat != null ? opts.casterSeat : null,
              timeline: T, segments: segments, cues: cues, end: cues[cues.length - 1].t };
   }
 
@@ -5555,7 +5555,16 @@ if (typeof module!=='undefined'){
         // LAB-22: TOP-FLUSH — the plate's anchor (its top-centre) on the enemy half's TOP edge; a half that reports no top plays no clip (fail-open)
         // EXPORT-4: a height-capped plate needs the half's height (no height, no clip — it could not be kept inside the half)
         if (sg.place === 'enemy-half-top') return hh && target && hh.top != null && (!m.scaleRule.halfFraction || hh.w > 0) && (!m.scaleRule.heightCap || hh.h > 0) ? place(m, { cx: hh.cx, cy: hh.top, w: target.w, halfW: hh.w, halfH: hh.h }) : null;
-        return hh && target ? place(m, { cx: hh.cx, cy: hh.cy, w: target.w, halfW: hh.w, halfH: hh.h }) : null;   // the card width still sets the scale (cardWidths), the half sets the centre
+        var pc = hh && target ? place(m, { cx: hh.cx, cy: hh.cy, w: target.w, halfW: hh.w, halfH: hh.h }) : null;   // the card width still sets the scale (cardWidths), the half sets the centre
+        // WAVE1-CLIPS-1 (owner ruling, 25 Nov 2026): on a half wider than the plate, the plate is centred on the SPAN of the Units it strikes, slid
+        // only as far as keeps it wholly inside the half (never past its sides; its height never leaves the half, so never across the middle line).
+        // Where the plate is the half's full width (a phone) there is no room to slide: unchanged.
+        if (pc && sg.place === 'enemy-half' && env.cardOf && p.struckUids && p.struckUids.length && pc.w < hh.w) {
+          var lo = Infinity, hi = -Infinity;
+          p.struckUids.forEach(function (u) { var c = env.cardOf(u); if (c && c.w > 0) { lo = Math.min(lo, c.cx - c.w / 2); hi = Math.max(hi, c.cx + c.w / 2); } });
+          if (hi > lo) { var left = hh.cx - hh.w / 2, cx = Math.max(left + pc.w / 2, Math.min(left + hh.w - pc.w / 2, (lo + hi) / 2)); pc.x += cx - hh.cx; }
+        }
+        return pc;
       });
       if (st.loaded) release();
       env.render(boards.before);
@@ -10287,10 +10296,12 @@ function attachArt(el, c, faction, board){
   if (c.ghost || c.id==='ghost') return;            // Yama tokens have no art
   const img=new Image();
   img.className='art'; img.alt=c.n;
-  img.onload=()=>{ el.insertBefore(img, el.firstChild); el.classList.add('has-art'); };
+  const put=()=>{ if (img.parentNode!==el){ el.insertBefore(img, el.firstChild); el.classList.add('has-art'); } };
+  img.onload=put;
   if (board){ img.onerror=()=>{ img.onerror=null; img.src=cardArtSrc(c, faction); };   // T93b: a missing board tile (e.g. The Setu Stones — no master) falls back to the framed card; if THAT 404s too, the (nulled) handler leaves it unloaded (no-art fallback, as before)
     img.src=boardTileSrc(c, faction); }
   else img.src=cardArtSrc(c, faction);              // hand + inspect keep the framed derivative, unchanged
+  if (img.complete && img.naturalWidth>0) put();    // WAVE1-CLIPS-1: a picture already in the cache is drawn at once — a redrawn row (the held board at its beat) never shows the name-only placeholder for a frame
 }
 
 /* ---------- board minis (art-first, medallion power) ---------- */
@@ -12168,7 +12179,8 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
       await cDelay(1750);   // hold the fire beat (28f @ SHEET_FPS 16 = 1750ms; cDelay scales by vfxT so the await tracks the sprite life)
     }
     return; }
-  if(ev.type==='token' && ev.abilityName==='Nagastra'){ const t0=(ev.targetUids||[])[0]; if(t0!=null){ const es=ownerPiOfUid(t0), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprNagastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } } }   // NAGASTRA — THE STOLEN SERPENT contamination plate over the ENVENOMED (enemy) half. Anchor = ownerPiOfUid of the first token target (= the envenomed side; equivalent to 1-ownerPiOfUid(caster), read straight off the targets). ADD, SUPPRESS NOTHING — NO return: the generic token beat below (source pulse / callout / per-foe ☠ badge floaters / sfx_venom_apply / persistent .venombadge) plays WHOLE; the plate is the WEATHER, the beat is the rain. DIM venom register — no hit-stop (the spectacle astra PLAY beat already carried the impact). Chaos Surge (Asura caster) fires its OWN serialized beat inside this same loop (line ~9188, ownerPiOfUid(buffed unit)) — the wash on the ASURA half, opposite this plate, never merged.
+  if(ev.type==='token' && ev.abilityName==='Nagastra'){ const t0=(ev.targetUids||[])[0]; if(t0!=null){ const es=ownerPiOfUid(t0), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(), fire=()=>VFX.sprNagastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(fxOwnsMoment('nagastra')) FX.pendingFire=fire; else fire(); } } }   // WAVE1-CLIPS-1: the Nagastra clip owns this beat (its strike lands on the tokens); not ready, failing or stood down → the classic plate, late if the clip fails after the beat (the Lanka precedent). NAGASTRA — THE STOLEN SERPENT contamination plate over the ENVENOMED (enemy) half. Anchor = ownerPiOfUid of the first token target (= the envenomed side; equivalent to 1-ownerPiOfUid(caster), read straight off the targets). ADD, SUPPRESS NOTHING — NO return: the generic token beat below (source pulse / callout / per-foe ☠ badge floaters / sfx_venom_apply / persistent .venombadge) plays WHOLE; the plate is the WEATHER, the beat is the rain. DIM venom register — no hit-stop (the spectacle astra PLAY beat already carried the impact). Chaos Surge (Asura caster) fires its OWN serialized beat inside this same loop (line ~9188, ownerPiOfUid(buffed unit)) — the wash on the ASURA half, opposite this plate, never merged.
+  if(ev.type==='damage' && ev.abilityName==='Agneyastra'){ const t0=(ev.targetUids||[])[0], dp=t0!=null?posOf(t0, snap):null; if(dp){ const fire=()=>VFX.sprDamage(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width*1.6); if(fxOwnsMoment('agneyastra')) FX.pendingFire=fire; else fire(); } }   // WAVE1-CLIPS-1 (ruling 3): the Agneyastra clip owns its damage beat (the fire ring on the one Unit hit); not ready, failing or stood down → the fallback it lacked: the game's shared damage strike at strike size on the target (late if the clip fails after the beat). The generic damage tick and number below play as always
   if (src && (ev.type==='buff'||ev.type==='token')){ cpulse(src.el,'choreo-src'); calloutAt(src, ev.abilityName); }
   const tgts=ev.targetUids||[];
   if (!tgts.length){ await cDelay(180); return; }
@@ -12343,8 +12355,9 @@ function fxPlayer(){
   return FX.player;
 }
 function fxTick(){
-  const r=FX.run; if(!r || r.done || !FX.player){ FX.raf=0; return; }
+  const r=FX.run; if(!r || r.done || !FX.player){ FX.raf=0; if(FX.atImpact) FX.atImpact(); return; }
   try{ FX.player.frame(performance.now()); }catch(e){ fxOnError(e); }
+  if(FX.atImpact && (!FX.run || FX.run.done || FX.run.log.impactDrawnAt!=null)) FX.atImpact();   // WAVE1-CLIPS-1: the held board moves in the frame that draws the impact cell
   FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
 }
 // the cast: start the routed clip on the game's clock, or return null and let the classic sprite play
@@ -12379,6 +12392,7 @@ function fxOwnsMoment(cardId, fire){
   return true;
 }
 function fxOnError(e){
+  if(FX.atImpact) FX.atImpact();   // WAVE1-CLIPS-1: a clip that fails releases a held step waiting for its impact cell at once
   const card=FX.owner; fxNote('clip-error', { card, error:String(e&&e.message||e) }, true);
   const fire=FX.pendingFire; FX.pendingFire=null;
   if(fire){ try{ fire(); }catch(x){} fxNote('fell-back', { card, why:'the clip failed after its cast — the classic sprite fired late' }); }
@@ -12392,7 +12406,7 @@ function fxBeatFrom(ev){
   const heard = FX.player && FX.run && !FX.run.done ? FX.player.beat() : false;
   if(!heard && FX.capFire){ const f=FX.capFire; FX.capFire=null; try{ f(); }catch(e){} fxNote('fell-back', { card:FX.owner, why:'the beat came after the cap — the classic sprite took it' }); }
 }
-function fxSkip(){ FX.pendingFire=null; FX.beatWant=null; FX.capFire=null; if(FX.player && FX.run && !FX.run.done){ try{ FX.player.skip(); }catch(e){} } FX.run=null; FX.owner=null; }
+function fxSkip(){ if(FX.atImpact) FX.atImpact(); FX.pendingFire=null; FX.beatWant=null; FX.capFire=null; if(FX.player && FX.run && !FX.run.done){ try{ FX.player.skip(); }catch(e){} } FX.run=null; FX.owner=null; }
 /* ══ EXPORT-6 — VASUKI VENOM STRIKE: the RISE at the cast, the FLOOD at the empowered round-end drain ══════════════════════════════
    Owner rulings (2026-09-19): "Export Vasuki Venom in live game." then "Go." — A: hand-entry prefetch only, and the ready-anchored rise;
    B: the drain side-check; C: the staked-road striker from the cast's own play event; D: the flood ends a still-playing rise.
@@ -12873,10 +12887,10 @@ function heldFinish(g, sawDrain){
   delete g.__lastDeath;
 }
 function reBoardUids(g){ const s=new Set(); for(const pi of [ME, OPP]){ const p=g.players[pi]; for(const c of p.units.concat(p.heroes)) if(c) s.add(c.uid); } return s; }
-// PASHU-ORDER-1 (owner rulings R1–R8, 22 Nov 2026) — THE HELD PLAY: Brahmastra and Pashupatastra only. The board from before the
+// PASHU-ORDER-1 (owner rulings R1–R8, 22 Nov 2026) — THE HELD PLAY: Brahmastra and Pashupatastra; Agneyastra and Nagastra from WAVE1-CLIPS-1. The board from before the
 // play shows through the opponent's showcase and the cast, and moves forward one event at a time on each event's own beat (the
 // round-end road's held copy, reused). The engine is untouched; the copy is display only and the live board wins at the end.
-const HELD_PLAYS={ 'Brahmastra':1, 'Pashupatastra':1 };
+const HELD_PLAYS={ 'Brahmastra':1, 'Pashupatastra':1, 'Agneyastra':1, 'Nagastra':1 };   // WAVE1-CLIPS-1 (owner ruling, 25 Nov 2026): Agneyastra's damage and Nagastra's Venom tokens wait for their own beat too — the clip's impact frame (f003 / f032) or, not ready, the classic effect at the same beat
 function heldPlayOf(evs){ const p=(evs||[]).find(e=>e.type==='play'); return (p && HELD_PLAYS[p.abilityName]) ? p : null; }
 // the display copy of ANY board, a staked view included (copied, never changed in place); never the events or the log
 function heldCopyAny(g){ if (!g) return null; const seen=new Map(), o={}; for (const k in g){ if (k==='events' || k==='log') continue; o[k]=reCopy(g[k], seen); } return o; }
@@ -13096,11 +13110,20 @@ function runAction(mutate, opts={}){
               const kids=[...el.parentElement.children].filter(n=>n.classList.contains('bc')); ((RE.gaps=RE.gaps||{})[el.parentElement.id]=RE.gaps[el.parentElement.id]||[]).push({ index: kids.indexOf(el), node: sp }); } }   // its space stays while a card of its row still waits for its own beat
           heldStep(RE.g, ev, MH.gone, G, evs[i+1]); if (heldSig(RE.g)!==s0) reDrawHeld(heldCounts(RE.g)===n0); choreoCredit+=performance.now()-c0;
         }catch(e){ heldRelease(MH, 'error: '+(e&&e.message)); try{ clearVictims(); render(); }catch(e2){} } };
+      // WAVE1-CLIPS-1 (owner ruling, 25 Nov 2026): when a live clip owns this event's beat and has not yet drawn its impact cell, the held board
+      // moves in the animation frame that draws it (fxTick) — never a frame before; a clip that fails, stands down or is skipped releases it at
+      // once, and a frame clock that has stopped (250 ms) cannot hold it longer. With no clip (the classic path) it moves at the start of the beat.
+      let impactWait=null;
+      const flushImpact=()=>{ const w=impactWait; impactWait=null; FX.atImpact=null; if(w){ clearTimeout(w.t); w.go(); } };
+      const clipHoldsBeat=(ev)=>{ const w=FX.beatWant, r=FX.run; return !!(w && r && !r.done && FX.player && ev.type===w.trigger && ev.abilityName===w.abilityName && r.log && r.log.impactDrawnAt==null && !r.log.loadErrors.length && !r.log.drawError); };
       for (const ev of evs){ if(choreoSkip) break; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; const i=evs.indexOf(ev);
-        if (heldLive() && ev.type!=='destroy') heldAt(ev, i);   // PASHU-ORDER-1: the copy moves at the START of this event's own beat (R3) — its number turns at the impact, and the redraw's time is repaid inside the same beat (R2)
+        flushImpact();
+        if (heldLive() && ev.type!=='destroy' && clipHoldsBeat(ev)){ impactWait={ go:()=>{ if (heldLive()) heldAt(ev, i); }, t:setTimeout(flushImpact, 250) }; FX.atImpact=flushImpact; }
+        else if (heldLive() && ev.type!=='destroy') heldAt(ev, i);   // PASHU-ORDER-1: the copy moves at the START of this event's own beat (R3) — its number turns at the impact, and the redraw's time is repaid inside the same beat (R2)
         try{ await playEvent(ev, snap, evs); }catch(e){}
         if (heldLive() && ev.type==='destroy') heldAt(ev, i);
         if (heldLive() && RE.gaps){ try{ let closed=false; for (const id in RE.gaps) if (!heldWaiting($(id), i)){ delete RE.gaps[id]; closed=true; } if (closed){ const c0=performance.now(); reDrawHeld(); choreoCredit+=performance.now()-c0; } }catch(e){} } }   // a row whose every card has had its beat closes up now, once (R3)   // a death: the real card has cracked in its own place; the row closes up only now, when the dwell ends (R3). Any error in the held road → the live board at once (R8)
+      flushImpact();
       if (heldLive() && !choreoSkip){ try{ const s0=heldSig(RE.g), n0=heldCounts(RE.g), hadGaps=!!(RE.gaps && Object.keys(RE.gaps).length); RE.gaps=null; heldMidFinish(RE.g, G); MH.done=true; if (heldSig(RE.g)!==s0 || hadGaps) reDrawHeld(!hadGaps && heldCounts(RE.g)===n0); }catch(e){ heldRelease(MH, 'error: '+(e&&e.message)); try{ render(); }catch(e2){} } }   // skip a broken step (e.g. a VFX drawImage race) — keep the match playable. HEARTBEAT (round-end venom fix): reset the watchdog clock BEFORE each event so the 8s watchdog (below, ~8126) measures STALL-since-last-beat, NOT total duration. A legitimately long round-end — a wide venomed board's per-unit ☠ ticks (~572ms each × 12+ units ≈ 7s+) — used to trip the absolute 8s cap, force-finishing the choreo so the round-end RESOLUTION BEAT (the totals count that shows the venom reducing the points) got snapped/skipped and the winner banner fired without the visible drop. With the heartbeat a PROGRESSING choreo never trips it (each event refreshes the budget); a genuinely STUCK one (no beat for 8s, or a hung single event) still does — and animateTotals stays double-protected by choreoRace's 3s cap. Mid-round choreos are short → the reset is a no-op there (nothing changes for mid-round totals).
       const roundEnded = G.roundHistory.length>roundCountAtActionStart && !G.over;
       if (roundEnded && !choreoSkip){   // ITEMS 2+3 — round-end RESOLUTION BEAT: the round-end effects (venom/round-end tier) already choreographed above; now settle the totals to the ROUND'S TRUE FINAL scores (roundHistory[last] — post-venom, PRE board-reset) so the score flip that decided the winner is VISIBLE, then hold before the banner. (Was: animateTotals→live totalPower = the post-RESET board = the desync root.)
