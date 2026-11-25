@@ -1,9 +1,9 @@
 # Gated game snapshot
 
 - Source repo: divya-yuddha
-- Source commit: `3910b506a4ee7921329d1584e64120cbaff4d348` (3910b50)
-- Source committed: 2026-11-25 14:49:23 +0530
-- Copy id (the stamp, GUEST-PLAY-1): `75da267` — 7 hex of the sha-256 of game/index.html
+- Source commit: `fb5310d717d34649e581889228b14e6e1c27914e` (fb5310d)
+- Source committed: 2026-11-25 20:07:01 +0530
+- Copy id (the stamp, GUEST-PLAY-1): `37842cd` — 7 hex of the sha-256 of game/index.html
 - Method: `git archive` of the recorded commit (the free-game working tree is never modified; working-tree dirt is ignored, so this copy is reproducible and complete against the commit).
 
 ## Copied from the commit
@@ -42,13 +42,13 @@
 
 ## Notes at sync time
 - Source working tree dirty files: 47 (ignored by the archive method).
-- game/ in-repo size: 2536 KB.
+- game/ in-repo size: 2544 KB.
 
 ## Entry-link stamps (S8 flag-1)
-- The twenty-five site->game links (rite.html x5, index.html x3, treasury.html x2, demo/index.html x2, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2, play/daily/index.html x1, play/smriti/index.html x2 — LINK-HOME-1) are stamped game/index.html?v=75da267 — the COPY ID (GUEST-PLAY-1): the first 7 hex of the sha-256 of this game/index.html, so they change exactly when the copy's BYTES change (a new source commit OR a changed injected block). The sync fails if the link count is not exactly 22.
+- The twenty-five site->game links (rite.html x5, index.html x3, treasury.html x2, demo/index.html x2, store.html x2, explore.html x2, mint.html x2, dashboard.html x2, my-invites.html x2, play/daily/index.html x1, play/smriti/index.html x2 — LINK-HOME-1) are stamped game/index.html?v=37842cd — the COPY ID (GUEST-PLAY-1): the first 7 hex of the sha-256 of this game/index.html, so they change exactly when the copy's BYTES change (a new source commit OR a changed injected block). The sync fails if the link count is not exactly 22.
 
 ## STAMP (S-HALL-WIRE-1 R4)
-- game/STAMP holds the copy id (75da267), plain text (the source commit is recorded above). The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
+- game/STAMP holds the copy id (37842cd), plain text (the source commit is recorded above). The Hall reads it (no-store) to build its battle frame's URL (../game/index.html?v=<sha>&wire=1), so the frame is bound to these bytes without mp/ joining the entry-link ledger: STAMP is a file the sync owns, not a link in mp/.
 
 ## Refresh
     bash scripts/sync_game.sh

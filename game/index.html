@@ -5414,7 +5414,7 @@ if (typeof module!=='undefined'){
     var glow = chained && spec.chain.shape === 'strike-afterglow';
     var T = glow ? afterglowTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : chained ? chainTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : arming ? armingTimeline(spec, SPEED[mode], opts.choreoSpeed) : timeline(spec, SPEED[mode], opts.choreoSpeed);
     var clip = !!(b.cast && (b.strike || arming)) && mode !== 'reduced', segments = [], cues = [];
-    var HALF_PLACES = { 'enemy-half-centre': 'enemy-half', 'enemy-half-top': 'enemy-half-top', 'enemy-half-bottom': 'enemy-half-bottom', 'caster-half-bottom': 'caster-half-bottom' };
+    var HALF_PLACES = { 'enemy-half-centre': 'enemy-half', 'enemy-half-top': 'enemy-half-top', 'enemy-half-bottom': 'enemy-half-bottom', 'caster-half-bottom': 'caster-half-bottom', 'caster-half-centre': 'caster-half' };   // WAVE1-CLIPS-1 batch 2: + the caster's own half, centred
     if (clip && glow) segments.push({ role: 'strike', clip: 0, start: T.strikeStart, end: Math.min(T.strikeEnd, T.handoffAt), frameMs: T.frameMs, place: k.anchor, impact: spec.clips[0].impact },
                                     { role: 'afterglow', clip: 1, start: T.afterglowStart, end: T.afterglowEnd, frameMs: T.afterglowFrameMs, place: k.afterglowAnchor, impact: null });
     else if (clip && chained) segments.push({ role: 'invoke', clip: 0, start: T.invokeStart, end: T.handoffAt, frameMs: T.invokeFrameMs, place: 'caster-half' },
@@ -5555,13 +5555,16 @@ if (typeof module!=='undefined'){
         // LAB-22: TOP-FLUSH — the plate's anchor (its top-centre) on the enemy half's TOP edge; a half that reports no top plays no clip (fail-open)
         // EXPORT-4: a height-capped plate needs the half's height (no height, no clip — it could not be kept inside the half)
         if (sg.place === 'enemy-half-top') return hh && target && hh.top != null && (!m.scaleRule.halfFraction || hh.w > 0) && (!m.scaleRule.heightCap || hh.h > 0) ? place(m, { cx: hh.cx, cy: hh.top, w: target.w, halfW: hh.w, halfH: hh.h }) : null;
-        var pc = hh && target ? place(m, { cx: hh.cx, cy: hh.cy, w: target.w, halfW: hh.w, halfH: hh.h }) : null;   // the card width still sets the scale (cardWidths), the half sets the centre
+        var halfPlate = sg.place === 'enemy-half' || sg.place === 'caster-half';
+        var pc = hh && (target || (halfPlate && m.scaleRule.halfFraction)) ? place(m, { cx: hh.cx, cy: hh.cy, w: target ? target.w : 0, halfW: hh.w, halfH: hh.h }) : null;   // the card width still sets the scale (cardWidths), the half sets the centre; WAVE1-CLIPS-1 batch 2: a half plate sized by the half needs no target card (a play-triggered clip)
         // WAVE1-CLIPS-1 (owner ruling, 25 Nov 2026): on a half wider than the plate, the plate is centred on the SPAN of the Units it strikes, slid
         // only as far as keeps it wholly inside the half (never past its sides; its height never leaves the half, so never across the middle line).
         // Where the plate is the half's full width (a phone) there is no room to slide: unchanged.
-        if (pc && sg.place === 'enemy-half' && env.cardOf && p.struckUids && p.struckUids.length && pc.w < hh.w) {
-          var lo = Infinity, hi = -Infinity;
-          p.struckUids.forEach(function (u) { var c = env.cardOf(u); if (c && c.w > 0) { lo = Math.min(lo, c.cx - c.w / 2); hi = Math.max(hi, c.cx + c.w / 2); } });
+        if (pc && halfPlate && pc.w < hh.w) {   // WAVE1-CLIPS-1 batch 2: the struck Units — or, for a play-triggered clip (no struck Units), every Unit on the plate's half (env.unitsOf)
+          var lo = Infinity, hi = -Infinity, rects = [];
+          if (p.struckUids && p.struckUids.length && env.cardOf) p.struckUids.forEach(function (u) { var c = env.cardOf(u); if (c) rects.push(c); });
+          else if (env.unitsOf) rects = env.unitsOf(seat) || [];
+          rects.forEach(function (c) { if (c && c.w > 0) { lo = Math.min(lo, c.cx - c.w / 2); hi = Math.max(hi, c.cx + c.w / 2); } });
           if (hi > lo) { var left = hh.cx - hh.w / 2, cx = Math.max(left + pc.w / 2, Math.min(left + hh.w - pc.w / 2, (lo + hi) / 2)); pc.x += cx - hh.cx; }
         }
         return pc;
@@ -10456,7 +10459,7 @@ function render(targetSet){
   // hand carousel
   const hand=$('hand'); hand.innerHTML='';
   const play=new Set(Q.playableIndices(G,ME));
-  const myTurn = G.turn===ME && !me.passed && !G.over;
+  const myTurn = heldTurn()===ME && !me.passed && !G.over;   // WAVE1-CLIPS-1 batch 2: heldTurn() is G.turn except while a held Tamasa waits for its slam
   me.hand.forEach((c,i)=>{
     const d=document.createElement('div');
     const ok = myTurn && play.has(i);
@@ -10480,7 +10483,7 @@ function render(targetSet){
   const shieldable = me.faction==='devas' && me.shieldUids.length < Q.shieldCap(me) && me.units.some(u=>!u.ghost && u.t==='unit' && !Q.isShielded(G,ME,u));
   $('shieldbtn').classList.toggle('hidden', !(myTurn && shieldable && !leapMode && !placeMode && !shieldMode && !pendingPlay && !unbindMode));
   $('unbindbtn').classList.toggle('hidden', !(myTurn && myBoundCards().length && !leapMode && !placeMode && !shieldMode && !pendingPlay && !unbindMode));   // RULES-FIX-1 1.3: a bound Hero counts too
-  $('turnind').textContent = G.over?'MATCH OVER': myTurn?'YOUR TURN': me.passed&&op.passed?'—': (G.turn===OPP?'OPPONENT…':'…');
+  $('turnind').textContent = G.over?'MATCH OVER': myTurn?'YOUR TURN': me.passed&&op.passed?'—': (heldTurn()===OPP?'OPPONENT…':'…');
   $('turnind').className = myTurn?'you':'';
   if(Story) applyStoryGuidance();   // story: mask the hand to the guided card/action + Brihaspati (after the normal hand/pass render)
 
@@ -11226,6 +11229,9 @@ function boardWash(color){
   w.classList.remove('on'); void w.offsetWidth; w.classList.add('on'); setTimeout(()=>w.classList.remove('on'),720*vfxT());
 }
 const FAC_HEX={ devas:'#e0b040', asuras:'#e0483c', vanaras:'#6fc257', nagas:'#3fb9a8' };
+// WAVE1-CLIPS-1 batch 2: the seat that PLAYED a card — every zone it can rest in after its play (a Mantra cast in the Rishi Mandala returns to the hand),
+// else the action's own actor (a staked view keeps no uid on a spent card), never a silent seat 0
+function playSeatOf(uid){ const pi=G.players.findIndex(p=>p && ([...(p.units||[]),...(p.heroes||[]),...(p.discard||[]),...(p.hand||[])].some(c=>c&&c.uid===uid) || (p.artifact&&p.artifact.uid===uid))); return pi>=0 ? pi : (actionActorSeat!=null ? actionActorSeat : ME); }
 function ownerPiOfUid(uid){ for(const pi of [0,1]){ const p=G.players[pi]; if([...p.units,...p.heroes,...p.discard].some(c=>c&&c.uid===uid)) return pi; if(p.artifact&&p.artifact.uid===uid) return pi; } return 0; }
 function wetBadge(el){ if(!el)return; const b=el.querySelector('.venombadge'); if(b){ b.classList.remove('wet'); void b.offsetWidth; b.classList.add('wet'); setTimeout(()=>b.classList.remove('wet'),600*vfxT()); } }
 function leapArcFromText(leaperPos, text){
@@ -12048,10 +12054,10 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     if(src){ cpulse(src.el,'choreo-src'); calloutAt(src, ev.abilityName); }   // cpulse fires CONCURRENT with the impact visual (beat 1a)
     if(LEGACY_VFX && isBody && src) VFX.cardLand(src.cx, src.rect.top+src.rect.height/2);   // (a) card-lands dust + embers — same beat as the clash SFX [T77-gated]
     if(LEGACY_VFX && isAstra){ const tp=halfCenterClient(1-ownerPiOfUid(ev.sourceUid)); if(tp){ VFX.astraBurst(tp.x, tp.y); if(tier==='combat') vignetteFlash(); if(c.r==='M') VFX.mythic(tp.x, tp.y); } }   // (b) burst; combat → screen-edge vignette; Mythic → lightning + flash + smoke [T77-gated; astra hit-stop/shake stay below]
-    if(isAstra && c) fxCast(c, ev, evs, snap);   // EXPORT-1: a routed Astra (registry.json) starts its effect clip HERE, on this beat's clock; unrouted Astras return at once and draw exactly as before
+    if(c && (isAstra || c.t==='mantra' || c.t==='artifact')) fxCast(c, ev, evs, snap);   // WAVE1-CLIPS-1 batch 2: + a routed Mantra or Artifact (Pavamana, Dharma Kavacha); EXPORT-1: a routed Astra (registry.json) starts its effect clip HERE, on this beat's clock; unrouted Astras return at once and draw exactly as before
     if(isAstra && c && c.id==='brahmastra'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(), fire=()=>VFX.sprBrahmastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('brahmastra', fire)) fire(); } }   // EXPORT-3: the rebuilt clip (LAB-22) owns this moment when it is routed and ready; not ready, or failing after the cast, the classic sprite fires (late) — T78: BOARD EFFECT (NEW pipeline, ungated) — the golden pillar row-plate over the enemy rows (Brahmastra destroys ALL enemy Units, engine-verified). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). Its strike beat rides the unconditional spectacle hit-stop below.
     if(isAstra && c && c.id==='pashupata'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(), fire=()=>VFX.sprPashupatastra(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('pashupata', fire)) fire(); } }   // T89: BOARD EFFECT (NEW pipeline, ungated) — the violet devouring vortex over the enemy rows (Pashupatastra = AoE board damage, engine-verified; pierces shields). PLATE-ANCHOR FIX (2026-08-09): anchored on the CASTER's ENEMY half (es=1-ownerPiOfUid — was hardcoded '.half.opp', wrong when the AI casts; human-cast case byte-identical). The vortex tear-open (beat 2) rides the spectacle hit-stop below.
-    if(isAstra && c && c.id==='tamasa'){ const es=1-ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTamasa(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // TAMASA — THE SMOTHERING (first Asura astra): the dim darkness plate over the CASTER's ENEMY half (es=1-ownerPiOfUid, f9c3149 idiom — correct for AI casts natively; the smother settles on the skipped opponent). DIM register — NO hit-stop coupling (the spectacle astra play beat already carries the astra impact; the darkness settles, it does not strike). Chaos Surge (the caster's own toast+buff, same evs list) plays as its OWN serialized beat — the wash on the ASURA/caster half (line ~9185, ownerPiOfUid(buffed unit)), opposite this plate, never merged (evs order play→toast→buff verified live). Nothing wired at the forced-skip consumption (it never calls pass() → no pass banner; the plate + the visible turn theft IS the card).
+    if(isAstra && c && c.id==='tamasa'){ const es=1-playSeatOf(ev.sourceUid), oh=document.querySelector(halfSel(es)); if(oh){ const r=oh.getBoundingClientRect(), fire=()=>VFX.sprTamasa(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('tamasa', fire)) fire(); } }   // WAVE1-CLIPS-1 batch 2: the clip owns the cast; the classic plate is its fallback (late, once, if the clip fails)   // TAMASA — THE SMOTHERING (first Asura astra): the dim darkness plate over the CASTER's ENEMY half (es=1-ownerPiOfUid, f9c3149 idiom — correct for AI casts natively; the smother settles on the skipped opponent). DIM register — NO hit-stop coupling (the spectacle astra play beat already carries the astra impact; the darkness settles, it does not strike). Chaos Surge (the caster's own toast+buff, same evs list) plays as its OWN serialized beat — the wash on the ASURA/caster half (line ~9185, ownerPiOfUid(buffed unit)), opposite this plate, never merged (evs order play→toast→buff verified live). Nothing wired at the forced-skip consumption (it never calls pass() → no pass banner; the plate + the visible turn theft IS the card).
     if(c && c.id==='amrita'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAmritaBless(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // AMRITA KALASHA — THE VESSEL'S BLESSING (ARTIFACT ROW opener).
     if(c && c.id==='kishkindhacrown'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprKishkindhacrown(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // KISHKINDHA CROWN — THE CANOPY CROWNS THE HOST: the crest plate (green + gold) over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). VERDANT/ASCENDING register — no hit-stop; the canopy CRESTS UP (the Signet's press-down mirror). The Crown-precedent Leap +1/+1 beats (leaper + copied unit, engine ~520) play through the existing buff machinery every leap — nothing bespoke here. ascent composites WHOLE via the 'contain' fit vocab.
     if(c && c.id==='ramasignet'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprRamasignet(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // RAMA'S SIGNET — THE SEAL OF TRUST: the press plate (gold + leaf-green) over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). STEADFAST register — no hit-stop; the seal is SET and HOLDS. The ward's ongoing work (floor-at-1 'block' at engine ~759, venom-floor ☠, token-negation silent skip) renders through the existing machinery — nothing bespoke here. Ring composites WHOLE via the 'contain' fit vocab.
@@ -12059,12 +12065,12 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     if(c && c.id==='patala'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprPatala(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // PATALA THRONE — THE SEAT OF SERPENT KINGS: the abyssal-teal + old-gold rising-throne arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). MENACING/DEEP register — no hit-stop. STRIKE-PLATE NO-FIRE (load-bearing): the Throne's R11 passive deepens the round-end Venom drain to −(1+round); that −3-at-R2 toast qualifies on AMOUNT for the Vasuki-Strike payoff plate (sprVenomDrain) but its guard also requires venomStrikeNpAtAction≥0 (an ACTUAL Strike cast, captured pre-mutate) — Throne-alone leaves it −1 → the strike-plate stays silent. Only Throne+Strike (both conditions met, amounts additive per R11) fires it. No guard change here — the arrival plate is the ONLY new VFX.
     if(c && c.id==='anantacoil'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprAnantacoil(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // ANANTA COIL — THE ENDLESS SERPENT (ARRIVAL, the row's LAST plate): jade-white-over-deep-green uncoiling plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). ENDLESS register — no hit-stop. The R14 coil-BIRTH is a SEPARATE beat (the 'Ananta Coil' passive handler below) fired at each fallen Naga's cell.
     if(c && c.id==='tripura'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprTripuraRise(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // TRIPURA — THE THREE CITIES RISE: the tri-metal arrival plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT (no isAstra gate). DOMINION register — no hit-stop. The turn-start +1 pulse rides its own buff beat each turn (Crown-precedent emit, evs-carried per check 4); THE FALL fires later off the ninth-sibling 'passive' emit when any astra shatters it.
-    if(c && c.id==='kavacha'){ const os=ownerPiOfUid(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(); VFX.sprKavacha(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // DHARMA KAVACHA — THE WALL OF LAW: the structured wall plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT, not an astra (no isAstra gate). STRUCTURED register — no hit-stop. ADD, SUPPRESS NOTHING: the shield-formation beats (sprShieldForm per designated Unit, same evs on an AI cast) play WHOLE — check-2 PROVEN LIVE (sprShieldForm×2, suppress=false): the shield events target EXISTING Units (not the played Kavacha), so the played-this-action suppression never applies. The G4 chip glow (R95) covers the passive.
-    if(c && c.t==='mantra' && c.id==='gayatri'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprGayatri(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T79: MANTRA row wash (NEW pipeline, ungated) — the serene sigil/lotus over the CASTER's (friendly) half; Gayatri revives the lowest friendly Unit shielded (engine-verified). No hit-stop coupling.
+    if(c && c.id==='kavacha'){ const os=playSeatOf(ev.sourceUid), oh=document.querySelector(halfSel(os)); if(oh){ const r=oh.getBoundingClientRect(), fire=()=>VFX.sprKavacha(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('kavacha', fire)) fire(); } }   // WAVE1-CLIPS-1 batch 2: the clip owns the cast; the classic plate is its fallback   // DHARMA KAVACHA — THE WALL OF LAW: the structured wall plate over the CASTER'S OWN half (os=ownerPiOfUid — OWN side, R95 artifact-row polarity). An ARTIFACT, not an astra (no isAstra gate). STRUCTURED register — no hit-stop. ADD, SUPPRESS NOTHING: the shield-formation beats (sprShieldForm per designated Unit, same evs on an AI cast) play WHOLE — check-2 PROVEN LIVE (sprShieldForm×2, suppress=false): the shield events target EXISTING Units (not the played Kavacha), so the played-this-action suppression never applies. The G4 chip glow (R95) covers the passive.
+    if(c && c.t==='mantra' && c.id==='gayatri'){ const cst=playSeatOf(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprGayatri(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T79: MANTRA row wash (NEW pipeline, ungated) — the serene sigil/lotus over the CASTER's (friendly) half; Gayatri revives the lowest friendly Unit shielded (engine-verified). No hit-stop coupling.
     if(isAstra && c && c.id==='venomstrike'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(), fire=()=>VFX.sprVenomSurge(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('venomstrike', fire)) fire(); } }   // VASUKI VENOM STRIKE — THE CAST (the poison rises): the amplifier's announcement surge over the CASTER's half (Gayatri half-rect precedent; the source rises). ⚑ OPEN RULING: caster-side is the authored shape — to move it to the ENEMY half on the owner's word, flip `cst` → `1-cst` on THIS line only. The astra carries NO resolution (flag-only cast, emit-free); the payoff plate fires at round-end off the drain toast. The spectacle-tier cast machinery coexists (Ahamkara/Chaos precedent — no contradiction).
-    if(c && c.t==='mantra' && c.id==='pavamana'){ const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(); VFX.sprPavamana(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); } }   // T95: MANTRA cleanse wash (Gayatri sibling, row plate over the CASTER's friendly half) — the purifying chant. SERENE, no hit-stop. The cleanse itself emits no per-unit ticks (Q3) so there is nothing to suppress.
+    if(c && c.t==='mantra' && c.id==='pavamana'){ const cst=playSeatOf(ev.sourceUid), mh=document.querySelector(halfSel(cst)); if(mh){ const r=mh.getBoundingClientRect(), fire=()=>VFX.sprPavamana(r.left+r.width/2, r.top+r.height*0.5, r.width*1.04); if(!fxOwnsMoment('pavamana', fire)) fire(); } }   // WAVE1-CLIPS-1 batch 2: the clip owns the cast; the classic wash is its fallback   // T95: MANTRA cleanse wash (Gayatri sibling, row plate over the CASTER's friendly half) — the purifying chant. SERENE, no hit-stop. The cleanse itself emits no per-unit ticks (Q3) so there is nothing to suppress.
     if(c && c.t==='mantra' && c.id==='ramanaam'){   // RAMA NAAM — MANTRA RADIANT BUFF wash (Gayatri/Pavamana sibling, row plate over the CASTER's friendly half). Rama Naam emits ONLY a log (no per-unit buff event), so the +2 floaters are UI-computed from the board (the friendly units the engine buffed) and land in the settle window (frames 26-36 ≈ 1.6s at 16fps). No engine touch.
-      const cst=ownerPiOfUid(ev.sourceUid), mh=document.querySelector(halfSel(cst));
+      const cst=playSeatOf(ev.sourceUid), mh=document.querySelector(halfSel(cst));   // WAVE1-CLIPS-1 batch 2 ruling 4: the caster (a Rishi Mantra rests in the hand)
       const buffed=((G.players[cst]||{}).units||[]).filter(u=>!u.ghost).map(u=>u.uid);
       if(reducedMotion()){   // brief: single STATIC wash frame at 0.35 + static floaters, no animation
         if(mh){ const r=mh.getBoundingClientRect(); const w=document.createElement('img'); w.src='https://sangbaran-purr.github.io/divya-yuddha/assets/vfx/layers/ramanaam/ramanaam_wash.png'; w.alt=''; w.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;object-fit:cover;opacity:.35;z-index:5;pointer-events:none;mix-blend-mode:screen'; document.body.appendChild(w); setTimeout(function(){ w.remove(); }, 1000); }
@@ -12110,7 +12116,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
     else if(tier==='combat'){ hitStop=70; }                                    // COMBAT astra: 70ms hit-stop (burst + vignette above)
     else if(c && c.t==='hero') hold+=300;
     if(hitStop) await cDelay(hitStop);                                         // HIT-STOP injected at the impact instant, before the hold (scaled by --vfx-t via cDelay; skipped in reduced-motion since playEvent never runs there)
-    await cDelay(hold); return;
+    await fxImpactWait(c, hold); return;   // WAVE1-CLIPS-1 batch 2: a play-triggered clip ends the hold on its impact frame; every other play: cDelay(hold), unchanged
   }
   if (ev.type==='destroy'){ const u=ev.targetUids[0]; const dp=posOf(u, snap) || koePos[u];   // T88b: kill-on-entry death dissolves at the showcase position
     if(ev.abilityName==='Vajra' && dp && !fxOwnsMoment('vajra')) VFX.sprVajra(dp.cx, dp.rect.top+dp.rect.height/2, dp.rect.width);   // T82: target-anchored strike (NEW pipeline, ungated) — keyed off the RESOLUTION event's struck unit; the 2-frame snap lands inside the 40ms death hit-stop below. T97: the struck card is STILL VISIBLE here (captured + persisted at render) → the bolt lands ON the card.
@@ -12343,6 +12349,7 @@ function fxPlayer(){
   FX.player = EffectClip.createPlayer({
     now: ()=>performance.now(), canvas: $('effectclip'), get dpr(){ return window.devicePixelRatio||1; },
     cardOf: (uid)=>{ const p=posOf(uid, FX.snap); if(!p) return null; const f=fxFieldRect(); return { cx:p.cx-f.left, cy:p.rect.top+p.rect.height/2-f.top, w:p.rect.width }; },
+    unitsOf: (seat)=>{ const f=fxFieldRect(); return [...document.querySelectorAll('#'+(seat===ME?'punits':'ounits')+' .bc:not(.held-gap)')].map(el=>{ const r=el.getBoundingClientRect(); return { cx:r.left-f.left+r.width/2, cy:r.top-f.top+r.height/2, w:r.width }; }); },   // WAVE1-CLIPS-1 batch 2: a half's Units, for a play-triggered plate's span
     halfOf: (seat)=>{ const h=document.querySelector(halfSel(seat)); if(!h) return null; const r=h.getBoundingClientRect(), f=fxFieldRect(); return { cx:r.left-f.left+r.width/2, cy:r.top-f.top+r.height/2, top:r.top-f.top, w:r.width, h:r.height }; },   // EXPORT-3: + top and width (Brahmastra hangs top-flush, sized as 0.93 of the half); EXPORT-4: + height (the fitted law's cap, the card floor)
     fieldCentreX: ()=>fxFieldRect().width/2,
     loadAtlas: fxLoadAtlas,
@@ -12355,9 +12362,10 @@ function fxPlayer(){
   return FX.player;
 }
 function fxTick(){
-  const r=FX.run; if(!r || r.done || !FX.player){ FX.raf=0; if(FX.atImpact) FX.atImpact(); return; }
+  const r=FX.run; if(!r || r.done || !FX.player){ FX.raf=0; if(FX.atImpact) FX.atImpact(); fxImpactFlush(); return; }
   try{ FX.player.frame(performance.now()); }catch(e){ fxOnError(e); }
-  if(FX.atImpact && (!FX.run || FX.run.done || FX.run.log.impactDrawnAt!=null)) FX.atImpact();   // WAVE1-CLIPS-1: the held board moves in the frame that draws the impact cell
+  if(FX.atImpact && (!FX.run || FX.run.done || FX.run.log.impactDrawnAt!=null)) FX.atImpact();
+  if(FX.impactWaiters && FX.impactWaiters.length && (!FX.run || FX.run.done || FX.run.log.impactDrawnAt!=null)) fxImpactFlush();   // WAVE1-CLIPS-1: the held board moves in the frame that draws the impact cell
   FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
 }
 // the cast: start the routed clip on the game's clock, or return null and let the classic sprite play
@@ -12371,10 +12379,11 @@ function fxCast(c, ev, evs, snap){
   try{
     FX.snap=snap; fxSizeCanvas();
     const sp=FX.specs[c.id], k=(sp.class==='effect-chain' ? sp.chain.contract : sp.contract) || {};
-    const casterSeat = fxGlow(sp) ? fxSeatFromTarget(evs, k) : ownerPiOfUid(ev.sourceUid);   // EXPORT-7 (ruling): Lanka Dahan's caster is the OTHER side of its FIRST damage target — the Astra-uid lookup (and its silent seat-0 fallback) is retired for this route
+    const casterSeat = fxGlow(sp) ? fxSeatFromTarget(evs, k) : playSeatOf(ev.sourceUid);   // WAVE1-CLIPS-1 batch 2: playSeatOf (a Rishi Mantra rests in the hand; never a silent seat 0)   // EXPORT-7 (ruling): Lanka Dahan's caster is the OTHER side of its FIRST damage target — the Astra-uid lookup (and its silent seat-0 fallback) is retired for this route
     const arming = sp.moment==='arming';   // EXPORT-6: Venom Strike's rise — no impact, started when decoded (ruling A)
-    const run=P.play({ events:evs }, sp, { before:null, after:null }, { mode:'full', choreoSpeed:vfxT(), casterSeat, beatGate:true, readyAnchor:arming });   // EXPORT-5: the impact waits for the game's REAL beat
-    FX.beatWant = arming ? null : { trigger:k.trigger, abilityName:k.abilityName }; FX.capFire=null;
+    const own = !arming && k.trigger==='play';   // WAVE1-CLIPS-1 batch 2: the beat is the clip's OWN frame (no later event carries it) — no beat gate; the page's play beat ends on that frame instead (fxImpactWait)
+    const run=P.play({ events:evs }, sp, { before:null, after:null }, { mode:'full', choreoSpeed:vfxT(), casterSeat, beatGate:!own, readyAnchor:arming });   // EXPORT-5: the impact waits for the game's REAL beat
+    FX.beatWant = (arming || own) ? null : { trigger:k.trigger, abilityName:k.abilityName }; FX.capFire=null;
     if(!run || !run.plan || !run.plan.clip){ fxNote('no-clip-planned', { card:c.id }, true); return null; }
     FX.run=run; FX.owner=c.id;
     if(!FX.raf) FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
@@ -12392,7 +12401,7 @@ function fxOwnsMoment(cardId, fire){
   return true;
 }
 function fxOnError(e){
-  if(FX.atImpact) FX.atImpact();   // WAVE1-CLIPS-1: a clip that fails releases a held step waiting for its impact cell at once
+  if(FX.atImpact) FX.atImpact(); fxImpactFlush();   // WAVE1-CLIPS-1: a clip that fails releases a held step waiting for its impact cell at once
   const card=FX.owner; fxNote('clip-error', { card, error:String(e&&e.message||e) }, true);
   const fire=FX.pendingFire; FX.pendingFire=null;
   if(fire){ try{ fire(); }catch(x){} fxNote('fell-back', { card, why:'the clip failed after its cast — the classic sprite fired late' }); }
@@ -12406,7 +12415,20 @@ function fxBeatFrom(ev){
   const heard = FX.player && FX.run && !FX.run.done ? FX.player.beat() : false;
   if(!heard && FX.capFire){ const f=FX.capFire; FX.capFire=null; try{ f(); }catch(e){} fxNote('fell-back', { card:FX.owner, why:'the beat came after the cap — the classic sprite took it' }); }
 }
-function fxSkip(){ if(FX.atImpact) FX.atImpact(); FX.pendingFire=null; FX.beatWant=null; FX.capFire=null; if(FX.player && FX.run && !FX.run.done){ try{ FX.player.skip(); }catch(e){} } FX.run=null; FX.owner=null; }
+// WAVE1-CLIPS-1 batch 2 — A PLAY-TRIGGERED CLIP OWNS ITS OWN BEAT. Pavamana, Tamasa and Dharma Kavacha carry no later engine event to hang a beat on,
+// so their play beat (the cast's hold) ends on the animation frame that draws the clip's impact cell — the white ring, the dome's slam, the domes
+// turning blue — and the held board moves in that same frame. No clip (not ready, failed, skipped, reduced motion): today's hold, unchanged.
+// A clip that fails or stands down releases the wait at once; a frame clock that stops cannot hold it past the planned impact + 400 ms.
+function fxImpactFlush(){ const w=FX.impactWaiters; FX.impactWaiters=[]; (w||[]).forEach(f=>{ try{ f(); }catch(e){} }); }
+function fxImpactWait(c, ms){
+  const r=FX.run, rt=c && FX.routes && FX.routes[c.id], sp=c && FX.specs[c.id], k=sp && sp.contract;
+  if(!r || r.done || !rt || FX.owner!==c.id || !k || k.trigger!=='play' || r.log.loadErrors.length || r.log.drawError) return cDelay(ms);
+  const ic=(r.plan.cues||[]).find(q=>q.cue==='impact'), left=ic ? ic.t-(performance.now()-r.t0) : 0;
+  return new Promise(res=>{ let fin=false; const go=()=>{ if(fin) return; fin=true; clearTimeout(t); res(); };
+    const t=setTimeout(()=>{ fxNote('impact-wait-cap', { card:c.id }); go(); }, Math.max(0, left)+400);
+    (FX.impactWaiters=FX.impactWaiters||[]).push(go); choreoForce.push(go); });
+}
+function fxSkip(){ if(FX.atImpact) FX.atImpact(); fxImpactFlush(); FX.pendingFire=null; FX.beatWant=null; FX.capFire=null; if(FX.player && FX.run && !FX.run.done){ try{ FX.player.skip(); }catch(e){} } FX.run=null; FX.owner=null; }
 /* ══ EXPORT-6 — VASUKI VENOM STRIKE: the RISE at the cast, the FLOOD at the empowered round-end drain ══════════════════════════════
    Owner rulings (2026-09-19): "Export Vasuki Venom in live game." then "Go." — A: hand-entry prefetch only, and the ready-anchored rise;
    B: the drain side-check; C: the staked-road striker from the cast's own play event; D: the flood ends a still-playing rise.
@@ -12879,6 +12901,9 @@ function heldApply(g, ev, gone, live, next){
     else if (ev.type==='passive' && ev.abilityName==='Vishwapasha') c.bound=false;
   }
 }
+function heldTurn(){ return (RE && RE.mid && RE.turnShow!=null) ? RE.turnShow : G.turn; }
+function renderTurnHeader(){ if (!G || !G.players) return; const me=G.players[ME], op=G.players[OPP], myTurn=heldTurn()===ME && !me.passed && !G.over;
+  $('passbtn').disabled=!myTurn; $('turnind').textContent = G.over?'MATCH OVER': myTurn?'YOUR TURN': me.passed&&op.passed?'—': (heldTurn()===OPP?'OPPONENT…':'…'); $('turnind').className = myTurn?'you':''; }
 function heldFlushGhost(g){ const q=g.__ghost; g.__ghost=null; if(!q) return; const pl=g.players[q.pi];
   if (pl.units.some(u=>u.id==='yama')) pl.units.push({ uid:q.uid, id:'ghost', n:`Ghost of ${q.n}`, sub:'Yama’s token', t:'unit', p:1, r:'C', power:1, base:1, ghost:true, txt:'' }); }
 function heldFinish(g, sawDrain){
@@ -12890,13 +12915,28 @@ function reBoardUids(g){ const s=new Set(); for(const pi of [ME, OPP]){ const p=
 // PASHU-ORDER-1 (owner rulings R1–R8, 22 Nov 2026) — THE HELD PLAY: Brahmastra and Pashupatastra; Agneyastra and Nagastra from WAVE1-CLIPS-1. The board from before the
 // play shows through the opponent's showcase and the cast, and moves forward one event at a time on each event's own beat (the
 // round-end road's held copy, reused). The engine is untouched; the copy is display only and the live board wins at the end.
-const HELD_PLAYS={ 'Brahmastra':1, 'Pashupatastra':1, 'Agneyastra':1, 'Nagastra':1 };   // WAVE1-CLIPS-1 (owner ruling, 25 Nov 2026): Agneyastra's damage and Nagastra's Venom tokens wait for their own beat too — the clip's impact frame (f003 / f032) or, not ready, the classic effect at the same beat
+const HELD_PLAYS={ 'Brahmastra':1, 'Pashupatastra':1, 'Agneyastra':1, 'Nagastra':1, 'Pavamana':1, 'Tamasa':1, 'Dharma Kavacha':1 };   // WAVE1-CLIPS-1 (owner ruling, 25 Nov 2026): Agneyastra's damage and Nagastra's Venom tokens wait for their own beat too — the clip's impact frame (f003 / f032) or, not ready, the classic effect at the same beat
 function heldPlayOf(evs){ const p=(evs||[]).find(e=>e.type==='play'); return (p && HELD_PLAYS[p.abilityName]) ? p : null; }
 // the display copy of ANY board, a staked view included (copied, never changed in place); never the events or the log
 function heldCopyAny(g){ if (!g) return null; const seen=new Map(), o={}; for (const k in g){ if (k==='events' || k==='log') continue; o[k]=reCopy(g[k], seen); } return o; }
 const HELD_PERM={ 'Kumuda':1, 'Rambha the Bold':1, 'Vishalakshi the Pale':1, 'Kartikeya':1, 'The Living Bridge':1 };   // their buff is permanent (engine: base AND power)
+// WAVE1-CLIPS-1 batch 2: the three held plays whose effect has NO event of its own — the engine changes state silently in playCard. Their copy moves
+// once, at the END of the play beat (the clip's impact frame — the white ring, the dome's slam, the domes turning blue — or the classic hold's end);
+// at the start of the play beat the copy does not move. Each mirrors the engine's own lines (src/engine.js castMantra 'pavamana', resolveAstra 'tamasa',
+// the artifact branch 'kavacha') on the copy, for the caster found in the live board.
+const HELD_SILENT={ 'Pavamana':1, 'Tamasa':1, 'Dharma Kavacha':1 };
+function heldCasterOf(live, uid){ if (!live) return -1; return live.players.findIndex(p=>p && [...(p.discard||[]), ...(p.hand||[]), ...(p.units||[]), ...(p.heroes||[]), p.artifact].some(c=>c && c.uid===uid)); }   // + the hand: in the Rishi Mandala a cast Mantra returns to it
+function heldSilent(g, ev, live){
+  const pi=heldCasterOf(live, ev.sourceUid); if (pi<0) return;
+  if (ev.abilityName==='Pavamana'){   // engine castMantra: each wounded or envenomed friendly Unit is healed to base, its tokens stripped, +1 per effect lifted
+    for (const u of g.players[pi].units){ if (u.ghost) continue; const deb = u.power < u.base ? 1 : 0, tok = u.venom||0; if (deb+tok===0) continue; if (deb) u.power=u.base; u.venom=0; u.power += deb+tok; } }
+  else if (ev.abilityName==='Tamasa') g.players[1-pi].skipNext=true;   // engine resolveAstra: the opponent skips their next turn (shown by the turn indicator, RE.turnShow)
+  else if (ev.abilityName==='Dharma Kavacha'){ const a=live.players[pi].artifact; g.players[pi].artifact = a ? Object.assign({}, a) : null; }   // the artifact takes its slot (the chip); shields arrive on their own 'shield' beats
+}
 // one event of a held play: heldApply, plus the shapes a play (not a round end) can carry
-function heldStep(g, ev, gone, live, next){
+function heldStep(g, ev, gone, live, next, atBeat){
+  if (ev.type==='play' && HELD_SILENT[ev.abilityName]){ if (atBeat) heldSilent(g, ev, live); return; }   // WAVE1-CLIPS-1 batch 2: nothing at the start of the play beat; the effect at its end
+  if (ev.type==='shield'){ for (const u of (ev.targetUids||[])){ const f=heldFind(g,u); if (f){ const P=g.players[f.pi]; P.shieldUids=P.shieldUids||[]; if (P.shieldUids.indexOf(u)<0) P.shieldUids.push(u); } } return; }   // WAVE1-CLIPS-1 batch 2: an AI's Dharma Shield (Kavacha raises two) lands on its own beat
   const T=ev.targetUids||[];
   if (ev.type==='damage' && (ev.abilityName==='Kumbhakarna' || ev.abilityName==='Kalanemi')){   // engine onTurnStart: the waking card's own flag clears before its sweep (no event of its own)
     const f=T.map(u=>heldFind(g,u)).find(Boolean);
@@ -13092,7 +13132,8 @@ function runAction(mutate, opts={}){
   }
   choreoActive=true; choreoSkip=false; choreoStartedAt=performance.now(); choreoBudgetMs=CHOREO_WATCHDOG_MS; choreoForce=[];
   const layer=$('choreolayer'); layer.classList.add('locked'); layer.onclick=PUZZLE_MODE ? null : skipChoreo;   // MINI-GAMES-1: no tap-to-skip in a puzzle — every try plays in full
-  if (MH){ RE={ g:MH.g, mid:true, evs, gaps:null }; reLive=MH.tok; }   // PASHU-ORDER-1: held from this moment — through the opponent's showcase, the cast and every beat
+  if (MH){ RE={ g:MH.g, mid:true, evs, gaps:null, turnShow:null }; reLive=MH.tok;
+    if (MH.card==='Tamasa'){ const a=(opts && opts.actor!=null) ? opts.actor : ME; RE.turnShow = G.players[1-a].passed ? a : 1-a; renderTurnHeader(); } }   // WAVE1-CLIPS-1 batch 2: until the slam the header shows the turn as it would be without the skip   // PASHU-ORDER-1: held from this moment — through the opponent's showcase, the cast and every beat
   const heldLive=()=>!!(MH && reLive===MH.tok && RE && RE.mid);
   (async()=>{
     if (reSeq) return reRun(reSeq, layer);   // RULES-FIX-1 1.1
@@ -13104,11 +13145,13 @@ function runAction(mutate, opts={}){
       const victimUids=[]; for(const ev of evs){ if(ev.type==='destroy' && (ev.abilityName==='Vajra' || ev.abilityName==='Gandiva')) (ev.targetUids||[]).forEach(u=>victimUids.push(u)); else if(ev.type==='passive' && ev.abilityName==='Sudarshana') (ev.targetUids||[]).forEach(u=>victimUids.push(u)); }   // GANDIVA: clone BOTH kill victims pre-render (a double-kill has two 'Gandiva' destroy events) so each strike lands on its held card
       captureVictims(victimUids);            // T97: clone the struck cards WHILE still on board — the next render() empties their cells; the strike then lands on the held clone
       render();                              // final board; spawnFloaters + HUD totals held while choreoActive
-      const heldAt=(ev, i)=>{ try{ const c0=performance.now(), s0=heldSig(RE.g), n0=heldCounts(RE.g);
+      const heldAt=(ev, i, atBeat)=>{ try{ const c0=performance.now(), s0=heldSig(RE.g), n0=heldCounts(RE.g);
           if (ev.type==='destroy') for (const u of (ev.targetUids||[])){ document.querySelectorAll(`#victimlayer .victim-showcase[data-uid="${u}"]`).forEach(n=>n.remove());   // the crack's dwell is over: it ends here
             const el=document.querySelector(`#field .row .bc[data-uid="${u}"]`); if (el && heldWaiting(el.parentElement, i)){ const sp=el.cloneNode(true); sp.removeAttribute('data-uid'); sp.classList.add('held-gap'); sp.style.visibility='hidden'; sp.style.pointerEvents='none';
               const kids=[...el.parentElement.children].filter(n=>n.classList.contains('bc')); ((RE.gaps=RE.gaps||{})[el.parentElement.id]=RE.gaps[el.parentElement.id]||[]).push({ index: kids.indexOf(el), node: sp }); } }   // its space stays while a card of its row still waits for its own beat
-          heldStep(RE.g, ev, MH.gone, G, evs[i+1]); if (heldSig(RE.g)!==s0) reDrawHeld(heldCounts(RE.g)===n0); choreoCredit+=performance.now()-c0;
+          heldStep(RE.g, ev, MH.gone, G, evs[i+1], atBeat); if (heldSig(RE.g)!==s0) reDrawHeld(heldCounts(RE.g)===n0);
+          if (atBeat && RE.turnShow!=null){ RE.turnShow=null; renderTurnHeader(); }   // WAVE1-CLIPS-1 batch 2: Tamasa's skip shows on the slam, not before
+          choreoCredit+=performance.now()-c0;
         }catch(e){ heldRelease(MH, 'error: '+(e&&e.message)); try{ clearVictims(); render(); }catch(e2){} } };
       // WAVE1-CLIPS-1 (owner ruling, 25 Nov 2026): when a live clip owns this event's beat and has not yet drawn its impact cell, the held board
       // moves in the animation frame that draws it (fxTick) — never a frame before; a clip that fails, stands down or is skipped releases it at
@@ -13121,6 +13164,7 @@ function runAction(mutate, opts={}){
         if (heldLive() && ev.type!=='destroy' && clipHoldsBeat(ev)){ impactWait={ go:()=>{ if (heldLive()) heldAt(ev, i); }, t:setTimeout(flushImpact, 250) }; FX.atImpact=flushImpact; }
         else if (heldLive() && ev.type!=='destroy') heldAt(ev, i);   // PASHU-ORDER-1: the copy moves at the START of this event's own beat (R3) — its number turns at the impact, and the redraw's time is repaid inside the same beat (R2)
         try{ await playEvent(ev, snap, evs); }catch(e){}
+        if (heldLive() && ev.type==='play' && HELD_SILENT[ev.abilityName]) heldAt(ev, i, true);   // WAVE1-CLIPS-1 batch 2: the play beat has ended on the clip's impact frame (fxImpactWait) or the classic hold — the silent effect lands now
         if (heldLive() && ev.type==='destroy') heldAt(ev, i);
         if (heldLive() && RE.gaps){ try{ let closed=false; for (const id in RE.gaps) if (!heldWaiting($(id), i)){ delete RE.gaps[id]; closed=true; } if (closed){ const c0=performance.now(); reDrawHeld(); choreoCredit+=performance.now()-c0; } }catch(e){} } }   // a row whose every card has had its beat closes up now, once (R3)   // a death: the real card has cracked in its own place; the row closes up only now, when the dwell ends (R3). Any error in the held road → the live board at once (R8)
       flushImpact();
