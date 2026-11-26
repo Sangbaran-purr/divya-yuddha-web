@@ -303,6 +303,7 @@ header{ padding:8px 12px; border-bottom:1px solid var(--line); display:flex; ali
 #field::before{ content:''; position:absolute; inset:0; z-index:0; background:url('https://sangbaran-purr.github.io/divya-yuddha/assets/img/board_bg.jpg') center center/cover no-repeat; }   /* base board = Mrityulok (board_bg), also the lazy-load/404 fallback shown under #realmboard */
 #realmboard{ position:absolute; inset:0; z-index:0; background:center center/cover no-repeat; opacity:0; transition:opacity .45s ease; pointer-events:none; }   /* per-realm board, crossfaded in over the base once its image loads */
 #field::after{ content:''; position:absolute; inset:0; z-index:1; background:rgba(6,4,2,var(--board-overlay,.30)); pointer-events:none; }   /* dark overlay for readability; per-realm strength via --board-overlay */
+#fxveil{ position:absolute; left:0; right:0; top:0; height:100%; z-index:4; background:#000; opacity:0; pointer-events:none; }   /* WAVE1-CLIPS-1 FINAL ruling 4: driven by fxVeil() */
 #vfxcanvas{ position:absolute; inset:0; z-index:5; pointer-events:none; }
 #effectclip{ position:absolute; inset:0; z-index:6; pointer-events:none; width:100%; height:100%; }
 #actorunder{ position:absolute; inset:0; z-index:8; pointer-events:none; width:100%; height:100%; }   /* EXPORT-2: the Hero manifestations — the portal glow and contact shadow */
@@ -2425,6 +2426,7 @@ body.puzzle #gearbtn, body.puzzle #unbindbtn, body.puzzle #shieldbtn, body.puzzl
     <div id="deck-p" class="deckstack"><img id="deckimg-p" alt=""><span class="deckcnt" id="deckcnt-p">12</span></div>
     <div id="embers"></div>
     <div id="victimlayer"></div><!-- T97b: hosts victim-showcase clones ABOVE the board rows (.half z-3) but BELOW #vfxcanvas z-5, so the strike renders OVER the held card. Static #field child → survives render() (which only fillRow()s the row containers). -->
+    <div id="fxveil"></div><!-- WAVE1-CLIPS-1 FINAL ruling 4: the veil — above the cards and board art (.half z-3) and the victim clones (z-4, earlier in the DOM), under both effect layers (#vfxcanvas z-5, #effectclip z-6) -->
     <canvas id="vfxcanvas"></canvas>
     <canvas id="effectclip"></canvas>
     <canvas id="actorunder"></canvas>
@@ -5270,7 +5272,9 @@ if (typeof module!=='undefined'){
 (function (root) {
   'use strict';
   var CHOREO_SPEED = 1.3;
-  var E1 = { capClass: 'the effect layer hi rung (the game sheet vfx_vajra hi: 3072x1536 RGBA)', capBytes: 3072 * 1536 * 4, oneAtATime: true };
+  var WHOLE_HALF = { marginPx: 8, featherPx: 8 };   // NO-CUT ruling (owner, 2026-11-26 18:04): the lit box sits 8 CSS px inside its half; an 8 px feather at the half's edges takes out the fainter glow beyond it
+  var E1 = { capClass: 'the effect layer hi rung (the game sheet vfx_vajra hi: 3072x1536 RGBA)', capBytes: 3072 * 1536 * 4, oneAtATime: true,
+             hiCapBytes: 3072 * 1536 * 4 * 9 / 4, hiClass: 'WAVE1-CLIPS-1 FINAL ruling 5 (owner, 2026-11-25 23:29): the large-screen set (x1.5 each way) — a ruled exception for large screens only, never a phone' };
   var num = function (x) { return typeof x === 'number' && isFinite(x); };
 
   function validate(m) {
@@ -5305,7 +5309,7 @@ if (typeof module!=='undefined'){
     if (!member) e = e.concat(contractErrors(m.contract));
     else if (m.contract !== undefined) e.push('a chain member carries no contract (the chain does)');
     if (m.moment === 'empowered-drain' && !(m.contract && m.contract.castEvent && m.contract.castEvent.type && m.contract.castEvent.abilityName && num(m.contract.minDrain))) e.push('an empowered-drain clip names its cast event and its minimum drain');
-    if (m.atlasSize && m.atlasSize.w * m.atlasSize.h * 4 > E1.capBytes) e.push('the atlas decodes past the E1 cap');
+    if (m.atlasSize && m.atlasSize.w * m.atlasSize.h * 4 > (m.rung === 'hi' ? E1.hiCapBytes : E1.capBytes)) e.push('the atlas decodes past the E1 cap');   // FINAL ruling 5: a large-screen pack (rung hi) has its own ruled cap
     return { ok: e.length === 0, errors: e };
   }
   function contractErrors(k) {
@@ -5414,7 +5418,7 @@ if (typeof module!=='undefined'){
     var glow = chained && spec.chain.shape === 'strike-afterglow';
     var T = glow ? afterglowTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : chained ? chainTimeline(spec.chain, spec.clips, SPEED[mode], opts.choreoSpeed) : arming ? armingTimeline(spec, SPEED[mode], opts.choreoSpeed) : timeline(spec, SPEED[mode], opts.choreoSpeed);
     var clip = !!(b.cast && (b.strike || arming)) && mode !== 'reduced', segments = [], cues = [];
-    var HALF_PLACES = { 'enemy-half-centre': 'enemy-half', 'enemy-half-top': 'enemy-half-top', 'enemy-half-bottom': 'enemy-half-bottom', 'caster-half-bottom': 'caster-half-bottom', 'caster-half-centre': 'caster-half' };   // WAVE1-CLIPS-1 batch 2: + the caster's own half, centred
+    var HALF_PLACES = { 'enemy-half-centre': 'enemy-half', 'enemy-half-top': 'enemy-half-top', 'enemy-half-bottom': 'enemy-half-bottom', 'caster-half-bottom': 'caster-half-bottom', 'caster-half-centre': 'caster-half', 'enemy-board-row': 'enemy-board', 'caster-board-row': 'caster-board' };   // WAVE1-CLIPS-1 batch 2: + the caster's own half, centred; REBUILD: + the board-sized plates
     if (clip && glow) segments.push({ role: 'strike', clip: 0, start: T.strikeStart, end: Math.min(T.strikeEnd, T.handoffAt), frameMs: T.frameMs, place: k.anchor, impact: spec.clips[0].impact },
                                     { role: 'afterglow', clip: 1, start: T.afterglowStart, end: T.afterglowEnd, frameMs: T.afterglowFrameMs, place: k.afterglowAnchor, impact: null });
     else if (clip && chained) segments.push({ role: 'invoke', clip: 0, start: T.invokeStart, end: T.handoffAt, frameMs: T.invokeFrameMs, place: 'caster-half' },
@@ -5540,7 +5544,7 @@ if (typeof module!=='undefined'){
       var withHalf = function (c, h) { return { cx: c.cx, cy: c.cy, w: c.w, halfW: h && h.w, halfH: h && h.h }; };
       var places = p.segments.map(function (sg) {
         var m = clips[sg.clip];
-        if (sg.place === 'target') return target ? place(m, withHalf(target, hE)) : null;
+        if (sg.place === 'target' && !(m.scaleRule && m.scaleRule.boardFit)) return target ? place(m, withHalf(target, hE)) : null;   // REBUILD: a board-fit strike is placed below
         var seat = (sg.place === 'enemy-half' || sg.place === 'enemy-half-top' || sg.place === 'enemy-half-bottom') ? (p.casterSeat != null ? 1 - p.casterSeat : null) : p.casterSeat;   // LAB-21: the enemy half is the caster's opposite seat
         var hh = seat != null && env.halfOf ? env.halfOf(seat) : null;
         // LAB-25: DIVIDER-FLUSH on a LOGICAL half — the plate's edge nearest the divider sits ON it (its bottom on the upper half, its top on the lower)
@@ -5555,6 +5559,57 @@ if (typeof module!=='undefined'){
         // LAB-22: TOP-FLUSH — the plate's anchor (its top-centre) on the enemy half's TOP edge; a half that reports no top plays no clip (fail-open)
         // EXPORT-4: a height-capped plate needs the half's height (no height, no clip — it could not be kept inside the half)
         if (sg.place === 'enemy-half-top') return hh && target && hh.top != null && (!m.scaleRule.halfFraction || hh.w > 0) && (!m.scaleRule.heightCap || hh.h > 0) ? place(m, { cx: hh.cx, cy: hh.top, w: target.w, halfW: hh.w, halfH: hh.h }) : null;
+        // WAVE1-CLIPS-1 REBUILD (owner rulings 2026-11-25 20:49): LARGE, ANCHORED ON ITS SIDE. The plate is as large as the board allows (it fits the
+        // board's frame — FINAL ruling 2 (2026-11-25 23:29): "fit" on every screen); its main action (the manifest's anchor) sits over its
+        // half's card row — the span of that half's Units — and the plate then slides toward the middle as far as keeps the picture inside the frame. It may
+        // spill across the middle line; nothing is drawn outside the board (the canvas is the board). A single-target strike (boardFit) keeps its strike point
+        // on the target card at the same size, the frame cutting it where it must.
+        if (sg.place === 'enemy-board' || sg.place === 'caster-board' || (sg.place === 'target' && m.scaleRule && m.scaleRule.boardFit)) {
+          var bseat = sg.place === 'caster-board' ? p.casterSeat : (p.casterSeat != null ? 1 - p.casterSeat : null), bh = bseat != null && env.halfOf ? env.halfOf(bseat) : null, fd = env.fieldOf ? env.fieldOf() : null;
+          if (!bh || !fd || !(fd.w > 0) || !(fd.h > 0)) return null;
+          var bs = Math.min(fd.w / m.cellSize.w, fd.h / m.cellSize.h), bw = m.cellSize.w * bs, bhh = m.cellSize.h * bs;
+          if (sg.place === 'target') return target ? { scale: bs, x: target.cx - m.anchor.x * bs, y: target.cy - m.anchor.y * bs, w: bw, h: bhh } : null;
+          // NO-CUT ruling (owner, 2026-11-26 18:04) — THE STANDING PLACEMENT RULE, on a WIDE board (env.wideBoard: the page's own test, the one that has picked the
+          // large-screen pack): an effect not aimed at a single card plays WHOLE inside the half it acts on — its lit box (m.litBox: the clip's real extent over
+          // all frames) fitted to that half with a margin and centred across it; it is drawn clipped to the half (nothing outside it) and feathered at the half's
+          // edges, so the faint glow outside the lit box fades out, never a hard line. It follows the seat. Phones keep the placement below.
+          if (m.litBox && env.wideBoard && env.wideBoard(m)) {
+            var lb = m.litBox, mg = WHOLE_HALF.marginPx, hl = bh.cx - bh.w / 2, ht = bh.top != null ? bh.top : bh.cy - bh.h / 2;
+            var ws = Math.min((bh.w - 2 * mg) / (lb.x1 - lb.x0), (bh.h - 2 * mg) / (lb.y1 - lb.y0));
+            return { scale: ws, x: bh.cx - (lb.x0 + lb.x1) / 2 * ws, y: ht + bh.h / 2 - (lb.y0 + lb.y1) / 2 * ws, w: m.cellSize.w * ws, h: m.cellSize.h * ws,
+                     clip: { x: hl, y: ht, w: bh.w, h: bh.h }, feather: WHOLE_HALF.featherPx };
+          }
+          var ur = env.unitsOf ? (env.unitsOf(bseat) || []) : [], blo = Infinity, bhi = -Infinity, bcy = 0, bcl = 0, bn = 0, rtop = Infinity, rbot = -Infinity;
+          ur.forEach(function (c) { if (c && c.w > 0) { var ch = c.h || c.w * 4 / 3; blo = Math.min(blo, c.cx - c.w / 2); bhi = Math.max(bhi, c.cx + c.w / 2); bcy += c.cy; bcl += c.cy + 0.25 * ch; rtop = Math.min(rtop, c.cy - ch / 2); rbot = Math.max(rbot, c.cy + ch / 2); bn++; } });
+          if (!bn) { rtop = bh.top != null ? bh.top : bh.cy - bh.h / 2; rbot = rtop + bh.h; }   // no Units: the half itself is the row
+          // REBUILD (owner ruling 2026-11-25 22:10; design note, FINAL ruling 9): an effect ON THE OPPONENT'S HALF keeps its strike/base point on that row's cards
+          // (their lower part), centred on their Units — this outranks "as large as the board allows" — at the largest size that keeps the WHOLE picture inside
+          // the frame. (No opponent-half clip is routed today: Nagastra and Tamasa play their classic plates until their clips are regenerated.)
+          if (sg.place === 'enemy-board' && bn) {
+            var eay = bcl / bn, eax = (blo + bhi) / 2;
+            bs = Math.min(bs, eay / m.anchor.y, (fd.h - eay) / (m.cellSize.h - m.anchor.y)); bw = m.cellSize.w * bs; bhh = m.cellSize.h * bs;
+            var ex = eax - m.anchor.x * bs; if (bw <= fd.w + 0.01) ex = Math.max(0, Math.min(fd.w - bw, ex));
+            return { scale: bs, x: ex, y: eay - m.anchor.y * bs, w: bw, h: bhh };
+          }
+          var ax = bn ? (blo + bhi) / 2 : bh.cx, ay = bn ? bcy / bn : bh.cy, bx = ax - m.anchor.x * bs, by = ay - m.anchor.y * bs;
+          if (bw <= fd.w + 0.01) bx = Math.max(0, Math.min(fd.w - bw, bx));   // + 0.01: a width-fit plate IS the board's width (float residue)
+          if (bhh <= fd.h + 0.01) by = Math.max(0, Math.min(fd.h - bhh, by));
+          // FINAL ruling 2 (2026-11-25 23:29): the main action stays ON ITS OWN HALF'S CARD ROW — the slide toward the middle stops where the action would
+          // leave the row (its "cut at the board's edge" is superseded by KAVACHA-ANCHOR's shrink below, 2026-11-26)
+          // KAVACHA-ANCHOR (owner rulings, 2026-11-26): the order for a plate anchored on its own half's card row — 1) the main action (m.anchor) on the
+          // caster's row at full size ("fit") where the whole picture fits so; 2) otherwise the plate SHRINKS just enough that the whole picture fits
+          // inside the board with the main action on the caster's row, centred on the caster's Units (the opponent-half placement law, for any effect
+          // cast from either seat — the action never lands on the other player's row); 3) a cut only where a ruling says so for that clip (none today)
+          var mA = m.anchor, cH = m.cellSize.h, lo0 = Math.max(0, rtop - mA.y * bs), hi0 = Math.min(fd.h - bhh, rbot - mA.y * bs);
+          if (lo0 <= hi0 + 0.01) by = Math.max(lo0, Math.min(Math.max(lo0, hi0), ay - mA.y * bs));
+          else if (mA.y > 0 && mA.y < cH) {
+            var ry = Math.max(rtop, Math.min(rbot, fd.h * mA.y / cH));   // the row point that allows the largest whole picture
+            bs = Math.min(bs, ry / mA.y, (fd.h - ry) / (cH - mA.y)); bw = m.cellSize.w * bs; bhh = cH * bs;
+            bx = ax - mA.x * bs; if (bw <= fd.w + 0.01) bx = Math.max(0, Math.min(fd.w - bw, bx));
+            by = ry - mA.y * bs;
+          } else by = Math.max(rtop - mA.y * bs, Math.min(rbot - mA.y * bs, by));
+          return { scale: bs, x: bx, y: by, w: bw, h: bhh };
+        }
         var halfPlate = sg.place === 'enemy-half' || sg.place === 'caster-half';
         var pc = hh && (target || (halfPlate && m.scaleRule.halfFraction)) ? place(m, { cx: hh.cx, cy: hh.cy, w: target ? target.w : 0, halfW: hh.w, halfH: hh.h }) : null;   // the card width still sets the scale (cardWidths), the half sets the centre; WAVE1-CLIPS-1 batch 2: a half plate sized by the half needs no target card (a play-triggered clip)
         // WAVE1-CLIPS-1 (owner ruling, 25 Nov 2026): on a half wider than the plate, the plate is centred on the SPAN of the Units it strikes, slid
@@ -5641,6 +5696,17 @@ if (typeof module!=='undefined'){
           g.drawImage(st.loaded.source, cell.x, cell.y, cell.w, cell.h, -m.anchor.x, -m.anchor.y, cell.w, cell.h);
           g.setTransform(1, 0, 0, 1, 0, 0);
           run.log.travel.push({ t: tr, cell: ix, x: pose.x, y: pose.y, rot: pose.rot, scale: pose.scale, u: pose.u });
+        }
+        else if (r.clip) {   // NO-CUT ruling (2026-11-26): a whole-in-half plate — drawn only inside its half, its edges feathered out there
+          var cr = r.clip, fe = Math.max(0, (r.feather || 0) * d), X0 = cr.x * d, Y0 = cr.y * d, X1 = (cr.x + cr.w) * d, Y1 = (cr.y + cr.h) * d;
+          g.save(); g.beginPath(); g.rect(X0, Y0, X1 - X0, Y1 - Y0); g.clip();
+          g.drawImage(st.loaded.source, cell.x, cell.y, cell.w, cell.h, r.x * d, r.y * d, r.w * d, r.h * d);
+          if (fe > 0 && g.createLinearGradient) {
+            g.globalCompositeOperation = 'destination-out';
+            [[X0, 0, X0 + fe, 0, X0, Y0, fe, Y1 - Y0], [X1, 0, X1 - fe, 0, X1 - fe, Y0, fe, Y1 - Y0], [0, Y0, 0, Y0 + fe, X0, Y0, X1 - X0, fe], [0, Y1, 0, Y1 - fe, X0, Y1 - fe, X1 - X0, fe]].forEach(function (b) {
+              var gr = g.createLinearGradient(b[0], b[1], b[2], b[3]); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(b[4], b[5], b[6], b[7]); });
+          }
+          g.restore();
         }
         else g.drawImage(st.loaded.source, cell.x, cell.y, cell.w, cell.h, r.x * d, r.y * d, r.w * d, r.h * d);
         g.globalCompositeOperation = 'source-over';
@@ -12258,7 +12324,7 @@ async function playEvent(ev, snap, evs=[]){   // T83: evs = this action's event 
    never a narrated line) — no banner.
    MEMORY (E1): the player holds at most one clip decoded at a time and releases it when the clip ends; compressed atlas bytes
    are prefetched when a routed card enters a hand that this page can see, and decoded only on the cast. */
-const FX = { base:'https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/', routes:null, registry:null, boot:null, specs:{}, specP:{}, blobs:{}, blobP:{}, run:null, owner:null, snap:null,
+const FX = { base:'https://sangbaran-purr.github.io/divya-yuddha/assets/manifest/', routes:null, registry:null, boot:null, specs:{}, specP:{}, rung:{}, blobs:{}, blobP:{}, run:null, owner:null, snap:null,
              pendingFire:null, raf:0, player:null, diag:[] };
 function fxNote(kind, detail, loud){   // quiet by default: kept for asserting and inspecting; a real cast failure also warns
   const d=Object.assign({ kind, at: Date.now() }, detail||{}); FX.diag.push(d); if(FX.diag.length>50) FX.diag.shift();
@@ -12290,10 +12356,45 @@ const assetRetryOk = (u)=>{ delete ASSET_RETRY.s[u]; };
 // EXPORT-6: a route may nest a second moment (Venom Strike's drain) — addressed as "<card>:<moment>"
 function fxRoute(key){ if(!FX.routes) return null; const k=String(key), i=k.indexOf(':'); if(i<0) return FX.routes[k] || null; const r=FX.routes[k.slice(0,i)]; return (r && r[k.slice(i+1)]) || null; }
 // a route's spec: one clip manifest, or an effect chain with its two clip manifests resolved beside it
+// WAVE1-CLIPS-1 FINAL ruling 5 — THE LARGE-SCREEN SET: a route with a "hi" pack uses it where its plate would be drawn wider than hiAbovePx CSS px — the
+// plate is as large as the board allows: the board's width, or its height x the clip's aspect, whichever is smaller. A phone's board is at most 428 px wide,
+// so no phone ever picks it. Decided at the pack's first fetch (from the board as laid out then); a board not yet laid out picks the normal pack.
+// NO-CUT ruling (owner, 2026-11-26 18:04) — ONE test for a WIDE board: the plate at "fit" would be drawn wider than the route's hiAbovePx (500 CSS px):
+// min(board width, board height x the plate's aspect). It has picked the large-screen pack since FINAL ruling 5; the player asks it (env.wideBoard) to play an
+// effect not aimed at a single card WHOLE inside its half. No phone's board passes it (<= 428 px wide); a tablet in portrait (518 px) does.
+const FX_WIDE_PX = 500;
+function fxWideBoard(aspect, abovePx){ const f=fxFieldRect(); if(!(f.width>0) || !(f.height>0)) return false; return Math.min(f.width, f.height*(aspect||1)) > (abovePx||FX_WIDE_PX); }
+// The pack (rule 9): a route drawn whole inside a half (rt.wholeHalf: the normal pack's cell width and lit box) takes the SMALLEST pack that is sharp at the
+// size it is drawn — the normal one while it is stretched no more than maxStretch (x1.5 CSS), the large-screen set beyond. Every other route: the old test.
+function fxHiPick(rt){ if(!rt || !rt.hi || !rt.hiAbovePx) return false; if(!fxWideBoard(rt.aspect, rt.hiAbovePx)) return false;
+  const wh=rt.wholeHalf; if(!wh) return true;
+  const h=document.querySelector(halfSel(ME)); if(!h) return true; const r=h.getBoundingClientRect(); if(!(r.width>0) || !(r.height>0)) return true;
+  const s=Math.min((r.width-2*8)/(wh.litW||1), (r.height-2*8)/(wh.litH||1));   // CSS px per normal-pack cell px = the stretch (the player's WHOLE_HALF margin, 8)
+  return s > (wh.maxStretch||1.5); }
+// WAVE1-CLIPS-1 FINAL ruling 4 — THE VEIL: a dark layer inside the board (#fxveil: above the cards and board art, under both effect layers) behind a clip
+// whose contract asks for it. It follows the clip's own clock: in over its first four frames, out with its fade tail; nothing while the clip has not drawn
+// (a classic fallback never shows it); off at once when the clip ends, fails, stands down or is skipped — it can never be left on.
+function fxVeil(){ const el=$('fxveil'); if(!el || !el.style) return; const r=FX.run, sp=r && r.spec, k=sp && (sp.class==='effect-chain' ? sp.chain.contract : sp.contract);
+  let op=0; const dr=r && r.log && r.log.drawn;
+  if(r && !r.done && r.current!==-1 && k && k.veil && dr && dr.length && !r.log.loadErrors.length && !r.log.drawError){
+    const sg=r.plan.segments[r.plan.segments.length-1], n=r.clips[sg.clip].cells.length, ix=dr[dr.length-1],
+          tail=Math.max(1, (sp.audit && sp.audit.fadeTail ? sp.audit.fadeTail.length : 1) - 1);
+    op=k.veil*Math.max(0, Math.min(1, (ix+1)/4, (n-1-ix)/tail)); }   // by the clip's own drawn cell: in over cells 0-3, out over the fade tail (0 on the last cell)
+  el.style.opacity=op>0.001 ? op.toFixed(3) : '0'; }
+function fxVeilOff(){ const el=$('fxveil'); if(el && el.style) el.style.opacity='0'; }
+// NO-CUT ruling (owner, 2026-11-26 18:04), rule 8: the veil lies on the half the effect ACTS ON only (the caster's, or the opposite one for a clip anchored on
+// the enemy's row), softened over 24 px at the middle line; a clip with no half (seat null) keeps the whole board. Phones the same.
+function fxVeilPlace(seat){ const el=$('fxveil'); if(!el || !el.style) return; const st=el.style;
+  const h=seat!=null ? document.querySelector(halfSel(seat)) : null, f=fxFieldRect();
+  if(!h || !(f.height>0)){ st.top='0'; st.height='100%'; st.webkitMaskImage=st.maskImage=''; return; }
+  const r=h.getBoundingClientRect(), upper=(r.top+r.height/2) < (f.top+f.height/2);
+  st.top=(r.top-f.top)+'px'; st.height=r.height+'px';
+  st.webkitMaskImage=st.maskImage='linear-gradient('+(upper?'to top':'to bottom')+', transparent 0, #000 24px)'; }
 function fxSpec(cardId){
   if(FX.specP[cardId]) return FX.specP[cardId];
   const rt=fxRoute(cardId); if(!rt || !window.EffectClip) return Promise.resolve(null);
-  const murl=fxUrl(rt.spec);
+  const hi=fxHiPick(rt); FX.rung[cardId]=hi ? 'hi' : 'normal';
+  const murl=fxUrl(hi ? rt.hi : rt.spec);   // WAVE1-CLIPS-1 FINAL ruling 5: the large-screen set where the plate is drawn wider than hiAbovePx
   if(!assetRetryAllowed(murl)) return Promise.resolve(null);   // EXPORT-5: a failed spec waits out its backoff
   FX.specP[cardId] = fetch(murl).then(r=>{ if(!r.ok) throw new Error('manifest '+r.status); return r.json(); }).then(m=>{
     if(m.class==='effect-chain') return Promise.all(m.clips.map(c=>{ const u=fxUrl(c.manifest, murl); return fetch(u).then(r=>{ if(!r.ok) throw new Error('clip manifest '+r.status); return r.json(); }).then(cm=>{ cm.__url=u; return cm; }); }))
@@ -12349,7 +12450,9 @@ function fxPlayer(){
   FX.player = EffectClip.createPlayer({
     now: ()=>performance.now(), canvas: $('effectclip'), get dpr(){ return window.devicePixelRatio||1; },
     cardOf: (uid)=>{ const p=posOf(uid, FX.snap); if(!p) return null; const f=fxFieldRect(); return { cx:p.cx-f.left, cy:p.rect.top+p.rect.height/2-f.top, w:p.rect.width }; },
-    unitsOf: (seat)=>{ const f=fxFieldRect(); return [...document.querySelectorAll('#'+(seat===ME?'punits':'ounits')+' .bc:not(.held-gap)')].map(el=>{ const r=el.getBoundingClientRect(); return { cx:r.left-f.left+r.width/2, cy:r.top-f.top+r.height/2, w:r.width }; }); },   // WAVE1-CLIPS-1 batch 2: a half's Units, for a play-triggered plate's span
+    fieldOf: ()=>{ const f=fxFieldRect(); return { w:f.width, h:f.height }; },   // WAVE1-CLIPS-1 REBUILD: the board's frame, for the board-sized plates
+    wideBoard: (m)=>{ const rt=m && fxRoute(m.cardId); return fxWideBoard(rt && rt.aspect ? rt.aspect : (m && m.cellSize ? m.cellSize.w/m.cellSize.h : 1), rt && rt.hiAbovePx); },   // NO-CUT ruling (2026-11-26): the wide-board test
+    unitsOf: (seat)=>{ const f=fxFieldRect(); return [...document.querySelectorAll('#'+(seat===ME?'punits':'ounits')+' .bc:not(.held-gap)')].map(el=>{ const r=el.getBoundingClientRect(); return { cx:r.left-f.left+r.width/2, cy:r.top-f.top+r.height/2, w:r.width, h:r.height }; }); },   // WAVE1-CLIPS-1 batch 2: a half's Units, for a play-triggered plate's span
     halfOf: (seat)=>{ const h=document.querySelector(halfSel(seat)); if(!h) return null; const r=h.getBoundingClientRect(), f=fxFieldRect(); return { cx:r.left-f.left+r.width/2, cy:r.top-f.top+r.height/2, top:r.top-f.top, w:r.width, h:r.height }; },   // EXPORT-3: + top and width (Brahmastra hangs top-flush, sized as 0.93 of the half); EXPORT-4: + height (the fitted law's cap, the card floor)
     fieldCentreX: ()=>fxFieldRect().width/2,
     loadAtlas: fxLoadAtlas,
@@ -12362,8 +12465,9 @@ function fxPlayer(){
   return FX.player;
 }
 function fxTick(){
-  const r=FX.run; if(!r || r.done || !FX.player){ FX.raf=0; if(FX.atImpact) FX.atImpact(); fxImpactFlush(); return; }
+  const r=FX.run; if(!r || r.done || !FX.player){ FX.raf=0; fxVeilOff(); if(FX.atImpact) FX.atImpact(); fxImpactFlush(); return; }
   try{ FX.player.frame(performance.now()); }catch(e){ fxOnError(e); }
+  try{ fxVeil(); }catch(e){ fxVeilOff(); }   // WAVE1-CLIPS-1 FINAL ruling 4
   if(FX.atImpact && (!FX.run || FX.run.done || FX.run.log.impactDrawnAt!=null)) FX.atImpact();
   if(FX.impactWaiters && FX.impactWaiters.length && (!FX.run || FX.run.done || FX.run.log.impactDrawnAt!=null)) fxImpactFlush();   // WAVE1-CLIPS-1: the held board moves in the frame that draws the impact cell
   FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
@@ -12385,6 +12489,7 @@ function fxCast(c, ev, evs, snap){
     const run=P.play({ events:evs }, sp, { before:null, after:null }, { mode:'full', choreoSpeed:vfxT(), casterSeat, beatGate:!own, readyAnchor:arming });   // EXPORT-5: the impact waits for the game's REAL beat
     FX.beatWant = (arming || own) ? null : { trigger:k.trigger, abilityName:k.abilityName }; FX.capFire=null;
     if(!run || !run.plan || !run.plan.clip){ fxNote('no-clip-planned', { card:c.id }, true); return null; }
+    try{ fxVeilPlace(/-board-row$/.test(k.anchor||'') ? (k.anchor==='enemy-board-row' ? 1-casterSeat : casterSeat) : null); }catch(e){}   // NO-CUT ruling: the veil on the half it acts on
     FX.run=run; FX.owner=c.id;
     if(!FX.raf) FX.raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame(fxTick) : 0;
     return run;
@@ -12401,7 +12506,7 @@ function fxOwnsMoment(cardId, fire){
   return true;
 }
 function fxOnError(e){
-  if(FX.atImpact) FX.atImpact(); fxImpactFlush();   // WAVE1-CLIPS-1: a clip that fails releases a held step waiting for its impact cell at once
+  fxVeilOff(); if(FX.atImpact) FX.atImpact(); fxImpactFlush();   // WAVE1-CLIPS-1: a clip that fails releases a held step waiting for its impact cell at once
   const card=FX.owner; fxNote('clip-error', { card, error:String(e&&e.message||e) }, true);
   const fire=FX.pendingFire; FX.pendingFire=null;
   if(fire){ try{ fire(); }catch(x){} fxNote('fell-back', { card, why:'the clip failed after its cast — the classic sprite fired late' }); }
@@ -12422,13 +12527,14 @@ function fxBeatFrom(ev){
 function fxImpactFlush(){ const w=FX.impactWaiters; FX.impactWaiters=[]; (w||[]).forEach(f=>{ try{ f(); }catch(e){} }); }
 function fxImpactWait(c, ms){
   const r=FX.run, rt=c && FX.routes && FX.routes[c.id], sp=c && FX.specs[c.id], k=sp && sp.contract;
+  if(r && !r.done && rt && FX.owner===c.id && k && k.trigger!=='play' && !r.log.loadErrors.length && !r.log.drawError && k.castHoldMs>ms) return cDelay(k.castHoldMs);   // WAVE1-CLIPS-1 REBUILD: a whole clip whose beat comes on a LATER event (Nagastra's tokens) holds the play beat for its lead, so that event lands on the clip's beat frame
   if(!r || r.done || !rt || FX.owner!==c.id || !k || k.trigger!=='play' || r.log.loadErrors.length || r.log.drawError) return cDelay(ms);
   const ic=(r.plan.cues||[]).find(q=>q.cue==='impact'), left=ic ? ic.t-(performance.now()-r.t0) : 0;
   return new Promise(res=>{ let fin=false; const go=()=>{ if(fin) return; fin=true; clearTimeout(t); res(); };
     const t=setTimeout(()=>{ fxNote('impact-wait-cap', { card:c.id }); go(); }, Math.max(0, left)+400);
     (FX.impactWaiters=FX.impactWaiters||[]).push(go); choreoForce.push(go); });
 }
-function fxSkip(){ if(FX.atImpact) FX.atImpact(); fxImpactFlush(); FX.pendingFire=null; FX.beatWant=null; FX.capFire=null; if(FX.player && FX.run && !FX.run.done){ try{ FX.player.skip(); }catch(e){} } FX.run=null; FX.owner=null; }
+function fxSkip(){ fxVeilOff(); if(FX.atImpact) FX.atImpact(); fxImpactFlush(); FX.pendingFire=null; FX.beatWant=null; FX.capFire=null; if(FX.player && FX.run && !FX.run.done){ try{ FX.player.skip(); }catch(e){} } FX.run=null; FX.owner=null; }
 /* ══ EXPORT-6 — VASUKI VENOM STRIKE: the RISE at the cast, the FLOOD at the empowered round-end drain ══════════════════════════════
    Owner rulings (2026-09-19): "Export Vasuki Venom in live game." then "Go." — A: hand-entry prefetch only, and the ready-anchored rise;
    B: the drain side-check; C: the staked-road striker from the cast's own play event; D: the flood ends a still-playing rise.
