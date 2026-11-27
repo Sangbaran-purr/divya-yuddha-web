@@ -52,6 +52,18 @@ window.DY_MF_CONFIG = {
   presaleVoucherUrl: "https://approval-bot-cxa2.onrender.com/presale/voucher",
   gasTopUpUrl: "https://approval-bot-cxa2.onrender.com/gas/topup",  // GAS-HELP-1 R3: POL for the network fee (dormant until the bot's GAS_TOPUP=on — until then it answers 503 and the roads show the fallback line)
 
+  // VEST-100-1 (owner rulings 2026-11-27) — THE LOCKERS, phase 1 (vested drops). Every locker road on the dashboard and the
+  // report runs ONLY when `on` is true AND `factory` is set (lockersOn() in each page); either missing keeps every page
+  // exactly as it was, read for read. It stays OFF until the ceremony: the factory is not deployed, so its address does
+  // not exist yet. When it does, the address travels verbatim from the web3 repo's mainnet record, and `deployBlock` is
+  // the factory's birth block (the floor of the report's LockerCreated / Dropped scans). There is no localStorage
+  // override for this block: one browser cannot switch it on.
+  lockers: {
+    on: false,
+    factory: null,
+    deployBlock: null,
+  },
+
   // ── Polygon mainnet read endpoint ──
   // RPC-CLEANUP-1 (owner rulings 2026-10-30) — ONE ROAD: our own read proxy (dy-rpc → a keyed provider, server-side)
   // serves every dashboard/report read, the getLogs history scans included. No free public RPC and no wallet rescue

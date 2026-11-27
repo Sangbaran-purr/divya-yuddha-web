@@ -259,7 +259,9 @@ async function chainWinnings(opts) {
 //    `opts.svc` installs a fetch stub standing in for the approval-bot's /winnings/* routes.
 async function dashboardPage(c, player, opts) {
   opts = opts || {};
-  const html = fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8");
+  // VEST-100-1 — `opts.htmlSrc` / `opts.mfSrc` stand in for dashboard.html / mf-config.js (the off-path check runs the
+  // COMMITTED files beside the new ones); `opts.lockers` sets the locker switch. All three absent → exactly as before.
+  const html = opts.htmlSrc != null ? opts.htmlSrc : fs.readFileSync(path.join(SITE, "dashboard.html"), "utf8");
   const body = (html.split(/<body[^>]*>/)[1] || "").split("</body>")[0];
   const dom = new JSDOM(`<!doctype html><body class="mf">${body}</body>`,
     { url: "https://divyayuddha.games/dashboard.html", pretendToBeVisual: true, runScripts: "outside-only" });
@@ -293,7 +295,8 @@ async function dashboardPage(c, player, opts) {
   for (const [k, v] of Object.entries(opts.ls || {})) w.localStorage.setItem(k, v);
   const run = (p) => w.eval(fs.readFileSync(p, "utf8"));
   run(path.join(SITE, "config.js"));
-  run(path.join(SITE, "mf-config.js"));
+  if (opts.mfSrc != null) w.eval(opts.mfSrc); else run(path.join(SITE, "mf-config.js"));
+  if (opts.lockers) w.DY_MF_CONFIG.lockers = opts.lockers;
   w.DY_CONFIG.chain.id = chainId;
   w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
   if (!opts.shippedRoads) { w.DY_MF_CONFIG.readRpcUrl = RPC; w.DY_MF_CONFIG.readRpcUrlFallbacks = []; }

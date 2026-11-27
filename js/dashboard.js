@@ -87,6 +87,32 @@ window.DYDash = (function () {
     "event Purchased(address indexed buyer, uint8 round, address asset, uint256 paid, uint256 usdE18, uint256 dycOut, uint256 liquid)",
   ];
   var ERC20_ABI = ["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)"];
+  // VEST-100-1 — the LockerFactory (web3 c28cf16c) and its Locker's Released event. Read and called ONLY while lockersOn().
+  var LOCKER_ABI = [
+    "function statusOf(address buyer) view returns (address locker, uint256 total, uint256 released, uint256 collectable, uint256 nextStepAt)",
+    "function release(address buyer) returns (uint256)",
+    "event Dropped(address indexed person, address indexed locker, uint256 amount, bytes32 ref)",
+    "event Released(address indexed buyer, uint256 amount, uint256 step)",   // emitted by the Locker itself
+  ];
+  var LOCKER_STEP = 2628000, LOCKER_STEPS = 24;   // Locker.sol STEP / STEPS (public constants; pinned by tests/suites/lockers.js)
+  // VEST-100-1 — THE LOCKER WORDS (owner-approved 2026-11-27; docs/DASHBOARD_DESIGN_v1.md §16, pinned by mp/copyproof.js).
+  // Schedule only: no locker line speaks of rewards, and the dashboard never offers Activate for locker coins (ruling 7).
+  var LOCKER_COPY = {
+    locked: "Locked. Released in 24 months from exchange listing.",
+    subEarlier: "Earlier purchase",
+    subLocker: "Locker",
+    label: "Locked Amount",
+    ready: "Ready to release: {amount} DYC",
+    firstRelease: "The first release is on {date}.",
+    step: "Step {k} of 24. {released} of {total} DYC released. Next release: {date}.",
+    button: "Release",
+    released: "Released {amount} DYC to your wallet.",
+    nothingDue: "Nothing to release yet. Next release: {date}.",
+    feedIn: "Received {amount} DYC into your locker",
+    feedOut: "Released {amount} DYC from your locker",
+    subtitle: "Locked coin",
+  };
+  function lcopy(t, o) { return t.replace(/\{(\w+)\}/g, function (m, k) { return o[k] != null ? String(o[k]) : m; }); }
 
   // ── ERROR DECODER (M-F4 defect 2) — every custom error the five user-facing contracts can throw,
   //    plus the shared OpenZeppelin base errors, gets a plain-words translation. "Unknown custom
@@ -130,8 +156,15 @@ window.DYDash = (function () {
     "error ERC20InvalidReceiver(address receiver)", "error ERC20InvalidSender(address sender)",
     "error ERC20InvalidApprover(address approver)", "error ERC20InvalidSpender(address spender)",
     "error OwnableUnauthorizedAccount(address account)", "error OwnableInvalidOwner(address owner)",
+    // VEST-100-1 — LockerFactory / Locker (the Release road). Only a locker call can raise these.
+    "error NotStarted()", "error NothingDue()", "error NoLocker(address buyer)",
   ];
   var ERR_PLAIN = {
+    // VEST-100-1 — the locker errors, owner-approved 2026-11-27 (DASHBOARD_DESIGN_v1 §16, pinned by mp/copyproof.js).
+    // Schedule only. Reached only on the locker road, which is dark until the ceremony.
+    NotStarted: "Nothing to release yet. The first release is one month after exchange listing.",
+    NothingDue: "Nothing to release yet. Releases come in 24 monthly steps from exchange listing.",
+    NoLocker: "This wallet has no locker, so there is nothing to release.",
     // token / allowance (the M-F4 defect-2 root cause: an un-approved stake)
     ERC20InsufficientAllowance: "This needs your approval first. Approve the token for this contract, then try again.",
     ERC20InsufficientBalance: "You don't have enough of that token in your wallet for this.",
@@ -355,7 +388,8 @@ window.DYDash = (function () {
   // GAS floors (house law: explicit gas limit for every state-touching call). redeem cold-state floor: measured max
   // 140,296 (cold nonce SSTORE + cold recipient + funding reconcile) → 160,000 with margin.
   var GAS = { claimVest: 160000, activate: 320000, stake: 320000, claimRoi: 300000, cashout: 260000, winRedeem: 260000, approve: 90000, buy: 380000, redeem: 160000, send: 90000,
-    toranaClaim: 250000 };   // TORANA-AUTO-1: measured 141,353–145,788 on a fork; room for a smart-account receiver
+    toranaClaim: 250000,   // TORANA-AUTO-1: measured 141,353–145,788 on a fork; room for a smart-account receiver
+    lockerRelease: 290000 };   // VEST-100-1: release floor 142,299 on a mainnet fork (step 1, the dearest step) × 2
   // S-STAKE-GATE-1 (owner ruling 2026-08-22): staking LIQUID DYC from the dashboard requires a 10,000 DYC floor
   // (the $100 line at 100 DYC/USD). Pure balanceOf threshold — SOURCE-BLIND (ICO liquid and P2P-received liquid
   // qualify equally). wei-DYC bigint, compared against the raw balanceOf — never a float on a formatted string. The
@@ -444,6 +478,10 @@ window.DYDash = (function () {
       deployBlock: (function (v) { v = Number(v); return (Number.isFinite(v) && v > 0) ? v : (FILE.deployBlock || 0); })(o.deployBlock),
     };
   }
+  // VEST-100-1 — THE SWITCH. The file only (mf-config.js `lockers`), never a localStorage override. ON needs `on === true`
+  // AND a factory address; anything less keeps every locker road dark and the page exactly as it was.
+  function lockersOn() { var L = FILE.lockers; return !!(L && L.on === true && L.factory); }
+  function lockerFactory() { return lockersOn() ? FILE.lockers.factory : null; }
 
   function withEthers() { return W.loadEthers().then(function (e) { ethersRef = e; return e; }); }
   // Reads (M-F4/b/c). Two chains from ONE builder. batchMaxCount:1 (M-F4b).
@@ -662,7 +700,11 @@ window.DYDash = (function () {
     var pct = granted > 0n ? Number((vested * 10000n) / granted) / 100 : 0;
     var pre = data.vest.dexDay === 0n;
     var untilTs = pre ? 0 : Number(data.vest.dexDay + data.vest.dur);
-    b.innerHTML =
+    // VEST-100-1 — a wallet with a locker sees two parts; every other wallet (and the switch off) sees the card as it was
+    if (data.lockErr) { lockerSubtitle(false); b.innerHTML = "<div class='notlive'>" + netMsg() + "</div>"; return; }
+    var hasLock = !!(data.lock && data.lock.total > 0n);
+    lockerSubtitle(hasLock);
+    var earlier =
       "<div class='stat-label'>Locked Amount</div>" +
       "<div class='stat-line'><span class='v'>" + fmt(locked) + "</span><span class='u'>DYC</span></div>" +
       "<div class='bar'><i style='width:" + pct.toFixed(0) + "%'></i></div>" +
@@ -672,7 +714,66 @@ window.DYDash = (function () {
       "<div class='stat-line'><span class='v' style='color:var(--gold-burnished)'>" + fmt(releasable) + "</span><span class='u'>DYC</span></div>" +
       "<div class='card-actions'><button class='btn-g btn-p' id='act-vclaim'" + (releasable > 0n ? "" : " disabled") + ">Claim</button></div>" +
       (pre ? "<div class='note pre'>⧗ Release begins at exchange listing</div>" : "");
+    b.innerHTML = hasLock ? (granted > 0n ? lockerSub(LOCKER_COPY.subEarlier) + earlier + "<div class='hair'></div>" : "") + lockerSub(LOCKER_COPY.subLocker) + lockerHtml(data.lock) : earlier;
     if ($("act-vclaim")) $("act-vclaim").onclick = freshThen(actClaimVesting);
+    if ($("act-lrelease")) $("act-lrelease").onclick = freshThen(actRelease);
+  }
+  // VEST-100-1 — the locker's part of the Vested card (schedule only: no reward, no Activate — ruling 7)
+  function lockerSub(t) { return "<div class='stat-label lock-sub' style='color:var(--gold-burnished);letter-spacing:.06em;margin-bottom:6px'>" + t + "</div>"; }
+  function lockerStep(lk) { return lk.dexDay === 0n ? 0 : (lk.next === 0 ? LOCKER_STEPS : Math.round((lk.next - Number(lk.dexDay)) / LOCKER_STEP) - 1); }
+  // the card's subtitle: "Locked coin" for a wallet with a locker; every other wallet keeps the page's own words.
+  // Touched only while the switch is on (off: the DOM is never written).
+  var lockerSubOrig = null;
+  function lockerSubtitle(hasLock) {
+    if (!lockersOn()) return;
+    var el = document.querySelector("#card-vesting .bcard-sub"); if (!el) return;
+    if (lockerSubOrig === null) lockerSubOrig = el.textContent;
+    var want = hasLock ? LOCKER_COPY.subtitle : lockerSubOrig;
+    if (el.textContent !== want) el.textContent = want;
+  }
+  // the locker's lines use the card's body-text colour and weight (the "Released but unclaimed" label's), not the dim note gold
+  var LK_TXT = "color:var(--parchment);opacity:.72;font-size:.82rem";
+  function lockerHtml(lk) {
+    var pre = lk.dexDay === 0n, k = lockerStep(lk), left = lk.total > lk.released ? lk.total - lk.released : 0n;
+    var pct = lk.total > 0n ? Number((lk.released * 10000n) / lk.total) / 100 : 0;
+    var line = "";
+    if (!pre && k === 0) line = lcopy(LOCKER_COPY.firstRelease, { date: lk.next ? dateFmt(lk.next) : "" });   // listed, step 1 not yet reached
+    else if (!pre) {
+      line = lcopy(LOCKER_COPY.step, { k: k, released: fmt(lk.released), total: fmt(lk.total), date: lk.next ? dateFmt(lk.next) : "" });
+      if (!lk.next) line = line.split(" Next release:")[0];   // after step 24 there is no next release
+    }
+    var can = !pre && (lk.collectable > 0n || k < LOCKER_STEPS);
+    var ready = "";
+    if (lk.collectable > 0n) {   // what pressing Release pays — the same weight as "Released but unclaimed"
+      var rp = LOCKER_COPY.ready.split("{amount}");
+      ready = "<div class='hair'></div><div class='stat-label lock-ready'>" + rp[0].replace(/\s+$/, "") + "</div>" +
+        "<div class='stat-line'><span class='v' style='color:var(--gold-burnished)'>" + fmt(lk.collectable) + "</span><span class='u'>" + rp[1].replace(/^\s+/, "") + "</span></div>";
+    }
+    return "<div class='stat-label'>" + LOCKER_COPY.label + "</div>" +
+      "<div class='stat-line'><span class='v'>" + fmt(left) + "</span><span class='u'>DYC</span></div>" +
+      "<div class='bar'><i style='width:" + pct.toFixed(0) + "%'></i></div>" +
+      "<div class='lock-note' style='margin-top:8px;" + LK_TXT + "'>" + LOCKER_COPY.locked + "</div>" +
+      (line ? "<div class='lock-step' style='margin-top:6px;" + LK_TXT + "'>" + line + "</div>" : "") +
+      ready +
+      "<div class='card-actions'><button class='btn-g btn-p' id='act-lrelease'" + (can ? "" : " disabled") + ">" + LOCKER_COPY.button + "</button></div>";
+  }
+  function actRelease() {
+    var lk = data.lock, me = W.state.address;
+    if (!lk) { failBox(RR_DASH); return; }
+    if (lk.collectable === 0n) { toast(lcopy(LOCKER_COPY.nothingDue, { date: lk.next ? dateFmt(lk.next) : "" })); return; }
+    var paidOf = function (rc) {   // the amount the Locker actually paid (its Released event), else what was due at the fresh read
+      try { var i = new ethersRef.Interface(LOCKER_ABI); for (var n = 0; n < rc.logs.length; n++) { var p = null; try { p = i.parseLog(rc.logs[n]); } catch (_) {} if (p && p.name === "Released") return p.args.amount; } } catch (e) {}
+      return lk.collectable;
+    };
+    return runAction({
+      contractAddr: lockerFactory(), abi: LOCKER_ABI, gas: GAS.lockerRelease,
+      simFn: function (k) { return k.release.staticCall(me); },
+      sendFn: function (k, o) { return k.release(me, o); },
+      title: LOCKER_COPY.button,
+      body: "<b>" + fmt(lk.collectable) + " DYC</b>",
+      successMsg: function (rc) { return lcopy(LOCKER_COPY.released, { amount: fmt(paidOf(rc)) }); },
+      feedRow: function (rc) { var a = paidOf(rc); return { type: LOCKER_COPY.subLocker, ic: "vesting", details: lcopy(LOCKER_COPY.feedOut, { amount: fmt(a) }), amt: fmt(a) + " DYC" }; },
+    });
   }
 
   function renderStaked() {
@@ -750,9 +851,9 @@ window.DYDash = (function () {
   function renderEmptyMint() {
     var el = $("empty-mint");
     if (!el) return;
-    var busy = data.liqErr || data.vestErr || data.stakeErr;
+    var busy = data.liqErr || data.vestErr || data.stakeErr || data.lockErr;
     var liquidZero = data.liquid === 0n;
-    var vestZero = !!data.vest && data.vest.granted === 0n;
+    var vestZero = !!data.vest && data.vest.granted === 0n && !(data.lock && data.lock.total > 0n);   // VEST-100-1: a locker is a holding
     var stakeZero = !!data.stake && data.stake.principal === 0n;
     el.classList.toggle("hidden", !(!busy && liquidZero && vestZero && stakeZero));
   }
@@ -799,6 +900,7 @@ window.DYDash = (function () {
     if (c.toranaClaim) q("tSt", c.toranaClaim, iTk, "status", [addr]);
     if (c.holderStaking) { q("hsN", c.holderStaking, iHs, "positionCount", [addr]); q("hsPend", c.holderStaking, iHs, "pendingRoi", [addr]); q("hsRoi", c.holderStaking, iHs, "roi", [addr]); q("hsReg", c.holderStaking, iHs, "vestedRegistered", [addr]); }
     if (c.dycoinSale) q("ico", c.dycoinSale, iSale, "attributionLocked", [addr]);
+    if (lockersOn()) q("lk", lockerFactory(), I(LOCKER_ABI), "statusOf", [addr]);   // VEST-100-1: the locker, in the same one read
     // the wallet-independent figures — only on a full read
     if (withGlobals) {
       q("gDec", c.dycoin, iDy, "decimals");
@@ -840,6 +942,11 @@ window.DYDash = (function () {
       if (c.toranaClaim) { var st = v("tSt"); d.toranaSt = st ? { s: Number(st[0]), spent: st[1], short: st[2] } : null; }
       if (c.dycoinSale) { if (ok("ico")) d.isIcoBuyer = !!v("ico"); else { d.isIcoBuyer = null; console.warn("ICO-buyer provenance read failed — staking gate follows the 10,000 DYC floor rule this cycle"); } }
       if (g && g.deskReserve != null) d.deskReserve = g.deskReserve;
+      // VEST-100-1 — THE LOCKER: every figure (and the vault's DEX Day, which places the steps), or the busy face — never a 0
+      if (lockersOn()) {
+        if (ok("lk") && g && g.vest) { var lk = v("lk"); d.lock = { addr: lk[0], total: lk[1], released: lk[2], collectable: lk[3], next: Number(lk[4]), dexDay: g.vest.dexDay }; }
+        else d.lockErr = true;
+      }
       // the second aggregate3 — only what depends on an answer above
       var calls2 = [], at2 = {};
       function q2(key, target, iface, fn, args) { at2[key] = calls2.length; calls2.push({ target: target, iface: iface, fn: fn, args: args || [] }); }
@@ -888,7 +995,7 @@ window.DYDash = (function () {
   }
   function paintCards() {
     // M-F4b: a configured read that threw is a NETWORK failure (not a bad address) → retry + honest message
-    var failed = !!(data.liqErr || data.vestErr || data.stakeErr || data.rewardErr);
+    var failed = !!(data.liqErr || data.vestErr || data.stakeErr || data.rewardErr || data.lockErr);
     if (failed) scheduleReadRetry(); else readSucceeded();
     renderLiquid(); renderVesting(); renderStaked(); renderRewards(); renderRunway(); renderWinnings();
     renderEmptyMint();
@@ -1044,7 +1151,7 @@ window.DYDash = (function () {
                     clearPending(tx.hash); // S-BUY-RESUME: resolved in-session — no resume needed
                     // S-LIVE-FIX-1: A2 optimistic feed row + A1 linked success toast (polygonscan tx link).
                     if (opts.feedRow) { var row = opts.feedRow(rc); if (row) { row.hash = tx.hash; if (!row.block) row.block = rc ? Number(rc.blockNumber) : 0; pushOptimistic(row); } }
-                    toast(opts.successMsg || "Transaction confirmed.", tx.hash);
+                    toast((typeof opts.successMsg === "function" ? opts.successMsg(rc) : opts.successMsg) || "Transaction confirmed.", tx.hash);
                     refresh();
                   }
                   else { clearPending(tx.hash); failBox("The transaction reverted on-chain. Nothing was changed."); } // S-BUY-RESUME: confirmed revert → drop
@@ -1229,7 +1336,30 @@ window.DYDash = (function () {
     // S-FEED-2: DYCoinSale purchases — the buy that lands DYC (85% into vesting, 15% liquid). dycOut = total DYC received.
     if (c.dycoinSale) parts.push({ address: c.dycoinSale, abi: SALE_ABI, events: [
       { name: "Purchased", row: function (e) { return { type: "Purchase", ic: "liquid", details: "Bought DYC", amt: fmt(e.args.dycOut) + " DYC" }; } }] });
+    // VEST-100-1: DYC delivered into this wallet's locker (the factory's Dropped — the person is its first indexed field)
+    if (lockersOn()) parts.push({ address: lockerFactory(), abi: LOCKER_ABI, events: [
+      { name: "Dropped", row: function (e) { return { type: LOCKER_COPY.subLocker, ic: "vesting", details: lcopy(LOCKER_COPY.feedIn, { amount: fmt(e.args.amount) }), amt: fmt(e.args.amount) + " DYC" }; } }] });
     return parts;
+  }
+  // VEST-100-1: a release, seen as the DYC moving from this wallet's locker to it. The Locker's own Released event is not
+  // read: the read proxy serves only listed contracts and every locker is a new address, while DYC is listed — and a
+  // locker sends DYC only when it releases, so these transfers are exactly the releases.
+  var TRANSFER_IFACE = null;
+  function lockerReleaseLogs(provider, c, addr, start, end) {
+    if (!lockersOn() || !c.dycoin || !data.lock || !(data.lock.total > 0n) || String(W.state.address || "").toLowerCase() !== String(addr).toLowerCase()) return Promise.resolve([]);
+    TRANSFER_IFACE = TRANSFER_IFACE || new ethersRef.Interface(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
+    var topics = [TRANSFER_IFACE.getEvent("Transfer").topicHash, ethersRef.zeroPadValue(data.lock.addr, 32), ethersRef.zeroPadValue(addr, 32)];
+    var raw = typeof provider.send === "function";
+    var ask = raw ? provider.send("eth_getLogs", [{ address: c.dycoin, topics: topics, fromBlock: ethersRef.toQuantity(start), toBlock: ethersRef.toQuantity(end) }])
+                  : provider.getLogs({ address: c.dycoin, topics: topics, fromBlock: start, toBlock: end });
+    return ask.then(function (logs) {
+      return (logs || []).map(function (lg) {
+        var v = TRANSFER_IFACE.parseLog({ topics: lg.topics, data: lg.data }).args.value;
+        var ts = null; try { if (lg.blockTimestamp != null) ts = Number(BigInt(lg.blockTimestamp)); } catch (x) { ts = null; }
+        return { blockNumber: Number(lg.blockNumber), transactionHash: lg.transactionHash, args: { amount: v }, blockTimestamp: ts,
+          __row: function () { return { type: LOCKER_COPY.subLocker, ic: "vesting", details: lcopy(LOCKER_COPY.feedOut, { amount: fmt(v) }), amt: fmt(v) + " DYC" }; } };
+      });
+    });
   }
   function scanRange(provider, c, addr, from, to, evs) {
     var parts = feedFilterParts(c);
@@ -1265,7 +1395,8 @@ window.DYDash = (function () {
             var ts = null; try { if (lg.blockTimestamp != null) ts = Number(BigInt(lg.blockTimestamp)); } catch (x) { ts = null; }
             out.push({ blockNumber: Number(lg.blockNumber), transactionHash: lg.transactionHash, args: parsed.args, __row: k.row, blockTimestamp: ts });
           });
-          return out;
+          if (!lockersOn()) return out;
+          return lockerReleaseLogs(provider, c, addr, start, end).then(function (rel) { return out.concat(rel); });   // VEST-100-1
         });
       },
     };

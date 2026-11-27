@@ -634,6 +634,47 @@ ok("WI6 · the cap is never written into the page: dashboard.js reads it from th
 ok("WI7 · the winnings desk's reserve line no longer asks for a smaller amount (the card has no amount field)",
    /ERR_WINNINGS = \{[\s\S]*?ReserveInsufficient: "The cash-out desk's reserve can't cover this right now\. Your winnings are safe; check back later\."/.test(DASH));
 
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// VEST-100-1 (owner rulings 2026-11-27 — approved word for word): DASHBOARD_DESIGN_v1 §16 LOCKERS → js/dashboard.js
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+const LK_DOC = (DDOC.split("## 16. LOCKERS")[1] || "");
+const LK_LAW = [   // owner's wording change 2026-11-27 20:12: LK1 replaced, the before-listing line retired, LK11–LK14 added
+  ["LK1 locked",     "Locked. Released in 24 months from exchange listing."],
+  ["LK3 sub-earlier","Earlier purchase"],
+  ["LK4 sub-locker", "Locker"],
+  ["LK5 step",       "Step {k} of 24. {released} of {total} DYC released. Next release: {date}."],
+  ["LK6 button",     "Release"],
+  ["LK7 released",   "Released {amount} DYC to your wallet."],
+  ["LK8 nothing",    "Nothing to release yet. Next release: {date}."],
+  ["LK9 feed-in",    "Received {amount} DYC into your locker"],
+  ["LK10 feed-out",  "Released {amount} DYC from your locker"],
+  ["LK11 ready",     "Ready to release: {amount} DYC"],
+  ["LK12 label",     "Locked Amount"],
+  ["LK13 subtitle",  "Locked coin"],
+  ["LK14 first",     "The first release is on {date}."],
+];
+const LK_ERR = [
+  ["LKE1 NotStarted", "NotStarted", "Nothing to release yet. The first release is one month after exchange listing."],
+  ["LKE2 NothingDue", "NothingDue", "Nothing to release yet. Releases come in 24 monthly steps from exchange listing."],
+  ["LKE3 NoLocker",   "NoLocker",   "This wallet has no locker, so there is nothing to release."],
+];
+const LK_RETIRED = ["Locked. Released in 24 monthly steps from exchange listing.", "The first release is one month after listing. The listing date is not yet set.", "The listing date is not yet set"];
+console.log("\n── LOCKERS · DASHBOARD_DESIGN_v1 §16 ruled copy (doc → js/dashboard.js) ──");
+const LK_BLOCK = (DASH.split("var LOCKER_COPY = {")[1] || "").split("};")[0];
+for (const [tag, line] of LK_LAW) {
+  ok(tag + " — in §16 of the doc", LK_DOC.split("\n").some((l) => norm(l.replace(/^- /, "")) === norm(line)), line);
+  ok(tag + " — carried verbatim by dashboard.js (LOCKER_COPY)", LK_BLOCK.indexOf(JSON.stringify(line)) >= 0, line);
+}
+const ERR_BLOCK = (DASH.split("var ERR_PLAIN = {")[1] || "").split("};")[0];
+for (const [tag, key, line] of LK_ERR) {
+  ok(tag + " — in §16 of the doc", LK_DOC.split("\n").some((l) => norm(l.replace(/^- /, "")) === norm(key + ": " + line)), line);
+  ok(tag + " — carried verbatim by dashboard.js (ERR_PLAIN." + key + ")", ERR_BLOCK.indexOf(key + ": " + JSON.stringify(line)) >= 0, line);
+}
+ok("LK15 · schedule only: no locker word speaks of rewards, earning, staking or Activate (ruling 7)",
+   LK_LAW.concat(LK_ERR.map((r) => [r[0], r[2]])).every((r) => !/reward|earn|stak|ROI|Activate|%/i.test(r[1])));
+ok("LK16 · the retired lines are gone from dashboard.js (owner's wording change 2026-11-27 20:12)",
+   LK_RETIRED.every((r) => DASH.indexOf(r) < 0), LK_RETIRED.filter((r) => DASH.indexOf(r) >= 0).join(" | "));
+
 // RPC-CLEANUP-1 — THE SEVENTH PAIR: docs/READ_ROAD_v1.md §2 (owner ruling 2026-10-30) → the page that shows each line.
 // With no free public RPC behind our proxy, these are the faces a buyer sees when a read fails — each with Try again.
 const RDOC = fs.readFileSync(path.resolve(__dirname, "..", "docs", "READ_ROAD_v1.md"), "utf8");
@@ -685,6 +726,6 @@ ok("SR4 · the USD card and the bundle + top-up roads stop on a moved price with
 ok("SR3 · the purchase's fresh read is wired at every DYC entry point (approve and buy) and stops on a moved price",
    (STORE.match(/freshCardThen\(btn, msg, row, function \(\) \{ do(ApproveThenSwap|Buy)\(/g) || []).length >= 3 && /stop = PRICE_CHANGED/.test(STORE));
 
-const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length + RR_LAW.length + SR_LAW.length;
+const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length + LK_LAW.length + LK_ERR.length + RR_LAW.length + SR_LAW.length;
 console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across EIGHT pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);

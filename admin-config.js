@@ -39,7 +39,12 @@ window.DY_ADMIN_CONFIG = {
     dropDesk: "0x28813f882E3DaefC6329Adf85005Fbfd31CaB8fa", // Drop Desk (coupon sign/publish/cancel/figures; owner=timelock, signer=PROD_OWNER)
     waveCardSale: "0x89f477BEa193956a724f3222fF4DF0f5267F6E92", // W3-REDEPLOY-WAVE — reborn WaveCardSale (Price Desk gate owner()==connected + setPrice/setSupplyCap/setSalesOpen target)
     waveCardMarket: "0x5Ab2F48Eae60169A4028e7ba8bA3cA664Bea5Fe1", // W3-REDEPLOY-WAVE — reborn WaveCardMarket (Price Desk marketsOpen switch target)
+    // VEST-100-1 — the LockerFactory (the Vested Drop panel; its gate is factory.master() == the connected wallet). NULL
+    // until the ceremony deploys it: null keeps the panel NOT CONFIGURED with every control disabled.
+    lockerFactory: null,
   },
+  // VEST-100-1 — the LockerFactory's birth block. NULL until the ceremony.
+  lockerDeployBlock: null,
 
   // The block the contracts were deployed at — the mint-history scan starts here
   // (0 falls back to a full chunked scan). The mainnet money-stack deploy block keeps the getLogs range tiny.

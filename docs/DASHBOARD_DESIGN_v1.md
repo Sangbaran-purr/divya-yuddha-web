@@ -308,3 +308,44 @@ and the player's one withdrawal in 24 hours is not used up.
 holds-unreadable refusals reuse the existing "We can't confirm your winnings right now - nothing is lost. Try again
 shortly." The staking cash-out's reserve line ("...Try a smaller amount or check back later.") is NOT part of this ruling:
 its wording is open (that panel also has no amount field - flagged to the owner 2026-10-30).
+
+## 16. LOCKERS (VEST-100-1 phase 1, owner rulings 2026-11-27)
+
+Coins delivered for payments made outside the portal (the master's vested drops) land in the person's own **Locker**: a
+contract of the LockerFactory (web3 c28cf16c) that releases them in 24 monthly steps from exchange listing (DEX Day, the
+vault's own date). Anyone may press Release; it pays only the person. The dashboard reads the locker in its one combined
+read (`statusOf`), and every locker road runs ONLY while `mf-config.js` `lockers.on` is true AND the factory address is
+set — dark until the ceremony. Schedule only: no locker line speaks of rewards, and the dashboard never offers Activate
+for locker coins (ruling 7).
+
+(Numbered 16, not 12: §12 is AFFILIATE-1 rung 3 and §13–15 are pinned by their headings.)
+
+### Ruled copy (pinned by `mp/copyproof.js`, doc → `js/dashboard.js`; owner's wording change 2026-11-27 20:12)
+- Locked. Released in 24 months from exchange listing.
+- Earlier purchase
+- Locker
+- Locked Amount
+- Ready to release: {amount} DYC
+- The first release is on {date}.
+- Step {k} of 24. {released} of {total} DYC released. Next release: {date}.
+- Release
+- Released {amount} DYC to your wallet.
+- Nothing to release yet. Next release: {date}.
+- Received {amount} DYC into your locker
+- Released {amount} DYC from your locker
+- Locked coin
+
+Before listing the locker shows the first line only; nowhere on the page says the listing date is not set. After listing
+and before the first step, "The first release is on {date}." stands in place of a step line. After step 24 there is no
+next release, so the step line ends at "…DYC released." "Locked Amount" labels the locker's figure (the label the earlier
+part uses). "Ready to release: {amount} DYC" shows whenever something is collectable, with the weight of "Released but
+unclaimed" (a label over the gold figure). The two sub-headings appear only for a wallet that has a locker; "Earlier
+purchase" only when the wallet also has DYC vesting from a purchase made before lockers. "Locked coin" is the card's
+subtitle for a wallet with a locker (with or without an earlier purchase); every other wallet keeps the subtitle the card
+has always had. The locker's lines use the card's body-text colour. Retired (never on the page): "Locked. Released in 24
+monthly steps from exchange listing." and "The first release is one month after listing. The listing date is not yet set."
+
+### Ruled error lines (the Release road; pinned by `mp/copyproof.js`, doc → `ERR_PLAIN` in `js/dashboard.js`)
+- NotStarted: Nothing to release yet. The first release is one month after exchange listing.
+- NothingDue: Nothing to release yet. Releases come in 24 monthly steps from exchange listing.
+- NoLocker: This wallet has no locker, so there is nothing to release.
