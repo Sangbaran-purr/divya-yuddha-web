@@ -373,7 +373,7 @@ async function main() {
     const lkUrls = ["effects/lankadahan/chain.json", "effects/lankadahan_fire/manifest.json", "effects/lankadahan_fire/atlas.webp", "effects/lankadahan_gold/manifest.json", "effects/lankadahan_gold/atlas.webp"].map((rel) => new URL(rel, ORIGIN).href);
     ok("F57 · the synced copy carries Lanka Dahan's glue (the strike-afterglow chain in its player, fxLankaBurn's owned burn and wash, the caster seat from the first damage target) and all five pack files resolve through the ONE absolute base to the free game's origin (HALL-SYNC-3)",
        /function fxLankaBurn\(fire, wash, floats\)\{/.test(gi) && /fxLankaBurn\(fire, wash, floats\);/.test(gi) && gi.indexOf("fxOwnsMoment('lankadahan')") >= 0 && gi.indexOf("fxChainLive('lankadahan')") >= 0 &&
-       /function fxSeatFromTarget\(evs, k\)/.test(gi) && /const casterSeat = fxGlow\(sp\) \? fxSeatFromTarget\(evs, k\) : ownerPiOfUid\(ev\.sourceUid\);/.test(gi) && /chain\.shape === 'strike-afterglow'/.test(gi) &&
+       /function fxSeatFromTarget\(evs, k\)/.test(gi) && /const casterSeat = fxGlow\(sp\) \? fxSeatFromTarget\(evs, k\) : playSeatOf\(ev\.sourceUid\);/.test(gi) && /chain\.shape === 'strike-afterglow'/.test(gi) &&
        gi.split(MBASE).length === 2 && lkUrls.length === 5 && lkUrls.every((u) => u.indexOf(ORIGIN + "effects/lankadahan") === 0), lkUrls.join(" · "));
     ok("F37 · the gate gem skips the Hall's battle frame (R5): the skip rides the injected preamble exactly once",
        (gi.match(/window\.top !== window && \/\[\?&\]wire=1\(&\|\$\)\/\.test\(location\.search\)\) return;/g) || []).length === 1);
