@@ -353,8 +353,24 @@ monthly steps from exchange listing." and "The first release is one month after 
 ### The proceeds report (VEST-100-1 phase 1 part 2; ruled line pinned by `mp/copyproof.js`, doc → `js/report.js`)
 - Coins delivered for payments made outside the portal are listed separately. They come from the treasury allocation and are locked, released in 24 months from exchange listing.
 
+The three figure labels (approved by the owner 2026-11-28, VEST-100-1 part 3; pinned by `mp/copyproof.js`, doc → `js/report.js`):
+- Delivered outside the portal — people
+- Delivered outside the portal — DYC
+- Held in lockers
+
 With the switch on, `report.html` shows a separate block under the sale: the line above, then the people the master
 has delivered to and the DYC delivered (the factory's `Dropped` events), and the DYC held in lockers (per locker, DYC
 dropped in minus DYC paid out of it, never below 0), each marked "from event logs". None of it is ever added to buyers,
 USD received or DYC sold, and a locker's creation (`LockerCreated`, by a drop or by its owner's `openLocker`) is never
-counted as a purchase. With the switch off the report is byte-identical to the page before lockers.
+counted as a purchase. With the switch off the report is byte-identical to the page before lockers. The sentence uses the
+page's explanatory-text colour (the parchment of the page's own opening line), and a figure never wraps its "DYC" onto a
+second line on a phone.
+
+### The admin Vested Drop panel (VEST-100-1 phase 1 part 3; ruled line pinned by `mp/copyproof.js`, doc → `js/admin.js`)
+- This address is a contract. Confirm it is the person's own wallet.
+
+The panel sits beside Coin Drops on `admin.html` and exists only while `admin-config.js` names the LockerFactory
+(`contracts.lockerFactory`, file only — no browser override); with it null the admin page is byte-identical to the page
+before lockers. It works only for the wallet that `factory.master()` names, read on chain. It takes wallets only, never a
+locker address, at most 20 lines a batch, and signs approve(factory, exact total) then drop or dropBatch, each simulated
+first; the allowance is 0 after a successful send.

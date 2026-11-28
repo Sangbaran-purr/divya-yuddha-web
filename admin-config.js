@@ -42,6 +42,9 @@ window.DY_ADMIN_CONFIG = {
     // VEST-100-1 — the LockerFactory (the Vested Drop panel; its gate is factory.master() == the connected wallet). NULL
     // until the ceremony deploys it: null keeps the panel NOT CONFIGURED with every control disabled.
     lockerFactory: null,
+    // VEST-100-1 part 3 — the 48h TimelockController, one of the addresses the Vested Drop panel refuses to drop to
+    // (verbatim from the web3 repo's docs/MAINNET_STACK_2026-08-15.md, contract #1). Read only by that panel.
+    timelock: "0xe684a6888F024C551DadEDAc193283174C2b828E",
   },
   // VEST-100-1 — the LockerFactory's birth block. NULL until the ceremony.
   lockerDeployBlock: null,

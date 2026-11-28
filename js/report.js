@@ -61,7 +61,7 @@ window.DYReport = (function () {
   var LOCKER_DROP_ABI = ["event Dropped(address indexed person, address indexed locker, uint256 amount, bytes32 ref)"];
   var LOCKER_REPORT_COPY = {   // docs/DASHBOARD_DESIGN_v1.md §16 (the report); pinned by mp/copyproof.js
     note: "Coins delivered for payments made outside the portal are listed separately. They come from the treasury allocation and are locked, released in 24 months from exchange listing.",
-    // the three labels below are DRAFTS awaiting the owner's ruling (VEST-100-1 part 2); pinned once ruled
+    // the three labels: approved by the owner (VEST-100-1 part 3, 2026-11-28), pinned in §16 and by mp/copyproof.js
     people: "Delivered outside the portal — people",
     dyc: "Delivered outside the portal — DYC",
     held: "Held in lockers",
@@ -194,11 +194,14 @@ window.DYReport = (function () {
   function lockerBlock(f) {
     f = f || {};
     var src = " <span class='rep-src'>from event logs</span>";
+    // part 3 fixes: the sentence is the page's explanatory text (the parchment of the page's own promise, not the dim
+    // label gold), and a figure never breaks before its "DYC" on a phone (the label wraps instead)
+    var fig = "<b style='white-space:nowrap'>";
     return "<div class='rep-lockers' style='margin-top:14px;padding-top:12px;border-top:1px solid rgba(217,168,78,.22)'>" +
-      "<div class='rep-note'>" + LOCKER_REPORT_COPY.note + "</div>" +
-      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.people + src + "</span><b>" + (f.people == null ? "—" : f.people) + "</b></div>" +
-      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.dyc + src + "</span><b>" + (f.dropped == null ? "—" : fmtDyc(f.dropped) + " DYC") + "</b></div>" +
-      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.held + src + "</span><b>" + (f.held == null ? "—" : fmtDyc(f.held) + " DYC") + "</b></div>" +
+      "<div class='rep-note' style='color:var(--parchment)'>" + LOCKER_REPORT_COPY.note + "</div>" +
+      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.people + src + "</span>" + fig + (f.people == null ? "—" : f.people) + "</b></div>" +
+      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.dyc + src + "</span>" + fig + (f.dropped == null ? "—" : fmtDyc(f.dropped) + " DYC") + "</b></div>" +
+      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.held + src + "</span>" + fig + (f.held == null ? "—" : fmtDyc(f.held) + " DYC") + "</b></div>" +
       "</div>";
   }
   // VEST-100-1 — the two figures from the logs: the factory's Dropped, then DYC Transfers out of the lockers dropped into.

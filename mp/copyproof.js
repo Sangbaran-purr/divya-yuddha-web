@@ -671,12 +671,24 @@ for (const [tag, key, line] of LK_ERR) {
   ok(tag + " — carried verbatim by dashboard.js (ERR_PLAIN." + key + ")", ERR_BLOCK.indexOf(key + ": " + JSON.stringify(line)) >= 0, line);
 }
 // VEST-100-1 part 2 — the report's ruled line (owner, 2026-11-28): §16 → js/report.js LOCKER_REPORT_COPY
-const LK_REP = [["LKR1 report", "Coins delivered for payments made outside the portal are listed separately. They come from the treasury allocation and are locked, released in 24 months from exchange listing."]];
+const LK_REP = [["LKR1 report", "Coins delivered for payments made outside the portal are listed separately. They come from the treasury allocation and are locked, released in 24 months from exchange listing."],
+  // VEST-100-1 part 3 — the three figure labels, approved by the owner 2026-11-28
+  ["LKR3 people", "Delivered outside the portal — people"],
+  ["LKR4 dyc", "Delivered outside the portal — DYC"],
+  ["LKR5 held", "Held in lockers"]];
 const REP_JS = fs.readFileSync(path.resolve(__dirname, "..", "js", "report.js"), "utf8");
 const LKR_BLOCK = (REP_JS.split("var LOCKER_REPORT_COPY = {")[1] || "").split("};")[0];
 for (const [tag, line] of LK_REP) {
   ok(tag + " — in §16 of the doc", LK_DOC.split("\n").some((l) => norm(l.replace(/^- /, "")) === norm(line)), line);
   ok(tag + " — carried verbatim by report.js (LOCKER_REPORT_COPY)", LKR_BLOCK.indexOf(JSON.stringify(line)) >= 0, line);
+}
+// VEST-100-1 part 3 — the admin Vested Drop panel's ruled warning: §16 → js/admin.js VD_COPY
+const LK_ADM = [["LKA1 contract warning", "This address is a contract. Confirm it is the person's own wallet."]];
+const ADM_JS = fs.readFileSync(path.resolve(__dirname, "..", "js", "admin.js"), "utf8");
+const VD_BLOCK = (ADM_JS.split("var VD_COPY = {")[1] || "").split("};")[0];
+for (const [tag, line] of LK_ADM) {
+  ok(tag + " — in §16 of the doc", LK_DOC.split("\n").some((l) => norm(l.replace(/^- /, "")) === norm(line)), line);
+  ok(tag + " — carried verbatim by admin.js (VD_COPY)", VD_BLOCK.indexOf(JSON.stringify(line)) >= 0, line);
 }
 ok("LKR2 · schedule only: the report's locker block speaks of no rewards, earning, staking or ROI",
    LKR_BLOCK.length > 0 && !/reward|earn|stak|ROI|Activate|%/i.test(LKR_BLOCK.replace(/\/\/[^\n]*/g, "")));
@@ -736,6 +748,6 @@ ok("SR4 · the USD card and the bundle + top-up roads stop on a moved price with
 ok("SR3 · the purchase's fresh read is wired at every DYC entry point (approve and buy) and stops on a moved price",
    (STORE.match(/freshCardThen\(btn, msg, row, function \(\) \{ do(ApproveThenSwap|Buy)\(/g) || []).length >= 3 && /stop = PRICE_CHANGED/.test(STORE));
 
-const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length + LK_LAW.length + LK_ERR.length + LK_REP.length + RR_LAW.length + SR_LAW.length;
+const RULED_ALL = RULED_N + DASH_LAW.length + MI_LAW.length + T_LAW.length + WI_LAW.length + LK_LAW.length + LK_ERR.length + LK_REP.length + LK_ADM.length + RR_LAW.length + SR_LAW.length;
 console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail) + " (" + RULED_ALL + " ruled lines × doc+code across EIGHT pairs, + " + (pass + fail - RULED_ALL * 2) + " structural)");
 process.exit(fail === 0 ? 0 : 1);

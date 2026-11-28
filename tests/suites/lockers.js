@@ -253,10 +253,13 @@ async function run() {
     const sent = [];
     const real = h.eth.request.bind(h.eth);
     h.eth.request = (a) => { if (a.method === "eth_sendTransaction") sent.push(a.method); return real(a); };
-    H.click(h.w, "#act-lrelease");
+    // part 3 (owner fix 2026-11-28): nothing collectable → the button in its disabled look, the ruled line beneath it, unpressed
     const nothing = "Nothing to release yet. Next release: " + dateFmt(dex + STEP) + ".";
-    await H.until(() => H.text(h.w).indexOf(nothing) >= 0, 15000, "the nothing-due line").catch(() => {});
-    ok("L9b · Release pressed before step 1: \"" + nothing + "\", and the wallet is asked for nothing", H.text(h.w).indexOf(nothing) >= 0 && sent.length === 0, sent.join(","));
+    const rb = h.w.document.querySelector("#act-lrelease"), wait = h.w.document.querySelector("#vest-body .lock-wait");
+    const under = !!(rb && wait && rb.parentNode.nextElementSibling === wait);
+    H.click(h.w, "#act-lrelease"); await H.sleep(800);
+    ok("L9b · listed, nothing collectable: Release shows disabled and \"" + nothing + "\" stands beneath it without a press; a press asks the wallet for nothing",
+       !!rb && rb.disabled === true && under && wait.textContent === nothing && sent.length === 0, (wait ? wait.textContent : "no line") + " | disabled " + (rb && rb.disabled) + " | under " + under + " | " + sent.join(","));
     H.teardown(h);
   }
   console.log("\n── L · step 1 ──");
@@ -267,6 +270,8 @@ async function run() {
     ok("L9 · step 1: \"" + want + "\", the locked line, and \"Ready to release: 1,000.00 DYC\" with the weight of \"Released but unclaimed\" (a label over the gold figure)",
        v.indexOf(want) >= 0 && v.indexOf(COPY.locked) >= 0 && !RETIRED.some((r) => v.indexOf(r) >= 0) && /Ready to release:\s*1,000\.00\s*DYC/.test(v)
        && !!h.w.document.querySelector("#vest-body .stat-label.lock-ready") && /gold-burnished/.test((h.w.document.querySelector("#vest-body .stat-label.lock-ready").nextElementSibling.querySelector(".v") || { getAttribute: () => "" }).getAttribute("style") || ""), v);
+    { const rb = h.w.document.querySelector("#act-lrelease");
+      ok("L9c · something collectable: Release is the live button it always was, with no nothing-due line", !!rb && rb.disabled === false && !h.w.document.querySelector("#vest-body .lock-wait")); }
     const bal0 = await c.dyc.balanceOf(c.B.address);
     const sent = [];
     const real = h.eth.request.bind(h.eth);
@@ -285,10 +290,12 @@ async function run() {
     await H.until(() => /Step 1 of 24\. 1,000\.00 of 24,000\.00 DYC released\./.test(T(h.w, "#vest-body")), 20000, "the card after the release").catch(() => {});
     ok("L12b · after the release nothing is collectable, so the Ready line is gone", !/Ready to release/.test(T(h.w, "#vest-body")), T(h.w, "#vest-body"));
     sent.length = 0;
-    H.click(h.w, "#act-lrelease");
     const nothing = "Nothing to release yet. Next release: " + dateFmt(dex + 2 * STEP) + ".";
-    await H.until(() => H.text(h.w).indexOf(nothing) >= 0, 15000, "the nothing-due line").catch(() => {});
-    ok("L13 · pressed again with nothing due: \"" + nothing + "\", and the wallet is asked for nothing", H.text(h.w).indexOf(nothing) >= 0 && sent.indexOf("eth_sendTransaction") < 0, sent.join(","));
+    await H.until(() => !!h.w.document.querySelector("#vest-body .lock-wait"), 15000, "the nothing-due line").catch(() => {});
+    const rb2 = h.w.document.querySelector("#act-lrelease"), wait2 = h.w.document.querySelector("#vest-body .lock-wait");
+    H.click(h.w, "#act-lrelease"); await H.sleep(800);
+    ok("L13 · between releases: Release shows disabled and \"" + nothing + "\" stands beneath it without a press; the wallet is asked for nothing",
+       !!rb2 && rb2.disabled === true && !!wait2 && wait2.textContent === nothing && sent.indexOf("eth_sendTransaction") < 0, (wait2 ? wait2.textContent : "no line") + " | " + sent.join(","));
     H.teardown(h);
   }
   {
@@ -377,6 +384,11 @@ async function run() {
     ok("RL4 · all three figures are marked \"from event logs\"", blk && blk.querySelectorAll(".rep-src").length === 3);
     ok("RL5 · buyers, DYC sold and the raised figures are exactly the switch-off report's (nothing added)", saleTop(h.w) === offTop, saleTop(h.w).slice(0, 200) + " ≠ " + offTop.slice(0, 200));
     ok("RL6 · schedule only: the block speaks of no rewards, earning, staking or ROI", !/reward|earn|stak|ROI|Activate/i.test(blk ? blk.textContent : "x"));
+    // part 3 fixes (owner 2026-11-28): the sentence in the page's explanatory colour; a figure never breaks before its DYC
+    const note = blk && blk.querySelector(".rep-note"), figs = blk ? Array.from(blk.querySelectorAll(".rep-figrow > b")) : [];
+    ok("RL10 · the sentence uses the page's explanatory-text colour (parchment, as the page's opening line) and each figure keeps its \"DYC\" on its line (no wrap)",
+       !!note && /color:\s*var\(--parchment\)/.test(note.getAttribute("style") || "") && figs.length === 3 && figs.every((b) => /white-space:\s*nowrap/.test(b.getAttribute("style") || "")),
+       (note && note.getAttribute("style")) + " | " + figs.map((b) => b.getAttribute("style")).join(","));
     H.teardown(h);
   }
   // more drops (a batch of 12 incl. one repeat person) and two lockers opened by their owners — no purchase, no drop

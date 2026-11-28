@@ -649,6 +649,7 @@ window.DYAdmin = (function () {
     // claim contract is a config fact independent of connection). refreshToranaPanel handles each of those.
     refreshToranaPanel();
     refreshPriceDeskGate(); // LEG2 — like TORANA: runs in ALL wallet states (dark on null address, connect prompt, owner check)
+    if (VD_ON) refreshVestedGate(); // VEST-100-1 part 3 — the Vested Drop panel (runs only while admin-config names the factory)
 
     if (!s.hasProvider) {
       banner.className = "banner warn";
@@ -1310,6 +1311,522 @@ window.DYAdmin = (function () {
         if (e && e.code === "ACTION_REJECTED") return { status: "fail", detail: "signature rejected in wallet" };
         return { status: "revert", detail: decodeErr(e), hash: e && e.transactionHash };
       });
+  }
+
+  // ---------- VESTED DROP (VEST-100-1 phase 1 part 3) — DYC from the master into each person's own Locker ----------
+  // The panel exists ONLY while admin-config.js names the LockerFactory (`contracts.lockerFactory`, the file only: no
+  // localStorage override, so one browser cannot switch it on). With it null nothing below runs — no markup is added, no
+  // read is made, nothing is stored — and the admin page is byte-identical to the page before lockers. It works only
+  // for the wallet `factory.master()` names (read on chain). It takes WALLETS only — a locker address is refused — at
+  // most VD_MAX lines a batch, and signs approve(factory, exact total) then drop / dropBatch, each simulated first.
+  var VD_FACTORY = (FILE.contracts && FILE.contracts.lockerFactory) || null;
+  var VD_ON = !!VD_FACTORY;
+  var VD_MAX = 20;
+  // Gas (VEST-100-1 part 3 fork run, web3 test_fork_panelBatchOf20_gas, Polygon mainnet block 98,060,000): dropBatch of 20
+  // drops to NEW Lockers measured 2,521,552 (the master's plain transaction) / 2,527,290 (its 7702 execute()) / 2,539,545
+  // (the DelegationManager route); one drop to a new Locker 159,552; approve 50,857 / 56,193 / 68,184. The limit is
+  // (40,000 + 127,000 × lines) × 1.5 — 3,870,000 for 20 (1.52 × the dearest road), 250,500 for one (1.57 × the single).
+  var VD_GAS_BASE = 40000n, VD_GAS_PER = 127000n;
+  var VD_APPROVE_GAS = 120000; // 1.76 × the dearest approve road
+  function vdDropGas(n) { return Number(((VD_GAS_BASE + VD_GAS_PER * BigInt(n)) * 3n) / 2n); }
+  var VD_REF_RX = /^[A-Za-z0-9._-]{1,31}$/;
+  var VD_COPY = {   // docs/DASHBOARD_DESIGN_v1.md §16 (the admin Vested Drop panel); pinned by mp/copyproof.js
+    contract: "This address is a contract. Confirm it is the person's own wallet.",
+  };
+  var VD_FACTORY_ABI = [
+    "function master() view returns (address)",
+    "function sale() view returns (address)",
+    "function vault() view returns (address)",
+    "function dyc() view returns (address)",
+    "function usdt() view returns (address)",
+    "function usdc() view returns (address)",
+    "function lockerImplementation() view returns (address)",
+    "function lockerOf(address buyer) view returns (address)",
+    "function isLocker(address who) view returns (bool)",
+    "function drop(address person, uint256 amount, bytes32 ref)",
+    "function dropBatch(address[] people, uint256[] amounts, bytes32[] refs)",
+    "event Dropped(address indexed person, address indexed locker, uint256 amount, bytes32 ref)",
+    "error ZeroAddress()", "error ZeroAmount()", "error NotMaster()", "error LengthMismatch()",
+    "error IsLocker(address person)", "error ProtectedRecipient(address person)",
+    // the DYC token's own errors, bubbled up through the factory's transferFrom (so a failed simulation reads plainly)
+    "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
+    "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
+  ];
+  var VD_DYC_ABI = [
+    "function approve(address spender, uint256 amount) returns (bool)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function balanceOf(address) view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
+    "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
+  ];
+  var vd = { ready: false, seq: 0, me: null, master: null, dyc: null, decimals: 18, balance: null, prot: {}, sent: [], busy: false };
+
+  function vdMount() {
+    if (!VD_ON) return;
+    var coin = $("panel-coin");
+    if (!coin || $("panel-vested")) return;
+    var p = el("section", "panel");
+    p.id = "panel-vested";
+    p.innerHTML =
+      "<h2>Vested Drop — LockerFactory.drop / dropBatch</h2>" +
+      "<p class='hint'>DYC from <b>your connected wallet</b> into each person's own <b>Locker</b>, where it is locked and " +
+      "released in 24 months from exchange listing — for payments made outside the portal. Enter the person's own " +
+      "<b>wallet</b>, never a locker address. At most " + VD_MAX + " lines per batch. Two signatures: first allow the " +
+      "factory to take the exact total, then the drop; each is simulated before your wallet opens.</p>" +
+      "<div id='vd-gate' class='mono' style='font-size:0.82rem;margin-bottom:0.6rem'>Checking the wallet…</div>" +
+      "<div class='row-actions'><span id='vd-balance' class='mono' style='font-size:0.82rem;color:var(--gold-aged)'>Balance: —</span></div>" +
+      "<label class='fld' for='vd-addr'>Single — the person's wallet address</label>" +
+      "<input class='txt' id='vd-addr' type='text' placeholder='0x… (checksummed)' autocomplete='off' disabled />" +
+      "<label class='fld' for='vd-amt'>Single — amount (DYC)</label>" +
+      "<input class='txt' id='vd-amt' type='text' placeholder='1500' autocomplete='off' disabled />" +
+      "<label class='fld' for='vd-ref'>Single — reference id</label>" +
+      "<input class='txt' id='vd-ref' type='text' placeholder='VD-YYYYMMDD-NN' autocomplete='off' disabled />" +
+      "<label class='fld' for='vd-batch'>Batch — one \"address, amount, reference id\" per line (CSV)</label>" +
+      "<textarea class='txt' id='vd-batch' placeholder='0x…, 1500, VD-YYYYMMDD-01&#10;0x…, 250, VD-YYYYMMDD-02' disabled></textarea>" +
+      "<div id='vd-next' class='hint' style='margin:0.4rem 0 0'></div>" +
+      "<button class='btn' id='vd-review' disabled>Review drop</button>" +
+      "<div id='vd-confirm'></div>" +
+      "<div id='vd-results'></div>";
+    coin.parentNode.insertBefore(p, coin.nextSibling);
+    $("vd-review").onclick = function () { vdReview(); };
+    vdShowNext();
+  }
+  function vdGateMsg(html, cls) {
+    var g = $("vd-gate");
+    if (g) { g.innerHTML = html; g.style.color = cls === "bad" ? "#ff9a86" : cls === "ok" ? "#9fd39f" : "var(--gold-aged)"; }
+  }
+  function vdToday() {
+    var d = new Date();
+    return d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, "0") + String(d.getUTCDate()).padStart(2, "0");
+  }
+  // the next reference id of today's form VD-YYYYMMDD-NN, after every id of today's form already in `used`
+  function vdNextRef(used, skip) {
+    var day = vdToday(), pre = "VD-" + day + "-", max = 0;
+    (used || []).forEach(function (r) {
+      var m = new RegExp("^VD-" + day + "-(\\d+)$").exec(String(r || "").trim());
+      if (m && Number(m[1]) > max) max = Number(m[1]);
+    });
+    return pre + String(max + 1 + (skip || 0)).padStart(2, "0");
+  }
+  function vdUsedRefs() {
+    var used = vd.sent.slice();
+    var b = $("vd-batch"), s = $("vd-ref");
+    if (b) b.value.split(/\r?\n/).forEach(function (l) { var p = l.split(/[,\t]/); if (p.length >= 3) used.push(p[2]); });
+    if (s && s.value) used.push(s.value);
+    return used;
+  }
+  function vdShowNext() {
+    var n = $("vd-next"), s = $("vd-ref");
+    var next = vdNextRef(vd.sent);
+    if (s) s.placeholder = next;
+    if (n) n.innerHTML = "Next reference id: <span class='mono'>" + next + "</span> (the form is VD-YYYYMMDD-NN, today's date in UTC).";
+  }
+
+  // THE GATE — the panel works only when factory.master() equals the connected wallet, read on chain. Any failed read
+  // keeps it off and says why. It also reads, on chain, every address the panel refuses to drop to.
+  function refreshVestedGate() {
+    if (!VD_ON || !$("panel-vested")) return;
+    vd.ready = false;
+    setPanelEnabled("vested", false);
+    var s = window.DYWallet.state;
+    if (!s.hasProvider) return vdGateMsg("No wallet in this browser, so this panel stays off.");
+    if (!s.connected) return vdGateMsg("Connect the master wallet to use this panel.");
+    if (!s.chainOk) return vdGateMsg("Switch the wallet to " + PLAYER.chain.name + " to use this panel.");
+    var me = s.address, seq = ++vd.seq;
+    vdGateMsg("Reading the locker factory from chain…");
+    var fail = function () {
+      if (seq !== vd.seq) return;
+      vdGateMsg("Could not read the locker factory on chain, so this panel stays off. Check the connection and reload the page.", "bad");
+    };
+    withEthers().then(function () {
+      var f = new ethersRef.Contract(VD_FACTORY, VD_FACTORY_ABI, readProvider());
+      return Promise.all([f.master(), f.sale(), f.vault(), f.dyc(), f.usdt(), f.usdc(), f.lockerImplementation()]);
+    }).then(function (r) {
+      if (seq !== vd.seq) return;
+      if (!eq(r[0], me)) {
+        vdGateMsg("This wallet is not the factory's master (" + shortAddr(r[0]) + "), so this panel stays off.");
+        return;
+      }
+      var known = cfg().dycoin;
+      if (known && !eq(known, r[3])) {
+        vdGateMsg("The factory's DYC (" + shortAddr(r[3]) + ") is not the DYC this console knows (" + shortAddr(known) + "), so this panel stays off.", "bad");
+        return;
+      }
+      var prot = {};
+      var add = function (a, name) { if (a && validAddr(a)) prot[a.toLowerCase()] = name; };
+      add(VD_FACTORY, "the locker factory");
+      add(r[6], "the locker template");
+      add(r[1], "the sale contract");
+      add(r[2], "the vesting vault");
+      add(r[3], "the DYC token");
+      add(r[4], "USDT");
+      add(r[5], "USDC");
+      add(FILE.contracts && FILE.contracts.timelock, "the timelock");
+      add(r[0], "the master wallet");
+      var t = new ethersRef.Contract(r[3], VD_DYC_ABI, readProvider());
+      return Promise.all([t.decimals(), t.balanceOf(me)]).then(function (d) {
+        if (seq !== vd.seq) return;
+        vd.me = me; vd.master = r[0]; vd.dyc = r[3]; vd.decimals = Number(d[0]); vd.balance = d[1]; vd.prot = prot;
+        vd.ready = true;
+        setPanelEnabled("vested", true);
+        vdGateMsg("Connected as the factory's master. The panel is on.", "ok");
+        vdShowBalance();
+        vdShowNext();
+      });
+    }).catch(fail);
+  }
+  function vdHuman(wei) {
+    var s = trimNum(ethersRef.formatUnits(wei, vd.decimals)), p = s.split(".");
+    return p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (p[1] ? "." + p[1] : "");
+  }
+  function vdShowBalance() {
+    var b = $("vd-balance");
+    if (b && vd.balance != null) b.innerHTML = "Your DYC balance: <b>" + vdHuman(vd.balance) + " DYC</b>";
+  }
+
+  // ── reading the input: the single fields OR the batch (never both), each line "address, amount, reference id" ──
+  function vdRows() {
+    var sa = $("vd-addr").value, sm = $("vd-amt").value, sr = $("vd-ref").value, bt = $("vd-batch").value;
+    var single = !!(sa.trim() || sm.trim() || sr.trim());
+    var lines = [];
+    bt.split(/\r?\n/).forEach(function (l, i) { if (l.trim()) lines.push({ n: i + 1, raw: l.trim(), parts: l.split(/[,\t]/).map(function (x) { return x.trim(); }) }); });
+    if (single && lines.length) return { both: true };
+    if (single) return { rows: [{ n: "single", raw: [sa, sm, sr].map(function (x) { return x.trim(); }).join(", "), parts: [sa.trim(), sm.trim(), sr.trim()] }] };
+    return { rows: lines };
+  }
+  // the checks that need no chain read; every reason a line fails is listed (a line may have several)
+  function vdCheckLocal(rows) {
+    var seen = {}, refSkip = 0, used = vd.sent.slice();
+    rows.forEach(function (r) { if (r.parts.length >= 3) used.push(r.parts[2]); });
+    return rows.map(function (r) {
+      var why = [], out = { n: r.n, raw: r.raw, why: why, warn: null };
+      if (r.parts.length !== 3) { why.push("needs three parts: address, amount, reference id"); return out; }
+      var a = r.parts[0], amt = r.parts[1], ref = r.parts[2];
+      if (!/^0x[0-9a-fA-F]{40}$/.test(a)) why.push("not a wallet address");
+      else {
+        var ck = validAddr(a);
+        if (!ck) why.push("bad checksum — copy the address again from the person's wallet");
+        else if (ck === ethersRef.ZeroAddress) why.push("the zero address");
+        else if (vd.prot[ck.toLowerCase()]) why.push("this is " + vd.prot[ck.toLowerCase()] + ", not a person's wallet");
+        else if (seen[ck.toLowerCase()] != null) why.push("repeats the address on line " + seen[ck.toLowerCase()]);
+        if (ck) { out.person = ck; if (seen[ck.toLowerCase()] == null) seen[ck.toLowerCase()] = r.n; }
+      }
+      if (!/^\d+(\.\d+)?$/.test(amt)) why.push("the amount is not a number of DYC (write it like 1500 or 12.5)");
+      else {
+        var wei = null;
+        try { wei = ethersRef.parseUnits(amt, vd.decimals); } catch (e) { wei = null; }
+        if (wei == null) why.push("the amount has more than " + vd.decimals + " decimal places");
+        else if (wei === 0n) why.push("the amount is zero");
+        else out.wei = wei;
+      }
+      if (!VD_REF_RX.test(ref)) {
+        why.push("the reference id must be at most 31 letters, digits, dots, dashes or underscores — no @ and no spaces (next free: " + vdNextRef(used, refSkip++) + ")");
+      } else out.ref = ref;
+      return out;
+    });
+  }
+  // the chain checks (only for lines whose address passed): a deployed locker is refused; an address with contract
+  // code is a warning that needs a tick; and each person's locker, and whether it is created by this drop
+  function vdCheckChain(checked) {
+    var p = readProvider();
+    var f = new ethersRef.Contract(VD_FACTORY, VD_FACTORY_ABI, p);
+    return Promise.all(checked.map(function (x) {
+      if (!x.person || x.why.length && x.why.some(function (w) { return /zero address|not a person|repeats|checksum|not a wallet/.test(w); })) return Promise.resolve();
+      return Promise.all([f.isLocker(x.person), p.getCode(x.person), f.lockerOf(x.person)]).then(function (r) {
+        if (r[0]) { x.why.push("this is a locker, not a wallet — enter the person's own wallet"); return; }
+        if (r[1] && r[1] !== "0x") x.warn = VD_COPY.contract;
+        x.locker = r[2];
+        return p.getCode(r[2]).then(function (lc) { x.creates = !lc || lc === "0x"; });
+      });
+    })).then(function () { return checked; });
+  }
+
+  function vdReview() {
+    var box = $("vd-confirm");
+    if (!vd.ready || vd.busy) return;
+    box.innerHTML = "";
+    $("vd-results").innerHTML = "";
+    var got = vdRows();
+    if (got.both) { box.appendChild(el("div", "q", "Use either the single fields or the batch, not both.")); return; }
+    var rows = got.rows;
+    if (!rows.length) { box.appendChild(el("div", "q", "Nothing to drop — enter a wallet, an amount and a reference id, or batch lines.")); return; }
+    if (rows.length > VD_MAX) {
+      box.appendChild(el("div", "q", "A batch takes at most " + VD_MAX + " lines; this one has " + rows.length + ". Split it into batches of " + VD_MAX + " or fewer."));
+      return;
+    }
+    box.appendChild(el("div", "q", "Checking every line on chain…"));
+    var checked = vdCheckLocal(rows);
+    return vdCheckChain(checked).then(function (list) {
+      box.innerHTML = "";
+      var bad = list.filter(function (x) { return x.why.length; });
+      if (bad.length) {
+        box.appendChild(el("div", "q", "<b>" + bad.length + "</b> line" + (bad.length === 1 ? "" : "s") +
+          " need fixing — the whole batch is blocked until every line is clean:"));
+        var ul = el("div", "mono vd-bad");
+        ul.style.margin = "0.4rem 0";
+        ul.innerHTML = bad.map(function (x) {
+          var t = x.raw.length > 60 ? x.raw.slice(0, 60) + "…" : x.raw;
+          return "<div class='vd-badline' data-line='" + x.n + "'>line " + x.n + " — " + x.why.map(function (w) { return "<span class='pill invalid' style='white-space:normal;display:inline-block;max-width:100%;text-transform:none;letter-spacing:0;line-height:1.4'>" + w + "</span>"; }).join(" ") +
+            "<br><span style='color:var(--gold-aged)'>&nbsp;&nbsp;" + escHtml(t) + "</span></div>";
+        }).join("");
+        box.appendChild(ul);
+        return;
+      }
+      return vdConfirm(list);
+    }).catch(function (e) {
+      box.innerHTML = "";
+      box.appendChild(el("div", "q", "<span class='bad'>Could not check the lines on chain</span> — nothing was signed. Try again in a moment. (" + escHtml(decodeErr(e)) + ")"));
+    });
+  }
+  function escHtml(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+
+  // THE CONFIRM SCREEN — each line in full, the total against a fresh balance, the ticks, then the two signatures
+  function vdConfirm(list) {
+    var box = $("vd-confirm");
+    var t = new ethersRef.Contract(vd.dyc, VD_DYC_ABI, readProvider());
+    return t.balanceOf(vd.me).then(function (bal) {
+      vd.balance = bal;
+      vdShowBalance();
+      var total = list.reduce(function (s, x) { return s + x.wei; }, 0n);
+      var wrap = el("div", "confirm vd-plan");
+      wrap.appendChild(el("div", "q", "Drop DYC into <b>" + list.length + "</b> Locker" + (list.length === 1 ? "" : "s") +
+        " — " + (list.length === 1 ? "one drop" : "one batch of " + list.length) + ":"));
+      var tbl = el("table", "grid");
+      tbl.innerHTML = "<thead><tr><th>#</th><th>Person (wallet)</th><th>Their Locker</th><th>Amount</th><th>Reference id</th></tr></thead>";
+      var tb = el("tbody");
+      list.forEach(function (x, i) {
+        var tr = el("tr", "vd-line");
+        tr.innerHTML = "<td>" + (i + 1) + (x.n !== "single" ? "<br><span style='color:var(--gold-aged)'>line " + x.n + "</span>" : "") + "</td>" +
+          "<td class='mono vd-person'>" + x.person + "</td>" +
+          "<td class='mono vd-locker'>" + x.locker + "<br><span style='color:var(--gold-aged)'>" + (x.creates ? "created now, by this drop" : "already exists") + "</span></td>" +
+          "<td class='vd-amt'><b>" + vdHuman(x.wei) + " DYC</b><br><span class='mono' style='color:var(--gold-aged)'>" + x.wei.toString() + " wei</span></td>" +
+          "<td class='mono vd-ref'>" + escHtml(x.ref) + "</td>";
+        tb.appendChild(tr);
+        if (x.warn) {
+          var wr = el("tr", "vd-warnrow");
+          wr.innerHTML = "<td></td><td colspan='4'><span class='pill dropped'>" + x.warn + "</span> " +
+            "<label style='font-size:0.8rem'><input type='checkbox' class='vd-warntick' data-i='" + i + "' /> Line " + (i + 1) +
+            ": I confirm " + shortAddr(x.person) + " is the person's own wallet.</label></td>";
+          tb.appendChild(wr);
+        }
+      });
+      tbl.appendChild(tb);
+      wrap.appendChild(tbl);
+      var sums = el("div", "vd-sums");
+      sums.style.margin = "0.6rem 0";
+      sums.style.fontSize = "0.85rem";
+      sums.innerHTML = "Batch total: <b class='vd-total'>" + vdHuman(total) + " DYC</b> <span class='mono' style='color:var(--gold-aged)'>(" + total.toString() + " wei)</span><br>" +
+        "Your DYC balance: <b class='vd-bal'>" + vdHuman(bal) + " DYC</b>";
+      wrap.appendChild(sums);
+      box.appendChild(wrap);
+      if (total > bal) {
+        wrap.appendChild(el("div", "q vd-short", "<span class='bad'>The total is more than your DYC balance</span> — need " + vdHuman(total) +
+          ", have " + vdHuman(bal) + " DYC. Nothing can be sent; reduce the amounts or top up the wallet."));
+        return;
+      }
+      var fin = el("label", "vd-final");
+      fin.style.display = "block";
+      fin.style.fontSize = "0.85rem";
+      fin.style.marginTop = "0.5rem";
+      fin.innerHTML = "<input type='checkbox' id='vd-final' /> I have checked every line: the wallets, the amounts and the reference ids.";
+      wrap.appendChild(fin);
+      wrap.appendChild(el("div", "hint", "Two signatures follow: first allow the factory to take exactly " + vdHuman(total) +
+        " DYC, then the drop. Each is simulated before your wallet opens."));
+      var actions = el("div", "row-actions");
+      var go = el("button", "btn primary", "Sign and send");
+      go.id = "vd-go";
+      go.disabled = true;
+      var cancel = el("button", "btn", "Cancel");
+      cancel.id = "vd-cancel";
+      actions.appendChild(go);
+      actions.appendChild(cancel);
+      wrap.appendChild(actions);
+      var ticks = function () {
+        var all = $("vd-final").checked;
+        wrap.querySelectorAll(".vd-warntick").forEach(function (c) { if (!c.checked) all = false; });
+        go.disabled = !all;
+      };
+      wrap.querySelectorAll("input[type=checkbox]").forEach(function (c) { c.onchange = ticks; c.onclick = ticks; });
+      cancel.onclick = function () { box.innerHTML = ""; };
+      go.onclick = function () {
+        ticks();
+        if (go.disabled) return;
+        go.disabled = true;
+        cancel.disabled = true;
+        wrap.querySelectorAll("input").forEach(function (c) { c.disabled = true; });
+        vdSend(list, total);
+      };
+    });
+  }
+
+  // THE SIGNING ORDER — simulate approve(factory, exact total) → sign it → simulate the drop → sign it. If anything fails
+  // after the approval landed, the panel offers "Reset allowance to 0". The allowance is never set above the total.
+  function vdSend(list, total) {
+    var out = $("vd-results");
+    out.innerHTML = "";
+    vd.busy = true;
+    var steps = el("div", "mono vd-steps");
+    steps.style.margin = "0.6rem 0";
+    out.appendChild(steps);
+    var say = function (cls, html) { var d = el("div", "vd-step " + (cls || ""), html); steps.appendChild(d); return d; };
+    var provider = readProvider();
+    var batch = list.length > 1;
+    var people = list.map(function (x) { return x.person; });
+    var amounts = list.map(function (x) { return x.wei; });
+    var refs = list.map(function (x) { return ethersRef.encodeBytes32String(x.ref); });
+    var approved = false;
+    var done = function () { vd.busy = false; };
+    return Promise.all([provider.getSigner(), feeOverrides(provider)]).then(function (r) {
+      var signer = r[0], fee = r[1];
+      var ov = function (gas) { var o = { gasLimit: gas }; if (fee && fee.maxFeePerGas != null) { o.maxFeePerGas = fee.maxFeePerGas; o.maxPriorityFeePerGas = fee.maxPriorityFeePerGas; } return o; };
+      var t = new ethersRef.Contract(vd.dyc, VD_DYC_ABI, signer);
+      var f = new ethersRef.Contract(VD_FACTORY, VD_FACTORY_ABI, signer);
+      say("", "1. Simulating the approval of exactly " + vdHuman(total) + " DYC to the factory…");
+      return t.approve.staticCall(VD_FACTORY, total).then(function () {
+        say("", "2. Approval simulated. Sign it in your wallet…");
+        return t.approve(VD_FACTORY, total, ov(VD_APPROVE_GAS));
+      }, function (e) { var x = new Error("sim-approve"); x.__vd = "simApprove"; x.cause = e; throw x; }).then(function (tx) {
+        say("", "Approval sent: <a class='txlink' target='_blank' rel='noopener' href='" + txUrl(tx.hash) + "'>" + tx.hash.slice(0, 10) + "… ↗</a> — waiting for it to land…");
+        return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
+          if (!rc || rc.status !== 1) { var x = new Error("approve reverted"); x.__vd = "approveRevert"; x.hash = tx.hash; throw x; }
+          approved = true;
+          say("good", "Approval landed.");
+          say("", "3. Simulating the " + (batch ? "batch of " + list.length : "drop") + "…");
+          return (batch ? f.dropBatch.staticCall(people, amounts, refs) : f.drop.staticCall(people[0], amounts[0], refs[0])).catch(function (e) {
+            var x = new Error("sim-drop"); x.__vd = "simDrop"; x.cause = e; throw x;
+          });
+        }, function (we) { if (we && we.__vd) throw we; var x = new Error("approve not mined"); x.__vd = "approveWait"; x.hash = tx.hash; throw x; });
+      }).then(function () {
+        say("", "4. Drop simulated. Sign it in your wallet…");
+        return batch ? f.dropBatch(people, amounts, refs, ov(vdDropGas(list.length))) : f.drop(people[0], amounts[0], refs[0], ov(vdDropGas(1)));
+      }).then(function (tx) {
+        say("", "Drop sent: <a class='txlink' target='_blank' rel='noopener' href='" + txUrl(tx.hash) + "'>" + tx.hash.slice(0, 10) + "… ↗</a> — waiting for it to land…");
+        return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS).then(function (rc) {
+          if (!rc || rc.status !== 1) { var x = new Error("drop reverted"); x.__vd = "dropRevert"; x.hash = tx.hash; throw x; }
+          return vdAfter(list, total, tx.hash, say);
+        }, function (we) { if (we && we.__vd) throw we; var x = new Error("drop not mined"); x.__vd = "dropWait"; x.hash = tx.hash; throw x; });
+      });
+    }).then(done, function (e) {
+      done();
+      var why = e && e.__vd, inner = (e && e.cause) || e;
+      var rejected = inner && (inner.code === "ACTION_REJECTED" || inner.code === 4001);
+      var msg;
+      if (why === "simApprove") msg = "The approval could not be simulated, so nothing was signed: " + escHtml(decodeVd(inner)) + ".";
+      else if (why === "simDrop") msg = "The approval landed, but the drop could not be simulated, so it was not signed: " + escHtml(decodeVd(inner)) + ".";
+      else if (why === "approveRevert") msg = "The approval reverted on chain.";
+      else if (why === "approveWait") msg = "The approval was not confirmed in " + Math.round(WAIT_TIMEOUT_MS / 1000) + " s — check your wallet before trying again.";
+      else if (why === "dropRevert") msg = "The drop reverted on chain; no DYC moved.";
+      else if (why === "dropWait") msg = "The drop was not confirmed in " + Math.round(WAIT_TIMEOUT_MS / 1000) + " s — check your wallet and the explorer before trying again.";
+      else if (rejected) msg = approved ? "The drop was rejected in your wallet; it was not sent." : "The approval was rejected in your wallet; nothing was sent.";
+      else msg = (approved ? "The drop did not go through: " : "Nothing was sent: ") + escHtml(decodeVd(inner)) + ".";
+      say("bad", "<span class='bad'>" + msg + "</span>");
+      // the allowance may now be above zero (an approval landed, or a wait that later lands): offer to put it back
+      var t = new ethersRef.Contract(vd.dyc, VD_DYC_ABI, readProvider());
+      return t.allowance(vd.me, VD_FACTORY).then(function (a) {
+        if (a > 0n) vdOfferReset(steps, a);
+        else say("", "Allowance to the factory: 0 DYC.");
+      }).catch(function () { if (approved) vdOfferReset(steps, null); });
+    });
+  }
+  function decodeVd(e) {
+    if (e && e.revert && e.revert.name) {
+      var n = e.revert.name, a = e.revert.args || [];
+      if (n === "IsLocker") return "that address is a locker, not a wallet";
+      if (n === "ProtectedRecipient") return "that address is one of the contracts the factory refuses";
+      if (n === "NotMaster") return "this wallet is not the factory's master";
+      if (n === "ZeroAddress") return "an address is the zero address";
+      if (n === "ZeroAmount") return "an amount is zero";
+      if (n === "ERC20InsufficientBalance") return "the wallet holds less DYC than the total";
+      if (n === "ERC20InsufficientAllowance") return "the factory's allowance is less than the total";
+      return n + (a.length ? "(" + a.join(", ") + ")" : "");
+    }
+    return decodeErr(e);
+  }
+  function vdOfferReset(steps, allowance) {
+    var d = el("div", "vd-reset");
+    d.style.marginTop = "0.5rem";
+    d.innerHTML = "The factory may still take " + (allowance != null ? "<b>" + vdHuman(allowance) + " DYC</b>" : "DYC") +
+      " from your wallet. <button class='btn tiny' id='vd-reset'>Reset allowance to 0</button> <span id='vd-reset-msg'></span>";
+    steps.appendChild(d);
+    $("vd-reset").onclick = function () {
+      var b = $("vd-reset"), m = $("vd-reset-msg");
+      b.disabled = true;
+      m.textContent = "Simulating…";
+      var provider = readProvider();
+      Promise.all([provider.getSigner(), feeOverrides(provider)]).then(function (r) {
+        var t = new ethersRef.Contract(vd.dyc, VD_DYC_ABI, r[0]);
+        var o = { gasLimit: VD_APPROVE_GAS };
+        if (r[1] && r[1].maxFeePerGas != null) { o.maxFeePerGas = r[1].maxFeePerGas; o.maxPriorityFeePerGas = r[1].maxPriorityFeePerGas; }
+        return t.approve.staticCall(VD_FACTORY, 0n).then(function () { m.textContent = "Sign it in your wallet…"; return t.approve(VD_FACTORY, 0n, o); })
+          .then(function (tx) { m.textContent = "Sent — waiting…"; return tx.wait(WAIT_CONFIRMS, WAIT_TIMEOUT_MS); })
+          .then(function () { return new ethersRef.Contract(vd.dyc, VD_DYC_ABI, readProvider()).allowance(vd.me, VD_FACTORY); })
+          .then(function (a) { m.innerHTML = a === 0n ? "<span class='good'>Allowance to the factory is now 0 DYC.</span>" : "<span class='bad'>The allowance is still " + vdHuman(a) + " DYC.</span>"; if (a !== 0n) b.disabled = false; });
+      }).catch(function (e) { m.innerHTML = "<span class='bad'>Not reset: " + escHtml(decodeVd(e)) + "</span>"; b.disabled = false; });
+    };
+  }
+
+  // AFTER A SEND — the transaction, the Dropped events read back from the chain, the allowance (0), and a record the
+  // owner downloads for his own files. Nothing personal is stored or sent anywhere.
+  function vdAfter(list, total, hash, say) {
+    var p = readProvider();
+    var fi = new ethersRef.Interface(VD_FACTORY_ABI);
+    var t = new ethersRef.Contract(vd.dyc, VD_DYC_ABI, p);
+    return Promise.all([p.getTransactionReceipt(hash), t.allowance(vd.me, VD_FACTORY), t.balanceOf(vd.me)]).then(function (r) {
+      var rc = r[0], evs = [];
+      (rc && rc.logs || []).forEach(function (lg) {
+        if (!eq(lg.address, VD_FACTORY)) return;
+        var e = null;
+        try { e = fi.parseLog(lg); } catch (x) { e = null; }
+        if (e && e.name === "Dropped") evs.push({ person: e.args.person, locker: e.args.locker, amount: e.args.amount, ref: ethersRef.decodeBytes32String(e.args.ref) });
+      });
+      vd.balance = r[2];
+      vdShowBalance();
+      list.forEach(function (x) { vd.sent.push(x.ref); });
+      vdShowNext();
+      ["vd-addr", "vd-amt", "vd-ref", "vd-batch"].forEach(function (id) { $(id).value = ""; });
+      $("vd-confirm").innerHTML = "";
+      var match = evs.length === list.length && list.every(function (x, i) {
+        var e = evs[i];
+        return e && eq(e.person, x.person) && eq(e.locker, x.locker) && e.amount === x.wei && e.ref === x.ref;
+      });
+      say("good", "<span class='good'>Drop landed.</span> Transaction <a class='txlink vd-tx' target='_blank' rel='noopener' href='" + txUrl(hash) + "'>" + hash + " ↗</a>");
+      say(match ? "good" : "bad", match
+        ? "Read back from the chain: " + evs.length + " Dropped event" + (evs.length === 1 ? "" : "s") + ", matching every line."
+        : "<span class='bad'>Read back from the chain: " + evs.length + " Dropped event" + (evs.length === 1 ? "" : "s") + " — they do not match the lines sent. Check the transaction on the explorer.</span>");
+      say(r[1] === 0n ? "good" : "bad", "Allowance to the factory now: <b class='vd-allow'>" + vdHuman(r[1]) + " DYC</b>.");
+      var tbl = el("table", "grid vd-readback");
+      tbl.innerHTML = "<thead><tr><th>#</th><th>Person</th><th>Locker</th><th>Amount</th><th>Reference id</th></tr></thead>";
+      var tb = el("tbody");
+      evs.forEach(function (e, i) {
+        var tr = el("tr");
+        tr.innerHTML = "<td>" + (i + 1) + "</td><td class='mono'>" + e.person + "</td><td class='mono'>" + e.locker + "</td><td>" + vdHuman(e.amount) + " DYC</td><td class='mono'>" + escHtml(e.ref) + "</td>";
+        tb.appendChild(tr);
+      });
+      tbl.appendChild(tb);
+      $("vd-results").appendChild(tbl);
+      var dl = el("button", "btn", "Download record");
+      dl.id = "vd-download";
+      dl.onclick = function () { vdDownload(evs, hash); };
+      $("vd-results").appendChild(dl);
+      $("vd-results").appendChild(el("div", "hint", "The record is a CSV for your own files — address, locker, amount, reference id and transaction. This page keeps no copy and sends it nowhere."));
+    });
+  }
+  function vdRecordCsv(evs, hash) {
+    var rows = ["address,locker,amount_dyc,reference_id,transaction_hash"];
+    evs.forEach(function (e) { rows.push([e.person, e.locker, trimNum(ethersRef.formatUnits(e.amount, vd.decimals)), e.ref, hash].join(",")); });
+    return rows.join("\n") + "\n";
+  }
+  function vdDownload(evs, hash) {
+    var csv = vdRecordCsv(evs, hash);
+    var url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "vested-drop-" + hash.slice(2, 10) + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
   // ---------- HISTORY (chunked getLogs, newest-first) ----------
@@ -3153,6 +3670,7 @@ window.DYAdmin = (function () {
   }
 
   function mount() {
+    if (VD_ON) vdMount(); // VEST-100-1 part 3 — adds the Vested Drop panel beside Coin Drops (nothing while the factory is null)
     // S-ADMIN-CONNECT — bring the status strip + wallet up FIRST, before any panel wiring can throw, so the owner
     // always has a visible connection state + a Connect button no matter what happens below.
     window.DYWallet.onChange(function () { renderStatusStrip(); refreshGate(); });
@@ -3264,6 +3782,8 @@ window.DYAdmin = (function () {
       dayEndTs: dayEndTs,
       bundledCkKey: bundledCkKey,
       historyProvider: historyProvider,
+      // VEST-100-1 part 3 — the Vested Drop panel's pure parts and constants, for the suite
+      vd: { on: VD_ON, max: VD_MAX, dropGas: vdDropGas, approveGas: VD_APPROVE_GAS, nextRef: vdNextRef, refRx: VD_REF_RX, recordCsv: vdRecordCsv, state: vd },
       toranaFindEligible: toranaFindEligible,   // RPC-CLEANUP-1: the "Find eligible" button's own handler (its onclick), for the one-press proof
       HEAD_BUFFER: HEAD_BUFFER,
       PROXY_URL: PROXY_URL,       // RPC-CLEANUP-1

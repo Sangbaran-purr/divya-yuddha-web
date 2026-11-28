@@ -742,7 +742,10 @@ window.DYDash = (function () {
       line = lcopy(LOCKER_COPY.step, { k: k, released: fmt(lk.released), total: fmt(lk.total), date: lk.next ? dateFmt(lk.next) : "" });
       if (!lk.next) line = line.split(" Next release:")[0];   // after step 24 there is no next release
     }
-    var can = !pre && (lk.collectable > 0n || k < LOCKER_STEPS);
+    // part 3: after listing with nothing collectable the button shows its disabled look and the ruled nothing-due line
+    // stands beneath it, unpressed; with something collectable it is the live button it always was
+    var can = !pre && lk.collectable > 0n;
+    var wait = (!pre && lk.collectable === 0n && lk.next) ? "<div class='lock-wait' style='margin-top:8px;" + LK_TXT + "'>" + lcopy(LOCKER_COPY.nothingDue, { date: dateFmt(lk.next) }) + "</div>" : "";
     var ready = "";
     if (lk.collectable > 0n) {   // what pressing Release pays — the same weight as "Released but unclaimed"
       var rp = LOCKER_COPY.ready.split("{amount}");
@@ -755,7 +758,8 @@ window.DYDash = (function () {
       "<div class='lock-note' style='margin-top:8px;" + LK_TXT + "'>" + LOCKER_COPY.locked + "</div>" +
       (line ? "<div class='lock-step' style='margin-top:6px;" + LK_TXT + "'>" + line + "</div>" : "") +
       ready +
-      "<div class='card-actions'><button class='btn-g btn-p' id='act-lrelease'" + (can ? "" : " disabled") + ">" + LOCKER_COPY.button + "</button></div>";
+      "<div class='card-actions'><button class='btn-g btn-p' id='act-lrelease'" + (can ? "" : " disabled") + ">" + LOCKER_COPY.button + "</button></div>" +
+      wait;
   }
   function actRelease() {
     var lk = data.lock, me = W.state.address;

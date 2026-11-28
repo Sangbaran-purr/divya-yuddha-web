@@ -19,7 +19,7 @@ const PICK = ARGS.filter(function (a) { return a.indexOf("--") !== 0; });
 
 // name → file. copyproof is already committed under mp/ and needs no chain; it runs first and fastest.
 const SUITES = [
-  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 508 },   // VEST-100-1 +37 (part 2: LKR1 report line doc+code, LKR2 schedule-only; §16 LOCKERS: 13 lines doc+code, 3 errors doc+code, LK15 schedule-only, LK16 retired lines; 2026-11-27 wording change)
+  { name: "copyproof",     file: path.join(H.SITE, "mp", "copyproof.js"), chain: false, expect: 516 },   // VEST-100-1 +45 (part 3: LKR3–5 the report labels doc+code, LKA1 the panel warning doc+code; part 2: LKR1 report line doc+code, LKR2 schedule-only; §16 LOCKERS: 13 lines doc+code, 3 errors doc+code, LK15 schedule-only, LK16 retired lines; 2026-11-27 wording change)
   { name: "p4",            file: path.join(__dirname, "suites", "p4.js"), chain: true, expect: 7 },
   { name: "p8rig",         file: path.join(__dirname, "suites", "p8rig.js"), chain: true, expect: 7 },
   { name: "p7dom",         file: path.join(__dirname, "suites", "p7dom.js"), chain: true, expect: 4 },
@@ -106,7 +106,11 @@ const SUITES = [
   { name: "dailyjob",      file: path.join(__dirname, "suites", "dailyjob.js"), chain: false, expect: 25 },   // DAILY-REVIEW-4 +1 (J3b: the preview lists the discard piles)
   // VEST-100-1 phase 1 part 1 (owner rulings 2026-11-27): the locker on the dashboard — off is byte-identical to HEAD for
   // three wallets × three off states; on: the Vested card's two parts, before listing / step 1 / step 24, Release, the feed.
-  { name: "lockers",       file: path.join(__dirname, "suites", "lockers.js"), chain: true, expect: 48, capMs: 900000 },   // VEST-100-1 part 2: +15 (RO 3, RL 9, RB 3 — the proceeds report)
+  { name: "lockers",       file: path.join(__dirname, "suites", "lockers.js"), chain: true, expect: 50, capMs: 900000 },   // VEST-100-1 part 2: +15 (RO 3, RL 9, RB 3 — the proceeds report) · part 3: +2 (L9c the live Release, RL10 the report fixes)
+  // VEST-100-1 phase 1 part 3 (owner rulings 2026-11-28): the admin Vested Drop panel — off is byte-identical to HEAD for the
+  // master, a stranger and no wallet; the gate on factory.master(); every refusal and the contract warning; the confirm
+  // screen; simulate → sign → simulate → sign with the exact approval; the allowance back to 0; the batch limit; read-back.
+  { name: "vesteddrop",    file: path.join(__dirname, "suites", "vesteddrop.js"), chain: true, expect: 64, capMs: 900000 },
 ];
 
 function freePort() {
