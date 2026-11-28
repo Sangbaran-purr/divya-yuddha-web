@@ -51,6 +51,22 @@ window.DYReport = (function () {
     "function totalCapacity() view returns (uint256)",
     "function POOL_AMOUNT() view returns (uint256)",
   ];
+  // VEST-100-1 (phase 1, owner rulings 2026-11-27) — the locker figures. Read ONLY while mf-config.js `lockers.on` is true
+  // AND the factory address is set; with the switch off nothing below runs and the page is byte-identical. Two figures,
+  // both tallied from event logs and listed SEPARATELY from the sale: never added to buyers, USD received or DYC sold.
+  //   • delivered outside the portal — the factory's Dropped events: the people (distinct `person`) and the DYC total.
+  //   • held in lockers — per locker, DYC dropped in minus DYC paid out of it (DYC Transfer logs FROM the locker),
+  //     never below 0 (a final release also pays DYC sent to the locker from outside).
+  // LockerCreated is never read: a Locker is created by a drop or by its owner's openLocker, never by a purchase here.
+  var LOCKER_DROP_ABI = ["event Dropped(address indexed person, address indexed locker, uint256 amount, bytes32 ref)"];
+  var LOCKER_REPORT_COPY = {   // docs/DASHBOARD_DESIGN_v1.md §16 (the report); pinned by mp/copyproof.js
+    note: "Coins delivered for payments made outside the portal are listed separately. They come from the treasury allocation and are locked, released in 24 months from exchange listing.",
+    // the three labels below are DRAFTS awaiting the owner's ruling (VEST-100-1 part 2); pinned once ruled
+    people: "Delivered outside the portal — people",
+    dyc: "Delivered outside the portal — DYC",
+    held: "Held in lockers",
+  };
+  function lockersOn() { var L = FILE.lockers; return !!(L && L.on === true && L.factory); }
   var DESK_ABI = [
     "function reserve() view returns (uint256)",
     "event Redeemed(address indexed user, uint256 dycAmount, uint256 usdtOut)",
@@ -155,7 +171,9 @@ window.DYReport = (function () {
       var roundTxt = round === 1 ? "PRESALE OPEN" : round === 2 ? "PUBLIC OPEN" : "BETWEEN ROUNDS";
       chip.innerHTML = "<span class='buy-round " + (round === 2 ? "public" : "presale") + "'>" + roundTxt + "</span>";
       var totalSold = pSold + qSold;
-      return countBuyers(logProvider(), c).then(function (buyers) {
+      var lk = lockersOn() ? lockerFigures(logProvider(), c) : null;   // VEST-100-1: only with the switch on
+      return (lk ? Promise.all([countBuyers(logProvider(), c), lk]) : countBuyers(logProvider(), c).then(function (n) { return [n, null]; })).then(function (rr) {
+        var buyers = rr[0];
         b.innerHTML =
           "<div class='rep-figrow'><span>Current round</span><b>" + roundTxt + "</b></div>" +
           roundBlock("Presale", "$" + fmtUnits(pPrice, 18, 3), pSold, pCap) +
@@ -167,9 +185,65 @@ window.DYReport = (function () {
             "<div class='rep-figrow'><span>Raised — POL</span><b>" + fmtPol(pol) + "</b></div>" +
           "</div>" +
           "<div class='rep-figrow'><span>Buyers <span class='rep-src'>from event logs</span></span><b>" + (buyers == null ? "—" : buyers) + "</b></div>" +
-          "<div class='rep-verifyrow'>" + verify(c.dycoinSale, "Verify the sale contract") + "</div>";
+          "<div class='rep-verifyrow'>" + verify(c.dycoinSale, "Verify the sale contract") + "</div>" +
+          (lk ? lockerBlock(rr[1]) : "");
       });
     }).catch(function () { b.innerHTML = repFail(); });
+  }
+  // VEST-100-1 — the separate block under the sale (switch on only). A figure that could not be read shows "—".
+  function lockerBlock(f) {
+    f = f || {};
+    var src = " <span class='rep-src'>from event logs</span>";
+    return "<div class='rep-lockers' style='margin-top:14px;padding-top:12px;border-top:1px solid rgba(217,168,78,.22)'>" +
+      "<div class='rep-note'>" + LOCKER_REPORT_COPY.note + "</div>" +
+      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.people + src + "</span><b>" + (f.people == null ? "—" : f.people) + "</b></div>" +
+      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.dyc + src + "</span><b>" + (f.dropped == null ? "—" : fmtDyc(f.dropped) + " DYC") + "</b></div>" +
+      "<div class='rep-figrow'><span>" + LOCKER_REPORT_COPY.held + src + "</span><b>" + (f.held == null ? "—" : fmtDyc(f.held) + " DYC") + "</b></div>" +
+      "</div>";
+  }
+  // VEST-100-1 — the two figures from the logs: the factory's Dropped, then DYC Transfers out of the lockers dropped into.
+  var LOCKER_TOPIC_CHUNK = 50;   // locker addresses per Transfer scan (one OR'ed `from` topic list)
+  function lockerFigures(provider, c) {
+    var L = FILE.lockers, from = Number(L.deployBlock) > 0 ? Number(L.deployBlock) : (c.deployBlock || 0);
+    return provider.getBlockNumber().then(function (latest) {
+      var iface = new ethersRef.Interface(LOCKER_DROP_ABI);
+      return scanLogs(provider, L.factory, [iface.getEvent("Dropped").topicHash], from, latest).then(function (logs) {
+        if (!logs) return { people: null, dropped: null, held: null };
+        var people = {}, into = {}, dropped = 0n;
+        logs.forEach(function (l) {
+          var a; try { a = iface.parseLog(l).args; } catch (e) { return; }
+          people[a.person.toLowerCase()] = 1;
+          var k = a.locker.toLowerCase();
+          into[k] = (into[k] || 0n) + a.amount;
+          dropped += a.amount;
+        });
+        var res = { people: Object.keys(people).length, dropped: dropped, held: null };
+        var lockers = Object.keys(into);
+        if (!lockers.length) { res.held = 0n; return res; }
+        if (!c.dycoin) return res;
+        var tTopic = ethersRef.id("Transfer(address,address,uint256)"), out = {}, i = 0;
+        function next() {
+          if (i >= lockers.length) {
+            var held = 0n;
+            lockers.forEach(function (k) { var v = into[k] - (out[k] || 0n); if (v > 0n) held += v; });
+            res.held = held;
+            return res;
+          }
+          var part = lockers.slice(i, i + LOCKER_TOPIC_CHUNK); i += LOCKER_TOPIC_CHUNK;
+          var fromTopics = part.map(function (a) { return ethersRef.zeroPadValue(a, 32); });
+          return scanLogs(provider, c.dycoin, [tTopic, fromTopics], from, latest).then(function (tl) {
+            if (!tl) return res;   // held stays "—"; the delivered figures still show
+            tl.forEach(function (t) {
+              var k = ("0x" + t.topics[1].slice(26)).toLowerCase();
+              var v; try { v = BigInt(t.data); } catch (e) { return; }
+              out[k] = (out[k] || 0n) + v;
+            });
+            return next();
+          });
+        }
+        return next();
+      });
+    }).catch(function () { return { people: null, dropped: null, held: null }; });
   }
   function roundBlock(name, price, sold, cap) {
     var pct = pctOf(sold, cap);

@@ -349,3 +349,12 @@ monthly steps from exchange listing." and "The first release is one month after 
 - NotStarted: Nothing to release yet. The first release is one month after exchange listing.
 - NothingDue: Nothing to release yet. Releases come in 24 monthly steps from exchange listing.
 - NoLocker: This wallet has no locker, so there is nothing to release.
+
+### The proceeds report (VEST-100-1 phase 1 part 2; ruled line pinned by `mp/copyproof.js`, doc → `js/report.js`)
+- Coins delivered for payments made outside the portal are listed separately. They come from the treasury allocation and are locked, released in 24 months from exchange listing.
+
+With the switch on, `report.html` shows a separate block under the sale: the line above, then the people the master
+has delivered to and the DYC delivered (the factory's `Dropped` events), and the DYC held in lockers (per locker, DYC
+dropped in minus DYC paid out of it, never below 0), each marked "from event logs". None of it is ever added to buyers,
+USD received or DYC sold, and a locker's creation (`LockerCreated`, by a drop or by its owner's `openLocker`) is never
+counted as a purchase. With the switch off the report is byte-identical to the page before lockers.

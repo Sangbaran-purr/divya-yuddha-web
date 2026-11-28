@@ -11,6 +11,14 @@
 //       after-release and nothing-due lines); a failed read is the busy face, never a 0; the feed's two ruled lines;
 //       schedule only (no reward words, no Activate in the locker's part).
 //   B · breakages — each guard put back wrong turns its check red.
+// PART 2 (the proceeds report, report.html + js/report.js):
+//   RO · OFF IS OFF — the report with the switch off (three variants) is byte-identical to the committed report.html,
+//       mf-config.js and js/report.js: the DOM (?v= stamps aside), the ordered read requests and localStorage.
+//   RL · ON — a separate block under the sale: the ruled line, the people and DYC delivered (Dropped), and the DYC held in
+//       lockers (dropped in − paid out, checked against each Locker's own heldIn/released), all "from event logs"; buyers,
+//       DYC sold and the raised figures unchanged; lockers opened by their owners (openLocker → LockerCreated) never counted;
+//       a refused log read is "—", never 0, and the sale still shows.
+//   RB · breakages.
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
@@ -43,6 +51,12 @@ ethers.FetchRequest.registerGetUrl(async (req, signal) => {
   const u = new URL(req.url);
   if (u.hostname === "rpc.divyayuddha.games") {
     let j = null; try { j = JSON.parse(Buffer.from(req.body).toString("utf8")); } catch (e) {}
+    // part 2: the read host may be told to refuse getLogs on one address (as the proxy does for an address it does not serve)
+    if (REC.refuseLogsAt && j && !Array.isArray(j) && j.method === "eth_getLogs" && String(((j.params || [])[0] || {}).address || "").toLowerCase() === REC.refuseLogsAt.toLowerCase()) {
+      REC.http++; REC.items.push(JSON.stringify({ m: j.method, p: j.params, refused: true }));
+      const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: j.id, error: { code: -32602, message: "address not served" } }));
+      return { statusCode: 200, statusMessage: "OK", headers: { "content-type": "application/json" }, body: new Uint8Array(body) };
+    }
     REC.http++;
     for (const it of (Array.isArray(j) ? j : [j])) if (it) REC.items.push(JSON.stringify({ m: it.method, p: it.params }));
     const r2 = new ethers.FetchRequest(H.RPC); r2.method = req.method; r2.body = req.body; for (const [k, v] of req) r2.setHeader(k, v);
@@ -119,6 +133,41 @@ async function visit(c, wallet, opts) {
   return { h, snap };
 }
 const firstDiff = (a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) return i + ": " + String(a[i]).slice(0, 160) + "  ≠  " + String(b[i]).slice(0, 160); return "none"; };
+
+// ── part 2: the REPORT page in jsdom — report.html's real markup and the real scripts in page order (no wallet) ──
+async function reportPage(c, opts) {
+  opts = opts || {};
+  const { JSDOM } = require(path.join(SITE, "tests", "node_modules", "jsdom"));
+  const html = opts.htmlSrc != null ? opts.htmlSrc : fs.readFileSync(path.join(SITE, "report.html"), "utf8");
+  const body = (html.split(/<body[^>]*>/)[1] || "").split("</body>")[0];
+  const dom = new JSDOM(`<!doctype html><body class="dash report">${body}</body>`, { url: "https://divyayuddha.games/report.html", pretendToBeVisual: true, runScripts: "outside-only" });
+  const w = dom.window;
+  w.ethers = ethers; w.TextEncoder = TextEncoder;
+  w.fetch = () => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null), text: () => Promise.resolve("") });
+  w.localStorage.setItem("dymf::config", JSON.stringify({ deployBlock: 1 }));
+  const run = (p) => w.eval(fs.readFileSync(path.join(SITE, p), "utf8"));
+  run("config.js");
+  if (opts.mfSrc != null) w.eval(opts.mfSrc); else run("mf-config.js");
+  if (opts.lockers) w.DY_MF_CONFIG.lockers = opts.lockers;
+  const chainId = Number((await c.provider.getNetwork()).chainId);
+  w.DY_CONFIG.chain.id = chainId; w.DY_CONFIG.chain.idHex = "0x" + chainId.toString(16);
+  w.DY_MF_CONFIG.contracts.dycoin = c.addrs.dyc;
+  for (const k of ["holderStaking", "roiRedemption"]) w.DY_MF_CONFIG.contracts[k] = null;
+  w.DY_MF_CONFIG.contracts.dycoinSale = c.addrs.sale; w.DY_MF_CONFIG.contracts.vestingVault = c.addrs.vault;
+  run("js/wallet.js");
+  if (opts.repSrc != null) w.eval(opts.repSrc); else run("js/report.js");
+  w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
+  w.DYReport.mount();   // report.html's inline boot
+  return { dom, w };
+}
+async function visitReport(c, opts) {
+  REC.items = []; REC.http = 0;
+  const h = await reportPage(c, opts);
+  await H.until(() => /Total DYC sold/.test(T(h.w, "#sale-body")) && /Currently vesting/.test(T(h.w, "#vault-body")) && /read just now/.test(T(h.w, "#rep-updated")), 25000, "the report to settle");
+  await H.sleep(1500);
+  const ls = {}; for (let i = 0; i < h.w.localStorage.length; i++) { const k = h.w.localStorage.key(i); ls[k] = h.w.localStorage.getItem(k); }
+  return { h, snap: { dom: h.w.document.body.innerHTML.replace(/\?v=[\w.-]+/g, "?v=*"), reads: REC.items.slice(), http: REC.http, ls: JSON.stringify(ls, Object.keys(ls).sort()) } };
+}
 
 async function run() {
   console.log("\n── VEST-100-1 · the locker on the dashboard (phase 1, part 1) ──");
@@ -285,6 +334,110 @@ async function run() {
     ok("B2 · a failed read shown as an empty locker is caught (L8's test goes red)", !/couldn't load|try again/i.test(T(h.w, "#vest-body")));
     H.teardown(h);
   }
+  // ═══════════════════ PART 2 · THE PROCEEDS REPORT ═══════════════════
+  console.log("\n── RO · the report with the switch off: byte-identical to the committed sources ──");
+  const ROLD = { htmlSrc: HEAD("report.html"), mfSrc: HEAD("mf-config.js"), repSrc: HEAD("js/report.js") };
+  {
+    const base = await visitReport(c, ROLD); H.teardown(base.h);
+    for (const [vname, lk] of VARIANTS) {
+      const now = await visitReport(c, lk ? { lockers: lk } : {}); H.teardown(now.h);
+      ok("RO · " + vname + ": DOM, ordered reads (" + now.snap.reads.length + "), HTTP count and localStorage identical",
+         base.snap.dom === now.snap.dom && JSON.stringify(base.snap.reads) === JSON.stringify(now.snap.reads) && base.snap.http === now.snap.http && base.snap.ls === now.snap.ls,
+         base.snap.dom !== now.snap.dom ? "DOM differs" : firstDiff(base.snap.reads, now.snap.reads));
+    }
+  }
+
+  console.log("\n── RL · the report with the switch on ──");
+  const RON = { lockers: { on: true, factory: c.fAddr, deployBlock: 1 } };
+  const LK = new ethers.Interface(["function heldIn() view returns (uint256)", "function released() view returns (uint256)"]);
+  const expectHeld = async () => {   // independent of the logs: each Locker's own books, never below 0
+    let held = 0n;
+    const logs = await c.factory.queryFilter(c.factory.filters.Dropped(), 0, "latest");
+    const lockers = Array.from(new Set(logs.map((l) => l.args.locker.toLowerCase())));
+    for (const l of lockers) {
+      const k = new ethers.Contract(l, LK, c.provider), v = (await k.heldIn()) - (await k.released());
+      if (v > 0n) held += v;
+    }
+    return { held, people: new Set(logs.map((l) => l.args.person.toLowerCase())).size, dropped: logs.reduce((a, l) => a + l.args.amount, 0n) };
+  };
+  const dyc0 = (v) => Number(ethers.formatUnits(v, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const saleTop = (w) => { const b = w.document.querySelector("#sale-body"); const x = b.cloneNode(true); const l = x.querySelector(".rep-lockers"); if (l) l.remove(); return x.textContent.replace(/\s+/g, " ").trim(); };
+  const rows = (w) => Array.from(w.document.querySelectorAll("#sale-body .rep-lockers .rep-figrow")).map((r) => r.textContent.replace(/\s+/g, " ").trim());
+  {
+    const off = await visitReport(c, {}); const offTop = saleTop(off.h.w); H.teardown(off.h);
+    const { h } = await visitReport(c, RON);
+    const e = await expectHeld(), r = rows(h.w);
+    const blk = h.w.document.querySelector("#sale-body .rep-lockers");
+    ok("RL1 · a separate block under the sale carries the ruled line verbatim",
+       !!blk && T(h.w, "#sale-body .rep-lockers .rep-note") === "Coins delivered for payments made outside the portal are listed separately. They come from the treasury allocation and are locked, released in 24 months from exchange listing.");
+    ok("RL2 · delivered outside the portal: " + e.people + " people and " + dyc0(e.dropped) + " DYC (the factory's Dropped)",
+       r[0] === "Delivered outside the portal — people from event logs" + e.people && r[1] === "Delivered outside the portal — DYC from event logs" + dyc0(e.dropped) + " DYC", r.join(" | "));
+    ok("RL3 · held in lockers = " + dyc0(e.held) + " DYC, equal to the Lockers' own heldIn − released (after L's releases)",
+       r[2] === "Held in lockers from event logs" + dyc0(e.held) + " DYC", r[2]);
+    ok("RL4 · all three figures are marked \"from event logs\"", blk && blk.querySelectorAll(".rep-src").length === 3);
+    ok("RL5 · buyers, DYC sold and the raised figures are exactly the switch-off report's (nothing added)", saleTop(h.w) === offTop, saleTop(h.w).slice(0, 200) + " ≠ " + offTop.slice(0, 200));
+    ok("RL6 · schedule only: the block speaks of no rewards, earning, staking or ROI", !/reward|earn|stak|ROI|Activate/i.test(blk ? blk.textContent : "x"));
+    H.teardown(h);
+  }
+  // more drops (a batch of 12 incl. one repeat person) and two lockers opened by their owners — no purchase, no drop
+  {
+    const people = []; for (let i = 0; i < 12; i++) people.push(ethers.Wallet.createRandom().address);
+    people[11] = people[0];
+    const amounts = people.map((_, i) => BigInt(i + 1) * 100n * DEC), refs = people.map((_, i) => ethers.encodeBytes32String("VD-20261128-" + String(i + 1).padStart(2, "0")));
+    const tot = amounts.reduce((a, b) => a + b, 0n);
+    await (await c.dyc.mint(c.addrs.owner, tot)).wait(); await (await c.dyc.approve(c.fAddr, tot)).wait();
+    await (await c.factory.dropBatch(people, amounts, refs)).wait();
+    const off = await visitReport(c, {}); const offTop = saleTop(off.h.w); H.teardown(off.h);
+    const before = await visitReport(c, RON); const rb = rows(before.h.w); H.teardown(before.h);
+    const e = await expectHeld();
+    ok("RL7 · after a batch of 12 (one person twice): " + e.people + " people, " + dyc0(e.dropped) + " DYC, held " + dyc0(e.held) + " DYC",
+       rb[0] === "Delivered outside the portal — people from event logs" + e.people && rb[1].endsWith("logs" + dyc0(e.dropped) + " DYC") && rb[2].endsWith("logs" + dyc0(e.held) + " DYC") && e.people === 2 + 11, rb.join(" | "));
+    for (const pk of ["0x" + "9".repeat(64), "0x" + "a".repeat(64)]) {
+      const wlt = new ethers.Wallet(pk, c.provider);
+      await (await c.owner.sendTransaction({ to: wlt.address, value: 10n ** 17n })).wait();
+      await (await c.factory.connect(wlt).openLocker()).wait();
+    }
+    const created = await c.factory.queryFilter(c.factory.filters.LockerCreated(), 0, "latest");
+    const after = await visitReport(c, RON); const ra = rows(after.h.w);
+    ok("RL8 · two lockers opened by their owners (" + created.length + " LockerCreated in all) change nothing: same people, DYC and held; buyers unchanged",
+       JSON.stringify(ra) === JSON.stringify(rb) && saleTop(after.h.w) === offTop, ra.join(" | "));
+    H.teardown(after.h);
+  }
+  {
+    REC.refuseLogsAt = c.fAddr;
+    const { h } = await visitReport(c, RON);
+    REC.refuseLogsAt = null;
+    const r = rows(h.w);
+    ok("RL9 · the factory's logs refused: every locker figure is \"—\" (never 0) and the sale still shows",
+       r.length === 3 && r.every((x) => /—$/.test(x)) && /Total DYC sold/.test(T(h.w, "#sale-body")), r.join(" | "));
+    H.teardown(h);
+  }
+
+  console.log("\n── RB · report breakages (each must turn its check red) ──");
+  const RNEW = fs.readFileSync(path.join(SITE, "js/report.js"), "utf8");
+  const rmut = (from, to) => { if (RNEW.indexOf(from) < 0) throw new Error("mutation anchor missing: " + from.slice(0, 60)); return RNEW.replace(from, to); };
+  {
+    const src = rmut("function lockersOn() { var L = FILE.lockers; return !!(L && L.on === true && L.factory); }", "function lockersOn() { var L = FILE.lockers; return !!(L && L.on === true); }");
+    const base = await visitReport(c, ROLD); H.teardown(base.h);
+    let now = null, hung = false;
+    try { now = await visitReport(c, { lockers: { on: true, factory: null, deployBlock: 1 }, repSrc: src }); H.teardown(now.h); } catch (e) { hung = true; }
+    ok("RB1 · a switch that ignores the missing factory is caught by the off check", hung || base.snap.dom !== now.snap.dom || JSON.stringify(base.snap.reads) !== JSON.stringify(now.snap.reads));
+  }
+  {
+    const src = rmut("Total DYC sold</span><span class='rep-bigval'>\" + fmtDyc(totalSold)", "Total DYC sold</span><span class='rep-bigval'>\" + fmtDyc(totalSold + ((rr[1] && rr[1].dropped) || 0n))");
+    const off = await visitReport(c, {}); const offTop = saleTop(off.h.w); H.teardown(off.h);
+    const { h } = await visitReport(c, Object.assign({ repSrc: src }, RON));
+    ok("RB2 · drops added into DYC sold are caught (RL5 goes red)", saleTop(h.w) !== offTop);
+    H.teardown(h);
+  }
+  {
+    const src = rmut("people[a.person.toLowerCase()] = 1;", "people[a.person.toLowerCase()] = 1; people[a.locker.toLowerCase() + ':l'] = 1;");
+    const { h } = await visitReport(c, Object.assign({ repSrc: src }, RON));
+    const e = await expectHeld();
+    ok("RB3 · counting lockers instead of people is caught (RL2/RL7 go red)", rows(h.w)[0] !== "Delivered outside the portal — people from event logs" + e.people);
+    H.teardown(h);
+  }
+
   console.log(fail ? "\n  " + fail + " FAILED, " + pass + " passed" : "\n  ALL GREEN — " + pass + "/" + pass);
   process.exit(fail ? 1 : 0);
 }
