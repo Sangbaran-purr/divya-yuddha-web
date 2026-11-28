@@ -10,6 +10,7 @@
 //   VG · THE GATE — factory.master() == the connected wallet, read on chain; anything else keeps it off, in plain words.
 //   VR · REFUSALS — every refused kind, numbered per line, blocking the whole batch; the next id VD-YYYYMMDD-NN.
 //   VW · THE CONTRACT WARNING — a tick per warned line before anything can be sent.
+//   VN · NO CHECKSUM (all lowercase / all uppercase): warned, its own tick; a reference id repeated in a batch: refused.
 //   VC · THE CONFIRM SCREEN — person, locker (created now / exists), DYC and wei, reference id, total, a fresh balance;
 //        blocked above the balance; a final tick.
 //   VS · THE SIGNING ORDER — simulate approve(exact total) → sign → simulate drop → sign; the gas limits; the allowance 0
@@ -254,6 +255,49 @@ async function run() {
     H.click(H1.w, "#vd-cancel");
   }
 
+  // ═══ VN · NO CHECKSUM, AND A REPEATED REFERENCE ID (owner additions 2026-11-28) ═══
+  console.log("\n── VN · an address with no checksum is warned (a tick); a repeated reference id is refused ──");
+  const NOCK = "This address has no checksum, so a typo cannot be detected. Check it character by character.";
+  {
+    const a1 = ethers.Wallet.createRandom().address, a2 = ethers.Wallet.createRandom().address;
+    await review(H1, [a1 + ", 10, VD-" + today() + "-07", a2 + ", 20, VD-" + today() + "-07"]);
+    const bl = badLines(H1.w);
+    ok("VN1 · a reference id repeated in one batch is refused: line 2 \"repeats the reference id on line 1\", the batch blocked",
+       bl.length === 1 && bl[0].n === "2" && /repeats the reference id on line 1/.test(bl[0].t) && !H1.w.document.querySelector("#vd-go"), JSON.stringify(bl));
+  }
+  const lower = ethers.Wallet.createRandom().address.toLowerCase();
+  const upper = "0x" + ethers.Wallet.createRandom().address.slice(2).toUpperCase();
+  {
+    await review(H1, [lower + ", 10, VD-" + today() + "-11", upper + ", 20, VD-" + today() + "-12", ethers.Wallet.createRandom().address + ", 30, VD-" + today() + "-13"]);
+    const rows = Array.from(H1.w.document.querySelectorAll("#vd-confirm .vd-warn-nochecksum"));
+    ok("VN2 · all lowercase and all uppercase: warned (not refused) with the ruled line, one warning each; the checksummed line has none",
+       badLines(H1.w).length === 0 && rows.length === 2 && rows.every((r) => r.textContent.indexOf(NOCK) >= 0)
+       && /Line 1:/.test(rows[0].textContent) && /Line 2:/.test(rows[1].textContent), rows.map((r) => r.textContent).join(" | ") || T(H1.w, "#vd-confirm"));
+    ok("VN3 · the confirm screen shows each such wallet checksummed", T(H1.w, "#vd-confirm .vd-person") === ethers.getAddress(lower));
+    tick(H1.w, "#vd-final");
+    const go = H1.w.document.querySelector("#vd-go");
+    const t1 = go.disabled;
+    tick(H1.w, "#vd-confirm .vd-warn-nochecksum .vd-warntick");
+    const t2 = go.disabled;
+    H1.w.document.querySelectorAll("#vd-confirm .vd-warntick").forEach((c) => { c.checked = true; c.dispatchEvent(new H1.w.Event("change")); });
+    ok("VN4 · Sign and send opens only when every no-checksum line is ticked (final tick only: shut; one of two: shut; both: open)", t1 === true && t2 === true && go.disabled === false);
+    H1.eth.__log = [];
+    H.click(H1.w, "#vd-go");
+    await H.until(() => !!H1.w.document.querySelector("#vd-download") || /did not go through|could not|rejected|reverted/.test(T(H1.w, "#vd-results")), 60000, "the send").catch(() => {});
+    const got = await Promise.all([lower, upper].map(async (p) => (await factory.statusOf(ethers.getAddress(p)))[1]));
+    ok("VN5 · once ticked, the lines send and land in the checksummed wallets' Lockers; the allowance is 0", got[0] === 10n * DEC && got[1] === 20n * DEC && (await dycR.allowance(c.addrs.owner, fAddr)) === 0n, got.join(","));
+  }
+  {
+    await review(H1, [contractAddr.toLowerCase() + ", 5, VD-" + today() + "-21"]);
+    const w = Array.from(H1.w.document.querySelectorAll("#vd-confirm .vd-warnrow")).map((r) => r.className);
+    tick(H1.w, "#vd-final");
+    tick(H1.w, "#vd-confirm .vd-warn-contract .vd-warntick");
+    const shut = H1.w.document.querySelector("#vd-go").disabled;
+    tick(H1.w, "#vd-confirm .vd-warn-nochecksum .vd-warntick");
+    ok("VN6 · a contract written in lowercase carries both warnings, and needs both ticks", w.length === 2 && /contract/.test(w[0]) && /nochecksum/.test(w[1]) && shut === true && H1.w.document.querySelector("#vd-go").disabled === false, w.join(","));
+    H.click(H1.w, "#vd-cancel");
+  }
+
   // ═══ VC · THE CONFIRM SCREEN ═══
   console.log("\n── VC · the confirm screen ──");
   const p1 = ethers.Wallet.createRandom().address;
@@ -300,8 +344,8 @@ async function run() {
     ok("VS3 · the approval is for EXACTLY the total (" + ethers.formatUnits(tot, 18) + " DYC) to the factory — never more",
        !!ap && ap[0].toLowerCase() === fAddr.toLowerCase() && ap[1] === tot && s.every((x) => String(x.to).toLowerCase() !== c.addrs.dyc.toLowerCase() || IDYC.decodeFunctionData("approve", x.data)[1] <= tot));
     const R = H1.w.DYAdmin._road.vd;
-    ok("VS4 · the gas limits: approve " + R.approveGas + ", dropBatch(3) " + R.dropGas(3) + " (from the fork run: (40,000 + 127,000 × n) × 1.5)",
-       s.length === 2 && BigInt(s[0].gas) === BigInt(R.approveGas) && BigInt(s[1].gas) === BigInt(R.dropGas(3)) && R.dropGas(20) === 3870000 && R.dropGas(1) === 250500 && R.approveGas === 120000,
+    ok("VS4 · the gas limits: approve " + R.approveGas + ", dropBatch(3) " + R.dropGas(3) + " (from the fork run plus the live 7702 envelope: (40,000 + 127,000 × n) × 1.5 + 300,000)",
+       s.length === 2 && BigInt(s[0].gas) === BigInt(R.approveGas) && BigInt(s[1].gas) === BigInt(R.dropGas(3)) && R.dropGas(20) === 4170000 && R.dropGas(1) === 550500 && R.approveGas === 300000,
        s.map((x) => x.gas).join(","));
     const allow = await dycR.allowance(c.addrs.owner, fAddr);
     ok("VS5 · after a successful send the factory's allowance is 0 — on chain, and the page says so", allow === 0n && T(H1.w, "#vd-results .vd-allow") === "0 DYC", allow.toString());
@@ -319,7 +363,7 @@ async function run() {
     ok("VS9 · Download record: a CSV of address, locker, amount, reference id and transaction hash (" + (H1.w.__saved && H1.w.__saved.name) + ")", csv === want && /^vested-drop-[0-9a-f]{8}\.csv$/.test(H1.w.__saved && H1.w.__saved.name), csv.slice(0, 300));
     const lsAfter = JSON.stringify(Object.assign({}, H1.w.localStorage));
     ok("VS10 · nothing stored and nothing sent anywhere: localStorage unchanged, no fetch, no host but the wallet and the read host", lsAfter === lsBefore && H1.w.__fetches.length === 0);
-    ok("VS11 · the next id moves past what was sent (" + H1.w.document.querySelector("#vd-ref").placeholder + ")", H1.w.document.querySelector("#vd-ref").placeholder === "VD-" + today() + "-04");
+    ok("VS11 · the next id moves past the highest id sent today (" + H1.w.document.querySelector("#vd-ref").placeholder + ")", H1.w.document.querySelector("#vd-ref").placeholder === "VD-" + today() + "-14");   // after VN5's -11…-13 and these -01…-03
   }
   // a drop that can no longer be simulated after the approval landed → Reset allowance to 0
   {
@@ -376,7 +420,7 @@ async function run() {
     const held = await Promise.all(who.map(async (p) => (await factory.statusOf(p))[1]));
     const s = sends(H1);
     ok("VL3 · a full batch of 20 to new Lockers lands in one dropBatch (gas limit " + (s[1] ? Number(s[1].gas) : "—") + "), every Locker holds its drop, the allowance is 0, 20 events read back",
-       s.length === 2 && Number(s[1].gas) === 3870000 && held.every((v, i) => v === BigInt((i + 1) * 100) * DEC) && (await dycR.allowance(c.addrs.owner, fAddr)) === 0n
+       s.length === 2 && Number(s[1].gas) === 4170000 && held.every((v, i) => v === BigInt((i + 1) * 100) * DEC) && (await dycR.allowance(c.addrs.owner, fAddr)) === 0n
        && H1.w.document.querySelectorAll("#vd-results .vd-readback tbody tr").length === 20, held.join(",") + " | " + T(H1.w, "#vd-results").slice(0, 200));
   }
   H.teardown(H1);
@@ -430,6 +474,19 @@ async function run() {
       const open = !h.w.document.querySelector("#vd-review").disabled;
       H.teardown(h);
       return open;
+    });
+
+  await mutant("VB5 · dropping the no-checksum warning is caught (VN2 goes red)",
+    'if (ck && (hex === hex.toLowerCase() || hex === hex.toUpperCase())) out.warns.push', "if (false) out.warns.push",
+    async (h) => {
+      await review(h, [ethers.Wallet.createRandom().address.toLowerCase() + ", 1, VD-Y"]);
+      return !h.w.document.querySelector("#vd-confirm .vd-warn-nochecksum");
+    });
+  await mutant("VB6 · letting a reference id repeat is caught (VN1 goes red)",
+    'else if (seenRef[ref] != null) why.push("repeats the reference id on line " + seenRef[ref]);', "",
+    async (h) => {
+      await review(h, [ethers.Wallet.createRandom().address + ", 1, VD-Z", ethers.Wallet.createRandom().address + ", 1, VD-Z"]);
+      return !badLines(h.w).some((b) => /repeats the reference id/.test(b.t));
     });
 
   console.log("\n" + (fail === 0 ? "ALL GREEN" : "FAILURES") + " — " + pass + "/" + (pass + fail));

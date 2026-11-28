@@ -683,7 +683,8 @@ for (const [tag, line] of LK_REP) {
   ok(tag + " — carried verbatim by report.js (LOCKER_REPORT_COPY)", LKR_BLOCK.indexOf(JSON.stringify(line)) >= 0, line);
 }
 // VEST-100-1 part 3 — the admin Vested Drop panel's ruled warning: §16 → js/admin.js VD_COPY
-const LK_ADM = [["LKA1 contract warning", "This address is a contract. Confirm it is the person's own wallet."]];
+const LK_ADM = [["LKA1 contract warning", "This address is a contract. Confirm it is the person's own wallet."],
+  ["LKA2 no-checksum warning", "This address has no checksum, so a typo cannot be detected. Check it character by character."]];   // owner 2026-11-28
 const ADM_JS = fs.readFileSync(path.resolve(__dirname, "..", "js", "admin.js"), "utf8");
 const VD_BLOCK = (ADM_JS.split("var VD_COPY = {")[1] || "").split("};")[0];
 for (const [tag, line] of LK_ADM) {

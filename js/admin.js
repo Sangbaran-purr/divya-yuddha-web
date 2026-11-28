@@ -1324,14 +1324,20 @@ window.DYAdmin = (function () {
   var VD_MAX = 20;
   // Gas (VEST-100-1 part 3 fork run, web3 test_fork_panelBatchOf20_gas, Polygon mainnet block 98,060,000): dropBatch of 20
   // drops to NEW Lockers measured 2,521,552 (the master's plain transaction) / 2,527,290 (its 7702 execute()) / 2,539,545
-  // (the DelegationManager route); one drop to a new Locker 159,552; approve 50,857 / 56,193 / 68,184. The limit is
-  // (40,000 + 127,000 × lines) × 1.5 — 3,870,000 for 20 (1.52 × the dearest road), 250,500 for one (1.57 × the single).
-  var VD_GAS_BASE = 40000n, VD_GAS_PER = 127000n;
-  var VD_APPROVE_GAS = 120000; // 1.76 × the dearest approve road
-  function vdDropGas(n) { return Number(((VD_GAS_BASE + VD_GAS_PER * BigInt(n)) * 3n) / 2n); }
+  // (the DelegationManager route); one drop to a new Locker 159,552; approve 50,857 / 56,193 / 68,184. BUT the fork's
+  // DelegationManager route carries an EMPTY permission context, and MetaMask's live routing of the master's casts
+  // (redeemDelegations 0xcef6d209, with its real delegation, caveats and 640–928-byte event) measured +99k to +170k of
+  // execution and +7.5k–9.6k intrinsic per cast (W3-BUNDLE-3 finding, MAINNET_STACK_2026-08-15: a routed DYC.transfer
+  // took 224,153 live). So every limit carries a fixed envelope allowance of 300,000 on top of the fork-derived figure:
+  //   drop:    (40,000 + 127,000 × lines) × 1.5 + 300,000 — 4,170,000 for 20, 550,500 for one
+  //   approve: 300,000 (the routed DYC.transfer's 224,153 live, plus a third)
+  var VD_GAS_BASE = 40000n, VD_GAS_PER = 127000n, VD_ENVELOPE = 300000n;
+  var VD_APPROVE_GAS = 300000;
+  function vdDropGas(n) { return Number(((VD_GAS_BASE + VD_GAS_PER * BigInt(n)) * 3n) / 2n + VD_ENVELOPE); }
   var VD_REF_RX = /^[A-Za-z0-9._-]{1,31}$/;
   var VD_COPY = {   // docs/DASHBOARD_DESIGN_v1.md §16 (the admin Vested Drop panel); pinned by mp/copyproof.js
     contract: "This address is a contract. Confirm it is the person's own wallet.",
+    nochecksum: "This address has no checksum, so a typo cannot be detected. Check it character by character.",
   };
   var VD_FACTORY_ABI = [
     "function master() view returns (address)",
@@ -1497,10 +1503,10 @@ window.DYAdmin = (function () {
   }
   // the checks that need no chain read; every reason a line fails is listed (a line may have several)
   function vdCheckLocal(rows) {
-    var seen = {}, refSkip = 0, used = vd.sent.slice();
+    var seen = {}, seenRef = {}, refSkip = 0, used = vd.sent.slice();
     rows.forEach(function (r) { if (r.parts.length >= 3) used.push(r.parts[2]); });
     return rows.map(function (r) {
-      var why = [], out = { n: r.n, raw: r.raw, why: why, warn: null };
+      var why = [], out = { n: r.n, raw: r.raw, why: why, warns: [] };
       if (r.parts.length !== 3) { why.push("needs three parts: address, amount, reference id"); return out; }
       var a = r.parts[0], amt = r.parts[1], ref = r.parts[2];
       if (!/^0x[0-9a-fA-F]{40}$/.test(a)) why.push("not a wallet address");
@@ -1511,6 +1517,9 @@ window.DYAdmin = (function () {
         else if (vd.prot[ck.toLowerCase()]) why.push("this is " + vd.prot[ck.toLowerCase()] + ", not a person's wallet");
         else if (seen[ck.toLowerCase()] != null) why.push("repeats the address on line " + seen[ck.toLowerCase()]);
         if (ck) { out.person = ck; if (seen[ck.toLowerCase()] == null) seen[ck.toLowerCase()] = r.n; }
+        // all lowercase or all uppercase carries no checksum (EIP-55), so a typo cannot be caught: warned, a tick to send
+        var hex = a.slice(2);
+        if (ck && (hex === hex.toLowerCase() || hex === hex.toUpperCase())) out.warns.push({ kind: "nochecksum", text: VD_COPY.nochecksum });
       }
       if (!/^\d+(\.\d+)?$/.test(amt)) why.push("the amount is not a number of DYC (write it like 1500 or 12.5)");
       else {
@@ -1522,7 +1531,8 @@ window.DYAdmin = (function () {
       }
       if (!VD_REF_RX.test(ref)) {
         why.push("the reference id must be at most 31 letters, digits, dots, dashes or underscores — no @ and no spaces (next free: " + vdNextRef(used, refSkip++) + ")");
-      } else out.ref = ref;
+      } else if (seenRef[ref] != null) why.push("repeats the reference id on line " + seenRef[ref]);
+      else { out.ref = ref; seenRef[ref] = r.n; }
       return out;
     });
   }
@@ -1535,7 +1545,7 @@ window.DYAdmin = (function () {
       if (!x.person || x.why.length && x.why.some(function (w) { return /zero address|not a person|repeats|checksum|not a wallet/.test(w); })) return Promise.resolve();
       return Promise.all([f.isLocker(x.person), p.getCode(x.person), f.lockerOf(x.person)]).then(function (r) {
         if (r[0]) { x.why.push("this is a locker, not a wallet — enter the person's own wallet"); return; }
-        if (r[1] && r[1] !== "0x") x.warn = VD_COPY.contract;
+        if (r[1] && r[1] !== "0x") x.warns.unshift({ kind: "contract", text: VD_COPY.contract });
         x.locker = r[2];
         return p.getCode(r[2]).then(function (lc) { x.creates = !lc || lc === "0x"; });
       });
@@ -1603,13 +1613,15 @@ window.DYAdmin = (function () {
           "<td class='vd-amt'><b>" + vdHuman(x.wei) + " DYC</b><br><span class='mono' style='color:var(--gold-aged)'>" + x.wei.toString() + " wei</span></td>" +
           "<td class='mono vd-ref'>" + escHtml(x.ref) + "</td>";
         tb.appendChild(tr);
-        if (x.warn) {
-          var wr = el("tr", "vd-warnrow");
-          wr.innerHTML = "<td></td><td colspan='4'><span class='pill dropped'>" + x.warn + "</span> " +
-            "<label style='font-size:0.8rem'><input type='checkbox' class='vd-warntick' data-i='" + i + "' /> Line " + (i + 1) +
-            ": I confirm " + shortAddr(x.person) + " is the person's own wallet.</label></td>";
+        x.warns.forEach(function (wn) {   // each warning on the line needs its own tick
+          var wr = el("tr", "vd-warnrow vd-warn-" + wn.kind);
+          var says = wn.kind === "contract" ? "I confirm " + shortAddr(x.person) + " is the person's own wallet."
+            : "I have checked " + shortAddr(x.person) + " character by character.";
+          wr.innerHTML = "<td></td><td colspan='4'><span class='pill dropped' style='white-space:normal;display:inline-block;max-width:100%;text-transform:none;letter-spacing:0;line-height:1.4'>" + wn.text + "</span> " +
+            "<label style='font-size:0.8rem'><input type='checkbox' class='vd-warntick' data-i='" + i + "' data-kind='" + wn.kind + "' /> Line " + (i + 1) +
+            ": " + says + "</label></td>";
           tb.appendChild(wr);
-        }
+        });
       });
       tbl.appendChild(tb);
       wrap.appendChild(tbl);

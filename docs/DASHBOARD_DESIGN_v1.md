@@ -368,9 +368,11 @@ second line on a phone.
 
 ### The admin Vested Drop panel (VEST-100-1 phase 1 part 3; ruled line pinned by `mp/copyproof.js`, doc → `js/admin.js`)
 - This address is a contract. Confirm it is the person's own wallet.
+- This address has no checksum, so a typo cannot be detected. Check it character by character.
 
 The panel sits beside Coin Drops on `admin.html` and exists only while `admin-config.js` names the LockerFactory
 (`contracts.lockerFactory`, file only — no browser override); with it null the admin page is byte-identical to the page
 before lockers. It works only for the wallet that `factory.master()` names, read on chain. It takes wallets only, never a
-locker address, at most 20 lines a batch, and signs approve(factory, exact total) then drop or dropBatch, each simulated
+locker address, at most 20 lines a batch, no reference id twice in one batch; an address written all in lowercase or all
+in uppercase (no checksum) is warned and needs its own tick, and signs approve(factory, exact total) then drop or dropBatch, each simulated
 first; the allowance is 0 after a successful send.
